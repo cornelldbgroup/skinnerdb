@@ -49,8 +49,6 @@ public class RelationPrinter {
 		TableInfo tableInfo = CatalogManager.
 				currentDB.nameToTable.get(tableName);
 		int nrCols = tableInfo.columnNames.size();
-		// Print table headline
-		//System.out.println("/--- " + tableName + " ---\\");
 		// Print table header
 		String header = StringUtils.join(tableInfo.columnNames, "\t");
 		int headerLength = header.length() + nrCols * 7;
@@ -83,7 +81,7 @@ public class RelationPrinter {
 			writer.println();
 		}
 		printSeparator('-', headerLength, writer);
-		//System.out.println("\\--- " + tableName + " ---/");
+		writer.flush();
 	}
 	/**
 	 * Print out cell content, formatted according to given data type.

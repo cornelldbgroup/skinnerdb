@@ -170,10 +170,10 @@ public class SkinnerCmd {
 					CatalogManager.removeTempTables();
 				}
 			} else {
-				System.err.println("Only plain select statements supported");
+				System.out.println("Only plain select statements supported");
 			}
 		} else {
-			System.err.println("Statement type " + 
+			System.out.println("Statement type " + 
 					sqlStatement.getClass().toString() + 
 					" not supported!");
 		}
