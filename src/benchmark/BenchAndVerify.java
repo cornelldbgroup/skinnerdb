@@ -3,6 +3,7 @@ package benchmark;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.io.File;
+import java.io.PrintStream;
 import java.io.PrintWriter;
 import java.nio.file.Files;
 import java.sql.Connection;
@@ -30,13 +31,10 @@ import expressions.ExpressionInfo;
 import expressions.normalization.CollationVisitor;
 import indexing.Indexer;
 import joining.JoinProcessor;
-import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.select.PlainSelect;
 import net.sf.jsqlparser.statement.select.Select;
-import net.sf.jsqlparser.statement.select.SelectExpressionItem;
-import net.sf.jsqlparser.statement.select.SelectItem;
 import postprocessing.PostProcessor;
 import preprocessing.Context;
 import preprocessing.Preprocessor;
@@ -101,8 +99,9 @@ public class BenchAndVerify {
 		java.sql.Statement pgStatement = connection.createStatement();
 		// Open benchmark result file
 		PrintWriter benchOut = new PrintWriter("bench.txt");
-		PrintWriter pgOut = new PrintWriter("pgResults.txt");
-		PrintWriter skinnerOut = new PrintWriter("skinnerResults.txt");
+		PrintStream pgOut = new PrintStream("pgResults.txt");
+		PrintStream skinnerOut = new PrintStream("skinnerResults.txt");
+		PrintStream console = System.out;
 		// Measure preprocessing time for each query
 		benchOut.println("Query\tMillis\tPreMillis\tPostMillis\tTuples\t"
 				+ "Iterations\tLookups\tNrIndexEntries\tnrUniqueLookups\t" 
@@ -183,8 +182,17 @@ public class BenchAndVerify {
 			StringBuilder pgBuilder = new StringBuilder();
 			PlainSelect plainSelect = entry.getValue();
 			pgBuilder.append("SELECT ");
-			pgBuilder.append(PlainSelect.getStringList(
-					plainSelect.getSelectItems()));
+			boolean firstSelectItem = true;
+			for (ExpressionInfo selExpr : query.selectExpressions) {
+				CollationVisitor collator = new CollationVisitor();
+				selExpr.originalExpression.accept(collator);
+				if (firstSelectItem) {
+					firstSelectItem = false;
+				} else {
+					pgBuilder.append(", ");
+				}
+				pgBuilder.append(collator.exprStack.pop().toString());
+			}
 			pgBuilder.append(" FROM ");
 			pgBuilder.append(fromClause);
 			pgBuilder.append(" WHERE ");
@@ -204,8 +212,10 @@ public class BenchAndVerify {
 			pgOut.flush();
 			// Output final result for Skinner
 			String resultRel = NamingConfig.FINAL_RESULT_NAME;
+			System.setOut(skinnerOut);
 			RelationPrinter.print(resultRel);
 			skinnerOut.flush();
+			System.setOut(console);
 			// Generate output
 			benchOut.print(entry.getKey() + "\t");
 			benchOut.print(totalMillis + "\t");

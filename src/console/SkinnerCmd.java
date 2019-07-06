@@ -124,7 +124,6 @@ public class SkinnerCmd {
 	 * @throws Exception
 	 */
 	static void processSQL(String input) throws Exception {
-		System.out.println("Processing input " + input);
 		// Try parsing as SQL query
 		Statement sqlStatement = null;
 		try {
@@ -151,7 +150,6 @@ public class SkinnerCmd {
 			CatalogManager.currentDB.storeDB();
 			System.out.println("Dropped " + tableName);
 		} else if (sqlStatement instanceof Select) {
-			System.out.println("Recognized select statement");
 			Select select = (Select)sqlStatement;
 			if (select.getSelectBody() instanceof PlainSelect) {
 				PlainSelect plainSelect = (PlainSelect)select.getSelectBody();
