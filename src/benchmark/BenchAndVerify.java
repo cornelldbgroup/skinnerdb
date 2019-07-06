@@ -29,6 +29,7 @@ import config.StartupConfig;
 import diskio.PathUtil;
 import expressions.ExpressionInfo;
 import expressions.normalization.CollationVisitor;
+import expressions.printing.PgPrinter;
 import indexing.Indexer;
 import joining.JoinProcessor;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
@@ -184,14 +185,14 @@ public class BenchAndVerify {
 			pgBuilder.append("SELECT ");
 			boolean firstSelectItem = true;
 			for (ExpressionInfo selExpr : query.selectExpressions) {
-				CollationVisitor collator = new CollationVisitor();
-				selExpr.originalExpression.accept(collator);
 				if (firstSelectItem) {
 					firstSelectItem = false;
 				} else {
 					pgBuilder.append(", ");
 				}
-				pgBuilder.append(collator.exprStack.pop().toString());
+				PgPrinter pgPrinter = new PgPrinter(query);
+				pgPrinter.setBuffer(pgBuilder);
+				selExpr.afterNormalization.accept(pgPrinter);
 			}
 			pgBuilder.append(" FROM ");
 			pgBuilder.append(fromClause);
