@@ -27,4 +27,4 @@ SkinnerDB is specialized for in-memory processing. The default settings for java
 
 # Team
 
-SkinnerDB is developed by the Cornell database group.
+SkinnerDB is developed by the Cornell database group (http://www.cs.cornell.edu/database/).
