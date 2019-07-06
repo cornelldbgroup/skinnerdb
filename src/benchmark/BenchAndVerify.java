@@ -204,7 +204,7 @@ public class BenchAndVerify {
 			pgOut.flush();
 			// Output final result for Skinner
 			String resultRel = NamingConfig.FINAL_RESULT_NAME;
-			RelationPrinter.print(resultRel, skinnerOut);
+			RelationPrinter.print(resultRel);
 			skinnerOut.flush();
 			// Generate output
 			benchOut.print(entry.getKey() + "\t");

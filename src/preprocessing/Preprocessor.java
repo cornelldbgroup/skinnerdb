@@ -266,8 +266,7 @@ public class Preprocessor {
 		log("Filtering using " + unaryPred + " took " + totalMillis + " milliseconds");
 		// Print out intermediate result table if logging is enabled
 		if (LoggingConfig.PRINT_INTERMEDIATES) {
-			RelationPrinter.print(filteredName, 
-					new PrintWriter(System.out));
+			RelationPrinter.print(filteredName);
 		}
 	}
 	/**

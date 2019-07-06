@@ -1,6 +1,5 @@
 package print;
 
-import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -30,21 +29,19 @@ public class RelationPrinter {
 	 * 
 	 * @param separator	character to print
 	 * @param nrRepeats	print character that many times
-	 * @param writer	use to print output
 	 */
-	static void printSeparator(char separator, 
-			int nrRepeats, PrintWriter writer) {
+	static void printSeparator(char separator, int nrRepeats) {
 		for (int i=0; i<nrRepeats; ++i) {
-			writer.print(separator);
+			System.out.print(separator);
 		}
-		writer.println();
+		System.out.println();
 	}
 	/**
 	 * Print out relation of given name on console.
 	 * 
 	 * @param tableName	name of table to print
 	 */
-	public static void print(String tableName, PrintWriter writer) throws Exception {
+	public static void print(String tableName) throws Exception {
 		// Get table meta-data
 		TableInfo tableInfo = CatalogManager.
 				currentDB.nameToTable.get(tableName);
@@ -52,9 +49,9 @@ public class RelationPrinter {
 		// Print table header
 		String header = StringUtils.join(tableInfo.columnNames, "\t");
 		int headerLength = header.length() + nrCols * 7;
-		printSeparator('-', headerLength, writer);
-		writer.println(header);
-		printSeparator('-', headerLength, writer);
+		printSeparator('-', headerLength);
+		System.out.println(header);
+		printSeparator('-', headerLength);
 		// Extract column types
 		List<SQLtype> colTypes = new ArrayList<SQLtype>();
 		for (String colName : tableInfo.columnNames) {
@@ -75,13 +72,13 @@ public class RelationPrinter {
 			for (int colCtr=0; colCtr<nrCols; ++colCtr) {
 				ColumnData colData = colsData.get(colCtr);
 				SQLtype type = colTypes.get(colCtr);
-				writer.print(printCell(type, colData, rowCtr));
-				writer.print("\t");
+				System.out.print(printCell(type, colData, rowCtr));
+				System.out.print("\t");
 			}
-			writer.println();
+			System.out.println();
 		}
-		printSeparator('-', headerLength, writer);
-		writer.flush();
+		printSeparator('-', headerLength);
+		System.out.flush();
 	}
 	/**
 	 * Print out cell content, formatted according to given data type.

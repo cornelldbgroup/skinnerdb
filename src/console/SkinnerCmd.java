@@ -124,6 +124,7 @@ public class SkinnerCmd {
 	 * @throws Exception
 	 */
 	static void processSQL(String input) throws Exception {
+		System.out.println("Processing input " + input);
 		// Try parsing as SQL query
 		Statement sqlStatement = null;
 		try {
@@ -150,6 +151,7 @@ public class SkinnerCmd {
 			CatalogManager.currentDB.storeDB();
 			System.out.println("Dropped " + tableName);
 		} else if (sqlStatement instanceof Select) {
+			System.out.println("Recognized select statement");
 			Select select = (Select)sqlStatement;
 			if (select.getSelectBody() instanceof PlainSelect) {
 				PlainSelect plainSelect = (PlainSelect)select.getSelectBody();
@@ -158,8 +160,7 @@ public class SkinnerCmd {
 							false, -1, -1, null, "testquery");
 					// Output final result
 					String resultRel = NamingConfig.FINAL_RESULT_NAME;
-					RelationPrinter.print(resultRel, 
-							new PrintWriter(System.out));					
+					RelationPrinter.print(resultRel);					
 				} catch (SQLexception e) {
 					 System.out.println(e.getMessage());
 				} catch (Exception e) {
@@ -214,8 +215,7 @@ public class SkinnerCmd {
 							plotEvery, plotDir, "testquery");
 					// Output final result
 					String resultRel = NamingConfig.FINAL_RESULT_NAME;
-					RelationPrinter.print(resultRel, 
-							new PrintWriter(System.out));					
+					RelationPrinter.print(resultRel);					
 				} catch (SQLexception e) {
 					 System.out.println(e.getMessage());
 				} catch (Exception e) {
@@ -311,7 +311,7 @@ public class SkinnerCmd {
 			BufferManager.loadDictionary();
 		}
 		// Command line processing
-		System.out.println("Enter 'help' for help, 'quit' to exit");
+		System.out.println("Enter 'help' for help and 'quit' to exit");
 		Scanner scanner = new Scanner(System.in);
 		boolean continueProcessing = true;
 		while (continueProcessing) {
