@@ -123,7 +123,6 @@ public class BenchAndVerify {
 			//System.gc();
 			long totalMillis = System.currentTimeMillis() - startMillis;
 			// Check consistency with Postgres results: unary preds
-			/*
 			for (ExpressionInfo expr : query.unaryPredicates) {
 				// Unary predicates must refer to one table
 				assertEquals(expr.aliasesMentioned.size(), 1);
@@ -155,14 +154,14 @@ public class BenchAndVerify {
 				System.out.println("Skinner card:\t" + skinnerCardinality);
 				assertEquals(pgCardinality, skinnerCardinality);
 			}
-			*/
 			// Check consistency with Postgres: join result size
 			StringBuilder sqlBuilder = new StringBuilder();
 			sqlBuilder.append("SELECT COUNT(*) FROM ");
 			List<String> fromItems = query.aliasToTable.entrySet().stream().
 					map(e -> e.getValue() + " " + e.getKey()).
 					collect(Collectors.toList());
-			sqlBuilder.append(StringUtils.join(fromItems, ", "));
+			String fromClause = StringUtils.join(fromItems, ", ");
+			sqlBuilder.append(fromClause);
 			if (!query.wherePredicates.isEmpty()) {
 				sqlBuilder.append(" WHERE ");
 				String whereCondition = StringUtils.join(
@@ -180,19 +179,21 @@ public class BenchAndVerify {
 			System.out.println("PG Card: " + pgJoinCard + 
 					"; Skinner card: " + skinnerJoinCard);
 			assertEquals(pgJoinCard, skinnerJoinCard);
-			// Output final result for Postgres and Skinner
+			// Output final result for Postgres
 			StringBuilder pgBuilder = new StringBuilder();
 			PlainSelect plainSelect = entry.getValue();
-			boolean first = true;
-			for (SelectItem selItem : plainSelect.getSelectItems()) {
-				Expression expr = ((SelectExpressionItem)selItem).getExpression();
-				CollationVisitor collator = new CollationVisitor();
-				expr.accept(collator);
-				
-			}
-
-			String sqlQuery = entry.getValue().toString();
-			ResultSet queryResult = pgStatement.executeQuery(sqlQuery);
+			pgBuilder.append("SELECT ");
+			pgBuilder.append(PlainSelect.getStringList(
+					plainSelect.getSelectItems()));
+			pgBuilder.append(" FROM ");
+			pgBuilder.append(fromClause);
+			pgBuilder.append(" WHERE ");
+			CollationVisitor collator = new CollationVisitor();
+			plainSelect.getWhere().accept(collator);
+			pgBuilder.append(collator.exprStack.pop().toString());
+			String pgQuery = pgBuilder.toString().replace("STRING", "TEXT");
+			System.out.println("PG Query: " + pgQuery);
+			ResultSet queryResult = pgStatement.executeQuery(pgQuery);
 			int nrPgCols = queryResult.getMetaData().getColumnCount();
 			while (queryResult.next()) {
 				for (int colCtr=1; colCtr<=nrPgCols; ++colCtr) {
@@ -201,6 +202,7 @@ public class BenchAndVerify {
 				pgOut.println();
 			}
 			pgOut.flush();
+			// Output final result for Skinner
 			String resultRel = NamingConfig.FINAL_RESULT_NAME;
 			RelationPrinter.print(resultRel, skinnerOut);
 			skinnerOut.flush();
