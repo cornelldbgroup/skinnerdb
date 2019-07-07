@@ -92,7 +92,7 @@ public class BenchAndVerify {
 			}
 		}
 		// Open connection to Postgres 
-		String url = "jdbc:postgresql:imdb";
+		String url = "jdbc:postgresql:imdb_unicode_index";
 		Properties props = new Properties();
 		props.setProperty("user","postgres");
 		props.setProperty("password","");
