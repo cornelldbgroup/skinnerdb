@@ -107,7 +107,9 @@ public class LoadCSV {
 		while ((inputFields = csvReader.readNext()) != null) {
 			for (int colCtr=0; colCtr<nrColumns; ++colCtr) {
 				String field = inputFields[colCtr];
-				boolean isNull = field==null||field.equals(nullRepresentation);
+				boolean isNull = field==null||
+						field.isEmpty()||
+						field.equals(nullRepresentation);
 				data.get(colCtr).isNull.set(rowCtr, isNull);
 				try {
 					switch (columnTypes[colCtr]) {
