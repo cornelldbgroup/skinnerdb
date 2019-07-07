@@ -1,6 +1,7 @@
 package joining;
 
 import java.util.Arrays;
+import java.util.stream.IntStream;
 
 import config.JoinConfig;
 import joining.join.OldJoin;
@@ -40,10 +41,29 @@ public class ParallelSearchJP {
 			root.childNodes[actionCtr] = new UctNode(
 					0, root, joinedTable);
 		}
-		// Initialize counters and variables
-		int[] joinOrder = new int[query.nrJoined];
 		// Iterate until join result was generated
+		IntStream.range(0, nrActions-1).parallel().forEach(a -> {
+			// Initialize counters and variables
+			int[] joinOrder = new int[query.nrJoined];
+			long roundCtr = 1;
+			// Initialize first table in join order
+			int firstTable = root.nextTable[a];
+			joinOrder[0] = firstTable;
+			// Iterate until one thread finishes
+			UctNode sampleRoot = root.childNodes[a];
+			try {
+				while (!joinOp.isFinished()) {
+					++roundCtr;
+					sampleRoot.sample(roundCtr, joinOrder, 
+							SelectionPolicy.UCB1);
+				}							
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+		});
 		Arrays.stream(root.childNodes).parallel().forEach(c -> {
+			// Initialize counters and variables
+			int[] joinOrder = new int[query.nrJoined];
 			long roundCtr = 1;
 			try {
 				while (!joinOp.isFinished()) {
