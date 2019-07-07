@@ -1,11 +1,10 @@
 package joining.progress;
 
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import joining.plan.JoinOrder;
-import query.QueryInfo;
 
 /**
  * Keeps track of progress made in evaluating different
@@ -35,7 +34,7 @@ public class ProgressTracker {
     /**
      * Maps join orders to the last state achieved during evaluation.
      */
-    Map<JoinOrder, State> orderToState = new HashMap<JoinOrder, State>();
+    Map<JoinOrder, State> orderToState = new ConcurrentHashMap<>();
     /**
      * Indicates whether processing is finished.
      */
@@ -63,7 +62,7 @@ public class ProgressTracker {
      */
     public void updateProgress(JoinOrder joinOrder, State state) {
         // Update termination flag
-        isFinished = state.isFinished();
+        isFinished = isFinished || state.isFinished();
         // Update state for specific join order
         orderToState.put(joinOrder, state);
         // Update state for all join order prefixes

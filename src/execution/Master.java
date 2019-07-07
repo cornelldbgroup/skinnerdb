@@ -1,6 +1,6 @@
 package execution;
 
-import joining.JoinProcessor;
+import joining.SequentialJP;
 import net.sf.jsqlparser.statement.select.PlainSelect;
 import postprocessing.PostProcessor;
 import preprocessing.Context;
@@ -36,7 +36,7 @@ public class Master {
 		// Filter, projection, and indexing for join phase
 		Context context = Preprocessor.process(query);
 		// Join filtered tables
-		JoinProcessor.process(query, context);
+		SequentialJP.process(query, context);
 		// Aggregation, grouping, and sorting if required
 		PostProcessor.process(query, context);
 	}

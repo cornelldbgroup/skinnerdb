@@ -1,7 +1,7 @@
 package joining.result;
 
 import java.util.*;
-import java.util.Map.Entry;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Represents the result of a query in compact form
@@ -15,9 +15,14 @@ public class JoinResult {
 	 * Contains join result tuples, represented as
 	 * integer vectors (each vector component
 	 * captures the tuple index for one of the
-	 * join tables).
+	 * join tables). The value is true for each
+	 * key (no specific concurrent hash set
+	 * implementation available in Java and
+	 * ConcurrentSkipListSet has logarithmic
+	 * lookup complexity).
 	 */
-	public Set<ResultTuple> tuples = new HashSet<>();
+	public Map<ResultTuple, Boolean> tuples = 
+			new ConcurrentHashMap<>();
 	/**
 	 * Number of tables being joined.
 	 */
@@ -41,31 +46,7 @@ public class JoinResult {
 	 * @param tupleIndices  tuple indices
 	 */
 	public void add(int[] tupleIndices) {
-		tuples.add(new ResultTuple(tupleIndices));
-		/*
-		ResultNode curNode = resultRoot;
-		for (int tableCtr=0; tableCtr<nrTables; ++tableCtr) {
-			int curTuple = tupleIndices[tableCtr];
-			if (!curNode.childNodes.containsKey(curTuple)) {
-				curNode.childNodes.put(curTuple, new ResultNode());
-			}
-			curNode = curNode.childNodes.get(curTuple);
-		}
-		*/
-	}
-	
-	void addSubtree(ResultNode resultNode, int level, 
-			int[] resultIndices, List<ResultTuple> tuples) {
-		if (level==nrTables) {
-			tuples.add(new ResultTuple(resultIndices));
-		} else {
-			for (Entry<Integer, ResultNode> entry : 
-				resultNode.childNodes.entrySet()) {
-				resultIndices[level] = entry.getKey();
-				addSubtree(entry.getValue(), level+1, 
-						resultIndices, tuples);
-			}
-		}
+		tuples.put(new ResultTuple(tupleIndices), true);
 	}
 	/**
 	 * Returns result tuples as tuple set.
@@ -73,12 +54,6 @@ public class JoinResult {
 	 * @return	set of result tuples
 	 */
 	public Collection<ResultTuple> getTuples() {
-		return tuples;
-		/*
-		List<ResultTuple> tuples = new ArrayList<>();
-		int[] resultIndices = new int[nrTables];
-		addSubtree(resultRoot, 0, resultIndices, tuples);
-		return tuples;
-		*/
+		return tuples.keySet();
 	}
 }
