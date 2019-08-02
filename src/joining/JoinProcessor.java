@@ -54,10 +54,7 @@ public class JoinProcessor {
 		// Initialize logging for new query
 		nrLogEntries = 0;
 		// Initialize multi-way join operator
-		/*
-		DefaultJoin joinOp = new DefaultJoin(query, preSummary, 
-				LearningConfig.BUDGET_PER_EPISODE);
-		*/
+
 		OldJoin joinOp = new OldJoin(query, context, 
 				JoinConfig.BUDGET_PER_EPISODE);
 		// Initialize UCT join order search tree

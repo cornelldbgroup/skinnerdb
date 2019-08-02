@@ -125,6 +125,24 @@ public class JoinIndexWrapper {
 		return nextIndex.nextTuple(priorVal, curTuple);
 	}
 	/**
+	 * Propose next index in next table that
+	 * satisfies equi-join condition with
+	 * current tuple in prior table and locates in thread scope, returns
+	 * cardinality if no such tuple is found.
+	 *
+	 * @param tupleIndices	current tuple indices
+	 * @param tid			thread id
+	 * @param nrThreads		number of threads
+	 * @return	next interesting tuple index or cardinality
+	 */
+	public int nextIndexInScope(int[] tupleIndices, int tid, int nrThreads) {
+		int priorTuple = tupleIndices[priorTable];
+		int priorVal = priorData.data[priorTuple];
+		int curTuple = tupleIndices[nextTable];
+		return nextIndex.nextTuple(priorVal, curTuple);
+	}
+
+	/**
 	 * Returns number of tuples indexed in next
 	 * table for given value in prior table.
 	 * 

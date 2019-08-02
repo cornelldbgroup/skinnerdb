@@ -1,12 +1,8 @@
 package query;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.Map.Entry;
+import java.util.stream.Collectors;
 
 import catalog.CatalogManager;
 import catalog.info.ColumnInfo;
@@ -15,11 +11,13 @@ import config.LoggingConfig;
 import expressions.ExpressionInfo;
 import expressions.aggregates.AggInfo;
 import expressions.typing.ExpressionScope;
+import net.sf.jsqlparser.JSQLParserException;
 import net.sf.jsqlparser.expression.Alias;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.Function;
 import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
 import net.sf.jsqlparser.expression.operators.relational.EqualsTo;
+import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.schema.Column;
 import net.sf.jsqlparser.schema.Table;
 import net.sf.jsqlparser.statement.select.AllColumns;
@@ -72,22 +70,22 @@ public class QueryInfo {
 	 * Maps each alias to its alias index.
 	 */
 	public Map<String, Integer> aliasToIndex =
-			new HashMap<String, Integer>();
+			new HashMap<>();
 	/**
 	 * Maps aliases to associated table name.
 	 */
-	public Map<String, String> aliasToTable = 
-			new HashMap<String, String>();
+	public Map<String, String> aliasToTable =
+			new HashMap<>();
 	/**
 	 * Maps unique column names to associated table aliases.
 	 */
 	public Map<String, String> columnToAlias =
-			new HashMap<String, String>();
+			new HashMap<>();
 	/**
 	 * Maps from aliases to SQL expressions.
 	 */
 	public Map<String, Expression> aliasToExpression =
-			new HashMap<String, Expression>();
+			new HashMap<>();
 	/**
 	 * Maps select clause items to corresponding alias.
 	 */
@@ -97,26 +95,26 @@ public class QueryInfo {
 	 * Maps column reference to column info.
 	 */
 	public Map<ColumnRef, ColumnInfo> colRefToInfo =
-			new HashMap<ColumnRef, ColumnInfo>();
+			new HashMap<>();
 	/**
 	 * Expressions that appear in the SELECT clause
 	 * with associated meta-data.
 	 */
 	public List<ExpressionInfo> selectExpressions =
-			new ArrayList<ExpressionInfo>();
+			new ArrayList<>();
 	/**
 	 * Stores information on predicates in WHERE clause.
 	 * Each expression integrates all predicates that
 	 * refer to the same table instances.
 	 */
-	public List<ExpressionInfo> wherePredicates = 
-			new ArrayList<ExpressionInfo>();
+	public List<ExpressionInfo> wherePredicates =
+			new ArrayList<>();
 	/**
 	 * List of expressions that correspond to unary
 	 * predicates.
 	 */
 	public List<ExpressionInfo> unaryPredicates =
-			new ArrayList<ExpressionInfo>();
+			new ArrayList<>();
 	/**
 	 * Sets of alias indices that are connected via
 	 * join predicates - used to quickly determined
@@ -141,19 +139,19 @@ public class QueryInfo {
 	 * non-equi join predicates.
 	 */	
 	public List<ExpressionInfo> nonEquiJoinPreds =
-			new ArrayList<ExpressionInfo>();
+			new ArrayList<>();
 	/**
 	 * Expressions that appear in GROUP-BY clause with
 	 * associated meta-data.
 	 */
 	public List<ExpressionInfo> groupByExpressions =
-			new ArrayList<ExpressionInfo>();
+			new ArrayList<>();
 	/**
 	 * Expressions that appear in ORDER-BY clause with
 	 * associated meta-data.
 	 */
 	public List<ExpressionInfo> orderByExpressions =
-			new ArrayList<ExpressionInfo>();
+			new ArrayList<>();
 	/**
 	 * Whether we sort i-th order-by element in
 	 * ascending (as opposed to descending) order.
@@ -167,12 +165,12 @@ public class QueryInfo {
 	 * Set of columns required for join processing.
 	 */
 	public Set<ColumnRef> colsForJoins =
-			new HashSet<ColumnRef>();
+			new HashSet<>();
 	/**
 	 * Set of columns required for post-processing.
 	 */
 	public Set<ColumnRef> colsForPostProcessing =
-			new HashSet<ColumnRef>();
+			new HashSet<>();
 	/**
 	 * Aggregate expressions in SELECT clause.
 	 */
@@ -188,7 +186,7 @@ public class QueryInfo {
 	 */
 	void extractFromInfo() throws Exception {
 		// Extract all from items
-		List<FromItem> fromItems = new ArrayList<FromItem>();
+		List<FromItem> fromItems = new ArrayList<>();
 		fromItems.add(plainSelect.getFromItem());
 		if (plainSelect.getJoins() != null) {
 			for (Join join : plainSelect.getJoins()) {
@@ -386,8 +384,8 @@ public class QueryInfo {
 			// Decompose into conjuncts
 			List<Expression> conjuncts = whereInfo.conjuncts;
 			// Merge conditions that refer to the same tables
-			Map<Set<String>, Expression> tablesToCondition = 
-					new HashMap<Set<String>, Expression>();
+			Map<Set<String>, Expression> tablesToCondition =
+					new HashMap<>();
 			for (Expression conjunct : conjuncts) {
 				ExpressionInfo conjunctInfo = 
 						new ExpressionInfo(this, conjunct);
@@ -406,13 +404,15 @@ public class QueryInfo {
 				ExpressionInfo pred = new ExpressionInfo(this, condition);
 				wherePredicates.add(pred);
 			}
+
+
 			// Separate into unary and join predicates
 			for (ExpressionInfo exprInfo : wherePredicates) {
 				if (exprInfo.aliasesMentioned.size() == 1) {
 					unaryPredicates.add(exprInfo);
 				} else {
 					// Join predicate - calculate mentioned alias indexes
-					Set<Integer> aliasIdxs = new HashSet<Integer>();
+					Set<Integer> aliasIdxs = new HashSet<>();
 					for (String alias : exprInfo.aliasesMentioned) {
 						aliasIdxs.add(aliasToIndex.get(alias));
 					}
@@ -422,7 +422,7 @@ public class QueryInfo {
 					for (Expression conjunct : exprInfo.conjuncts) {
 						ExpressionInfo curInfo = new ExpressionInfo(this, conjunct);
 						Set<ColumnRef> curEquiJoinCols = extractEquiJoinCols(curInfo);
-						if (curEquiJoinCols != null) {							
+						if (curEquiJoinCols != null) {
 							equiJoinCols.addAll(curEquiJoinCols);
 							equiJoinPreds.add(curInfo);
 						} else {
@@ -436,6 +436,8 @@ public class QueryInfo {
 					}
 				} // if join predicate
 			} // over where conjuncts
+
+
 		} // if where clause
 	}
 	/**
@@ -532,7 +534,7 @@ public class QueryInfo {
 	 * @return				set of references to mentioned columns
 	 */
 	static Set<ColumnRef> extractCols(List<ExpressionInfo> expressions) {
-		Set<ColumnRef> colRefs = new HashSet<ColumnRef>();
+		Set<ColumnRef> colRefs = new HashSet<>();
 		for (ExpressionInfo expr : expressions) {
 			colRefs.addAll(expr.columnsMentioned);
 		}
@@ -567,7 +569,7 @@ public class QueryInfo {
 	 */
 	public boolean connected(Set<Integer> aliasIndices, int newIndex) {
 		// Resulting join indices if selecting new table for join
-		Set<Integer> indicesAfterJoin = new HashSet<Integer>();
+		Set<Integer> indicesAfterJoin = new HashSet<>();
 		indicesAfterJoin.addAll(aliasIndices);
 		indicesAfterJoin.add(newIndex);
 		// Is there at least one connecting join predicate?

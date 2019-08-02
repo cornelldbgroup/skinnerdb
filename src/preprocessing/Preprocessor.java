@@ -69,7 +69,7 @@ public class Preprocessor {
 		// Reset error flag
 		hadError = false;
 		// Collect columns required for joins and post-processing
-		Set<ColumnRef> requiredCols = new HashSet<ColumnRef>();
+		Set<ColumnRef> requiredCols = new HashSet<>();
 		requiredCols.addAll(query.colsForJoins);
 		requiredCols.addAll(query.colsForPostProcessing);
 		log("Required columns: " + requiredCols);
@@ -93,7 +93,7 @@ public class Preprocessor {
 		// Iterate over query aliases
 		query.aliasToTable.keySet().parallelStream().forEach(alias -> {
 			// Collect required columns (for joins and post-processing) for this table
-			List<ColumnRef> curRequiredCols = new ArrayList<ColumnRef>();
+			List<ColumnRef> curRequiredCols = new ArrayList<>();
 			for (ColumnRef requiredCol : requiredCols) {
 				if (requiredCol.aliasName.equals(alias)) {
 					curRequiredCols.add(requiredCol);

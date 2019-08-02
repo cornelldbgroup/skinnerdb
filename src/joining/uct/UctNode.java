@@ -112,14 +112,14 @@ public class UctNode {
         createdIn = roundCtr;
         treeLevel = 0;
         nrActions = nrTables;
-        priorityActions = new ArrayList<Integer>();
+        priorityActions = new ArrayList<>();
         for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
             priorityActions.add(actionCtr);
         }
         childNodes = new UctNode[nrActions];
         nrTries = new int[nrActions];
         accumulatedReward = new double[nrActions];
-        joinedTables = new HashSet<Integer>();
+        joinedTables = new HashSet<>();
         unjoinedTables = new ArrayList<>();
         nextTable = new int[nrTables];
         for (int tableCtr = 0; tableCtr < nrTables; ++tableCtr) {
