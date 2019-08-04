@@ -185,9 +185,14 @@ public class BufferManager {
 	 * @return			data of requested column
 	 * @throws Exception
 	 */
-	public static ColumnData getManagerData(ColumnRef columnRef) throws Exception {
+	public static ColumnData getManagerData(ColumnRef columnRef) {
 		// Load data by data manager
-		return manager.getData(columnRef);
+		try {
+			return manager.getData(columnRef);
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		return null;
 	}
 
 

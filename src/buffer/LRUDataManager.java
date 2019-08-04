@@ -11,6 +11,7 @@ import query.ColumnRef;
 import types.TypeUtil;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static buffer.BufferManager.log;
 
@@ -24,7 +25,7 @@ public class LRUDataManager implements IDataManager {
     private int size = 0;
 
     public LRUDataManager() {
-        colToData = new HashMap<>();
+        colToData = new ConcurrentHashMap<>();
         columnOrder = new Stack<>();
     }
 
@@ -43,6 +44,7 @@ public class LRUDataManager implements IDataManager {
             }
             colToData.put(column, data);
             columnOrder.add(column);
+            size += data.cardinality;
         }
     }
 
@@ -62,8 +64,8 @@ public class LRUDataManager implements IDataManager {
         // Load data if necessary
         ColumnData columnData = colToData.get(columnRef);
         if (columnData == null) {
-            ColumnData data = loadColumn(columnRef);
-            put(columnRef, data);
+            columnData = loadColumn(columnRef);
+            put(columnRef, columnData);
         }
         return columnData;
     }

@@ -64,7 +64,8 @@ public class Materialize {
 		// Generate column data
 		sourceColRefs.parallelStream().forEach(sourceColRef -> {
 			// Copy relevant rows into result column
-			ColumnData srcData = BufferManager.colToData.get(sourceColRef);
+//			ColumnData srcData = BufferManager.colToData.get(sourceColRef);
+			ColumnData srcData = BufferManager.getManagerData(sourceColRef);
 			ColumnData resultData = rowList==null?
 					srcData.copyRows(rowBitSet):srcData.copyRows(rowList);
 			String columnName = sourceColRef.columnName;
