@@ -30,6 +30,7 @@ public class IntData extends ColumnData implements Serializable {
 	public IntData(int cardinality) {
 		super(cardinality);
 		this.data = new int[cardinality];
+		this.elementSize = 4;
 	}
 
 	@Override

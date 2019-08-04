@@ -30,6 +30,7 @@ public class LongData extends ColumnData implements Serializable {
 	public LongData(int cardinality) {
 		super(cardinality);
 		this.data = new long[cardinality];
+		this.elementSize = 8;
 	}
 
 	@Override

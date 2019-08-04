@@ -30,6 +30,7 @@ public class DoubleData extends ColumnData implements Serializable {
 	public DoubleData(int cardinality) {
 		super(cardinality);
 		this.data = new double[cardinality];
+		this.elementSize = 4;
 	}
 
 	@Override

@@ -46,6 +46,12 @@ public class BufferManager {
 	public final static Map<ColumnRef, Index> colToIndex =
 			new ConcurrentHashMap<ColumnRef, Index>();
 	/**
+	 * Implementation of buffer management algorithm.
+	 */
+	public final static IDataManager manager =
+			new LRUDataManager();
+
+	/**
 	 * Loads dictionary from hard disk.
 	 */
 	public static void loadDictionary() throws Exception {
@@ -170,6 +176,21 @@ public class BufferManager {
 		}
 		return colToData.get(columnRef);
 	}
+
+	/**
+	 * Returns data of specified column, loads data from disk if
+	 * currently not loaded.
+	 *
+	 * @param columnRef	request data for this column
+	 * @return			data of requested column
+	 * @throws Exception
+	 */
+	public static ColumnData getManagerData(ColumnRef columnRef) throws Exception {
+		// Load data by data manager
+		return manager.getData(columnRef);
+	}
+
+
 	/**
 	 * Remove given column from buffer space.
 	 * 

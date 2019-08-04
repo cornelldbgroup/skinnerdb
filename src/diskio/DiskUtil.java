@@ -1,5 +1,8 @@
 package diskio;
 
+import data.*;
+import types.JavaType;
+
 import java.io.FileInputStream;
 import java.io.ObjectInputStream;
 
@@ -27,6 +30,38 @@ public class DiskUtil {
 			objIn.close();
 			fileIn.close();
 			return object;
+		} catch (Exception e) {
+			throw new Exception("Error loading object at path '" + path + "'");
+		}
+	}
+
+	public static ColumnData loadObject(String path, JavaType javaType) throws Exception {
+		ColumnData columnData;
+		// Read generic object from file
+		try {
+			FileInputStream fileIn = new FileInputStream(path);
+			ObjectInputStream objIn = new ObjectInputStream(fileIn);
+			Object object = objIn.readObject();
+			// Cast object according to column type
+			switch (javaType) {
+				case INT:
+					columnData = (IntData)object;
+					break;
+				case LONG:
+					columnData = (LongData)object;
+					break;
+				case DOUBLE:
+					columnData = (DoubleData)object;
+					break;
+				case STRING:
+					columnData = (StringData)object;
+					break;
+				default:
+					throw new IllegalStateException("Unexpected value: " + javaType);
+			}
+			objIn.close();
+			fileIn.close();
+			return columnData;
 		} catch (Exception e) {
 			throw new Exception("Error loading object at path '" + path + "'");
 		}

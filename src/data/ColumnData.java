@@ -23,6 +23,10 @@ public abstract class ColumnData implements Serializable {
 	 */
 	public final BitSet isNull;
 	/**
+	 * the size of each element.
+	 */
+	public int elementSize;
+	/**
 	 * Initializes flags indicating NULL values.
 	 * 
 	 * @param cardinality	number of rows in column

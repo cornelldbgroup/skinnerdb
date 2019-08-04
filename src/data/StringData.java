@@ -31,6 +31,7 @@ public class StringData extends ColumnData implements Serializable {
 	public StringData(int cardinality) {
 		super(cardinality);
 		this.data = new String[cardinality];
+		this.elementSize = 4;
 	}
 	
 	@Override

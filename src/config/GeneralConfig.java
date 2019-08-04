@@ -12,4 +12,9 @@ public class GeneralConfig {
 	 * Whether to use in-memory data processing.
 	 */
 	public static boolean inMemory = true;
+	/**
+	 * The size of cache in bytes
+	 */
+	public static int cacheSize = 100000;
+
 }
