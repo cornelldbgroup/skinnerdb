@@ -27,7 +27,9 @@ command in the SkinnerDB console. Note that you need to re-create indexes after 
 <li>Run a benchmark using the <code>bench ../imdb/queries outputfile.txt</code> command in the SkinnerDB console (you may need to adapt the relative path to the directory containing benchmark queries, replace <code>outputfile.txt</code> by a file name of your choosing).</li>
 </ol>
 
-After running the benchmark, benchmark results can be found in the specified output file. Benchmark results include per-query times for each of the processing phases (pre-processing, join phase, and post-processing) as well as many other statistics such as the number of tuples generated (column "Tuples") or the number of UCT tree nodes generated (column "NrUctNodes").
+After running the benchmark, benchmark results can be found in the specified output file. Benchmark results include per-query times for each of the processing phases (pre-processing, join phase, and post-processing) as well as many other statistics such as the number of tuples generated (column "Tuples") or the number of UCT tree nodes generated (column "NrUctNodes"). 
+
+Typical times for running all queries of the join order benchmark are 83 seconds with indexes (104 seconds without indexes) on our benchmarking platform (Dell PowerEdge R640 server with 2 Intel Xeon 2.3 GHz CPUs and 256 GB of RAM running OpenJDK 1.8). Times may slightly vary from run to run as join ordering decisions depend initially on randomization. 
 
 # Quickstart
 
@@ -48,6 +50,10 @@ SkinnerDB is specialized for in-memory processing. The default settings for java
 7. (Optional) Create indices for the database columns. Run the 'index all' command in the Skinner console to create indices on all database columns. Again, this may take a while but can pay off at run time. Currently, we do not store indices on hard disk. This means that the 'index all' command (as opposed to the 'compress' command!) has to be re-run each time after starting the Skinner console.
 
 8. Run analytical SQL queries. The current prototype only supports a very limited subset of SQL and not all features have been tested yet. The current support includes (without guarantees) select queries with inequality and equality predicates, LIKE expressions (as they appear in the join order benchmark, some special cases are currently not handled correctly), logical and arithmetic expressions, minimum and maximum aggregation, joins with predicates specified in the SQL WHERE clause, grouping, and sorting.
+
+# Tuning
+
+SkinnerDB includes various tuning parameters that can improve performance for specific benchmarks and data sets. Those parameters are hardcoded in the current version and can be found in the sub-folder src/config. Among the most important parameters are the `EXPLORATION_WEIGHT`, the `BUDGET_PER_EPISODE`, and the `FORGET` parameter (all in JoinConfig.java). Increasing the exploration weight makes the algorithm more "curious", thereby spending more effort in exploration as opposed to exploitation (here: using promising join orders). Increasing the budget per episode decreases learning overheads but may reduce the quality of join order decisions. If the forget parameter is enabled, the UCT tree is rebuilt regularly to increase exploration.
 
 # Team
 
