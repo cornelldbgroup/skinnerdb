@@ -67,15 +67,17 @@ public class SkinnerCmd {
 	 */
 	static void processBenchCmd(String input) throws Exception {
 		String[] inputFrags = input.split("\\s");
-		if (inputFrags.length != 2) {
+		if (inputFrags.length != 3) {
 			System.out.println("Error - specify only path "
-					+ "to directory containing queries");
+					+ "to directory containing queries and "
+					+ "name of output file");
 		} else {
 			// Check whether directory exists
 			String dirPath = inputFrags[1];
 			if (fileOrError(dirPath)) {
 				// Open benchmark result file and write header
-				PrintWriter benchOut = new PrintWriter("benchresults.txt");
+				String outputName = inputFrags[2];
+				PrintWriter benchOut = new PrintWriter(outputName);
 				BenchUtil.writeBenchHeader(benchOut);
 				// Load all queries to benchmark
 				Map<String, PlainSelect> nameToQuery = 
@@ -88,9 +90,6 @@ public class SkinnerCmd {
 				}
 				// Close benchmark result file
 				benchOut.close();				
-			} else {
-				System.out.println("Error - cannot find "
-						+ "directory at path " + dirPath);
 			}
 		}
 	}
@@ -293,7 +292,7 @@ public class SkinnerCmd {
 			String[] inputFrags = input.split("\\s");
 			processExplain(inputFrags);
 		} else if (input.equals("help")) {
-			System.out.println("'bench <Dir>' to benchmark queries in all *.sql files");
+			System.out.println("'bench <query Dir> <output file>' to benchmark queries in *.sql files");
 			System.out.println("'compress' to compress database");
 			System.out.println("'exec <SQL file>' to execute file");
 			System.out.println("'explain <Plot Dir> <Plot Bound> "
