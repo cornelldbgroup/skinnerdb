@@ -71,21 +71,27 @@ public class SkinnerCmd {
 			System.out.println("Error - specify only path "
 					+ "to directory containing queries");
 		} else {
+			// Check whether directory exists
 			String dirPath = inputFrags[1];
-			// Open benchmark result file and write header
-			PrintWriter benchOut = new PrintWriter("benchresults.txt");
-			BenchUtil.writeBenchHeader(benchOut);
-			// Load all queries to benchmark
-			Map<String, PlainSelect> nameToQuery = 
-					BenchUtil.readAllQueries(dirPath);
-			// Iterate over queries
-			for (Entry<String, PlainSelect> entry : nameToQuery.entrySet()) {
-				String queryName = entry.getKey();
-				PlainSelect query = entry.getValue();
-				BenchUtil.benchQuery(queryName, query, benchOut);
+			if (fileOrError(dirPath)) {
+				// Open benchmark result file and write header
+				PrintWriter benchOut = new PrintWriter("benchresults.txt");
+				BenchUtil.writeBenchHeader(benchOut);
+				// Load all queries to benchmark
+				Map<String, PlainSelect> nameToQuery = 
+						BenchUtil.readAllQueries(dirPath);
+				// Iterate over queries
+				for (Entry<String, PlainSelect> entry : nameToQuery.entrySet()) {
+					String queryName = entry.getKey();
+					PlainSelect query = entry.getValue();
+					BenchUtil.benchQuery(queryName, query, benchOut);
+				}
+				// Close benchmark result file
+				benchOut.close();				
+			} else {
+				System.out.println("Error - cannot find "
+						+ "directory at path " + dirPath);
 			}
-			// Close benchmark result file
-			benchOut.close();
 		}
 	}
 	/**
