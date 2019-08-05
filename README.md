@@ -1,7 +1,7 @@
 # SkinnerDB
 
 This repository contains a very early version of a (slightly refined) re-implementation of SkinnerDB, 
-described in the paper <a href="https://dl.acm.org/citation.cfm?id=3275600">SkinnerDB: Regret-bounded query evaluation via reinforcement learning</a> at SIGMOD 2019. 
+described in the paper <a href="https://dl.acm.org/citation.cfm?id=3275600">SkinnerDB: Regret-bounded query evaluation via reinforcement learning</a> at SIGMOD 2019 (see video recording of SIGMOD talk <a href="https://www.youtube.com/watch?v=QRYVnKaZ9fw">here</a>). 
 
 This source code is currently under development and **NOT CONSIDERED STABLE**. 
 
