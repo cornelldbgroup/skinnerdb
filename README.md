@@ -20,6 +20,7 @@ The <a href="http://www.vldb.org/pvldb/vol9/p204-leis.pdf">join order benchmark<
 java -jar -Xmx16G -XX:+UseConcMarkSweepGC Skinner.jar /path/to/skinner/data
 </code>
 </p>
+The settings for garbage collector (<code>-XX:+UseConcMarkSweepGC</code>) and heap space (<code>-Xmx16G</code>) work best for our benchmarking platform but may need to be revised for different machines.    
 </li>
 <li>Optionally, create indexes on all columns using the <code>index all</code> 
 command in the SkinnerDB console. Note that you need to re-create indexes after each startup as the current version does not store indexes on disk.</li>
