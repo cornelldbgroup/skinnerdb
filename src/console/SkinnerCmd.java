@@ -3,9 +3,12 @@ package console;
 import java.io.File;
 import java.io.PrintWriter;
 import java.util.Arrays;
+import java.util.Map;
 import java.util.Scanner;
+import java.util.Map.Entry;
 import java.util.regex.Pattern;
 
+import benchmark.BenchUtil;
 import buffer.BufferManager;
 import catalog.CatalogManager;
 import catalog.info.TableInfo;
@@ -53,6 +56,36 @@ public class SkinnerCmd {
 			System.out.println("Error - input file at " +
 					filePath + " does not exist");
 			return false;
+		}
+	}
+	/**
+	 * Processes a command for benchmarking all queries in a
+	 * given directory.
+	 * 
+	 * @param input		input command
+	 * @throws Exception
+	 */
+	static void processBenchCmd(String input) throws Exception {
+		String[] inputFrags = input.split("\\s");
+		if (inputFrags.length != 2) {
+			System.out.println("Error - specify only path "
+					+ "to directory containing queries");
+		} else {
+			String dirPath = inputFrags[1];
+			// Open benchmark result file and write header
+			PrintWriter benchOut = new PrintWriter("benchresults.txt");
+			BenchUtil.writeBenchHeader(benchOut);
+			// Load all queries to benchmark
+			Map<String, PlainSelect> nameToQuery = 
+					BenchUtil.readAllQueries(dirPath);
+			// Iterate over queries
+			for (Entry<String, PlainSelect> entry : nameToQuery.entrySet()) {
+				String queryName = entry.getKey();
+				PlainSelect query = entry.getValue();
+				BenchUtil.benchQuery(queryName, query, benchOut);
+			}
+			// Close benchmark result file
+			benchOut.close();
 		}
 	}
 	/**
@@ -244,6 +277,8 @@ public class SkinnerCmd {
 		if (input.equals("quit")) {
 			// Terminate console
 			return false;
+		} else if (input.startsWith("bench")) {
+			processBenchCmd(input);
 		} else if (input.equals("compress")) {
 			Compressor.compress();
 		} else if (input.startsWith("exec")) {
@@ -252,6 +287,7 @@ public class SkinnerCmd {
 			String[] inputFrags = input.split("\\s");
 			processExplain(inputFrags);
 		} else if (input.equals("help")) {
+			System.out.println("'bench <Dir>' to benchmark queries in all *.sql files");
 			System.out.println("'compress' to compress database");
 			System.out.println("'exec <SQL file>' to execute file");
 			System.out.println("'explain <Plot Dir> <Plot Bound> "

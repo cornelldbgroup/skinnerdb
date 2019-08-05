@@ -78,19 +78,7 @@ public class BenchAndVerify {
 		Indexer.indexAll(StartupConfig.INDEX_CRITERIA);
 		// Read all queries from files
 		Map<String, PlainSelect> nameToQuery = 
-				new TreeMap<String, PlainSelect>(
-						Collections.reverseOrder());
-		File dir = new File(args[1]);
-		for (File file : dir.listFiles()) {
-			if (file.getName().endsWith(".sql")) {
-				String sql = new String(Files.readAllBytes(file.toPath()));
-				System.out.println(sql);
-				Statement sqlStatement = CCJSqlParserUtil.parse(sql);
-				Select select = (Select)sqlStatement;
-				PlainSelect plainSelect = (PlainSelect)select.getSelectBody();
-				nameToQuery.put(file.getName(), plainSelect);				
-			}
-		}
+				BenchUtil.readAllQueries(args[1]);
 		// Open connection to Postgres 
 		String url = "jdbc:postgresql:imdb_unicode_index";
 		Properties props = new Properties();
@@ -104,10 +92,7 @@ public class BenchAndVerify {
 		PrintStream skinnerOut = new PrintStream("skinnerResults.txt");
 		PrintStream console = System.out;
 		// Measure preprocessing time for each query
-		benchOut.println("Query\tMillis\tPreMillis\tPostMillis\tTuples\t"
-				+ "Iterations\tLookups\tNrIndexEntries\tnrUniqueLookups\t" 
-				+ "NrUctNodes\tNrPlans\tJoinCard\tNrSamples\tAvgReward\t"
-				+ "MaxReward\tTotalWork");
+		BenchUtil.writeBenchHeader(benchOut);
 		for (Entry<String, PlainSelect> entry : nameToQuery.entrySet()) {
 			System.out.println(entry.getKey());
 			System.out.println(entry.getValue().toString());
@@ -120,7 +105,6 @@ public class BenchAndVerify {
 			long postStartMillis = System.currentTimeMillis();
 			PostProcessor.process(query, preSummary);
 			long postMillis = System.currentTimeMillis() - postStartMillis;
-			//System.gc();
 			long totalMillis = System.currentTimeMillis() - startMillis;
 			// Check consistency with Postgres results: unary preds
 			for (ExpressionInfo expr : query.unaryPredicates) {
