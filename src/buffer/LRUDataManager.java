@@ -20,8 +20,17 @@ public class LRUDataManager implements IDataManager {
      * the LRU cache for loaded columns.
      */
     private Map<ColumnRef, ColumnData> colToData;
+    /**
+     * the order of column touched by the system.
+     */
     private Stack<ColumnRef> columnOrder;
+    /**
+     * the size of cache.
+     */
     private int capacity = GeneralConfig.cacheSize;
+    /**
+     * the current size of data stored in the memory.
+     */
     private int size = 0;
 
     public LRUDataManager() {

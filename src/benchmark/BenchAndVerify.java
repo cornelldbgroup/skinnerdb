@@ -16,6 +16,7 @@ import java.util.Properties;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 
+import config.*;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.Map.Entry;
@@ -23,9 +24,6 @@ import java.util.Map.Entry;
 import buffer.BufferManager;
 import catalog.CatalogManager;
 import catalog.info.TableInfo;
-import config.GeneralConfig;
-import config.NamingConfig;
-import config.StartupConfig;
 import diskio.PathUtil;
 import expressions.ExpressionInfo;
 import expressions.normalization.CollationVisitor;
@@ -123,94 +121,101 @@ public class BenchAndVerify {
 			//System.gc();
 			long totalMillis = System.currentTimeMillis() - startMillis;
 			// Check consistency with Postgres results: unary preds
-			for (ExpressionInfo expr : query.unaryPredicates) {
-				// Unary predicates must refer to one table
-				assertEquals(expr.aliasesMentioned.size(), 1);
-				// Get cardinality after PG filtering
-				String alias = expr.aliasesMentioned.iterator().next();
-				String table = query.aliasToTable.get(alias);
+			if (TestConfig.CHECK_CORRECTNESS) {
+				for (ExpressionInfo expr : query.unaryPredicates) {
+					// Unary predicates must refer to one table
+					assertEquals(expr.aliasesMentioned.size(), 1);
+					// Get cardinality after PG filtering
+					String alias = expr.aliasesMentioned.iterator().next();
+					String table = query.aliasToTable.get(alias);
+					StringBuilder sqlBuilder = new StringBuilder();
+					sqlBuilder.append("SELECT COUNT(*) FROM ");
+					sqlBuilder.append(table);
+					sqlBuilder.append(" AS ");
+					sqlBuilder.append(alias);
+					sqlBuilder.append(" WHERE ");
+					CollationVisitor collator = new CollationVisitor();
+					expr.originalExpression.accept(collator);
+					sqlBuilder.append(collator.exprStack.pop().toString());
+					String sql = sqlBuilder.toString().replace("STRING", "TEXT");
+					System.out.println(sql);
+					ResultSet result = pgStatement.executeQuery(sql);
+					result.next();
+					int pgCardinality = result.getInt(1);
+					System.out.println("PG cardinality:\t" + pgCardinality);
+					// Get cardinality after Skinner filtering
+					String filteredName = preSummary.aliasToFiltered.get(alias);
+					TableInfo filteredTable = CatalogManager.currentDB.
+							nameToTable.get(filteredName);
+					String columnName = filteredTable.nameToCol.keySet().iterator().next();
+					ColumnRef colRef = new ColumnRef(filteredName, columnName);
+					int skinnerCardinality = BufferManager.colToData.get(colRef).getCardinality();
+					System.out.println("Skinner card:\t" + skinnerCardinality);
+					assertEquals(pgCardinality, skinnerCardinality);
+				}
+
+				// Check consistency with Postgres: join result size
 				StringBuilder sqlBuilder = new StringBuilder();
 				sqlBuilder.append("SELECT COUNT(*) FROM ");
-				sqlBuilder.append(table);
-				sqlBuilder.append(" AS ");
-				sqlBuilder.append(alias);
-				sqlBuilder.append(" WHERE ");
+				List<String> fromItems = query.aliasToTable.entrySet().stream().
+						map(e -> e.getValue() + " " + e.getKey()).
+						collect(Collectors.toList());
+				String fromClause = StringUtils.join(fromItems, ", ");
+				sqlBuilder.append(fromClause);
+				if (!query.wherePredicates.isEmpty()) {
+					sqlBuilder.append(" WHERE ");
+					String whereCondition = StringUtils.join(
+							query.wherePredicates, " AND ");
+					sqlBuilder.append(whereCondition);
+				}
+				String joinSql = sqlBuilder.toString().replace("STRING", "TEXT");
+				System.out.println("Join query: " + joinSql);
+				ResultSet joinResult = pgStatement.executeQuery(joinSql);
+				joinResult.next();
+				int pgJoinCard = joinResult.getInt(1);
+
+				// Get cardinality of Skinner join result
+				int skinnerJoinCard = CatalogManager.getCardinality(
+						NamingConfig.JOINED_NAME);
+				System.out.println("PG Card: " + pgJoinCard +
+						"; Skinner card: " + skinnerJoinCard);
+				assertEquals(pgJoinCard, skinnerJoinCard);
+				// Output final result for Postgres
+				StringBuilder pgBuilder = new StringBuilder();
+				PlainSelect plainSelect = entry.getValue();
+				pgBuilder.append("SELECT ");
+				boolean firstSelectItem = true;
+				for (ExpressionInfo selExpr : query.selectExpressions) {
+					if (firstSelectItem) {
+						firstSelectItem = false;
+					} else {
+						pgBuilder.append(", ");
+					}
+					PgPrinter pgPrinter = new PgPrinter(query);
+					pgPrinter.setBuffer(pgBuilder);
+					selExpr.afterNormalization.accept(pgPrinter);
+				}
+				pgBuilder.append(" FROM ");
+				pgBuilder.append(fromClause);
+				pgBuilder.append(" WHERE ");
 				CollationVisitor collator = new CollationVisitor();
-				expr.originalExpression.accept(collator);
-				sqlBuilder.append(collator.exprStack.pop().toString());
-				String sql = sqlBuilder.toString().replace("STRING", "TEXT");
-				System.out.println(sql);
-				ResultSet result = pgStatement.executeQuery(sql);
-				result.next();
-				int pgCardinality = result.getInt(1);
-				System.out.println("PG cardinality:\t" + pgCardinality);
-				// Get cardinality after Skinner filtering
-				String filteredName = preSummary.aliasToFiltered.get(alias);
-				TableInfo filteredTable = CatalogManager.currentDB.
-						nameToTable.get(filteredName);
-				String columnName = filteredTable.nameToCol.keySet().iterator().next();
-				ColumnRef colRef = new ColumnRef(filteredName, columnName);
-				int skinnerCardinality = BufferManager.colToData.get(colRef).getCardinality();
-				System.out.println("Skinner card:\t" + skinnerCardinality);
-				assertEquals(pgCardinality, skinnerCardinality);
+				plainSelect.getWhere().accept(collator);
+				pgBuilder.append(collator.exprStack.pop().toString());
+				String pgQuery = pgBuilder.toString().replace("STRING", "TEXT");
+				System.out.println("PG Query: " + pgQuery);
+				ResultSet queryResult = pgStatement.executeQuery(pgQuery);
+				int nrPgCols = queryResult.getMetaData().getColumnCount();
+				while (queryResult.next()) {
+					for (int colCtr=1; colCtr<=nrPgCols; ++colCtr) {
+						pgOut.print(queryResult.getString(colCtr) + "\t");
+					}
+					pgOut.println();
+				}
+				pgOut.flush();
 			}
-			// Check consistency with Postgres: join result size
-			StringBuilder sqlBuilder = new StringBuilder();
-			sqlBuilder.append("SELECT COUNT(*) FROM ");
-			List<String> fromItems = query.aliasToTable.entrySet().stream().
-					map(e -> e.getValue() + " " + e.getKey()).
-					collect(Collectors.toList());
-			String fromClause = StringUtils.join(fromItems, ", ");
-			sqlBuilder.append(fromClause);
-			if (!query.wherePredicates.isEmpty()) {
-				sqlBuilder.append(" WHERE ");
-				String whereCondition = StringUtils.join(
-						query.wherePredicates, " AND ");
-				sqlBuilder.append(whereCondition);
-			}
-			String joinSql = sqlBuilder.toString().replace("STRING", "TEXT");
-			System.out.println("Join query: " + joinSql);
-			ResultSet joinResult = pgStatement.executeQuery(joinSql);
-			joinResult.next();
-			int pgJoinCard = joinResult.getInt(1);
-			// Get cardinality of Skinner join result
+
 			int skinnerJoinCard = CatalogManager.getCardinality(
 					NamingConfig.JOINED_NAME);
-			System.out.println("PG Card: " + pgJoinCard + 
-					"; Skinner card: " + skinnerJoinCard);
-			assertEquals(pgJoinCard, skinnerJoinCard);
-			// Output final result for Postgres
-			StringBuilder pgBuilder = new StringBuilder();
-			PlainSelect plainSelect = entry.getValue();
-			pgBuilder.append("SELECT ");
-			boolean firstSelectItem = true;
-			for (ExpressionInfo selExpr : query.selectExpressions) {
-				if (firstSelectItem) {
-					firstSelectItem = false;
-				} else {
-					pgBuilder.append(", ");
-				}
-				PgPrinter pgPrinter = new PgPrinter(query);
-				pgPrinter.setBuffer(pgBuilder);
-				selExpr.afterNormalization.accept(pgPrinter);
-			}
-			pgBuilder.append(" FROM ");
-			pgBuilder.append(fromClause);
-			pgBuilder.append(" WHERE ");
-			CollationVisitor collator = new CollationVisitor();
-			plainSelect.getWhere().accept(collator);
-			pgBuilder.append(collator.exprStack.pop().toString());
-			String pgQuery = pgBuilder.toString().replace("STRING", "TEXT");
-			System.out.println("PG Query: " + pgQuery);
-			ResultSet queryResult = pgStatement.executeQuery(pgQuery);
-			int nrPgCols = queryResult.getMetaData().getColumnCount();
-			while (queryResult.next()) {
-				for (int colCtr=1; colCtr<=nrPgCols; ++colCtr) {
-					pgOut.print(queryResult.getString(colCtr) + "\t");
-				}
-				pgOut.println();
-			}
-			pgOut.flush();
 			// Output final result for Skinner
 			String resultRel = NamingConfig.FINAL_RESULT_NAME;
 			System.setOut(skinnerOut);
