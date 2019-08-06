@@ -19,6 +19,7 @@ import operators.MapRows;
 import operators.Materialize;
 import operators.MinMaxAggregate;
 import operators.OrderBy;
+import operators.SumAggregate;
 import preprocessing.Context;
 import query.ColumnRef;
 import query.QueryInfo;
@@ -136,6 +137,10 @@ public class PostProcessor {
 			int nrGroups = context.nrGroups;
 			ColumnRef groupRef = context.groupRef;
 			switch (aggInfo.aggFunction) {
+			case SUM:
+				SumAggregate.execute(sourceRef, nrGroups, 
+						groupRef, targetRef);
+				break;
 			case MIN:
 				MinMaxAggregate.execute(sourceRef, nrGroups, 
 						groupRef, false, targetRef);
@@ -144,6 +149,9 @@ public class PostProcessor {
 				MinMaxAggregate.execute(sourceRef, nrGroups, 
 						groupRef, true, targetRef);
 				break;
+			default:
+				throw new Exception("Error - aggregate " + aggInfo +
+						" should have been rewritten");
 			}
 		}
 	}

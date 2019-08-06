@@ -2,18 +2,14 @@ package benchmark;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import java.io.File;
 import java.io.PrintStream;
 import java.io.PrintWriter;
-import java.nio.file.Files;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.StringUtils;
@@ -32,10 +28,7 @@ import expressions.normalization.CollationVisitor;
 import expressions.printing.PgPrinter;
 import indexing.Indexer;
 import joining.JoinProcessor;
-import net.sf.jsqlparser.parser.CCJSqlParserUtil;
-import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.select.PlainSelect;
-import net.sf.jsqlparser.statement.select.Select;
 import postprocessing.PostProcessor;
 import preprocessing.Context;
 import preprocessing.Preprocessor;
