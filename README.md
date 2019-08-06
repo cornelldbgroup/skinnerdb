@@ -13,7 +13,7 @@ The <a href="http://www.vldb.org/pvldb/vol9/p204-leis.pdf">join order benchmark<
 
 <ol>
 <li>Download the IMDB database in the SkinnerDB format <a href="https://drive.google.com/file/d/1UCXtiPvVlwzUCWxKM6ic-XqIryk4OTgE/view?usp=sharing">here</a>. Decompress the linked .zip file.</li>
-<li>Download this GitHub repository which already contains the join order benchmark queries in the sub-folder imdb/queries.</li> 
+<li>Download this GitHub repository (the master branch!) which already contains the join order benchmark queries in the sub-folder imdb/queries.</li> 
 <li>Start SkinnerDB using the executable .jar file in the jars sub-folder. For Linux, use the following command in the jars directory (while replacing /path/to/skinner/data by the path to the decompressed IMDB database): 
 <p>
 <code>
