@@ -2,6 +2,7 @@ package expressions.compilation;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.HashMap;
 import java.util.List;
@@ -1526,14 +1527,71 @@ public class ExpressionCompiler implements ExpressionVisitor {
 
 	@Override
 	public void visit(CaseExpression arg0) {
-		// TODO Auto-generated method stub
-		
+		List<Expression> whenExprs = arg0.getWhenClauses();
+		int nrWhenExprs = whenExprs.size();
+		// Generate labels
+		Label theEnd = new Label();
+		List<Label> whenLabels = new ArrayList<>();
+		for (int whenCtr=0; whenCtr<nrWhenExprs; ++whenCtr) {
+			whenLabels.add(new Label());
+		}
+		// Iterate over when expressions
+		for (int whenCtr=0; whenCtr<nrWhenExprs; ++whenCtr) {
+			// Evaluate when condition
+			Expression whenExpr = whenExprs.get(whenCtr);
+			WhenClause whenClause = (WhenClause)whenExpr;
+			whenClause.getWhenExpression().accept(this);
+			// Combine null flag and evaluation result
+			evaluationVisitor.visitInsn(Opcodes.IMUL);
+			// Jump if condition is satisfied
+			Label whenLabel = whenLabels.get(whenCtr);
+			evaluationVisitor.visitJumpInsn(
+					Opcodes.IFNE, whenLabel);
+		}
+		// Do we have an else expression?
+		Expression elseExpr = arg0.getElseExpression();
+		if (elseExpr != null) {
+			elseExpr.accept(this);
+			evaluationVisitor.visitJumpInsn(Opcodes.GOTO, theEnd);
+		} else {
+			// No else expression specified - return null
+			SQLtype resultType = expressionInfo.expressionToType.get(arg0);
+			JavaType jResultType = TypeUtil.toJavaType(resultType);
+			switch (jResultType) {
+			case INT:
+				evaluationVisitor.visitLdcInsn(0);
+				break;
+			case LONG:
+				evaluationVisitor.visitLdcInsn(0L);
+				break;
+			case DOUBLE:
+				evaluationVisitor.visitLdcInsn(0.0);
+				break;
+			case STRING:
+				evaluationVisitor.visitLdcInsn("");
+				break;
+			}
+			evaluationVisitor.visitLdcInsn(0);
+			evaluationVisitor.visitJumpInsn(Opcodes.GOTO, theEnd);
+		}
+		// Evaluate when expressions
+		for (int whenCtr=0; whenCtr<nrWhenExprs; ++whenCtr) {
+			// Add associated jump target
+			Label whenLabel = whenLabels.get(whenCtr);
+			evaluationVisitor.visitLabel(whenLabel);
+			// Evaluate when condition
+			Expression whenExpr = whenExprs.get(whenCtr);
+			WhenClause whenClause = (WhenClause)whenExpr;
+			whenClause.getThenExpression().accept(this);
+			evaluationVisitor.visitJumpInsn(Opcodes.GOTO, theEnd);
+		}
+		evaluationVisitor.visitLabel(theEnd);
 	}
 
 	@Override
 	public void visit(WhenClause arg0) {
-		// TODO Auto-generated method stub
-		
+		// WHEN clauses are handled when visiting
+		// the surrounding CASE expression!
 	}
 
 	@Override

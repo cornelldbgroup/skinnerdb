@@ -515,14 +515,43 @@ public class SimplificationVisitor extends SkinnerVisitor {
 
 	@Override
 	public void visit(CaseExpression arg0) {
-		// TODO Auto-generated method stub
-		
+		// Copy case expression
+		CaseExpression caseCopy = new CaseExpression();
+		// Copy when clauses
+		List<Expression> whenExprsCopy = new ArrayList<>();
+		for (Expression whenExpr : arg0.getWhenClauses()) {
+			whenExpr.accept(this);
+			whenExprsCopy.add(opStack.pop());
+		}
+		caseCopy.setWhenClauses(whenExprsCopy);
+		// Copy switch expression if any
+		Expression switchExpr = arg0.getSwitchExpression();
+		if (switchExpr != null) {
+			switchExpr.accept(this);
+			Expression switchCopy = opStack.pop();
+			caseCopy.setSwitchExpression(switchCopy);
+		}
+		// Copy else expression if any
+		Expression elseExpr = arg0.getElseExpression();
+		if (elseExpr != null) {
+			elseExpr.accept(this);
+			Expression elseCopy = opStack.pop();
+			caseCopy.setElseExpression(elseCopy);
+		}
+		// Put copy on stack
+		opStack.push(caseCopy);
 	}
 
 	@Override
 	public void visit(WhenClause arg0) {
-		// TODO Auto-generated method stub
-		
+		arg0.getWhenExpression().accept(this);
+		Expression whenCopy = opStack.pop();
+		arg0.getThenExpression().accept(this);
+		Expression thenCopy = opStack.pop();
+		WhenClause clauseCopy = new WhenClause();
+		clauseCopy.setWhenExpression(whenCopy);
+		clauseCopy.setThenExpression(thenCopy);
+		opStack.push(clauseCopy);
 	}
 
 	@Override

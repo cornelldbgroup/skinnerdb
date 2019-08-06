@@ -497,14 +497,79 @@ public class TypeVisitor extends SkinnerVisitor {
 
 	@Override
 	public void visit(CaseExpression arg0) {
-		// TODO Auto-generated method stub
-		
+		// Treat when expressions
+		SQLtype resultType = null;
+		ExpressionScope resultScope = null;
+		for (Expression expr : arg0.getWhenClauses()) {
+			expr.accept(this);
+			// Check for type and scope consistency
+			SQLtype thisType = outputType.get(expr);
+			ExpressionScope thisScope = outputScope.get(expr);
+			if (resultType == null) {
+				resultType = thisType;
+			}
+			if (resultScope == null) {
+				resultScope = thisScope;
+			}
+			if (!thisType.equals(resultType)) {
+				sqlExceptions.add(new SQLexception("Error -"
+						+ "inconsistent result types "
+						+ "of then clauses"));
+			}
+			if (!thisScope.equals(resultScope)) {
+				sqlExceptions.add(new SQLexception("Error -"
+						+ "inconsistent result scopes "
+						+ "of then clauses"));
+			}
+		}
+		System.out.println(outputType.toString());
+		// Treat switch expression if any
+		Expression switchExpr = arg0.getSwitchExpression();
+		if (switchExpr != null) {
+			switchExpr.accept(this);
+		}
+		// Treat else expression if any
+		Expression elseExpr = arg0.getElseExpression();
+		if (elseExpr != null) {
+			elseExpr.accept(this);
+			// Check for type and scope consistency
+			SQLtype elseType = outputType.get(elseExpr);
+			ExpressionScope elseScope = outputScope.get(elseExpr);
+			if (!elseType.equals(resultType)) {
+				sqlExceptions.add(new SQLexception("Error - "
+						+ "else clause '" + elseExpr + "' has "
+						+ "type " + elseType + ", inconsistent "
+						+ "with result type " + resultType));
+			}
+			if (!elseScope.equals(resultScope)) {
+				sqlExceptions.add(new SQLexception("Error -"
+						+ "else clause has inconsistent scope"));
+			}
+		}
+		// Add type and scope for case block
+		outputType.put(arg0, resultType);
+		outputScope.put(arg0, resultScope);
 	}
 
 	@Override
 	public void visit(WhenClause arg0) {
-		// TODO Auto-generated method stub
-		
+		// Treat when expression
+		Expression whenExpr = arg0.getWhenExpression();
+		whenExpr.accept(this);
+		// Ensure that when expression is Boolean
+		if (!outputType.get(whenExpr).equals(SQLtype.BOOL)) {
+			sqlExceptions.add(new SQLexception("Error - " + 
+					"when expression " + whenExpr + 
+					" is not Boolean"));
+		}
+		// Treat then expression
+		Expression thenExpr = arg0.getThenExpression();
+		thenExpr.accept(this);
+		// Assign type and scope of then expression for surrounding expression
+		SQLtype thenType = outputType.get(thenExpr);
+		ExpressionScope thenScope = outputScope.get(thenExpr);
+		outputType.put(arg0, thenType);
+		outputScope.put(arg0, thenScope);
 	}
 
 	@Override

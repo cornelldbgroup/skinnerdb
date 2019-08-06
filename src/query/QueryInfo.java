@@ -187,6 +187,10 @@ public class QueryInfo {
 	 * number of items in the from clause etc.).
 	 */
 	void extractFromInfo() throws Exception {
+		// Check if FROM clause exists
+		if (plainSelect.getFromItem() == null) {
+			throw new SQLexception("Error - no FROM clause");
+		}
 		// Extract all from items
 		List<FromItem> fromItems = new ArrayList<FromItem>();
 		fromItems.add(plainSelect.getFromItem());

@@ -257,14 +257,21 @@ public class PlainVisitor extends SkinnerVisitor {
 
 	@Override
 	public void visit(CaseExpression caseExpression) {
-		// TODO Auto-generated method stub
-		
+		if (caseExpression.getSwitchExpression() != null) {
+			caseExpression.getSwitchExpression().accept(this);
+		}
+		if (caseExpression.getElseExpression() != null) {
+			caseExpression.getElseExpression().accept(this);
+		}
+		for (Expression expr : caseExpression.getWhenClauses()) {
+			expr.accept(this);
+		}
 	}
 
 	@Override
 	public void visit(WhenClause whenClause) {
-		// TODO Auto-generated method stub
-		
+		whenClause.getWhenExpression().accept(this);
+		whenClause.getThenExpression().accept(this);
 	}
 
 	@Override
