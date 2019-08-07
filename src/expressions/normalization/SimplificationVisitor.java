@@ -72,6 +72,7 @@ import net.sf.jsqlparser.expression.operators.relational.NotEqualsTo;
 import net.sf.jsqlparser.expression.operators.relational.RegExpMatchOperator;
 import net.sf.jsqlparser.expression.operators.relational.RegExpMySQLOperator;
 import net.sf.jsqlparser.schema.Column;
+import net.sf.jsqlparser.statement.create.table.ColDataType;
 import net.sf.jsqlparser.statement.select.SubSelect;
 
 /**
@@ -120,8 +121,8 @@ public class SimplificationVisitor extends SkinnerVisitor {
 		newFunction.setEscaped(arg0.isEscaped());
 		newFunction.setKeep(arg0.getKeep());
 		// Certain standard functions are rewritten into base functions
-		String fctName = arg0.getName();
-		if (fctName.equalsIgnoreCase("count")) {
+		String fctName = arg0.getName().toLowerCase();
+		if (fctName.equals("count")) {
 			newFunction.setName("sum");
 			newFunction.setAllColumns(false);
 			List<Expression> sumParams = new ArrayList<>();
@@ -143,12 +144,35 @@ public class SimplificationVisitor extends SkinnerVisitor {
 				sumParams.add(caseClause);
 			}
 			newFunction.setParameters(new ExpressionList(sumParams));
+			opStack.push(newFunction);
+		} else if (fctName.equals("avg")) {
+			// Sum over average input expression and cast to double
+			newFunction.setName("sum");
+			newFunction.setAllColumns(false);
+			newFunction.setParameters(new ExpressionList(newParams));
+			CastExpression newCast = new CastExpression();
+			newCast.setLeftExpression(newFunction);
+			ColDataType doubleType = new ColDataType();
+			doubleType.setDataType("double");
+			newCast.setType(doubleType);
+			// Divide by the count of average input
+			Function divisorFct = new Function();
+			divisorFct.setAllColumns(false);
+			divisorFct.setDistinct(false);
+			divisorFct.setEscaped(false);
+			divisorFct.setName("count");
+			divisorFct.setParameters(new ExpressionList(newParams));
+			Division division = new Division();
+			division.setLeftExpression(newCast);
+			division.setRightExpression(divisorFct);
+			// Still need to rewrite the count statement
+			division.accept(this);
 		} else {
 			newFunction.setName(arg0.getName());
 			newFunction.setAllColumns(arg0.isAllColumns());	
 			newFunction.setParameters(new ExpressionList(newParams));
+			opStack.push(newFunction);
 		}
-		opStack.push(newFunction);
 	}
 
 	@Override

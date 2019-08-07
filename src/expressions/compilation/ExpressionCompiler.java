@@ -1559,19 +1559,19 @@ public class ExpressionCompiler implements ExpressionVisitor {
 			JavaType jResultType = TypeUtil.toJavaType(resultType);
 			switch (jResultType) {
 			case INT:
-				evaluationVisitor.visitLdcInsn(0);
+				evaluationVisitor.visitLdcInsn((int)0);
 				break;
 			case LONG:
-				evaluationVisitor.visitLdcInsn(0L);
+				evaluationVisitor.visitLdcInsn((long)0);
 				break;
 			case DOUBLE:
-				evaluationVisitor.visitLdcInsn(0.0);
+				evaluationVisitor.visitLdcInsn((double)0);
 				break;
 			case STRING:
 				evaluationVisitor.visitLdcInsn("");
 				break;
 			}
-			evaluationVisitor.visitLdcInsn(0);
+			evaluationVisitor.visitIntInsn(Opcodes.BIPUSH, 0);
 			evaluationVisitor.visitJumpInsn(Opcodes.GOTO, theEnd);
 		}
 		// Evaluate when expressions

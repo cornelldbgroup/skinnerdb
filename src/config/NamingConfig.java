@@ -22,9 +22,10 @@ public class NamingConfig {
 	public static final String JOINED_NAME = "joined.";
 	/**
 	 * Name of table containing for each join result row
-	 * the associated group.
+	 * the associated group (and potentially columns used
+	 * for calculating group IDs).
 	 */
-	public static final String GROUPS_TBL_NAME = "groups.";
+	public static final String GROUPS_TBL_NAME = "groups.results";
 	/**
 	 * Prefix of name of a column that contains data for group by.
 	 */
@@ -34,13 +35,18 @@ public class NamingConfig {
 	 */
 	public static final String GROUPS_COL_NAME = "groups.result";
 	/**
-	 * Name of table holding the results for query aggregates.
+	 * Name of table holding results of expressions over which
+	 * we aggregate.
 	 */
-	public static final String AGG_TBL_NAME = "aggregates.";
+	public static final String AGG_SRC_TBL_NAME = "aggregates.sources";
 	/**
 	 * Prefix of name of column holding input data for aggregate.
 	 */
 	public static final String AGG_SRC_COL_PRE = "aggregate.source";
+	/**
+	 * Name of table holding the results for query aggregates.
+	 */
+	public static final String AGG_TBL_NAME = "aggregates.";
 	/**
 	 * Prefix of columns holding the result of query aggregates.
 	 */
