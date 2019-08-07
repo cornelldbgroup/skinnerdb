@@ -1,5 +1,7 @@
 package operators;
 
+import java.util.Arrays;
+
 import buffer.BufferManager;
 import catalog.CatalogManager;
 import catalog.info.ColumnInfo;

@@ -88,11 +88,13 @@ public class PlainVisitor extends SkinnerVisitor {
 
 	@Override
 	public void visit(Function function) {
-		for (Expression parameterExpression :
-			function.getParameters().getExpressions()) {
-			parameterExpression.accept(this);
+		ExpressionList paramList = function.getParameters();
+		if (paramList != null) {
+			for (Expression parameterExpression :
+				paramList.getExpressions()) {
+				parameterExpression.accept(this);
+			}			
 		}
-		
 	}
 
 	@Override

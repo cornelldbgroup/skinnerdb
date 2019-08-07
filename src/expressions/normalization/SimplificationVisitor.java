@@ -101,24 +101,53 @@ public class SimplificationVisitor extends SkinnerVisitor {
 	@Override
 	public void visit(Function arg0) {
 		// Visit function parameter expressions
-		List<Expression> params = arg0.getParameters().getExpressions();
-		for (Expression param : params) {
-			param.accept(this);
-		}
-		// Combine rewritten operands in expression list
-		int nrParams = params.size();
 		List<Expression> newParams = new ArrayList<Expression>();
-		for (int i=0; i<nrParams; ++i) {
-			newParams.add(0, opStack.pop());
+		ExpressionList paramList = arg0.getParameters();
+		if (paramList != null) {
+			List<Expression> params = paramList.getExpressions();
+			for (Expression param : params) {
+				param.accept(this);
+			}
+			// Combine rewritten operands in expression list
+			int nrParams = params.size();
+			for (int i=0; i<nrParams; ++i) {
+				newParams.add(0, opStack.pop());
+			}			
 		}
 		// Create new function expression and push on the stack
 		Function newFunction = new Function();
-		newFunction.setName(arg0.getName());
 		newFunction.setDistinct(arg0.isDistinct());
 		newFunction.setEscaped(arg0.isEscaped());
 		newFunction.setKeep(arg0.getKeep());
-		newFunction.setParameters(new ExpressionList(params));
-		newFunction.setAllColumns(arg0.isAllColumns());
+		// Certain standard functions are rewritten into base functions
+		String fctName = arg0.getName();
+		if (fctName.equalsIgnoreCase("count")) {
+			newFunction.setName("sum");
+			newFunction.setAllColumns(false);
+			List<Expression> sumParams = new ArrayList<>();
+			// Do we count all rows?
+			if (arg0.isAllColumns()) {
+				sumParams.add(new LongValue(1));
+			} else {
+				IsNullExpression countRowCondition = new IsNullExpression();
+				countRowCondition.setNot(true);
+				countRowCondition.setLeftExpression(newParams.get(0));
+				WhenClause whenClause = new WhenClause();
+				whenClause.setWhenExpression(countRowCondition);
+				List<Expression> whenExprs = new ArrayList<>();
+				whenExprs.add(whenClause);
+				whenClause.setThenExpression(new LongValue(1));
+				CaseExpression caseClause = new CaseExpression();
+				caseClause.setWhenClauses(whenExprs);
+				caseClause.setElseExpression(new LongValue(0));
+				sumParams.add(caseClause);
+			}
+			newFunction.setParameters(new ExpressionList(sumParams));
+		} else {
+			newFunction.setName(arg0.getName());
+			newFunction.setAllColumns(arg0.isAllColumns());	
+			newFunction.setParameters(new ExpressionList(newParams));
+		}
 		opStack.push(newFunction);
 	}
 

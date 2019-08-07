@@ -209,54 +209,58 @@ public class TypeVisitor extends SkinnerVisitor {
 	@Override
 	public void visit(Function arg0) {
 		// Treat parameter expressions
-		List<Expression> paramExprs = arg0.getParameters().getExpressions();
-		for (Expression paramExpr : paramExprs) {
-			paramExpr.accept(this);
-		}
-		// Calculate common type
-		SQLtype commonType = outputType.get(paramExprs.get(0));
-		for (Expression paramExpr : paramExprs) {
-			SQLtype type = outputType.get(paramExpr);
-			commonType = TypeUtil.commonType(commonType, type);
-		}
-		outputType.put(arg0, commonType);
-		// Calculate output scope
-		ExpressionScope paramScope = outputScope.get(paramExprs.get(0));
-		if (paramExprs.size() == 1) {
-			// Check whether this is an aggregation function
-			switch (arg0.getName().toLowerCase()) {
-			case "max":
-			case "min":
-			case "count":
-			case "sum":
-			case "avg":
-				outputScope.put(arg0, ExpressionScope.PER_GROUP);
-				break;
-			default:
-				outputScope.put(arg0, paramScope);
-			}
+		if (arg0.getName().equalsIgnoreCase("count")) {
+			outputType.put(arg0, SQLtype.INT);
+			outputScope.put(arg0, ExpressionScope.PER_GROUP);
 		} else {
-			outputScope.put(arg0, paramScope);			
-		}
-		// Add cast expressions if necessary
-		List<Expression> newParamExprs = new ArrayList<Expression>();
-		for (Expression paramExpr : paramExprs) {
-			SQLtype type = outputType.get(paramExpr);
-			if (type == commonType) {
-				// No casting necessary
-				newParamExprs.add(paramExpr);
-			} else {
-				// Need to add casting
-				CastExpression cast = new CastExpression();
-				ColDataType colDataType = new ColDataType();
-				colDataType.setDataType(commonType.toString());
-				cast.setType(colDataType);
-				cast.setLeftExpression(paramExpr);
-				outputType.put(cast, commonType);
-				newParamExprs.add(cast);
+			List<Expression> paramExprs = arg0.getParameters().getExpressions();
+			for (Expression paramExpr : paramExprs) {
+				paramExpr.accept(this);
 			}
+			// Calculate common type
+			SQLtype commonType = outputType.get(paramExprs.get(0));
+			for (Expression paramExpr : paramExprs) {
+				SQLtype type = outputType.get(paramExpr);
+				commonType = TypeUtil.commonType(commonType, type);
+			}
+			outputType.put(arg0, commonType);
+			// Calculate output scope
+			ExpressionScope paramScope = outputScope.get(paramExprs.get(0));
+			if (paramExprs.size() == 1) {
+				// Check whether this is an aggregation function
+				switch (arg0.getName().toLowerCase()) {
+				case "max":
+				case "min":
+				case "sum":
+				case "avg":
+					outputScope.put(arg0, ExpressionScope.PER_GROUP);
+					break;
+				default:
+					outputScope.put(arg0, paramScope);
+				}
+			} else {
+				outputScope.put(arg0, paramScope);			
+			}
+			// Add cast expressions if necessary
+			List<Expression> newParamExprs = new ArrayList<Expression>();
+			for (Expression paramExpr : paramExprs) {
+				SQLtype type = outputType.get(paramExpr);
+				if (type == commonType) {
+					// No casting necessary
+					newParamExprs.add(paramExpr);
+				} else {
+					// Need to add casting
+					CastExpression cast = new CastExpression();
+					ColDataType colDataType = new ColDataType();
+					colDataType.setDataType(commonType.toString());
+					cast.setType(colDataType);
+					cast.setLeftExpression(paramExpr);
+					outputType.put(cast, commonType);
+					newParamExprs.add(cast);
+				}
+			}
+			arg0.setParameters(new ExpressionList(newParamExprs));
 		}
-		arg0.setParameters(new ExpressionList(newParamExprs));
 	}
 
 	@Override
@@ -522,7 +526,6 @@ public class TypeVisitor extends SkinnerVisitor {
 						+ "of then clauses"));
 			}
 		}
-		System.out.println(outputType.toString());
 		// Treat switch expression if any
 		Expression switchExpr = arg0.getSwitchExpression();
 		if (switchExpr != null) {

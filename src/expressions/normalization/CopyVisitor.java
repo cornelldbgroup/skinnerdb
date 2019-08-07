@@ -95,26 +95,30 @@ public class CopyVisitor extends SkinnerVisitor {
 
 	@Override
 	public void visit(Function arg0) {
-		// Visit function parameter expressions
-		List<Expression> params = arg0.getParameters().getExpressions();
-		for (Expression param : params) {
-			param.accept(this);
-		}
-		// Combine rewritten operands in expression list
-		int nrParams = params.size();
-		List<Expression> newParams = new ArrayList<Expression>();
-		for (int i=0; i<nrParams; ++i) {
-			newParams.add(0, exprStack.pop());
-		}
 		// Create new function expression and push on the stack
 		Function newFunction = new Function();
 		newFunction.setName(arg0.getName());
 		newFunction.setDistinct(arg0.isDistinct());
 		newFunction.setEscaped(arg0.isEscaped());
 		newFunction.setKeep(arg0.getKeep());
-		newFunction.setParameters(new ExpressionList(newParams));
 		newFunction.setAllColumns(arg0.isAllColumns());
 		exprStack.push(newFunction);
+		// Visit function parameter expressions
+		ExpressionList paramList = arg0.getParameters();
+		if (paramList != null) {
+			// Copy parameters
+			List<Expression> params = paramList.getExpressions();
+			for (Expression param : params) {
+				param.accept(this);
+			}
+			// Combine rewritten operands in expression list
+			int nrParams = params.size();
+			List<Expression> newParams = new ArrayList<Expression>();
+			for (int i=0; i<nrParams; ++i) {
+				newParams.add(0, exprStack.pop());
+			}
+			newFunction.setParameters(new ExpressionList(newParams));			
+		}
 	}
 
 	@Override
