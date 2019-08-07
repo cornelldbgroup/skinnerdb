@@ -4,15 +4,15 @@ public class LoggingConfig {
 	/**
 	 * Whether to log intermediate steps during query analysis.
 	 */
-	public final static boolean QUERY_ANALYSIS_VERBOSE = true;
+	public final static boolean QUERY_ANALYSIS_VERBOSE = false;
 	/**
 	 * Whether to log expressions after each transformation stage.
 	 */
-	public final static boolean EXPRESSIONS_VERBOSE = true;
+	public final static boolean EXPRESSIONS_VERBOSE = false;
 	/**
 	 * Whether to generate logging output while compiling expressions.
 	 */
-	public final static boolean COMPILATION_VERBOSE = true;
+	public final static boolean COMPILATION_VERBOSE = false;
 	/**
 	 * Whether to print per-row evaluation results for expressions.
 	 */
@@ -34,7 +34,7 @@ public class LoggingConfig {
 	 * processing step - this is only practical for very small
 	 * database for debugging purposes.
 	 */
-	public final static boolean PRINT_INTERMEDIATES = true;
+	public final static boolean PRINT_INTERMEDIATES = false;
 	/**
 	 * Whether to generate logging output when generating
 	 * join index wrappers.
