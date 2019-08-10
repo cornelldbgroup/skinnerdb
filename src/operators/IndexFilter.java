@@ -144,10 +144,10 @@ public class IndexFilter extends PlainVisitor {
 		IntIndex intIndex = (IntIndex)index;
 		int startPos = intIndex.keyToPositions.getOrDefault(constant, -1);
 		if (startPos >= 0) {
-			int nrEntries = intIndex.positions[startPos];
+			int nrEntries = intIndex.getEntry(startPos);
 			for (int i=0; i<nrEntries; ++i) {
 				int pos = startPos + 1 + i;
-				int rowIdx = intIndex.positions[pos];
+				int rowIdx = intIndex.getEntry(pos);
 				rows.add(rowIdx);
 			}				
 		}

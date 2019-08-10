@@ -97,7 +97,7 @@ public class Filter {
 			String tableName, Map<ColumnRef, ColumnRef> columnMapping) 
 					throws Exception {
 		// Load required columns for predicate evaluation
-		loadPredCols(unaryPred, columnMapping);
+//		loadPredCols(unaryPred, columnMapping);
 		// Compile unary predicate for fast evaluation
 		UnaryBoolEval unaryBoolEval = compilePred(unaryPred, columnMapping);
 		// Get cardinality of table referenced in predicate

@@ -1,6 +1,12 @@
 package buffer;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -8,6 +14,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import catalog.CatalogManager;
 import catalog.info.ColumnInfo;
 import catalog.info.TableInfo;
+import config.BufferConfig;
+import config.GeneralConfig;
 import config.LoggingConfig;
 import data.ColumnData;
 import data.Dictionary;
@@ -18,6 +26,7 @@ import data.StringData;
 import diskio.DiskUtil;
 import diskio.PathUtil;
 import indexing.Index;
+import indexing.IntIndex;
 import query.ColumnRef;
 import types.JavaType;
 import types.TypeUtil;
@@ -188,11 +197,51 @@ public class BufferManager {
 	public static ColumnData getManagerData(ColumnRef columnRef) {
 		// Load data by data manager
 		try {
-			return manager.getData(columnRef);
+			// Get column information from catalog
+			ColumnInfo column = CatalogManager.getColumn(columnRef);
+			// Read generic object from file
+			String dataPath = PathUtil.colToPath.get(column);
+			if (dataPath == null) {
+				return BufferManager.colToData.get(columnRef);
+			}
+			else {
+				return manager.getData(columnRef);
+			}
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
 		return null;
+	}
+
+	/**
+	 * Returns data of specified column, loads data from disk if
+	 * currently not loaded.
+	 *
+	 * @param intIndex	request index for this column
+	 * @return			data of requested column
+	 * @throws Exception
+	 */
+	public static int getIndexData(IntIndex intIndex, int pos) throws Exception {
+		// Load data by data manager
+		if (GeneralConfig.inMemory) {
+			return intIndex.positions[pos];
+		}
+		else {
+			return manager.getIndexData(intIndex, pos);
+		}
+	}
+
+	/**
+	 * Store given column into buffer space.
+	 *
+	 * @param columnRef	reference to column to remove
+	 * @throws Exception
+	 */
+	public static void storeColumn(ColumnRef columnRef, ColumnData columnData) {
+		if (LoggingConfig.BUFFER_VERBOSE) {
+			System.out.println("Storing column " + columnRef);
+		}
+		BufferManager.colToData.put(columnRef, columnData);
 	}
 
 
@@ -226,6 +275,16 @@ public class BufferManager {
 				}
 			}
 		}
+		// close file channels
+		for (ColumnRef columnRef: colToIndex.keySet()) {
+			IntIndex intIndex = (IntIndex) colToIndex.get(columnRef);
+			intIndex.closeChannels();
+		}
+		// delete temporary data
+		Files.walk(Paths.get(PathUtil.indexPath))
+				.sorted(Comparator.reverseOrder())
+				.map(Path::toFile)
+				.forEach(File::delete);
 	}
 	/**
 	 * Log given text if buffer logging activated.

@@ -1,5 +1,8 @@
 package operators;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Collection;
@@ -54,32 +57,22 @@ public class Materialize {
 					sourceCol.isUnique, sourceCol.isNotNull, 
 					sourceCol.isForeign);
 			resultTable.addColumn(resultCol);
-		}		
-		// Load source data if necessary
-		if (!GeneralConfig.inMemory) {
-			for (ColumnRef sourceColRef : sourceColRefs) {
-				BufferManager.loadColumn(sourceColRef);
-			}
 		}
+
 		// Generate column data
 		sourceColRefs.parallelStream().forEach(sourceColRef -> {
 			// Copy relevant rows into result column
-//			ColumnData srcData = BufferManager.colToData.get(sourceColRef);
-			ColumnData srcData = BufferManager.getManagerData(sourceColRef);
+			ColumnData srcData = BufferManager.colToData.get(sourceColRef);;
 			ColumnData resultData = rowList==null?
 					srcData.copyRows(rowBitSet):srcData.copyRows(rowList);
 			String columnName = sourceColRef.columnName;
 			ColumnRef resultColRef = new ColumnRef(targetRelName, columnName);
-			BufferManager.colToData.put(resultColRef, resultData);
+
+			// write data to the buffer
+			BufferManager.storeColumn(resultColRef, resultData);
 		});
 		// Update statistics in catalog
 		CatalogManager.updateStats(targetRelName);
-		// Unload source data if necessary
-		if (!GeneralConfig.inMemory) {
-			for (ColumnRef sourceColRef : sourceColRefs) {
-				BufferManager.unloadColumn(sourceColRef);				
-			}
-		}
 	}
 	/**
 	 * Materializes a join relation from given indices

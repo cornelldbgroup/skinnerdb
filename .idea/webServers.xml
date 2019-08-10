@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="6de8c098-f485-42ab-9073-8cffd4b2a501" name="skinnerdb" url="http://dbgroupserver1.cs.cornell.edu">
+        <fileTransfer host="dbgroupserver1.cs.cornell.edu" port="22" rootFolder="/home/zw555/" accessType="SFTP">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+          <option name="port" value="22" />
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>

@@ -2,10 +2,16 @@ package indexing;
 
 import buffer.BufferManager;
 import catalog.CatalogManager;
+import config.GeneralConfig;
 import config.IndexingMode;
 import data.ColumnData;
 import data.IntData;
+import diskio.PathUtil;
 import query.ColumnRef;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 /**
  * Features utility functions for creating indexes.
@@ -25,7 +31,7 @@ public class Indexer {
 			ColumnData data = BufferManager.getData(colRef);
 			if (data instanceof IntData) {
 				IntData intData = (IntData)data;
-				IntIndex index = new IntIndex(intData);
+				IntIndex index = new IntIndex(colRef, intData);
 				BufferManager.colToIndex.put(colRef, index);
 			}					
 		}
@@ -39,6 +45,12 @@ public class Indexer {
 	public static void indexAll(IndexingMode mode) throws Exception {
 		System.out.println("Indexing all key columns ...");
 		long startMillis = System.currentTimeMillis();
+		// create temporary files for non-volatile data
+		if (!GeneralConfig.inMemory) {
+			Path indexDir = Files.createTempDirectory(Paths.get(PathUtil.dbDir), "indexes");
+			PathUtil.indexPath = indexDir.toString();
+			indexDir.toFile().deleteOnExit();
+		}
 		CatalogManager.currentDB.nameToTable.values().parallelStream().forEach(
 			tableInfo -> {
 				tableInfo.nameToCol.values().parallelStream().forEach(

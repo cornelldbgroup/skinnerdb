@@ -1,12 +1,36 @@
 package indexing;
 
+import buffer.BufferManager;
 import com.koloboke.collect.map.IntIntCursor;
 import com.koloboke.collect.map.IntIntMap;
 import com.koloboke.collect.map.hash.HashIntIntMaps;
 
+import com.sun.tools.javah.Gen;
+import config.GeneralConfig;
 import config.LoggingConfig;
 import data.IntData;
+import diskio.PathUtil;
+import query.ColumnRef;
 import statistics.JoinStats;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.IntBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.channels.SeekableByteChannel;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * Indexes integer values (not necessarily unique).
@@ -20,6 +44,10 @@ public class IntIndex extends Index {
 	 */
 	public final IntData intData;
 	/**
+	 * Reference to a specific column
+	 */
+	public final ColumnRef columnRef;
+	/**
 	 * Cardinality of indexed table.
 	 */
 	public final int cardinality;
@@ -29,12 +57,18 @@ public class IntIndex extends Index {
 	 * numbers at which those entries are found.
 	 */
 	public int[] positions;
+	public int prefixSum;
 	/**
 	 * After indexing: maps search key to index
 	 * of first position at which associated
 	 * information is stored.
 	 */
 	public IntIntMap keyToPositions;
+	/**
+	 * After indexing: if inMemory is not enable,
+	 * store the positions array to the file by java NIO.
+	 */
+	public SeekableByteChannel positionChannel;
 	/**
 	 * Position of current iterator.
 	 */
@@ -45,14 +79,16 @@ public class IntIndex extends Index {
 	int lastIterPos = -1;
 	/**
 	 * Create index on the given integer column.
-	 * 
+	 *
+	 * @param colRef	create index on this column
 	 * @param intData	integer data to index
 	 */
-	public IntIndex(IntData intData) {
+	public IntIndex(ColumnRef colRef, IntData intData) {
 		long startMillis = System.currentTimeMillis();
 		// Extract info
 		this.intData = intData;
 		this.cardinality = intData.cardinality;
+		this.columnRef = colRef;
 		int[] data = intData.data;
 		// Count number of occurrences for each value
 		IntIntMap keyToNr = HashIntIntMaps.newMutableMap();
@@ -81,7 +117,7 @@ public class IntIndex extends Index {
 		}
 		log("Prefix sum:\t" + prefixSum);
 		// Generate position information
-		positions = new int[prefixSum];
+		int[] positions = new int[prefixSum];
 		for (int i=0; i<cardinality; ++i) {
 			if (!intData.isNull.get(i)) {
 				int key = data[i];
@@ -92,6 +128,8 @@ public class IntIndex extends Index {
 				positions[pos] = i;				
 			}
 		}
+		this.prefixSum = prefixSum;
+
 		// Output statistics for performance tuning
 		if (LoggingConfig.INDEXING_VERBOSE) {
 			long totalMillis = System.currentTimeMillis() - startMillis;
@@ -100,6 +138,18 @@ public class IntIndex extends Index {
 		}
 		// Check index if enabled
 		IndexChecker.checkIndex(intData, this);
+
+		// write indexes to files when the inMemory is not enable.
+		if (!GeneralConfig.inMemory) {
+			try {
+				writePositions(colRef, positions);
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+		else {
+			this.positions = positions;
+		}
 	}
 	/**
 	 * Returns index of next tuple with given value
@@ -119,12 +169,12 @@ public class IntIndex extends Index {
 			return cardinality;
 		}
 		// Can we return first indexed value?
-		int firstTuple = positions[firstPos+1];
+		int firstTuple = getEntry(firstPos+1);
 		if (firstTuple>prevTuple) {
 			return firstTuple;
 		}
 		// Get number of indexed values
-		int nrVals = positions[firstPos];
+		int nrVals = getEntry(firstPos);
 		// Update index-related statistics
 		JoinStats.nrIndexEntries += nrVals;
 		if (nrVals==1) {
@@ -135,7 +185,7 @@ public class IntIndex extends Index {
 		int upperBound = firstPos + nrVals;
 		while (upperBound-lowerBound>1) {
 			int middle = lowerBound + (upperBound-lowerBound)/2;
-			if (positions[middle] > prevTuple) {
+			if (getEntry(middle) > prevTuple) {
 				upperBound = middle;
 			} else {
 				lowerBound = middle;
@@ -143,8 +193,9 @@ public class IntIndex extends Index {
 		}
 		// Get next tuple
 		for (int pos=lowerBound; pos<=upperBound; ++pos) {
-			if (positions[pos] > prevTuple) {
-				return positions[pos];
+			int next = getEntry(pos);
+			if (next > prevTuple) {
+				return next;
 			}
 		}
 		// No suitable tuple found
@@ -162,7 +213,7 @@ public class IntIndex extends Index {
 		if (firstPos<0) {
 			return 0;
 		} else {
-			return positions[firstPos];
+			return getEntry(firstPos);
 		}
 	}
 	/**
@@ -174,7 +225,7 @@ public class IntIndex extends Index {
 	public void initIter(int value) {
 		iterPos = keyToPositions.getOrDefault(value, -1);
 		if (iterPos!=-1) {
-			int nrVals = positions[iterPos];
+			int nrVals = getEntry(iterPos);
 			lastIterPos = iterPos + nrVals;
 		}
 	}
@@ -189,7 +240,7 @@ public class IntIndex extends Index {
 			return cardinality;
 		} else {
 			++iterPos;
-			return positions[iterPos];
+			return getEntry(iterPos);
 		}
 	}
 	/**
@@ -210,7 +261,7 @@ public class IntIndex extends Index {
 		int upperBound = lastIterPos;
 		while (upperBound-lowerBound>1) {
 			int middle = lowerBound + (upperBound-lowerBound)/2;
-			if (positions[middle] > prevTuple) {
+			if (getEntry(middle) > prevTuple) {
 				upperBound = middle;
 			} else {
 				lowerBound = middle;
@@ -218,16 +269,38 @@ public class IntIndex extends Index {
 		}
 		// Get next tuple
 		for (int pos=lowerBound; pos<=upperBound; ++pos) {
-			if (positions[pos] > prevTuple) {
+			int next = getEntry(pos);
+			if (next > prevTuple) {
 				// Advance iterator and return position
 				iterPos = pos;
-				return positions[pos];
+				return next;
 			}
 		}
 		// No matching tuple found
 		iterPos = lastIterPos;
 		return cardinality;
 	}
+
+	/**
+	 * Get the entry in given position.
+	 *
+	 * @param pos	the index of positions
+	 * @return the according entry.
+	 */
+	public int getEntry(int pos) {
+		if (GeneralConfig.inMemory) {
+			return positions[pos];
+		}
+		else {
+			try {
+				return BufferManager.getIndexData(this, pos);
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+		}
+		return positions[pos];
+	}
+
 	/**
 	 * Output given log text if activated.
 	 * 
@@ -237,5 +310,24 @@ public class IntIndex extends Index {
 		if (LoggingConfig.INDEXING_VERBOSE) {
 			System.out.println(logText);
 		}
+	}
+
+	void writePositions(ColumnRef colRef, int[] positions) throws IOException {
+		Set<StandardOpenOption> options = new HashSet<>();
+		options.add(StandardOpenOption.CREATE);
+		options.add(StandardOpenOption.READ);
+		options.add(StandardOpenOption.WRITE);
+
+		Path indexPath = Files.createFile(Paths.get(PathUtil.indexPath, colRef.toString() + ".tmp"));
+		SeekableByteChannel channel = Files.newByteChannel(indexPath, options);
+		// write data to the int buffer
+		ByteBuffer byteBuffer = ByteBuffer.allocate(4 * positions.length);
+		byteBuffer.asIntBuffer().put(positions);
+		channel.write(byteBuffer);
+		positionChannel = channel;
+	}
+
+	public void closeChannels() throws IOException {
+		positionChannel.close();
 	}
 }

@@ -13,7 +13,7 @@ import catalog.info.ColumnInfo;
 import catalog.info.TableInfo;
 import catalog.stats.TableStats;
 import config.GeneralConfig;
-import config.LoadConfig;
+import config.BufferConfig;
 import data.ColumnData;
 import data.DoubleData;
 import data.IntData;
@@ -40,7 +40,7 @@ public class LoadCSV {
 	 */
 	static int lineCount(String path) throws Exception {
 		BufferedReader reader = new BufferedReader(new FileReader(path));
-		int nrRows = LoadConfig.maxRows;
+		int nrRows = BufferConfig.maxRows;
 		@SuppressWarnings("unused")
 		String line = null;
 		int lineCtr = 0;
@@ -106,7 +106,7 @@ public class LoadCSV {
 		CSVReader csvReader = new CSVReader(new FileReader(csvPath));
 		String[] inputFields;
 		int rowCtr = 0;
-		int nrRows = LoadConfig.maxRows;
+		int nrRows = BufferConfig.maxRows;
 		while ((inputFields = csvReader.readNext()) != null && rowCtr < nrRows) {
 			for (int colCtr=0; colCtr<nrColumns; ++colCtr) {
 				String field = inputFields[colCtr];

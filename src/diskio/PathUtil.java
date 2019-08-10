@@ -29,6 +29,10 @@ public class PathUtil {
 	 */
 	public static String dataPath = null;
 	/**
+	 * Path to directory containing indexes.
+	 */
+	public static String indexPath = null;
+	/**
 	 * If a string dictionary was created, it will
 	 * be stored under this path.
 	 */
