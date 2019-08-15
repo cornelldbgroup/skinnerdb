@@ -20,11 +20,11 @@ public class TypeUtil {
 		case BYTE:
 		case INT:
 		case STRING_CODE:
-			return JavaType.INT;
-		case LONG:
 		case DATE:
 		case TIME:
 		case TIMESTAMP:
+			return JavaType.INT;
+		case LONG:
 			return JavaType.LONG;
 		case DOUBLE:
 			return JavaType.DOUBLE;
@@ -125,6 +125,12 @@ public class TypeUtil {
 		case "string":
 		case "character varying":
 			return SQLtype.STRING;
+		case "date":
+			return SQLtype.DATE;
+		case "time":
+			return SQLtype.TIME;
+		case "timestamp":
+			return SQLtype.TIMESTAMP;
 		default:
 			return null;
 		}

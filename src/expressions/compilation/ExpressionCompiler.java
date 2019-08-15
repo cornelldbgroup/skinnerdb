@@ -1017,22 +1017,25 @@ public class ExpressionCompiler implements ExpressionVisitor {
 	
 	@Override
 	public void visit(DateValue arg0) {
-		// Transform date into long value
-		evaluationVisitor.visitLdcInsn(arg0.getValue().getTime());
+		// Transform date into int value
+		int unixTime = (int)(arg0.getValue().getTime()/1000);
+		evaluationVisitor.visitLdcInsn(unixTime);
 		evaluationVisitor.visitIntInsn(Opcodes.BIPUSH, 1);
 	}
 
 	@Override
 	public void visit(TimeValue arg0) {
 		// Transform time into long value
-		evaluationVisitor.visitLdcInsn(arg0.getValue().getTime());
+		int unixTime = (int)(arg0.getValue().getTime()/1000);
+		evaluationVisitor.visitLdcInsn(unixTime);
 		evaluationVisitor.visitIntInsn(Opcodes.BIPUSH, 1);
 	}
 
 	@Override
 	public void visit(TimestampValue arg0) {
 		// Transform timestamp into long value
-		evaluationVisitor.visitLdcInsn(arg0.getValue().getTime());
+		int unixTime = (int)(arg0.getValue().getTime()/1000);
+		evaluationVisitor.visitLdcInsn(unixTime);
 		evaluationVisitor.visitIntInsn(Opcodes.BIPUSH, 1);
 	}
 

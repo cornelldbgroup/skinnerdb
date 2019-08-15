@@ -2,6 +2,9 @@ package diskio;
 
 import java.io.BufferedReader;
 import java.io.FileReader;
+import java.sql.Date;
+import java.sql.Time;
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -131,6 +134,27 @@ public class LoadCSV {
 					case STRING:
 						StringData stringData = ((StringData)data.get(colCtr));
 						stringData.data[rowCtr] = isNull?nullRepresentation:field; 
+						break;
+					case DATE:
+						IntData dateData = ((IntData)data.get(colCtr));
+						if (!isNull) {
+							Date date = Date.valueOf(field);
+							dateData.data[rowCtr] = (int)date.getTime()/1000;							
+						}
+						break;
+					case TIME:
+						IntData timeData = ((IntData)data.get(colCtr));
+						if (!isNull) {
+							Time time = Time.valueOf(field);
+							timeData.data[rowCtr] = (int)time.getTime()/1000;
+						}
+						break;
+					case TIMESTAMP:
+						IntData tsData = ((IntData)data.get(colCtr));
+						if (!isNull) {
+							Timestamp ts = Timestamp.valueOf(field);
+							tsData.data[rowCtr] = (int)ts.getTime()/1000;
+						}
 						break;
 					default:
 						throw new Exception("Unsupported type: " + columnTypes[colCtr]);

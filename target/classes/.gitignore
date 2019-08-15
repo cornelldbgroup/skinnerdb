@@ -1,10 +1,4 @@
-/joining/
-/console/
-/benchmark/
-/operators/
-/postprocessing/
-/ddl/
-/query/
 /expressions/
-/config/
-/preprocessing/
+/types/
+/print/
+/diskio/

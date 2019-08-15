@@ -1,5 +1,8 @@
 package print;
 
+import java.sql.Date;
+import java.sql.Time;
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -100,10 +103,26 @@ public class RelationPrinter {
 			case DOUBLE:
 				return Double.valueOf(((DoubleData)data).data[rowNr]).toString();
 			case STRING_CODE:
-				int code = Integer.valueOf(((IntData)data).data[rowNr]);
+				int code = ((IntData)data).data[rowNr];
 				return BufferManager.dictionary.getString(code);
 			case STRING:
 				return ((StringData)data).data[rowNr];
+			case DATE:
+			case TIME:
+			case TIMESTAMP:
+				int unixTime = ((IntData)data).data[rowNr];
+				long millisSince1970 = unixTime * 1000;				
+				// Print out datetime in appropriate format
+				if (type.equals(SQLtype.TIME)) {
+					Time time = new Time(millisSince1970);
+					return time.toString();
+				} else if (type.equals(SQLtype.DATE)) {
+					Date date = new Date(millisSince1970);
+					return date.toString();
+				} else {
+					Timestamp timestamp = new Timestamp(millisSince1970);
+					return timestamp.toString();
+				}
 			default:
 				return "Error - Unsupported output type!";
 			}			
