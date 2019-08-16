@@ -4,6 +4,7 @@ import java.sql.Date;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.List;
 
 import org.apache.commons.lang3.StringUtils;
@@ -112,7 +113,7 @@ public class RelationPrinter {
 			case TIME:
 			case TIMESTAMP:
 				int unixTime = ((IntData)data).data[rowNr];
-				long millisSince1970 = unixTime * 1000;				
+				long millisSince1970 = unixTime * 1000l;
 				// Print out datetime in appropriate format
 				if (type.equals(SQLtype.TIME)) {
 					Time time = new Time(millisSince1970);

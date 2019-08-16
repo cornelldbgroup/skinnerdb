@@ -63,6 +63,7 @@ import net.sf.jsqlparser.expression.operators.relational.GreaterThan;
 import net.sf.jsqlparser.expression.operators.relational.GreaterThanEquals;
 import net.sf.jsqlparser.expression.operators.relational.InExpression;
 import net.sf.jsqlparser.expression.operators.relational.IsNullExpression;
+import net.sf.jsqlparser.expression.operators.relational.ItemsList;
 import net.sf.jsqlparser.expression.operators.relational.JsonOperator;
 import net.sf.jsqlparser.expression.operators.relational.LikeExpression;
 import net.sf.jsqlparser.expression.operators.relational.Matches;
@@ -111,25 +112,78 @@ public class TypeVisitor extends SkinnerVisitor {
 		this.queryInfo = queryInfo;
 	}
 	/**
-	 * Creates a new cast expression with given input,
-	 * target type, and target scope. Updates type
-	 * and scope data structures accordingly.
+	 * Creates a new cast expression with given input
+	 * and target type. Updates type and scope data
+	 * structures accordingly.
 	 * 
 	 * @param input			cast input expression
 	 * @param targetType	target type for casting
-	 * @param targetScope	scope of cast output
 	 * @return				newly created cast expression
 	 */
-	CastExpression newCast(Expression input, SQLtype targetType, 
-			ExpressionScope targetScope) {
+	CastExpression newCast(Expression input, SQLtype targetType) {
 		CastExpression cast = new CastExpression();
 		cast.setLeftExpression(input);
 		ColDataType colDataType = new ColDataType();
 		colDataType.setDataType(targetType.toString());
 		cast.setType(colDataType);
 		outputType.put(cast, targetType);
-		outputScope.put(cast, targetScope);
+		propagateScope(input, cast);
 		return cast;
+	}
+	/**
+	 * Tries to unify two different scopes, returns the
+	 * unified scope if successful and null otherwise.
+	 * 
+	 * @param scope1	first scope to unify
+	 * @param scope2	second scope to unify
+	 * @return			unified scope or null if unification impossible
+	 */
+	ExpressionScope unifyScope(ExpressionScope scope1, 
+			ExpressionScope scope2) {
+		if (scope1.equals(scope2)) {
+			return scope1;
+		} else if (scope1.equals(ExpressionScope.ANY_SCOPE)) {
+			return scope2;
+		} else if (scope2.equals(ExpressionScope.ANY_SCOPE)) {
+			return scope1;
+		} else {
+			return null;
+		}
+	}
+	/**
+	 * Propagate scope of first expression to scope of
+	 * second expression - try to unify scopes if second
+	 * expression is already assigned to a scope.
+	 * 
+	 * @param from	propagate scope of this expression
+	 * @param to	propagate scope to this expression
+	 */
+	void propagateScope(Expression from, Expression to) {
+		ExpressionScope fromScope = outputScope.get(from);
+		if (fromScope == null) {
+			sqlExceptions.add(new SQLexception("Error - "
+					+ "no scope set for " + from));
+		} else {
+			ExpressionScope priorToScope = outputScope.get(to);
+			// Was a scope set previously for the target expression?
+			if (priorToScope == null) {
+				// No prior scope - simply adopt source scope
+				outputScope.put(to, fromScope);
+			} else {
+				// Prior scope was set - try to unify
+				ExpressionScope unifiedScope = unifyScope(
+						fromScope, priorToScope);
+				// Throw exception if unsuccessful
+				if (unifiedScope == null) {
+					sqlExceptions.add(new SQLexception("Error - "
+							+ "cannot unify scopes for "
+							+ from + " and " + to));
+				} else {
+					// Register unified scope
+					outputScope.put(to, unifiedScope);
+				}
+			}
+		}
 	}
 	/**
 	 * Add casts for inputs of binary expression if necessary.
@@ -139,9 +193,9 @@ public class TypeVisitor extends SkinnerVisitor {
 	void castInputs(BinaryExpression binaryExpression) {
 		Expression expression1 = binaryExpression.getLeftExpression();
 		Expression expression2 = binaryExpression.getRightExpression();
+		// Try to unify operand types
 		SQLtype type1 = outputType.get(expression1);
 		SQLtype type2 = outputType.get(expression2);
-		ExpressionScope scope = outputScope.get(expression1);
 		SQLtype commonType = TypeUtil.commonType(type1, type2);
 		if (commonType == null) {
 			sqlExceptions.add(new SQLexception("Error - "
@@ -149,14 +203,30 @@ public class TypeVisitor extends SkinnerVisitor {
 					+ "unify types " + type1 + " and " + type2
 					+ " in expression " + binaryExpression.toString()));
 		}
+		// Cast operands if necessary
 		if (type1 != commonType) {
-			CastExpression cast = newCast(expression1, commonType, scope);
+			CastExpression cast = newCast(expression1, commonType);
 			binaryExpression.setLeftExpression(cast);
 		}
 		if (type2 != commonType) {
-			CastExpression cast = newCast(expression2, commonType, scope);
+			CastExpression cast = newCast(expression2, commonType);
 			binaryExpression.setRightExpression(cast);
 		}
+	}
+	/**
+	 * Returns true iff the first type is a date time type and
+	 * the second type an interval type. 
+	 * 
+	 * @param type1		first type (potentially date or time type)
+	 * @param type2		second type (potentially interval type)
+	 * @return		true iff date time and interval types
+	 */
+	boolean datetimeInterval(SQLtype type1, SQLtype type2) {
+		return (type1.equals(SQLtype.TIMESTAMP) ||
+				type1.equals(SQLtype.DATE) ||
+				type1.equals(SQLtype.TIME)) && 
+			(type2.equals(SQLtype.DT_INTERVAL) ||
+			type2.equals(SQLtype.YM_INTERVAL));	
 	}
 	/**
 	 * Treats a binary arithmetic expression.
@@ -171,15 +241,50 @@ public class TypeVisitor extends SkinnerVisitor {
 		expression2.accept(this);
 		SQLtype type1 = outputType.get(expression1);
 		SQLtype type2 = outputType.get(expression2);
-		SQLtype commonType = TypeUtil.commonType(type1, type2);
-		outputType.put(binaryExpression, commonType);
 		// Take care of output scope
-		ExpressionScope scope = outputScope.get(expression1);
-		outputScope.put(binaryExpression, scope);
-		// Add cast expressions if necessary
-		castInputs(binaryExpression);
+		propagateScope(expression1, binaryExpression);
+		propagateScope(expression2, binaryExpression);
+		// Distinguish special case of time intervals
+		if (TypeUtil.isInterval(type1) || TypeUtil.isInterval(type2)) {
+			// Distinguish type of operation
+			if (binaryExpression instanceof Addition) {
+				if (type1.equals(type2)) {
+					// Addition between two intervals of same type
+					outputType.put(binaryExpression, type1);
+				} else if (datetimeInterval(type1, type2)) {
+					outputType.put(binaryExpression, type1);
+				} else if (datetimeInterval(type2, type1)) {
+					outputType.put(binaryExpression, type2);
+				} else {
+					sqlExceptions.add(new SQLexception("Error - "
+							+ "incompatible types for interval "
+							+ "addition in " + binaryExpression));
+				}
+			} else if (binaryExpression instanceof Subtraction) {
+				if (type1.equals(type2)) {
+					// Subtraction between two intervals of same type
+					outputType.put(binaryExpression, type1);
+				} else if (datetimeInterval(type1, type2)) {
+					outputType.put(binaryExpression, type1);
+				} else {
+					sqlExceptions.add(new SQLexception("Error - "
+							+ "incompatible types for interval "
+							+ "subtraction in " + binaryExpression));
+				}
+			} else {
+				sqlExceptions.add(new SQLexception("Error - "
+						+ "expression " + binaryExpression + " is "
+								+ "not admissible (interval operands "
+								+ "only allow addition and subtraction)"));
+			}
+		} else {
+			// No time intervals involved -> proceed as usual
+			SQLtype commonType = TypeUtil.commonType(type1, type2);
+			outputType.put(binaryExpression, commonType);
+			// Add cast expressions if necessary
+			castInputs(binaryExpression);			
+		}
 	}
-	
 	/**
 	 * Treats a binary comparison operation.
 	 * 
@@ -193,8 +298,8 @@ public class TypeVisitor extends SkinnerVisitor {
 		expression2.accept(this);
 		outputType.put(binaryCmp, SQLtype.BOOL);
 		// No changes to output scope
-		ExpressionScope scope = outputScope.get(expression1);
-		outputScope.put(binaryCmp, scope);
+		propagateScope(expression1, binaryCmp);
+		propagateScope(expression2, binaryCmp);
 		// Add casts if necessary
 		castInputs(binaryCmp);
 	}
@@ -202,8 +307,7 @@ public class TypeVisitor extends SkinnerVisitor {
 	@Override
 	public void visit(NullValue arg0) {
 		outputType.put(arg0, SQLtype.ANY_TYPE);
-		// TODO: this does not work in some cases
-		outputScope.put(arg0, ExpressionScope.PER_TUPLE);
+		outputScope.put(arg0, ExpressionScope.ANY_SCOPE);
 	}
 
 	@Override
@@ -265,11 +369,13 @@ public class TypeVisitor extends SkinnerVisitor {
 
 	@Override
 	public void visit(SignedExpression arg0) {
-		arg0.getExpression().accept(this);
-		SQLtype type = outputType.get(arg0.getExpression());
-		ExpressionScope scope = outputScope.get(arg0.getExpression());
+		Expression input = arg0.getExpression();
+		input.accept(this);
+		// Set output type
+		SQLtype type = outputType.get(input);
 		outputType.put(arg0, type);
-		outputScope.put(arg0, scope);
+		// Set output scope
+		propagateScope(input, arg0);
 	}
 
 	@Override
@@ -287,7 +393,7 @@ public class TypeVisitor extends SkinnerVisitor {
 	@Override
 	public void visit(DoubleValue arg0) {
 		outputType.put(arg0, SQLtype.DOUBLE);
-		outputScope.put(arg0, ExpressionScope.PER_TUPLE);
+		outputScope.put(arg0, ExpressionScope.ANY_SCOPE);
 	}
 
 	@Override
@@ -298,7 +404,7 @@ public class TypeVisitor extends SkinnerVisitor {
 		} else {
 			outputType.put(arg0, SQLtype.LONG);
 		}
-		outputScope.put(arg0, ExpressionScope.PER_TUPLE);
+		outputScope.put(arg0, ExpressionScope.ANY_SCOPE);
 	}
 
 	@Override
@@ -310,28 +416,30 @@ public class TypeVisitor extends SkinnerVisitor {
 	@Override
 	public void visit(DateValue arg0) {
 		outputType.put(arg0, SQLtype.DATE);
-		outputScope.put(arg0, ExpressionScope.PER_TUPLE);
+		outputScope.put(arg0, ExpressionScope.ANY_SCOPE);
 	}
 
 	@Override
 	public void visit(TimeValue arg0) {
 		outputType.put(arg0, SQLtype.TIME);
-		outputScope.put(arg0, ExpressionScope.PER_TUPLE);
+		outputScope.put(arg0, ExpressionScope.ANY_SCOPE);
 	}
 
 	@Override
 	public void visit(TimestampValue arg0) {
 		outputType.put(arg0, SQLtype.TIMESTAMP);
-		outputScope.put(arg0, ExpressionScope.PER_TUPLE);
+		outputScope.put(arg0, ExpressionScope.ANY_SCOPE);
 	}
 
 	@Override
 	public void visit(Parenthesis arg0) {
-		arg0.getExpression().accept(this);
-		SQLtype type = outputType.get(arg0.getExpression());
-		ExpressionScope scope = outputScope.get(arg0.getExpression());
+		Expression input = arg0.getExpression();
+		input.accept(this);
+		// Set result type
+		SQLtype type = outputType.get(input);
 		outputType.put(arg0, type);
-		outputScope.put(arg0, scope);
+		// Set result scope
+		propagateScope(input, arg0);
 	}
 
 	@Override
@@ -348,7 +456,7 @@ public class TypeVisitor extends SkinnerVisitor {
 		} else {
 			outputType.put(arg0, SQLtype.STRING);
 		}
-		outputScope.put(arg0, ExpressionScope.PER_TUPLE);
+		outputScope.put(arg0, ExpressionScope.ANY_SCOPE);
 	}
 
 	@Override
@@ -390,8 +498,9 @@ public class TypeVisitor extends SkinnerVisitor {
 		expression2.accept(this);
 		expression3.accept(this);
 		outputType.put(arg0, SQLtype.BOOL);
-		ExpressionScope scope1 = outputScope.get(expression1);
-		outputScope.put(arg0, scope1);
+		propagateScope(expression1, arg0);
+		propagateScope(expression2, arg0);
+		propagateScope(expression3, arg0);
 	}
 
 	@Override
@@ -411,24 +520,36 @@ public class TypeVisitor extends SkinnerVisitor {
 
 	@Override
 	public void visit(InExpression arg0) {
-		// Type components
-		arg0.getLeftExpression().accept(this);
+		// Check for support
+		ItemsList rightList = arg0.getRightItemsList();
+		if (!(rightList instanceof ExpressionList)) {
+			sqlExceptions.add(new SQLexception("Error - "
+					+ "no support for IN statement of RH type "
+					+ rightList.getClass()));
+		}
+		// Treat component expressions
+		Expression left = arg0.getLeftExpression();
+		left.accept(this);
 		for (Expression expr : ((ExpressionList)
-				arg0.getRightItemsList()).getExpressions()) {
+				rightList).getExpressions()) {
 			expr.accept(this);
 		}
 		// IN expressions results in Boolean
 		outputType.put(arg0, SQLtype.BOOL);
-		// Scope does not change, compared to components
-		outputScope.put(arg0, outputScope.get(arg0.getLeftExpression()));
+		// Set output scope
+		propagateScope(left, arg0);
+		for (Expression expr : ((ExpressionList)
+				rightList).getExpressions()) {
+			propagateScope(expr, arg0);
+		}
 	}
 
 	@Override
 	public void visit(IsNullExpression arg0) {
-		arg0.getLeftExpression().accept(this);
+		Expression left = arg0.getLeftExpression();
+		left.accept(this);
 		outputType.put(arg0, SQLtype.BOOL);
-		ExpressionScope scope = outputScope.get(arg0.getLeftExpression());
-		outputScope.put(arg0, scope);
+		propagateScope(left, arg0);
 	}
 
 	@Override
@@ -437,7 +558,6 @@ public class TypeVisitor extends SkinnerVisitor {
 		Expression leftExpression = arg0.getLeftExpression();
 		leftExpression.accept(this);
 		SQLtype leftType = outputType.get(leftExpression);
-		ExpressionScope scope = outputScope.get(leftExpression);
 		// Cast from string codes to strings may be necessary
 		if (leftType.equals(SQLtype.STRING_CODE)) {
 			CastExpression cast = new CastExpression();
@@ -447,13 +567,15 @@ public class TypeVisitor extends SkinnerVisitor {
 			cast.setType(colDataType);
 			arg0.setLeftExpression(cast);
 			outputType.put(cast, SQLtype.STRING);
-			outputScope.put(cast, scope);
+			propagateScope(leftExpression, cast);
 		}
 		// Process right expression
-		arg0.getRightExpression().accept(this);
+		Expression rightExpression = arg0.getRightExpression();
+		rightExpression.accept(this);
 		// Set result type and scope
 		outputType.put(arg0, SQLtype.BOOL);
-		outputScope.put(arg0, scope);
+		propagateScope(leftExpression, arg0);
+		propagateScope(rightExpression, arg0);
 	}
 
 	@Override
@@ -503,26 +625,16 @@ public class TypeVisitor extends SkinnerVisitor {
 	public void visit(CaseExpression arg0) {
 		// Treat when expressions
 		SQLtype resultType = null;
-		ExpressionScope resultScope = null;
 		for (Expression expr : arg0.getWhenClauses()) {
 			expr.accept(this);
 			// Check for type and scope consistency
 			SQLtype thisType = outputType.get(expr);
-			ExpressionScope thisScope = outputScope.get(expr);
 			if (resultType == null) {
 				resultType = thisType;
-			}
-			if (resultScope == null) {
-				resultScope = thisScope;
 			}
 			if (!thisType.equals(resultType)) {
 				sqlExceptions.add(new SQLexception("Error - "
 						+ "inconsistent result types "
-						+ "of then clauses"));
-			}
-			if (!thisScope.equals(resultScope)) {
-				sqlExceptions.add(new SQLexception("Error -"
-						+ "inconsistent result scopes "
 						+ "of then clauses"));
 			}
 		}
@@ -537,22 +649,23 @@ public class TypeVisitor extends SkinnerVisitor {
 			elseExpr.accept(this);
 			// Check for type and scope consistency
 			SQLtype elseType = outputType.get(elseExpr);
-			ExpressionScope elseScope = outputScope.get(elseExpr);
 			if (!elseType.equals(resultType)) {
 				sqlExceptions.add(new SQLexception("Error - "
 						+ "else clause '" + elseExpr + "' has "
 						+ "type " + elseType + ", inconsistent "
 						+ "with result type " + resultType));
 			}
-			if (!elseScope.equals(resultScope)) {
-				sqlExceptions.add(new SQLexception("Error - "
-						+ "else clause has inconsistent scope: "
-						+ elseScope + " (else) versus " + resultScope));
-			}
 		}
-		// Add type and scope for case block
+		// Add result type for case block
 		outputType.put(arg0, resultType);
-		outputScope.put(arg0, resultScope);
+		// Determine output scope
+		for (Expression when : arg0.getWhenClauses()) {
+			propagateScope(when, arg0);
+		}
+		if (switchExpr != null) {
+			propagateScope(switchExpr, arg0);
+		}
+		propagateScope(arg0.getElseExpression(), arg0);
 	}
 
 	@Override
@@ -569,11 +682,12 @@ public class TypeVisitor extends SkinnerVisitor {
 		// Treat then expression
 		Expression thenExpr = arg0.getThenExpression();
 		thenExpr.accept(this);
-		// Assign type and scope for surrounding expression
+		// Assign type for surrounding expression
 		SQLtype thenType = outputType.get(thenExpr);
-		ExpressionScope whenScope = outputScope.get(whenExpr);
 		outputType.put(arg0, thenType);
-		outputScope.put(arg0, whenScope);
+		// Assign scope for surrounding expression
+		propagateScope(whenExpr, arg0);
+		propagateScope(thenExpr, arg0);
 	}
 
 	@Override
@@ -622,13 +736,14 @@ public class TypeVisitor extends SkinnerVisitor {
 
 	@Override
 	public void visit(CastExpression arg0) {
-		arg0.getLeftExpression().accept(this);
+		Expression input = arg0.getLeftExpression();
+		input.accept(this);
+		// Determine output type
 		SQLtype type = TypeUtil.parseString(
 				arg0.getType().getDataType());
-		ExpressionScope scope = outputScope.get(
-				arg0.getLeftExpression());
-		outputType.put(arg0, type);		
-		outputScope.put(arg0, scope);
+		outputType.put(arg0, type);
+		// Determine output scope
+		propagateScope(input, arg0);
 	}
 
 	@Override
@@ -656,8 +771,29 @@ public class TypeVisitor extends SkinnerVisitor {
 
 	@Override
 	public void visit(IntervalExpression arg0) {
-		// TODO Auto-generated method stub
-		
+		// Determine result type
+		SQLtype type = null;
+		String timeUnit = arg0.getIntervalType().toLowerCase();
+		switch (timeUnit) {
+		case "year":
+		case "month":
+			type = SQLtype.YM_INTERVAL;
+			break;
+		case "day":
+		case "hour":
+		case "minute":
+		case "second":
+			type = SQLtype.DT_INTERVAL;
+			break;
+		default:
+			sqlExceptions.add(new SQLexception("Error - "
+					+ "unknown time unit " + timeUnit + ". "
+							+ "Allowed units are year, month, "
+							+ "day, hour, minute, second."));
+		}
+		outputType.put(arg0, type);
+		// Determine output scope
+		outputScope.put(arg0, ExpressionScope.ANY_SCOPE);
 	}
 
 	@Override
@@ -745,14 +881,14 @@ public class TypeVisitor extends SkinnerVisitor {
 			outputType.put(arg0, SQLtype.TIMESTAMP);
 			break;
 		}
-		outputScope.put(arg0, ExpressionScope.PER_TUPLE);
+		outputScope.put(arg0, ExpressionScope.ANY_SCOPE);
 	}
 
 	@Override
 	public void visit(NotExpression arg0) {
-		arg0.getExpression().accept(this);
+		Expression input = arg0.getExpression();
+		input.accept(this);
 		outputType.put(arg0, SQLtype.BOOL);
-		ExpressionScope scope = outputScope.get(arg0.getExpression());
-		outputScope.put(arg0, scope);
+		propagateScope(input, arg0);
 	}
 }

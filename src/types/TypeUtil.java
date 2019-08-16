@@ -99,6 +99,17 @@ public class TypeUtil {
 		}
 	}
 	/**
+	 * Returns true iff the given type is one of
+	 * the data types representing time intervals.
+	 * 
+	 * @param type	test whether this type is interval type
+	 * @return		true iff given type represents time interval
+	 */
+	public static boolean isInterval(SQLtype type) {
+		return type.equals(SQLtype.DT_INTERVAL) ||
+				type.equals(SQLtype.YM_INTERVAL);
+	}
+	/**
 	 * Returns corresponding expression type for a given name.
 	 * 
 	 * @param typeString	string representation of type

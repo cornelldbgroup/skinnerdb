@@ -9,7 +9,6 @@ import net.sf.jsqlparser.expression.DateTimeLiteralExpression;
 import net.sf.jsqlparser.expression.DateValue;
 import net.sf.jsqlparser.expression.DoubleValue;
 import net.sf.jsqlparser.expression.Expression;
-import net.sf.jsqlparser.expression.ExpressionVisitor;
 import net.sf.jsqlparser.expression.ExtractExpression;
 import net.sf.jsqlparser.expression.Function;
 import net.sf.jsqlparser.expression.HexValue;
@@ -190,12 +189,6 @@ public class CopyVisitor extends SkinnerVisitor {
 		// Recursive invocation fills operand stack
 		oldBinaryOp.getLeftExpression().accept(this);
 		oldBinaryOp.getRightExpression().accept(this);
-		
-		System.out.println("Test left: " + 
-		oldBinaryOp.getLeftExpression().getClass());
-		System.out.println("Test right: " + 
-		oldBinaryOp.getRightExpression().getClass());
-		
 		// Obtain rewritten operands from stack
 		Expression op2 = exprStack.pop();
 		Expression op1 = exprStack.pop();
@@ -492,8 +485,7 @@ public class CopyVisitor extends SkinnerVisitor {
 
 	@Override
 	public void visit(IntervalExpression arg0) {
-		System.out.println(arg0.toString());
-		
+		exprStack.push(arg0);
 	}
 
 	@Override

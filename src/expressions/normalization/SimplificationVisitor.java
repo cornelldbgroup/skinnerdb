@@ -719,8 +719,7 @@ public class SimplificationVisitor extends SkinnerVisitor {
 
 	@Override
 	public void visit(IntervalExpression arg0) {
-		// TODO Auto-generated method stub
-		
+		opStack.push(arg0);
 	}
 
 	@Override

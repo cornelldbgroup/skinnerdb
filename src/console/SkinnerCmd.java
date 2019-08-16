@@ -149,6 +149,7 @@ public class SkinnerCmd {
 						processInput(sqlCmd);				
 					} catch (Exception e) {
 						System.err.println("Error processing command " + sqlCmd);
+						e.printStackTrace();
 					}
 				}
 				scanner.close();				

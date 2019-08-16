@@ -1095,8 +1095,8 @@ public class ExpressionCompiler implements ExpressionVisitor {
 	 * @param months	number of months to add (can be negative)
 	 * @return			seconds since January 1st 1970 after addition
 	 */
-	static int addMonths(int dateSecs, int months) {
-		calendar.setTimeInMillis(dateSecs * 1000);
+	public static int addMonths(int dateSecs, int months) {
+		calendar.setTimeInMillis(dateSecs * 1000l);
 		calendar.add(Calendar.MONTH, months);
 		return (int)(calendar.getTimeInMillis()/1000);
 	}
@@ -1118,14 +1118,15 @@ public class ExpressionCompiler implements ExpressionVisitor {
 			if (dateYMintervalOp(right, left)) {
 				evaluationVisitor.visitInsn(Opcodes.SWAP);
 			}
-			// Special treatment when adding dates and year-month intervals
-			if ()
-			if (leftType.equals(SQLtype.YM_INTERVAL) && rightType.equals(other))
-			expressionInfo.expressionToType
-
-
-			return true;
-		} else if (dateYMintervalOp(right, left)) {
+			// Multiply number of months by -1 for subtraction
+			if (arg0 instanceof Subtraction) {
+				evaluationVisitor.visitLdcInsn(-1);
+				evaluationVisitor.visitInsn(Opcodes.IMUL);
+			}
+			// Invoke auxiliary function for adding months
+			evaluationVisitor.visitMethodInsn(Opcodes.INVOKESTATIC,
+					"expressions/compilation/ExpressionCompiler", 
+					"addMonths", "(II)I", false);
 			return true;
 		} else {
 			return false;
@@ -1152,20 +1153,23 @@ public class ExpressionCompiler implements ExpressionVisitor {
 		evaluationVisitor.visitJumpInsn(Opcodes.IFEQ, firstNull);
 		binaryExpression.getRightExpression().accept(this);
 		evaluationVisitor.visitJumpInsn(Opcodes.IFEQ, secondNull);
+		// Treat case that both input operands are not null
 		JavaType jType = jType(binaryExpression.getLeftExpression());
-		switch (jType) {
-		case INT:
-			evaluationVisitor.visitInsn(intOp);
-			break;
-		case LONG:
-			evaluationVisitor.visitInsn(longOp);
-			break;
-		case DOUBLE:
-			evaluationVisitor.visitInsn(doubleOp);
-			break;
-		default:
-			System.err.println("Warning: unsupported types in " + 
-					readableName);
+		if (!treatAsMonthArithmetic(binaryExpression)) {
+			switch (jType) {
+			case INT:
+				evaluationVisitor.visitInsn(intOp);
+				break;
+			case LONG:
+				evaluationVisitor.visitInsn(longOp);
+				break;
+			case DOUBLE:
+				evaluationVisitor.visitInsn(doubleOp);
+				break;
+			default:
+				System.err.println("Warning: unsupported types in " + 
+						readableName);
+			}
 		}
 		evaluationVisitor.visitIntInsn(Opcodes.BIPUSH, 1);
 		evaluationVisitor.visitJumpInsn(Opcodes.GOTO, theEnd);
@@ -1813,7 +1817,8 @@ public class ExpressionCompiler implements ExpressionVisitor {
 		String strVal = param.substring(1, param.length()-1);
 		int intVal = Integer.valueOf(strVal);
 		// Treat according to interval type
-		switch (arg0.getIntervalType().toLowerCase()) {
+		String intervalType = arg0.getIntervalType().toLowerCase();
+		switch (intervalType) {
 		case "year":
 			evaluationVisitor.visitLdcInsn(intVal * 12);
 			break;
@@ -1835,7 +1840,10 @@ public class ExpressionCompiler implements ExpressionVisitor {
 		case "second":
 			evaluationVisitor.visitLdcInsn(intVal);
 			break;
+		default:
+			System.out.println("Error - unknown interval type");
 		}
+		evaluationVisitor.visitIntInsn(Opcodes.BIPUSH, 1);
 	}
 
 	@Override

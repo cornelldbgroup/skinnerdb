@@ -78,7 +78,7 @@ public class MapRows {
 			UnaryIntEval unaryIntEval = unaryCompiler.getUnaryIntEval();
 			// Generate result data and store in buffer
 			IntData intResult = new IntData(outCard);
-			if (groupBy) {
+			if (groupBy && outCard<0) {
 				intResult.isNull.set(0, outCard-1);
 			}
 			BufferManager.colToData.put(targetRef, intResult);
@@ -105,7 +105,7 @@ public class MapRows {
 			UnaryLongEval unaryLongEval = unaryCompiler.getUnaryLongEval();
 			// Generate result data and store in buffer
 			LongData longResult = new LongData(outCard);
-			if (groupBy) {
+			if (groupBy && outCard<0) {
 				longResult.isNull.set(0, outCard-1);
 			}
 			BufferManager.colToData.put(targetRef, longResult);
@@ -132,7 +132,7 @@ public class MapRows {
 			UnaryDoubleEval unaryDoubleEval = unaryCompiler.getUnaryDoubleEval();
 			// Generate result data and store in buffer
 			DoubleData doubleResult = new DoubleData(outCard);
-			if (groupBy) {
+			if (groupBy && outCard<0) {
 				doubleResult.isNull.set(0, outCard-1);
 			}
 			BufferManager.colToData.put(targetRef, doubleResult);
@@ -159,7 +159,7 @@ public class MapRows {
 			UnaryStringEval unaryStringEval = unaryCompiler.getUnaryStringEval();
 			// Generate result data and store in buffer
 			StringData stringResult = new StringData(outCard);
-			if (groupBy) {
+			if (groupBy && outCard<0) {
 				stringResult.isNull.set(0, outCard-1);
 			}
 			BufferManager.colToData.put(targetRef, stringResult);

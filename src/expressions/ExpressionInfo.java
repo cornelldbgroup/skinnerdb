@@ -198,8 +198,11 @@ public class ExpressionInfo {
 		tryVisit(finalExpression, typeVisitor);
 		this.expressionToType = typeVisitor.outputType;
 		this.resultType = expressionToType.get(finalExpression);
+		// Final scoping - generic scope defaults to per-tuple scope
 		this.expressionToScope = typeVisitor.outputScope;
-		this.resultScope = expressionToScope.get(finalExpression);
+		ExpressionScope curResultScope = expressionToScope.get(finalExpression);
+		this.resultScope = curResultScope.equals(ExpressionScope.ANY_SCOPE)?
+				ExpressionScope.PER_TUPLE:curResultScope;
 		log("Expression types:\t" + expressionToType.toString());
 		log("Expression scopes:\t" + expressionToScope.toString());
 		// Extract conjuncts
