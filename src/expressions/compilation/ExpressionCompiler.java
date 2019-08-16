@@ -4,6 +4,7 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.BitSet;
+import java.util.Calendar;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -178,6 +179,12 @@ public class ExpressionCompiler implements ExpressionVisitor {
 	 * Used for generating local variables in evaluation method.
 	 */
 	public final LocalVariablesSorter evaluationLocals;
+	/**
+	 * Used for evaluating arithmetic expressions that
+	 * involve adding a given number of months to a
+	 * date or timestamp expression.
+	 */
+	static Calendar calendar = Calendar.getInstance();
 	/**
 	 * Initializes fields and writes expression evaluator boilerplate code.
 	 * 
@@ -1065,6 +1072,66 @@ public class ExpressionCompiler implements ExpressionVisitor {
 		addPrintStack((code >= 0?JavaType.INT:JavaType.STRING));
 	}
 	/**
+	 * Returns true iff the left operand is either a date or
+	 * a timestamp and the right operand is a year-month
+	 * time interval.
+	 * 
+	 * @param left		left operand of binary expression
+	 * @param right		right operand of binary expression
+	 * @return			true iff the operands require special treatment
+	 */
+	boolean dateYMintervalOp(Expression left, Expression right) {
+		SQLtype leftType = expressionInfo.expressionToType.get(left);
+		SQLtype rightType = expressionInfo.expressionToType.get(right);
+		return (leftType.equals(SQLtype.DATE) || 
+				leftType.equals(SQLtype.TIMESTAMP)) &&
+				(rightType.equals(SQLtype.YM_INTERVAL));
+	}
+	/**
+	 * Adds given number of months to a date, represented
+	 * according to Unix time format.
+	 * 
+	 * @param dateSecs	seconds since January 1st 1970
+	 * @param months	number of months to add (can be negative)
+	 * @return			seconds since January 1st 1970 after addition
+	 */
+	static int addMonths(int dateSecs, int months) {
+		calendar.setTimeInMillis(dateSecs * 1000);
+		calendar.add(Calendar.MONTH, months);
+		return (int)(calendar.getTimeInMillis()/1000);
+	}
+	/**
+	 * Adds code to treat the addition or subtraction of a
+	 * number of months from a date or timestamp value.
+	 * Returns true iff the given expression is indeed
+	 * of that type.
+	 * 
+	 * @param arg0	expression potentially involving months arithmetic
+	 * @return		true if code for expression was added
+	 */
+	boolean treatAsMonthArithmetic(BinaryExpression arg0) {
+		Expression left = arg0.getLeftExpression();
+		Expression right = arg0.getRightExpression();
+		if (dateYMintervalOp(left, right) ||
+				dateYMintervalOp(right, left)) {
+			// Swap input parameters if required
+			if (dateYMintervalOp(right, left)) {
+				evaluationVisitor.visitInsn(Opcodes.SWAP);
+			}
+			// Special treatment when adding dates and year-month intervals
+			if ()
+			if (leftType.equals(SQLtype.YM_INTERVAL) && rightType.equals(other))
+			expressionInfo.expressionToType
+
+
+			return true;
+		} else if (dateYMintervalOp(right, left)) {
+			return true;
+		} else {
+			return false;
+		}
+	}
+	/**
 	 * Adds byte code for a binary arithmetic operation.
 	 * Also invokes this visitor recursively.
 	 * 
@@ -1741,8 +1808,34 @@ public class ExpressionCompiler implements ExpressionVisitor {
 
 	@Override
 	public void visit(IntervalExpression arg0) {
-		// TODO Auto-generated method stub
-		
+		// Extract parameter value
+		String param = arg0.getParameter();
+		String strVal = param.substring(1, param.length()-1);
+		int intVal = Integer.valueOf(strVal);
+		// Treat according to interval type
+		switch (arg0.getIntervalType().toLowerCase()) {
+		case "year":
+			evaluationVisitor.visitLdcInsn(intVal * 12);
+			break;
+		case "month":
+			evaluationVisitor.visitLdcInsn(intVal);
+			break;
+		case "day":
+			int daySecs = 24 * 60 * 60 * intVal;
+			evaluationVisitor.visitLdcInsn(daySecs);
+			break;
+		case "hour":
+			int hourSecs = 60 * 60 * intVal;
+			evaluationVisitor.visitLdcInsn(hourSecs);
+			break;
+		case "minute":
+			int minuteSecs = 60 * intVal;
+			evaluationVisitor.visitLdcInsn(minuteSecs);
+			break;
+		case "second":
+			evaluationVisitor.visitLdcInsn(intVal);
+			break;
+		}
 	}
 
 	@Override
@@ -1819,8 +1912,20 @@ public class ExpressionCompiler implements ExpressionVisitor {
 
 	@Override
 	public void visit(DateTimeLiteralExpression arg0) {
-		// TODO Auto-generated method stub
-		
+		switch (arg0.getType()) {
+		case DATE:
+			DateValue dateVal = new DateValue(arg0.getValue());
+			visit(dateVal);
+			break;
+		case TIME:
+			TimeValue timeVal = new TimeValue(arg0.getValue());
+			visit(timeVal);
+			break;
+		case TIMESTAMP:
+			TimestampValue tsVal = new TimestampValue(arg0.getValue());
+			visit(tsVal);
+			break;
+		}
 	}
 
 	@Override

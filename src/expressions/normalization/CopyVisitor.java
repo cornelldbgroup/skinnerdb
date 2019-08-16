@@ -190,6 +190,12 @@ public class CopyVisitor extends SkinnerVisitor {
 		// Recursive invocation fills operand stack
 		oldBinaryOp.getLeftExpression().accept(this);
 		oldBinaryOp.getRightExpression().accept(this);
+		
+		System.out.println("Test left: " + 
+		oldBinaryOp.getLeftExpression().getClass());
+		System.out.println("Test right: " + 
+		oldBinaryOp.getRightExpression().getClass());
+		
 		// Obtain rewritten operands from stack
 		Expression op2 = exprStack.pop();
 		Expression op1 = exprStack.pop();
@@ -486,7 +492,7 @@ public class CopyVisitor extends SkinnerVisitor {
 
 	@Override
 	public void visit(IntervalExpression arg0) {
-		// TODO Auto-generated method stub
+		System.out.println(arg0.toString());
 		
 	}
 
@@ -564,8 +570,7 @@ public class CopyVisitor extends SkinnerVisitor {
 
 	@Override
 	public void visit(DateTimeLiteralExpression arg0) {
-		// TODO Auto-generated method stub
-		
+		exprStack.push(arg0);
 	}
 
 	@Override

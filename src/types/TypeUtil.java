@@ -23,6 +23,8 @@ public class TypeUtil {
 		case DATE:
 		case TIME:
 		case TIMESTAMP:
+		case YM_INTERVAL:
+		case DT_INTERVAL:
 			return JavaType.INT;
 		case LONG:
 			return JavaType.LONG;
@@ -116,14 +118,15 @@ public class TypeUtil {
 		case "double":
 		case "numeric":
 			return SQLtype.DOUBLE;
-		case "char":
-			return SQLtype.CHAR;
 		case "stringcode":
 		case "string_code":
 			return SQLtype.STRING_CODE;
+		case "character":
+		case "char":
+		case "character varying":
+		case "varchar":
 		case "text":
 		case "string":
-		case "character varying":
 			return SQLtype.STRING;
 		case "date":
 			return SQLtype.DATE;

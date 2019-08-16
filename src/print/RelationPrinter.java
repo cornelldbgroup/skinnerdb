@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.time.DurationFormatUtils;
 
 import buffer.BufferManager;
 import catalog.CatalogManager;
@@ -123,9 +124,20 @@ public class RelationPrinter {
 					Timestamp timestamp = new Timestamp(millisSince1970);
 					return timestamp.toString();
 				}
+			case YM_INTERVAL:
+				int totalMonths = ((IntData)data).data[rowNr];
+				int years = totalMonths / 12;
+				int remainingMonths = totalMonths % 12;
+				return years + " year" + (years!=1?"s":"") + " " +
+						remainingMonths + " month" + 
+						(remainingMonths!=1?"s":"");
+			case DT_INTERVAL:
+				int durationSecs = ((IntData)data).data[rowNr];
+				long durationMillis = 1000 * durationSecs;
+				return DurationFormatUtils.formatDurationISO(durationMillis);
 			default:
-				return "Error - Unsupported output type!";
-			}			
+				return "Error - Unsupported output type " + type + "!";
+			}
 		}
 	}
 }

@@ -516,7 +516,7 @@ public class TypeVisitor extends SkinnerVisitor {
 				resultScope = thisScope;
 			}
 			if (!thisType.equals(resultType)) {
-				sqlExceptions.add(new SQLexception("Error -"
+				sqlExceptions.add(new SQLexception("Error - "
 						+ "inconsistent result types "
 						+ "of then clauses"));
 			}
@@ -545,8 +545,9 @@ public class TypeVisitor extends SkinnerVisitor {
 						+ "with result type " + resultType));
 			}
 			if (!elseScope.equals(resultScope)) {
-				sqlExceptions.add(new SQLexception("Error -"
-						+ "else clause has inconsistent scope"));
+				sqlExceptions.add(new SQLexception("Error - "
+						+ "else clause has inconsistent scope: "
+						+ elseScope + " (else) versus " + resultScope));
 			}
 		}
 		// Add type and scope for case block
@@ -568,11 +569,11 @@ public class TypeVisitor extends SkinnerVisitor {
 		// Treat then expression
 		Expression thenExpr = arg0.getThenExpression();
 		thenExpr.accept(this);
-		// Assign type and scope of then expression for surrounding expression
+		// Assign type and scope for surrounding expression
 		SQLtype thenType = outputType.get(thenExpr);
-		ExpressionScope thenScope = outputScope.get(thenExpr);
+		ExpressionScope whenScope = outputScope.get(whenExpr);
 		outputType.put(arg0, thenType);
-		outputScope.put(arg0, thenScope);
+		outputScope.put(arg0, whenScope);
 	}
 
 	@Override
@@ -733,8 +734,18 @@ public class TypeVisitor extends SkinnerVisitor {
 
 	@Override
 	public void visit(DateTimeLiteralExpression arg0) {
-		// TODO Auto-generated method stub
-		
+		switch (arg0.getType()) {
+		case DATE:
+			outputType.put(arg0, SQLtype.DATE);
+			break;
+		case TIME:
+			outputType.put(arg0, SQLtype.TIME);
+			break;
+		case TIMESTAMP:
+			outputType.put(arg0, SQLtype.TIMESTAMP);
+			break;
+		}
+		outputScope.put(arg0, ExpressionScope.PER_TUPLE);
 	}
 
 	@Override

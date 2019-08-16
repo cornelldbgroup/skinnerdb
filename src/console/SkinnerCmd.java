@@ -300,7 +300,7 @@ public class SkinnerCmd {
 			System.out.println("'help' for help");
 			System.out.println("'index all' to index each column");
 			System.out.println("'list' to list database tables");
-			System.out.println("'load <table> < CSV file>' "
+			System.out.println("'load <table> < CSV file> <NULL representation>' "
 					+ "to load table data from .csv file");
 			System.out.println("'quit' for quit");
 			System.out.println("Write SQL queries in a single line");
