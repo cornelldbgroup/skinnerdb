@@ -3,6 +3,7 @@ package console;
 import java.io.File;
 import java.io.PrintWriter;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
 import java.util.Map.Entry;
@@ -11,23 +12,27 @@ import java.util.regex.Pattern;
 import benchmark.BenchUtil;
 import buffer.BufferManager;
 import catalog.CatalogManager;
+import catalog.info.ColumnInfo;
 import catalog.info.TableInfo;
 import compression.Compressor;
 import config.GeneralConfig;
 import config.NamingConfig;
 import config.StartupConfig;
+import data.ColumnData;
 import ddl.TableCreator;
 import diskio.LoadCSV;
 import diskio.PathUtil;
 import execution.Master;
 import indexing.Indexer;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
+import net.sf.jsqlparser.schema.Table;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.create.table.CreateTable;
 import net.sf.jsqlparser.statement.drop.Drop;
 import net.sf.jsqlparser.statement.select.PlainSelect;
 import net.sf.jsqlparser.statement.select.Select;
 import print.RelationPrinter;
+import query.ColumnRef;
 import query.SQLexception;
 
 /**
@@ -157,6 +162,37 @@ public class SkinnerCmd {
 		}
 	}
 	/**
+	 * Copies content and schema from source to new target relation.
+	 * 
+	 * @param fromRel		copy from this relation
+	 * @param toRel			copy to this relation
+	 * @throws Exception
+	 */
+	static void copyInto(String fromRel, String toRel) throws Exception {
+		// Copy schema
+		TableCreator.copyTable(fromRel, toRel);
+		// Copy data in buffer
+		TableInfo fromInfo = CatalogManager.currentDB.nameToTable.get(fromRel);
+		for (String col : fromInfo.columnNames) {
+			ColumnRef fromRef = new ColumnRef(fromRel, col);
+			ColumnRef toRef = new ColumnRef(toRel, col);
+			ColumnData colData = BufferManager.getData(fromRef);
+			BufferManager.colToData.put(toRef, colData);
+		}
+		// Update statistics of new table
+		CatalogManager.updateStats(toRel);
+		// Store new table on hard disk
+		TableInfo toInfo = CatalogManager.currentDB.nameToTable.get(toRel);
+		for (Entry<String, ColumnInfo> entry : toInfo.nameToCol.entrySet()) {
+			String col = entry.getKey();
+			ColumnInfo colInfo = entry.getValue();
+			// Get associated data
+			ColumnRef colRef = new ColumnRef(toRel, col);
+			ColumnData colData = BufferManager.colToData.get(colRef);
+			colData.store(PathUtil.colToPath.get(colInfo));
+		}
+	}
+	/**
 	 * Process input string as SQL statement.
 	 * 
 	 * @param input	input text
@@ -195,9 +231,28 @@ public class SkinnerCmd {
 				try {
 					Master.executeSelect(plainSelect, 
 							false, -1, -1, null, "testquery");
-					// Output final result
+					// Process final result
 					String resultRel = NamingConfig.FINAL_RESULT_NAME;
-					RelationPrinter.print(resultRel);					
+					// Either copy to new table or display in console
+					List<Table> intoTables = plainSelect.getIntoTables();
+					if (intoTables == null) {
+						// Display on console
+						RelationPrinter.print(resultRel);
+					} else {
+						// Copy into newly created tables
+						for (Table intoTable : intoTables) {
+							String intoTblName = intoTable.getName();
+							copyInto(resultRel, intoTblName);
+							System.out.println("Copied query result to " 
+									+ intoTblName);
+						}
+						// Clean up before storing updated
+						// catalog on disk (to avoid storing
+						// information on temporary tables).
+						BufferManager.unloadTempData();
+						CatalogManager.removeTempTables();
+						CatalogManager.currentDB.storeDB();
+					}
 				} catch (SQLexception e) {
 					 System.out.println(e.getMessage());
 				} catch (Exception e) {

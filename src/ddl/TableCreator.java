@@ -1,5 +1,6 @@
 package ddl;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.commons.lang3.StringUtils;
@@ -13,6 +14,8 @@ import data.IntData;
 import data.LongData;
 import data.StringData;
 import diskio.PathUtil;
+import net.sf.jsqlparser.schema.Table;
+import net.sf.jsqlparser.statement.create.table.ColDataType;
 import net.sf.jsqlparser.statement.create.table.ColumnDefinition;
 import net.sf.jsqlparser.statement.create.table.CreateTable;
 import query.ColumnRef;
@@ -22,7 +25,7 @@ import types.SQLtype;
 import types.TypeUtil;
 
 /**
- * Processes statements for creating tables.
+ * Processes statements for creating (permanent) tables.
  * 
  * @author immanueltrummer
  *
@@ -106,5 +109,53 @@ public class TableCreator {
 		}
 		CatalogManager.updateStats(tableName);
 		return table;
+	}
+	/**
+	 * Updates the catalog by copying the schema of the
+	 * source table into a newly created target table.
+	 * The target table may be specified either as
+	 * temporary or permanent.
+	 * 
+	 * @param fromTbl		copy schema from this table
+	 * @param toTbl			newly created table copying schema
+	 * @return				new table or null
+	 * @throws Exception
+	 */
+	public static TableInfo copyTable(String fromTbl, 
+			String toTbl) throws Exception {
+		// Generate table creation statement
+		CreateTable create = new CreateTable();
+		// Specify table to create
+		Table table = new Table(toTbl);
+		create.setTable(table);
+		// Retrieve source table schema
+		TableInfo fromInfo = CatalogManager.currentDB.nameToTable.get(fromTbl);
+		// Specify columns to create
+		List<ColumnDefinition> colDefs = new ArrayList<>();
+		create.setColumnDefinitions(colDefs);
+		for (String colName : fromInfo.columnNames) {
+			ColumnInfo colInfo = fromInfo.nameToCol.get(colName);
+			ColumnDefinition colDef = new ColumnDefinition();
+			colDef.setColumnName(colName);
+			ColDataType colDataType = new ColDataType();
+			colDataType.setDataType(colInfo.type.toString());
+			colDef.setColDataType(colDataType);
+			List<String> colSpecList = new ArrayList<>();
+			if (colInfo.isPrimary) {
+				colSpecList.add("primary key");				
+			}
+			if (colInfo.isForeign) {
+				colSpecList.add("foreign key");
+			}
+			if (colInfo.isNotNull) {
+				colSpecList.add("not null");
+			}
+			if (colInfo.isUnique) {
+				colSpecList.add("unique");
+			}
+			colDef.setColumnSpecStrings(colSpecList);
+			colDefs.add(colDef);
+		}
+		return addTable(create);
 	}
 }
