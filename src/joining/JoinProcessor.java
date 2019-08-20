@@ -17,6 +17,7 @@ import preprocessing.Context;
 import print.RelationPrinter;
 import query.ColumnRef;
 import query.QueryInfo;
+import statistics.BufferStats;
 import statistics.JoinStats;
 import visualization.TreePlotter;
 
@@ -51,6 +52,7 @@ public class JoinProcessor {
         JoinStats.nrUctNodes = 0;
         JoinStats.nrPlansTried = 0;
         JoinStats.nrSamples = 0;
+		BufferStats.initBufferStats();
 		// Initialize logging for new query
 		nrLogEntries = 0;
 		// Initialize multi-way join operator

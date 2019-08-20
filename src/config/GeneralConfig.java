@@ -11,10 +11,14 @@ public class GeneralConfig {
 	/**
 	 * Whether to use in-memory data processing.
 	 */
-	public static boolean inMemory = false;
+	public static boolean inMemory = true;
+	/**
+	 * Whether to use in-memory index processing.
+	 */
+	public static boolean indexInMemory = false;
 	/**
 	 * The size of cache in bytes
 	 */
-	public static int cacheSize = 100000;
+	public static int cacheSize = 50000000;
 
 }

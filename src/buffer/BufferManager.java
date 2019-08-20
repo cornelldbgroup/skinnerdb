@@ -5,10 +5,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 import catalog.CatalogManager;
@@ -54,6 +51,15 @@ public class BufferManager {
 	 */
 	public final static Map<ColumnRef, Index> colToIndex =
 			new ConcurrentHashMap<ColumnRef, Index>();
+	/**
+	 * Maps column references to associated IDs.
+	 */
+	public final static Map<ColumnRef, Integer> colToID = new HashMap<>();
+	/**
+	 * Maps column IDs to associated indices.
+	 */
+	public final static Map<Integer, Index> idToIndex =
+			new ConcurrentHashMap<>();
 	/**
 	 * Implementation of buffer management algorithm.
 	 */
@@ -102,6 +108,13 @@ public class BufferManager {
 				String columnName = column.name;
 				colsToLoad.add(new ColumnRef(tableName, columnName));
 			}
+		}
+		int id = BufferManager.colToID.values()
+				.stream()
+				.mapToInt(v -> v)
+				.max().orElse(0) + 1;
+		for (ColumnRef columnRef: colsToLoad) {
+			BufferManager.colToID.putIfAbsent(columnRef, id++);
 		}
 		// Load columns
 		colsToLoad.stream().parallel().forEach((colRef) -> {
@@ -223,12 +236,32 @@ public class BufferManager {
 	 */
 	public static int getIndexData(IntIndex intIndex, int pos) throws Exception {
 		// Load data by data manager
-		if (GeneralConfig.inMemory) {
+		if (GeneralConfig.indexInMemory) {
 			return intIndex.positions[pos];
 		}
 		else {
-			return manager.getIndexData(intIndex, pos);
+			if (BufferConfig.loadPage) {
+				return manager.getDataInWindow(intIndex, pos);
+			}
+			else {
+				return manager.getIndexData(intIndex, pos);
+			}
 		}
+	}
+
+	/**
+	 * Get the data of given column and row id.
+	 *
+	 * @param column	the id of column.
+	 * @param rid		the id of row
+	 * @return			the value located in specified column and row.
+	 * @throws Exception
+	 */
+	public static int getRowData(int column, int rid) throws Exception {
+		if (idToIndex.containsKey(column)) {
+			IntIndex intIndex = (IntIndex) idToIndex.get(column);
+		}
+		return 0;
 	}
 
 	/**
@@ -257,6 +290,7 @@ public class BufferManager {
 		}
 		colToData.remove(columnRef);
 		colToIndex.remove(columnRef);
+		colToID.remove(columnRef);
 	}
 	/**
 	 * Unload all columns of temporary tables (typically after
@@ -271,20 +305,20 @@ public class BufferManager {
 				for (ColumnInfo colInfo : table.nameToCol.values()) {					
 					ColumnRef colRef = new ColumnRef(
 							tableName, colInfo.name);
+					// close file channels
+					if (colToIndex.containsKey(colRef)) {
+						// close file channels
+						if (!GeneralConfig.indexInMemory) {
+							((IntIndex)colToIndex.get(colRef)).closeChannels();
+						}
+					}
 					unloadColumn(colRef);
 				}
 			}
 		}
-		// close file channels
-		for (ColumnRef columnRef: colToIndex.keySet()) {
-			IntIndex intIndex = (IntIndex) colToIndex.get(columnRef);
-			intIndex.closeChannels();
+		if (!GeneralConfig.indexInMemory) {
+			manager.clearCache();
 		}
-		// delete temporary data
-		Files.walk(Paths.get(PathUtil.indexPath))
-				.sorted(Comparator.reverseOrder())
-				.map(Path::toFile)
-				.forEach(File::delete);
 	}
 	/**
 	 * Log given text if buffer logging activated.

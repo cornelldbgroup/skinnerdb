@@ -3,7 +3,7 @@ package buffer;
 import config.BufferConfig;
 import config.GeneralConfig;
 import config.LoggingConfig;
-import data.*;
+import data.ColumnData;
 import indexing.IntIndex;
 import query.ColumnRef;
 import statistics.BufferStats;
@@ -18,11 +18,11 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
 
-public class LRUDataManager implements IDataManager {
+public class FIFODataManager implements IDataManager {
     /**
      * the order of column touched by the system.
      */
-    private Deque<IntIndex> columnOrder;
+    private Queue<IntIndex> columnOrder;
     /**
      * the LRU cache for loaded columns.
      */
@@ -31,7 +31,7 @@ public class LRUDataManager implements IDataManager {
     /**
      * the order of column touched by the system.
      */
-    private Deque<EntryRef> indexOrder;
+    private Queue<EntryRef> indexOrder;
     /**
      * the size of cache.
      */
@@ -45,7 +45,7 @@ public class LRUDataManager implements IDataManager {
      */
     private BufferedWriter writer;
 
-    public LRUDataManager() {
+    public FIFODataManager() {
         colToIndex = new HashMap<>();
         columnOrder = new LinkedList<>();
         indexOrder = new LinkedList<>();
@@ -57,10 +57,8 @@ public class LRUDataManager implements IDataManager {
             }
         }
     }
-
     @Override
     public ColumnData getData(ColumnRef columnRef) throws Exception {
-        // Load data if necessary
         return null;
     }
 
@@ -68,18 +66,11 @@ public class LRUDataManager implements IDataManager {
     public int getIndexData(IntIndex intIndex, int pos) throws Exception {
         int[] positions;
         BufferStats.nrIndexLookups++;
-        long start = System.currentTimeMillis();
         if (intIndex.positions != null) {
             // cache hit
             BufferStats.nrCacheHit++;
             positions = intIndex.positions;
             log("Column " + intIndex.cid + " is in the memory.");
-            columnOrder.remove(intIndex);
-            columnOrder.addFirst(intIndex);
-            long end = System.currentTimeMillis();
-            log("Time: " + (end - start));
-            log("Cache Lookup: " + BufferStats.nrIndexLookups +
-                    "\t Cache Hits: " + BufferStats.nrCacheHit + "\t Cache Miss: " + BufferStats.nrCacheMiss);
             return positions[pos];
         }
         // cache miss
@@ -101,7 +92,7 @@ public class LRUDataManager implements IDataManager {
         }
         // the column has been stored in the cache or the cache is full?
         while (capacity < size + indexSize && size > 0) {
-            IntIndex removeIndex = columnOrder.removeLast();
+            IntIndex removeIndex = columnOrder.remove();
             int colSize = removeIndex.prefixSum * 4;
             size -= colSize;
             log("Remove " + removeIndex.cid + " from the memory... The size: " + colSize);
@@ -109,13 +100,10 @@ public class LRUDataManager implements IDataManager {
             removeIndex.positions = null;
         }
         intIndex.positions = positions;
-        columnOrder.addFirst(intIndex);
+        columnOrder.add(intIndex);
         size += positions.length * 4;
         log("Returning Data... The cache size: " + size);
-        long end = System.currentTimeMillis();
-        log("Time: " + (end - start));
-        log("Cache Lookup: " + BufferStats.nrIndexLookups +
-                "\t Cache Hits: " + BufferStats.nrCacheHit + "\t Cache Miss: " + BufferStats.nrCacheMiss);
+
         return positions[pos];
     }
 
@@ -131,16 +119,10 @@ public class LRUDataManager implements IDataManager {
             // cache hit
             BufferStats.nrCacheHit++;
             log("Column " + intIndex.cid + " starting from " + start + " is in the memory.");
-            // move the index entry to the first.
-            indexOrder.remove(entryRef);
-            indexOrder.addFirst(entryRef);
-            log("Cache Lookup: " + BufferStats.nrIndexLookups +
-                    "\t Cache Hits: " + BufferStats.nrCacheHit + "\t Cache Miss: " + BufferStats.nrCacheMiss);
             return entryRef.positions[offset];
         }
         // cache miss
         BufferStats.nrCacheMiss++;
-
         // load data from the buffer
         SeekableByteChannel channel = intIndex.positionChannel;
         int channelLength = (int) (channel.size() / 4);
@@ -160,7 +142,7 @@ public class LRUDataManager implements IDataManager {
         }
         // the column has been stored in the cache or the cache is full?
         while (capacity < size + indexSize && size > 0) {
-            EntryRef removeEntry = indexOrder.removeLast();
+            EntryRef removeEntry = indexOrder.remove();
             intIndex.keyToEntries.remove(start);
             int colSize = removeEntry.positions.length * 4;
             size -= colSize;
@@ -170,11 +152,9 @@ public class LRUDataManager implements IDataManager {
         entryRef = new EntryRef(cid, start, positions);
         intIndex.keyToEntries.put(start, entryRef);
         // push the index entry to the first.
-        indexOrder.addFirst(entryRef);
+        indexOrder.add(entryRef);
         size += positions.length * 4;
         log("Returning Data... The cache size: " + size);
-        log("Cache Lookup: " + BufferStats.nrIndexLookups +
-                "\t Cache Hits: " + BufferStats.nrCacheHit + "\t Cache Miss: " + BufferStats.nrCacheMiss);
         return positions[offset];
     }
 
@@ -190,14 +170,11 @@ public class LRUDataManager implements IDataManager {
     public void log(String text) {
         if (LoggingConfig.MANAGER_VERBOSE) {
             try {
-//                writer.write(text);
-//                writer.write("\n");
-                System.out.println(text);
-            } catch (Exception e) {
+                writer.write(text);
+                writer.write("\n");
+            } catch (IOException e) {
                 e.printStackTrace();
             }
         }
     }
-
-
 }

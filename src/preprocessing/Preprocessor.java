@@ -1,10 +1,5 @@
 package preprocessing;
-
-import java.io.PrintWriter;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 
@@ -13,15 +8,9 @@ import config.LoggingConfig;
 import config.NamingConfig;
 import config.PreConfig;
 import expressions.ExpressionInfo;
-import indexing.Index;
 import indexing.Indexer;
-import indexing.IntIndex;
 import net.sf.jsqlparser.expression.Expression;
-import net.sf.jsqlparser.expression.LongValue;
-import net.sf.jsqlparser.expression.StringValue;
 import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
-import net.sf.jsqlparser.expression.operators.relational.EqualsTo;
-import net.sf.jsqlparser.schema.Column;
 import operators.Filter;
 import operators.IndexFilter;
 import operators.IndexTest;
@@ -133,8 +122,11 @@ public class Preprocessor {
 		if (hadError) {
 			throw new Exception("Error in pre-processor.");
 		}
+		// Create ids for columns.
+		log("Creating column IDs ...");
+		createColumnsID(preSummary);
 		// Create missing indices for columns involved in equi-joins.
-		log("Creating indices ...");			
+		log("Creating indices ...");
 		createJoinIndices(query, preSummary);
 		return preSummary;
 	}
@@ -280,21 +272,44 @@ public class Preprocessor {
 			throws Exception {
 		// Iterate over columns in equi-joins
 		long startMillis = System.currentTimeMillis();
-		query.equiJoinCols.parallelStream().forEach(queryRef -> {
+		Set<ColumnRef> values = new HashSet<>();
+		for (ColumnRef queryRef: query.equiJoinCols) {
+			ColumnRef dbRef = preSummary.columnMapping.get(queryRef);
+			values.add(dbRef);
+		}
+
+		values.parallelStream().forEach(dbRef -> {
 			try {
-				// Resolve query-specific column reference
-				ColumnRef dbRef = preSummary.columnMapping.get(queryRef);
-				log("Creating index for " + queryRef + 
-						" (query) - " + dbRef + " (DB)");
 				// Create index (unless it exists already)
 				Indexer.index(dbRef);
 			} catch (Exception e) {
-				System.err.println("Error creating index for " + queryRef);
+				System.err.println("Error creating index for " + dbRef);
 				e.printStackTrace();
 			}
 		});
 		long totalMillis = System.currentTimeMillis() - startMillis;
 		log("Created all indices in " + totalMillis + " ms.");
+	}
+
+	/**
+	 * Create unique ids for different column references.
+	 * @param preSummary	summary of pre-processing steps executed so far
+	 *
+	 */
+	static void createColumnsID(Context preSummary) {
+		// Iterate over columns in equi-joins
+		long startMillis = System.currentTimeMillis();
+		int id = BufferManager.colToID.values()
+				.stream()
+				.mapToInt(v -> v)
+				.max().orElse(0) + 1;
+		for (ColumnRef columnRef: preSummary.columnMapping.values()) {
+			if (!BufferManager.colToID.containsKey(columnRef)) {
+				BufferManager.colToID.put(columnRef, id++);
+			}
+		}
+		long totalMillis = System.currentTimeMillis() - startMillis;
+		log("Created all ids in " + totalMillis + " ms.");
 	}
 	/**
 	 * Output logging message if pre-processing logging activated.

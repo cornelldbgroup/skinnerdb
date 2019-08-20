@@ -22,6 +22,10 @@ public class LoggingConfig {
 	 */
 	public final static boolean BUFFER_VERBOSE = false;
 	/**
+	 * Whether to generate verbose output on management activity.
+	 */
+	public final static boolean MANAGER_VERBOSE = false;
+	/**
 	 * Whether to generate verbose output about pre-processing.
 	 */
 	public final static boolean PREPROCESSING_VERBOSE = false;

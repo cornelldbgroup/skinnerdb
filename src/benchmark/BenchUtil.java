@@ -19,6 +19,7 @@ import postprocessing.PostProcessor;
 import preprocessing.Context;
 import preprocessing.Preprocessor;
 import query.QueryInfo;
+import statistics.BufferStats;
 import statistics.JoinStats;
 
 /**
@@ -61,10 +62,10 @@ public class BenchUtil {
 	 * @param benchOut	channel to benchmark file
 	 */
 	public static void writeBenchHeader(PrintWriter benchOut) {
-		benchOut.println("Query\tMillis\tPreMillis\tPostMillis\tTuples\t"
+		benchOut.println("Query\tMillis\tPreMillis\tJoinMillis\tPostMillis\tTuples\t"
 				+ "Iterations\tLookups\tNrIndexEntries\tnrUniqueLookups\t" 
 				+ "NrUctNodes\tNrPlans\tJoinCard\tNrSamples\tAvgReward\t"
-				+ "MaxReward\tTotalWork");
+				+ "MaxReward\tTotalWork\tNrIndexLookup\tNrCacheHits\tNrCacheMiss\tHitRatio");
 	}
 	/**
 	 * Executes given query, measures various metrics and writes
@@ -82,10 +83,15 @@ public class BenchUtil {
 		long startMillis = System.currentTimeMillis();
 		QueryInfo query = new QueryInfo(sql, false, -1, -1, null);
 		Context preSummary = Preprocessor.process(query);
-		long preMillis = System.currentTimeMillis() - startMillis;
+		System.out.println("Finish Pre-processing");
+		long joinStart = System.currentTimeMillis();
+		long preMillis = joinStart - startMillis;
 		JoinProcessor.process(query, preSummary);
+        System.out.println("Finish Join");
 		long postStartMillis = System.currentTimeMillis();
+		long joinMillis = postStartMillis - joinStart;
 		PostProcessor.process(query, preSummary);
+        System.out.println("Finish Post-processing");
 		long postMillis = System.currentTimeMillis() - postStartMillis;
 		long totalMillis = System.currentTimeMillis() - startMillis;
 		// Get cardinality of Skinner join result
@@ -95,6 +101,7 @@ public class BenchUtil {
 		benchOut.print(queryName + "\t");
 		benchOut.print(totalMillis + "\t");
 		benchOut.print(preMillis + "\t");
+		benchOut.print(joinMillis + "\t");
 		benchOut.print(postMillis + "\t");
 		benchOut.print(JoinStats.nrTuples + "\t");
 		benchOut.print(JoinStats.nrIterations + "\t");
@@ -107,7 +114,12 @@ public class BenchUtil {
 		benchOut.print(JoinStats.nrSamples + "\t");
 		benchOut.print(JoinStats.avgReward + "\t");
 		benchOut.print(JoinStats.maxReward + "\t");
-		benchOut.println(JoinStats.totalWork);
+		benchOut.print(JoinStats.totalWork + "\t");
+		benchOut.print(BufferStats.nrIndexLookups + "\t");
+		benchOut.print(BufferStats.nrCacheHit + "\t");
+		benchOut.print(BufferStats.nrCacheMiss + "\t");
+		double hitRatio = BufferStats.nrIndexLookups == 0 ? 0 : (BufferStats.nrCacheHit + 0.0) / BufferStats.nrIndexLookups;
+		benchOut.println(hitRatio);
 		benchOut.flush();
 		// Clean up
 		BufferManager.unloadTempData();

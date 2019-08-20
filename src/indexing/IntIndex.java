@@ -1,6 +1,7 @@
 package indexing;
 
 import buffer.BufferManager;
+import buffer.EntryRef;
 import com.koloboke.collect.map.IntIntCursor;
 import com.koloboke.collect.map.IntIntMap;
 import com.koloboke.collect.map.hash.HashIntIntMaps;
@@ -10,12 +11,15 @@ import config.GeneralConfig;
 import config.LoggingConfig;
 import data.IntData;
 import diskio.PathUtil;
+import org.omg.PortableInterceptor.SYSTEM_EXCEPTION;
 import query.ColumnRef;
+import statistics.BufferStats;
 import statistics.JoinStats;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.ObjectOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.IntBuffer;
@@ -27,10 +31,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.*;
 
 /**
  * Indexes integer values (not necessarily unique).
@@ -44,9 +45,13 @@ public class IntIndex extends Index {
 	 */
 	public final IntData intData;
 	/**
-	 * Reference to a specific column
+	 * Reference to a specific column.
 	 */
 	public final ColumnRef columnRef;
+	/**
+	 * Reference to a specific column id.
+	 */
+	public final int cid;
 	/**
 	 * Cardinality of indexed table.
 	 */
@@ -57,6 +62,9 @@ public class IntIndex extends Index {
 	 * numbers at which those entries are found.
 	 */
 	public int[] positions;
+	/**
+	 * Number of position information
+	 */
 	public int prefixSum;
 	/**
 	 * After indexing: maps search key to index
@@ -64,6 +72,13 @@ public class IntIndex extends Index {
 	 * information is stored.
 	 */
 	public IntIntMap keyToPositions;
+    public IntIntMap keyToPageSize;
+	/**
+	 * Local memory saving a mapping from
+	 * distinct value to part of positions
+	 * that is encapsulated in EntryRef.
+	 */
+	public Map<Integer, EntryRef> keyToEntries;
 	/**
 	 * After indexing: if inMemory is not enable,
 	 * store the positions array to the file by java NIO.
@@ -89,67 +104,121 @@ public class IntIndex extends Index {
 		this.intData = intData;
 		this.cardinality = intData.cardinality;
 		this.columnRef = colRef;
-		int[] data = intData.data;
-		// Count number of occurrences for each value
-		IntIntMap keyToNr = HashIntIntMaps.newMutableMap();
-		for (int i=0; i<cardinality; ++i) {
-			// Don't index null values
-			if (!intData.isNull.get(i)) {
-				int value = data[i];
-				int nr = keyToNr.getOrDefault(value, 0);
-				keyToNr.put(value, nr+1);				
+		this.cid = BufferManager.colToID.get(colRef);
+		// load data from the disk
+		Path indexPath = Paths.get(PathUtil.indexPath, columnRef.toString() + ".idx");
+		if (Files.exists(indexPath) && !GeneralConfig.indexInMemory) {
+			// load keys map
+			int[] data = intData.data;
+			// Count number of occurrences for each value
+			IntIntMap keyToNr = HashIntIntMaps.newMutableMap();
+			for (int i=0; i<cardinality; ++i) {
+				// Don't index null values
+				if (!intData.isNull.get(i)) {
+					int value = data[i];
+					int nr = keyToNr.getOrDefault(value, 0);
+					keyToNr.put(value, nr+1);
+				}
 			}
-		}
-		// Assign each key to the appropriate position offset
-		int nrKeys = keyToNr.size();
-		log("Number of keys:\t" + nrKeys);
-		keyToPositions = HashIntIntMaps.newMutableMap(nrKeys);
-		int prefixSum = 0;
-		IntIntCursor keyToNrCursor = keyToNr.cursor();
-		while (keyToNrCursor.moveNext()) {
-			int key = keyToNrCursor.key();
-			keyToPositions.put(key, prefixSum);
-			// Advance offset taking into account
-			// space for row indices and one field
-			// storing the number of following indices.
-			int nrFields = keyToNrCursor.value() + 1;
-			prefixSum += nrFields;
-		}
-		log("Prefix sum:\t" + prefixSum);
-		// Generate position information
-		int[] positions = new int[prefixSum];
-		for (int i=0; i<cardinality; ++i) {
-			if (!intData.isNull.get(i)) {
-				int key = data[i];
-				int startPos = keyToPositions.get(key);
-				positions[startPos] += 1;
-				int offset = positions[startPos];
-				int pos = startPos + offset;
-				positions[pos] = i;				
+			// Assign each key to the appropriate position offset
+			int nrKeys = keyToNr.size();
+			log("Number of keys:\t" + nrKeys);
+			keyToPositions = HashIntIntMaps.newMutableMap(nrKeys);
+			keyToPageSize = HashIntIntMaps.newMutableMap(nrKeys);
+			keyToEntries = new HashMap<>();
+			int prefixSum = 0;
+			IntIntCursor keyToNrCursor = keyToNr.cursor();
+			while (keyToNrCursor.moveNext()) {
+				int key = keyToNrCursor.key();
+				keyToPositions.put(key, prefixSum);
+				// Advance offset taking into account
+				// space for row indices and one field
+				// storing the number of following indices.
+				int nrFields = keyToNrCursor.value() + 1;
+                keyToPageSize.put(key, nrFields);
+				prefixSum += nrFields;
 			}
-		}
-		this.prefixSum = prefixSum;
+			this.prefixSum = prefixSum;
 
-		// Output statistics for performance tuning
-		if (LoggingConfig.INDEXING_VERBOSE) {
-			long totalMillis = System.currentTimeMillis() - startMillis;
-			log("Created index for integer column with cardinality " + 
-					cardinality + " in " + totalMillis + " ms.");
-		}
-		// Check index if enabled
-		IndexChecker.checkIndex(intData, this);
-
-		// write indexes to files when the inMemory is not enable.
-		if (!GeneralConfig.inMemory) {
+			// load positions channel
+			Set<StandardOpenOption> options = new HashSet<>();
+			options.add(StandardOpenOption.READ);
+			options.add(StandardOpenOption.WRITE);
 			try {
-				writePositions(colRef, positions);
+				positionChannel = Files.newByteChannel(indexPath, options);
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
 		}
 		else {
-			this.positions = positions;
+			int[] data = intData.data;
+			// Count number of occurrences for each value
+			IntIntMap keyToNr = HashIntIntMaps.newMutableMap();
+			for (int i=0; i<cardinality; ++i) {
+				// Don't index null values
+				if (!intData.isNull.get(i)) {
+					int value = data[i];
+					int nr = keyToNr.getOrDefault(value, 0);
+					keyToNr.put(value, nr+1);
+				}
+			}
+			// Assign each key to the appropriate position offset
+			int nrKeys = keyToNr.size();
+			log("Number of keys:\t" + nrKeys);
+			keyToPositions = HashIntIntMaps.newMutableMap(nrKeys);
+            keyToPageSize = HashIntIntMaps.newMutableMap(nrKeys);
+			keyToEntries = new HashMap<>();
+			int prefixSum = 0;
+			IntIntCursor keyToNrCursor = keyToNr.cursor();
+			while (keyToNrCursor.moveNext()) {
+				int key = keyToNrCursor.key();
+				keyToPositions.put(key, prefixSum);
+				// Advance offset taking into account
+				// space for row indices and one field
+				// storing the number of following indices.
+				int nrFields = keyToNrCursor.value() + 1;
+                keyToPageSize.put(key, nrFields);
+				prefixSum += nrFields;
+			}
+			log("Prefix sum:\t" + prefixSum);
+			// Generate position information
+			int[] positions = new int[prefixSum];
+			for (int i=0; i<cardinality; ++i) {
+				if (!intData.isNull.get(i)) {
+					int key = data[i];
+					int startPos = keyToPositions.get(key);
+					positions[startPos] += 1;
+					int offset = positions[startPos];
+					int pos = startPos + offset;
+					positions[pos] = i;
+				}
+			}
+			this.prefixSum = positions.length;
+
+			// Output statistics for performance tuning
+			if (LoggingConfig.INDEXING_VERBOSE) {
+				long totalMillis = System.currentTimeMillis() - startMillis;
+				log("Created index for integer column with cardinality " +
+						cardinality + " in " + totalMillis + " ms.");
+			}
+			// Check index if enabled
+			IndexChecker.checkIndex(intData, this);
+			long startWriteMillis = System.currentTimeMillis();
+			// write indexes to files when the inMemory is not enable.
+			if (!GeneralConfig.indexInMemory) {
+				try {
+					store(positions);
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			}
+			else {
+				this.positions = positions;
+			}
 		}
+
+		long end = System.currentTimeMillis();
+//		System.out.println(colRef.toString() + ": " + (end - startMillis) + " ms");
 	}
 	/**
 	 * Returns index of next tuple with given value
@@ -168,13 +237,13 @@ public class IntIndex extends Index {
 			JoinStats.nrUniqueIndexLookups += 1;
 			return cardinality;
 		}
+		// Get number of indexed values
+		int nrVals = getEntry(firstPos);
 		// Can we return first indexed value?
 		int firstTuple = getEntry(firstPos+1);
 		if (firstTuple>prevTuple) {
 			return firstTuple;
 		}
-		// Get number of indexed values
-		int nrVals = getEntry(firstPos);
 		// Update index-related statistics
 		JoinStats.nrIndexEntries += nrVals;
 		if (nrVals==1) {
@@ -285,10 +354,10 @@ public class IntIndex extends Index {
 	 * Get the entry in given position.
 	 *
 	 * @param pos	the index of positions
-	 * @return the according entry.
+	 * @return 		the according entry.
 	 */
 	public int getEntry(int pos) {
-		if (GeneralConfig.inMemory) {
+		if (GeneralConfig.indexInMemory) {
 			return positions[pos];
 		}
 		else {
@@ -312,22 +381,43 @@ public class IntIndex extends Index {
 		}
 	}
 
-	void writePositions(ColumnRef colRef, int[] positions) throws IOException {
+	/**
+	 * Close the channel that is opened
+	 * during index generation.
+	 *
+	 * @throws IOException
+	 */
+	public void closeChannels() throws IOException {
+		// close the channel
+		positionChannel.close();
+		// remove temporary files
+		Path index = Paths.get(PathUtil.indexPath,columnRef.toString() + ".idx");
+		Files.deleteIfExists(index);
+	}
+
+	@Override
+	public void store(int[] positions) throws Exception {
+		// store positions data
+		Path indexPath = Files.createFile(Paths.get(PathUtil.indexPath, columnRef.toString() + ".idx"));
 		Set<StandardOpenOption> options = new HashSet<>();
 		options.add(StandardOpenOption.CREATE);
 		options.add(StandardOpenOption.READ);
 		options.add(StandardOpenOption.WRITE);
-
-		Path indexPath = Files.createFile(Paths.get(PathUtil.indexPath, colRef.toString() + ".tmp"));
-		SeekableByteChannel channel = Files.newByteChannel(indexPath, options);
+		positionChannel = Files.newByteChannel(indexPath, options);
 		// write data to the int buffer
 		ByteBuffer byteBuffer = ByteBuffer.allocate(4 * positions.length);
+		byteBuffer.order(ByteOrder.nativeOrder());
 		byteBuffer.asIntBuffer().put(positions);
-		channel.write(byteBuffer);
-		positionChannel = channel;
+		positionChannel.write(byteBuffer);
 	}
 
-	public void closeChannels() throws IOException {
-		positionChannel.close();
+	@Override
+	public boolean equals(Object other) {
+		if (other instanceof IntIndex) {
+			IntIndex otherIndex = (IntIndex)other;
+			return otherIndex.cid == cid;
+		} else {
+			return false;
+		}
 	}
 }

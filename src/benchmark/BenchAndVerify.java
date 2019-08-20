@@ -40,6 +40,7 @@ import preprocessing.Preprocessor;
 import print.RelationPrinter;
 import query.ColumnRef;
 import query.QueryInfo;
+import statistics.BufferStats;
 import statistics.JoinStats;
 
 /**
@@ -70,16 +71,10 @@ public class BenchAndVerify {
 		CatalogManager.loadDB(PathUtil.schemaPath);
 		PathUtil.initDataPaths(CatalogManager.currentDB);
 		System.out.println("Loading data ...");
-		GeneralConfig.inMemory = false;
+		GeneralConfig.inMemory = true;
 		// Load data and/or dictionary
-		if (GeneralConfig.inMemory) {
-			// In-memory data processing
-			BufferManager.loadDB();
-		} else {
-			// Disc data processing (not fully implemented!) -
-			// string dictionary is still loaded.
-			BufferManager.loadDictionary();
-		}
+		// In-memory data processing
+		BufferManager.loadDB();
 
 		System.out.println("Data loaded.");
 		Indexer.indexAll(StartupConfig.INDEX_CRITERIA);
@@ -112,9 +107,11 @@ public class BenchAndVerify {
 			QueryInfo query = new QueryInfo(entry.getValue(),
 					false, -1, -1, null);
 			Context preSummary = Preprocessor.process(query);
-			long preMillis = System.currentTimeMillis() - startMillis;
+			long joinStart = System.currentTimeMillis();
+			long preMillis = joinStart - startMillis;
 			JoinProcessor.process(query, preSummary);
 			long postStartMillis = System.currentTimeMillis();
+			long joinMillis = postStartMillis - joinStart;
 			PostProcessor.process(query, preSummary);
 			long postMillis = System.currentTimeMillis() - postStartMillis;
 			long totalMillis = System.currentTimeMillis() - startMillis;
@@ -224,6 +221,7 @@ public class BenchAndVerify {
 			benchOut.print(entry.getKey() + "\t");
 			benchOut.print(totalMillis + "\t");
 			benchOut.print(preMillis + "\t");
+			benchOut.print(joinMillis + "\t");
 			benchOut.print(postMillis + "\t");
 			benchOut.print(JoinStats.nrTuples + "\t");
 			benchOut.print(JoinStats.nrIterations + "\t");
@@ -236,7 +234,10 @@ public class BenchAndVerify {
 			benchOut.print(JoinStats.nrSamples + "\t");
 			benchOut.print(JoinStats.avgReward + "\t");
 			benchOut.print(JoinStats.maxReward + "\t");
-			benchOut.println(JoinStats.totalWork);
+			benchOut.print(JoinStats.totalWork + "\t");
+			benchOut.print(BufferStats.nrIndexLookups + "\t");
+			benchOut.print(BufferStats.nrCacheHit + "\t");
+			benchOut.println(BufferStats.nrCacheMiss);
 			benchOut.flush();
 			// Clean up
 			BufferManager.unloadTempData();

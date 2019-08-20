@@ -33,11 +33,16 @@ public class Master {
 		// Analyze input query
 		QueryInfo query = new QueryInfo(select, explain, 
 				plotAtMost, plotEvery, plotDir);
+//		long preStart = System.currentTimeMillis();
 		// Filter, projection, and indexing for join phase
 		Context context = Preprocessor.process(query);
+//		long joinStart = System.currentTimeMillis();
 		// Join filtered tables
 		JoinProcessor.process(query, context);
+//		long postStart = System.currentTimeMillis();
 		// Aggregation, grouping, and sorting if required
 		PostProcessor.process(query, context);
+//		long end = System.currentTimeMillis();
+//		System.out.println((joinStart - preStart) + " " + (joinStart - preStart) + " " + (end - postStart));
 	}
 }

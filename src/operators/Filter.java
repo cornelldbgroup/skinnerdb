@@ -41,6 +41,22 @@ public class Filter {
 		}
 	}
 	/**
+	 * Unload required columns for predicate evaluations into main memory.
+	 *
+	 * @param unaryPred			unary predicate
+	 * @param columnMapping		maps query to database columns
+	 * @throws Exception
+	 */
+	static void unloadPredCols(ExpressionInfo unaryPred,
+							 Map<ColumnRef, ColumnRef> columnMapping) throws Exception {
+		// Load required data into memory
+		if (!GeneralConfig.inMemory) {
+			for (ColumnRef colRef : unaryPred.columnsMentioned) {
+				BufferManager.unloadColumn(colRef);
+			}
+		}
+	}
+	/**
 	 * Compiles evaluator for unary predicate.
 	 * 
 	 * @param unaryPred			predicate to compile
@@ -97,7 +113,7 @@ public class Filter {
 			String tableName, Map<ColumnRef, ColumnRef> columnMapping) 
 					throws Exception {
 		// Load required columns for predicate evaluation
-//		loadPredCols(unaryPred, columnMapping);
+		loadPredCols(unaryPred, columnMapping);
 		// Compile unary predicate for fast evaluation
 		UnaryBoolEval unaryBoolEval = compilePred(unaryPred, columnMapping);
 		// Get cardinality of table referenced in predicate
@@ -117,13 +133,7 @@ public class Filter {
 						Collectors.toList());
 		}
 		// Clean up columns loaded for this operation
-		/*
-		if (!GeneralConfig.inMemory) {
-			for (ColumnRef colRef : unaryPred.columnsMentioned) {
-				BufferManager.unloadColumn(colRef);
-			}
-		}
-		*/
+		unloadPredCols(unaryPred, columnMapping);
 		return result;
 	}
 	/**

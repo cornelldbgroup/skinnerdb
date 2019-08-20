@@ -341,7 +341,6 @@ public class ExpressionCompiler implements ExpressionVisitor {
 	 */
 	public static int[] getIntData(String tableName, String columnName) {
 		ColumnRef columnRef = new ColumnRef(tableName, columnName);
-//		IntData intData = (IntData) BufferManager.getManagerData(columnRef);
 		IntData intData = (IntData)BufferManager.colToData.get(columnRef);
 		return intData.data;
 	}

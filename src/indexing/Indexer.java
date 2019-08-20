@@ -9,9 +9,11 @@ import data.IntData;
 import diskio.PathUtil;
 import query.ColumnRef;
 
+import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Comparator;
 
 /**
  * Features utility functions for creating indexes.
@@ -33,7 +35,7 @@ public class Indexer {
 				IntData intData = (IntData)data;
 				IntIndex index = new IntIndex(colRef, intData);
 				BufferManager.colToIndex.put(colRef, index);
-			}					
+			}
 		}
 	}
 	/**
@@ -45,12 +47,17 @@ public class Indexer {
 	public static void indexAll(IndexingMode mode) throws Exception {
 		System.out.println("Indexing all key columns ...");
 		long startMillis = System.currentTimeMillis();
-		// create temporary files for non-volatile data
-		if (!GeneralConfig.inMemory) {
-			Path indexDir = Files.createTempDirectory(Paths.get(PathUtil.dbDir), "indexes");
-			PathUtil.indexPath = indexDir.toString();
-			indexDir.toFile().deleteOnExit();
+		// delete temporary data
+		Path indexPath = Paths.get(PathUtil.indexPath);
+		if (Files.exists(indexPath)) {
+			Files.walk(indexPath)
+					.sorted(Comparator.reverseOrder())
+					.map(Path::toFile)
+					.forEach(File::delete);
 		}
+		Files.createDirectory(indexPath);
+
+		// create temporary files for non-volatile data
 		CatalogManager.currentDB.nameToTable.values().parallelStream().forEach(
 			tableInfo -> {
 				tableInfo.nameToCol.values().parallelStream().forEach(
@@ -63,7 +70,7 @@ public class Indexer {
 								String column = columnInfo.name;
 								ColumnRef colRef = new ColumnRef(table, column);
 								System.out.println("Indexing " + colRef + " ...");
-								index(colRef);								
+								index(colRef);
 							}
 						} catch (Exception e) {
 							System.err.println("Error indexing " + columnInfo);

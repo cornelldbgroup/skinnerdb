@@ -31,6 +31,7 @@ public class DiskUtil {
 			fileIn.close();
 			return object;
 		} catch (Exception e) {
+			e.printStackTrace();
 			throw new Exception("Error loading object at path '" + path + "'");
 		}
 	}

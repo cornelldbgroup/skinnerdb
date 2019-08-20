@@ -33,6 +33,10 @@ public class PathUtil {
 	 */
 	public static String indexPath = null;
 	/**
+	 * Path to directory containing indexes.
+	 */
+	public static String tempPath = null;
+	/**
 	 * If a string dictionary was created, it will
 	 * be stored under this path.
 	 */
@@ -61,6 +65,8 @@ public class PathUtil {
 		// Initialize dictionary and data directory paths
 		dictionaryPath = Paths.get(dbDir, "stringdic.sdb").toString();
 		dataPath = Paths.get(dbDir, "data").toString();
+		indexPath = Paths.get(dbDir, "index").toString();
+		tempPath = Paths.get(dbDir, "tmp").toString();
 		// Iterate over database tables
 		colToPath = new HashMap<>();
 		for (TableInfo tblInfo : dbInfo.nameToTable.values()) {
