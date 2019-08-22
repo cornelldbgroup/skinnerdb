@@ -2,7 +2,6 @@ package unnesting;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -12,13 +11,16 @@ import java.util.Stack;
 import catalog.CatalogManager;
 import catalog.info.ColumnInfo;
 import catalog.info.TableInfo;
-import expressions.normalization.PlainVisitor;
+import config.NamingConfig;
+import expressions.normalization.CopyVisitor;
 import net.sf.jsqlparser.expression.Expression;
+import net.sf.jsqlparser.schema.Column;
 import net.sf.jsqlparser.schema.Table;
 import net.sf.jsqlparser.statement.select.FromItem;
 import net.sf.jsqlparser.statement.select.Join;
 import net.sf.jsqlparser.statement.select.PlainSelect;
 import net.sf.jsqlparser.statement.select.SelectBody;
+import net.sf.jsqlparser.statement.select.SelectExpressionItem;
 import net.sf.jsqlparser.statement.select.SelectItem;
 import net.sf.jsqlparser.statement.select.SelectVisitor;
 import net.sf.jsqlparser.statement.select.SetOperationList;
@@ -36,7 +38,7 @@ import query.select.SelectUtil;
  * @author immanueltrummer
  *
  */
-public class UnnestingVisitor extends PlainVisitor implements SelectVisitor {
+public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 	/**
 	 * Used to assign unique IDs to anonymous sub-queries.
 	 */
@@ -57,14 +59,21 @@ public class UnnestingVisitor extends PlainVisitor implements SelectVisitor {
 	 */
 	public List<PlainSelect> unnestedQueries = new ArrayList<>();
 	/**
-	 * Maps sub-queries to names of associated result tables.
-	 */
-	public Map<PlainSelect, String> queryNames = new HashMap<>();
-	/**
 	 * Contains the names of result fields of the last treated
 	 * sub-query on top.
 	 */
-	public Stack<Set<String>> subqueryFields = new Stack<>();
+	public Stack<List<String>> subqueryFields = new Stack<>();
+	/**
+	 * List of references to tables containing sub-query results
+	 * that need to be added to FROM clause.
+	 */
+	public Stack<Table> addToFrom = new Stack<>();
+	/**
+	 * List of correlated predicates that need to be added to
+	 * WHERE clause (since they cannot be resolved in inner
+	 * scope).
+	 */
+	public Stack<Expression> addToWhere = new Stack<>();
 	/**
 	 * Extracts all possible column references to base tables
 	 * that appear in the given query's FROM clause (note: we
@@ -124,9 +133,8 @@ public class UnnestingVisitor extends PlainVisitor implements SelectVisitor {
 				PlainSelect plainSelect = (PlainSelect)selectBody;
 				plainSelect.setIntoTables(Arrays.asList(
 						new Table[] {table}));
-				queryNames.put(plainSelect, alias);
 				// Add references to sub-query columns to scope
-				Set<String> newCols = subqueryFields.pop();
+				List<String> newCols = subqueryFields.pop();
 				for (String col : newCols) {
 					scopeCols.add(new ColumnRef("", col));
 					scopeCols.add(new ColumnRef(alias, col));					
@@ -174,11 +182,43 @@ public class UnnestingVisitor extends PlainVisitor implements SelectVisitor {
 			List<SelectItem> selectItems = plainSelect.getSelectItems();
 			Map<Expression, String> selectToName = 
 					SelectUtil.assignAliases(selectItems);
-			Set<String> selectNames = new HashSet<>();
-			selectNames.addAll(selectToName.values());
+			List<String> selectNames = new ArrayList<>();
+			for (SelectItem selectItem : selectItems) {
+				Expression selectExpr = ((SelectExpressionItem)
+						selectItem).getExpression();
+				selectNames.add(selectToName.get(selectExpr));
+			}
 			subqueryFields.add(selectNames);
 		} catch (SQLexception e) {
 			sqlExceptions.add(e);
+		}
+	}
+	/**
+	 * Expand FROM clause by adding tables containing
+	 * results of nested queries that were rewritten
+	 * during unnesting.
+	 * 
+	 * @param plainSelect	expand this query's FROM clause
+	 */
+	void expandFrom(PlainSelect plainSelect) {
+		while (!addToFrom.isEmpty()) {
+			Table toAdd = addToFrom.pop();
+			FromItem firstItem = plainSelect.getFromItem();
+			if (firstItem == null) {
+				plainSelect.setFromItem(toAdd);
+			} else {
+				// Make sure that join list is initialized
+				List<Join> joins = plainSelect.getJoins();
+				if (joins == null) {
+					joins = new ArrayList<>();
+					plainSelect.setJoins(joins);
+				}
+				// Add new table via simple join
+				Join join = new Join();
+				join.setSimple(true);
+				join.setRightItem(toAdd);
+				joins.add(join);
+			}
 		}
 	}
 	
@@ -194,8 +234,17 @@ public class UnnestingVisitor extends PlainVisitor implements SelectVisitor {
 		// Treat sub-queries in FROM clause
 		unnestFrom(plainSelect, newOuterCols);
 		// Unnest sub-queries in WHERE clause
+		Expression originalWhere = plainSelect.getWhere();
+		if (originalWhere != null) {
+			// Replace where clause by unnested version
+			originalWhere.accept(this);
+			Expression newWhere = exprStack.pop();
+			plainSelect.setWhere(newWhere);
+		}
 		// Add unnested sub-queries to FROM clause if any
+		expandFrom(plainSelect);
 		// Resolve wildcard in SELECT clause
+		
 		// Add fields required by outer scope to SELECT clause
 		// Add unnested query to query sequence
 		unnestedQueries.add(plainSelect);
@@ -216,10 +265,44 @@ public class UnnestingVisitor extends PlainVisitor implements SelectVisitor {
 		// TODO Auto-generated method stub
 		
 	}
-
+	/**
+	 * This method is invoked for subselects in
+	 * where and select clauses while subselects
+	 * in the FROM clause are treated separately.
+	 */
 	@Override
 	public void visit(SubSelect subSelect) {
-		// TODO Auto-generated method stub
-		
+		// Check for alias - should not have any
+		if (subSelect.getAlias() != null) {
+			sqlExceptions.add(new SQLexception("Error -"
+					+ "specified alias for anonymous "
+					+ "sub-query: " + subSelect));
+		} else {
+			// Name anonymous sub-query
+			String alias = NamingConfig.SUBQUERY_PRE + nextSubqueryID;
+			++nextSubqueryID;
+			// Unnest nested sub-query if possible
+			SelectBody selectBody = subSelect.getSelectBody();
+			if (selectBody instanceof PlainSelect) {
+				PlainSelect plainSelect = (PlainSelect)selectBody;
+				// Rewrite sub-query and add to query list
+				plainSelect.accept(this);
+				Table resultTable = new Table(alias);
+				plainSelect.setIntoTables(Arrays.asList(
+						new Table[] {resultTable}));
+				// Replace nested sub-query by table reference
+				List<String> subqueryCols = subqueryFields.pop();
+				String firstCol = subqueryCols.get(0);
+				exprStack.add(new Column(resultTable, firstCol));
+				// Schedule table containing sub-query result to 
+				// be added to FROM clause.
+				addToFrom.add(resultTable);
+			} else {
+				sqlExceptions.add(new SQLexception("Error - "
+						+ "unsupported sub-query type: "
+						+ selectBody + " (type: " + 
+						selectBody.getClass() + ")"));
+			}
+		}
 	}	
 }

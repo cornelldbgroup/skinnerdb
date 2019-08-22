@@ -9,6 +9,14 @@ package config;
  */
 public class NamingConfig {
 	/**
+	 * Prefix for naming anonymous sub-queries during unnesting.
+	 */
+	public static final String SUBQUERY_PRE = "subquery.";
+	/**
+	 * Prefix for naming columns that are created during unnesting.
+	 */
+	public static final String SUBQUERY_COL_PRE = "subquerycol.";
+	/**
 	 * Prefix to add to table names after initial, index-based filtering.
 	 */
 	public static final String IDX_FILTERED_PRE = "indexfiltered.";
