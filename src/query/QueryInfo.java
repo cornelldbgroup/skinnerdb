@@ -31,6 +31,9 @@ import net.sf.jsqlparser.statement.select.PlainSelect;
 import net.sf.jsqlparser.statement.select.SelectExpressionItem;
 import net.sf.jsqlparser.statement.select.SelectItem;
 import net.sf.jsqlparser.util.cnfexpression.CNFConverter;
+import query.from.FromUtil;
+import query.select.SelectUtil;
+
 import org.apache.commons.lang3.StringUtils;
 
 /**
@@ -192,13 +195,7 @@ public class QueryInfo {
 			throw new SQLexception("Error - no FROM clause");
 		}
 		// Extract all from items
-		List<FromItem> fromItems = new ArrayList<FromItem>();
-		fromItems.add(plainSelect.getFromItem());
-		if (plainSelect.getJoins() != null) {
-			for (Join join : plainSelect.getJoins()) {
-				fromItems.add(join.getRightItem());
-			}			
-		}
+		List<FromItem> fromItems = FromUtil.allFromItems(plainSelect);
 		nrJoined = fromItems.size();
 		// Extract tables from items
 		aliases = new String[nrJoined];
@@ -257,34 +254,6 @@ public class QueryInfo {
 		}
 	}
 	/**
-	 * Generate an alias for columns in the SELECT clause for which
-	 * no alias is specified. Alias name is based on the expression
-	 * type, to ensure unique aliases, a number is optionally appended. 
-	 * 
-	 * @param expression	expression for which to introduce alias
-	 * @param priorAliases	set of all previously used aliases
-	 * @return	unique alias
-	 */
-	String generateAlias(Expression expression, Set<String> priorAliases) {
-		// Generate alias prefix
-		String prefix = "default";
-		if (expression instanceof Column) {
-			Column column = (Column)expression;
-			prefix = column.getColumnName();
-		} else if (expression instanceof Function) {
-			Function function = (Function)expression;
-			prefix = function.getName();
-		}
-		// Add number suffix if necessary
-		String alias = prefix;
-		int aliasCtr = 1;
-		while (priorAliases.contains(alias)) {
-			aliasCtr++;
-			alias = prefix + aliasCtr;
-		}
-		return alias;
-	}
-	/**
 	 * Adds all columns of a given table to a list of select clause items.
 	 * 
 	 * @param tblAlias		add columns for this table alias
@@ -323,21 +292,14 @@ public class QueryInfo {
 						+ "clause item - ignoring");
 			}
 		}
-		// Set of previously used aliases
-		Set<String> priorAliases = new HashSet<>();
-		// Add select items and assign aliases
-		for (SelectExpressionItem exprItem : selectItems) {
-			Expression expr = exprItem.getExpression();
-			Alias queryAlias = exprItem.getAlias();
-			String alias = queryAlias!=null?
-					queryAlias.getName():
-						generateAlias(expr, priorAliases);
-			// Check whether alias was used before
-			if (priorAliases.contains(alias)) {
-				throw new SQLexception("Error - alias " + 
-						alias + " used multiple times");
-			}
-			priorAliases.add(alias);
+		// Name items in select clause
+		Map<Expression, String> selectExprToAlias = 
+				SelectUtil.assignAliases(
+						plainSelect.getSelectItems());
+		// Update fields associated with select clause
+		for (Entry<Expression, String> entry : selectExprToAlias.entrySet()) {
+			Expression expr = entry.getKey();
+			String alias = entry.getValue();
 			ExpressionInfo exprInfo = new ExpressionInfo(this, expr);
 			selectExpressions.add(exprInfo);
 			aliasToExpression.put(alias, exprInfo.finalExpression);
