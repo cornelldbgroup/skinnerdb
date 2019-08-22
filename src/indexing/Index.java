@@ -14,4 +14,6 @@ public abstract class Index {
      * @throws Exception
      */
     public abstract void store(int[] positions) throws Exception;
+
+    public abstract void clear();
 }

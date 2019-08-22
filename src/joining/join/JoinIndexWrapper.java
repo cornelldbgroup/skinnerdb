@@ -122,7 +122,11 @@ public class JoinIndexWrapper {
 		int priorTuple = tupleIndices[priorTable];
 		int priorVal = priorData.data[priorTuple];
 		int curTuple = tupleIndices[nextTable];
-		return nextIndex.nextTuple(priorVal, curTuple);
+//		if (nextIndex.nextTuple(priorVal, curTuple) != nextIndex.nextTupleInPage(priorVal, curTuple)) {
+//			System.out.println("wrong");
+//		}
+		return nextIndex.nextTupleInPage(priorVal, curTuple);
+//		return nextIndex.nextTuple(priorVal, curTuple);
 	}
 	/**
 	 * Returns number of tuples indexed in next

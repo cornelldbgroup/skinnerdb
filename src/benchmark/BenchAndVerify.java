@@ -237,7 +237,9 @@ public class BenchAndVerify {
 			benchOut.print(JoinStats.totalWork + "\t");
 			benchOut.print(BufferStats.nrIndexLookups + "\t");
 			benchOut.print(BufferStats.nrCacheHit + "\t");
-			benchOut.println(BufferStats.nrCacheMiss);
+			benchOut.print(BufferStats.nrCacheMiss + "\t");
+			double hitRatio = BufferStats.nrIndexLookups == 0 ? 0 : (BufferStats.nrCacheHit + 0.0) / BufferStats.nrIndexLookups;
+			benchOut.println(hitRatio);
 			benchOut.flush();
 			// Clean up
 			BufferManager.unloadTempData();

@@ -28,4 +28,4 @@ def agg_results(fileData, attrs):
             value_list.append(str(avg))
         print("\t".join(value_list))
 fileData = load_files("../data/cache")
-agg_results(fileData, ["Millis", "PreMillis", "JoinMillis"])
+agg_results(fileData, ["Millis", "PreMillis", "JoinMillis", "NrCacheMiss"])

@@ -169,7 +169,8 @@ public class Preprocessor {
 		List<Expression> nonIndexedConjuncts = new ArrayList<>();
 		for (Expression conjunct : unaryPred.conjuncts) {
 			// Re-initialize index test
-			indexTest.canUseIndex = true;
+//			indexTest.canUseIndex = true;
+			indexTest.canUseIndex = false;
 			// Compare predicate against indexes
 			conjunct.accept(indexTest);
 			// Can conjunct be evaluated only from indices?

@@ -58,7 +58,7 @@ public class BufferManager {
 	/**
 	 * Maps column IDs to associated indices.
 	 */
-	public final static Map<Integer, Index> idToIndex =
+	public final static Map<Integer, IntIndex> idToIndex =
 			new ConcurrentHashMap<>();
 	/**
 	 * Implementation of buffer management algorithm.
@@ -109,6 +109,7 @@ public class BufferManager {
 				colsToLoad.add(new ColumnRef(tableName, columnName));
 			}
 		}
+		// Create column id
 		int id = BufferManager.colToID.values()
 				.stream()
 				.mapToInt(v -> v)
@@ -290,7 +291,10 @@ public class BufferManager {
 		}
 		colToData.remove(columnRef);
 		colToIndex.remove(columnRef);
-		colToID.remove(columnRef);
+		if (colToID.containsKey(columnRef)) {
+			int id = colToID.remove(columnRef);
+			idToIndex.remove(id);
+		}
 	}
 	/**
 	 * Unload all columns of temporary tables (typically after
@@ -309,7 +313,8 @@ public class BufferManager {
 					if (colToIndex.containsKey(colRef)) {
 						// close file channels
 						if (!GeneralConfig.indexInMemory) {
-							((IntIndex)colToIndex.get(colRef)).closeChannels();
+							IntIndex intIndex = (IntIndex)colToIndex.get(colRef);
+							intIndex.closeChannels();
 						}
 					}
 					unloadColumn(colRef);

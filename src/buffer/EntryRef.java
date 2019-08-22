@@ -9,22 +9,25 @@ package buffer;
  */
 public class EntryRef {
     /**
-     * id of the column (unique within query).
+     * id of the entry (unique within query).
      */
-    public final int cid;
+    public final int id;
     /**
      * start position (unique within column).
      */
     public final int start;
-    public final int[] positions;
+    /**
+     * actual positions array
+     */
+    public int[] positions;
     /**
      * Initializes reference for given column id and value.
      *
-     * @param cid		id of the column
+     * @param id		id of the entry
      * @param start	    start position of the column
      */
-    public EntryRef(int cid, int start, int[] positions) {
-        this.cid = cid;
+    public EntryRef(int id, int start, int[] positions) {
+        this.id = id;
         this.start = start;
         this.positions = positions;
     }
@@ -32,9 +35,13 @@ public class EntryRef {
     public boolean equals(Object other) {
         if (other instanceof EntryRef) {
             EntryRef otherRef = (EntryRef)other;
-            return cid == otherRef.cid && start == otherRef.start;
+            return id == otherRef.id;
         } else {
             return false;
         }
+    }
+    @Override
+    public int hashCode() {
+        return id * 31 + start;
     }
 }

@@ -209,11 +209,13 @@ public class OldJoin extends MultiWayJoin {
         int remainingBudget = budget;
         // Number of completed tuples added
         nrResultTuples = 0;
+        JoinStats.nrCacheMiss = 0;
         // Execute join order until budget depleted or all input finished -
         // at each iteration start, tuple indices contain next tuple
         // combination to look at.
         while (remainingBudget > 0 && joinIndex >= 0) {
         	++JoinStats.nrIterations;
+        	JoinStats.cacheMiss = false;
         	//log("Offsets:\t" + Arrays.toString(offsets));
         	//log("Indices:\t" + Arrays.toString(tupleIndices));
             // Get next table in join order
@@ -268,6 +270,9 @@ public class OldJoin extends MultiWayJoin {
                     nextCardinality = cardinalities[nextTable];
                     tupleIndices[nextTable] += 1;
                 }
+            }
+            if (JoinStats.cacheMiss) {
+                JoinStats.nrCacheMiss++;
             }
             --remainingBudget;
         }

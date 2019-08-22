@@ -59,4 +59,12 @@ public class JoinStats {
      * (calculated based on table offsets after query evaluation).
      */
     public static double totalWork = 0;
+    /**
+     * Whether to load data from the disk
+     */
+    public static boolean cacheMiss = false;
+    /**
+     * Number of cache miss.
+     */
+    public static int nrCacheMiss = 0;
 }

@@ -4,9 +4,11 @@ import config.BufferConfig;
 import config.GeneralConfig;
 import config.LoggingConfig;
 import data.*;
+import indexing.Index;
 import indexing.IntIndex;
 import query.ColumnRef;
 import statistics.BufferStats;
+import statistics.JoinStats;
 
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -22,7 +24,7 @@ public class LRUDataManager implements IDataManager {
     /**
      * the order of column touched by the system.
      */
-    private Deque<IntIndex> columnOrder;
+    private Deque<Integer> columnOrder;
     /**
      * the LRU cache for loaded columns.
      */
@@ -64,29 +66,59 @@ public class LRUDataManager implements IDataManager {
         return null;
     }
 
+    private boolean checkSize() {
+        int checkSize = 0;
+        for (Integer integer : columnOrder) {
+            IntIndex index = BufferManager.idToIndex.get(integer);
+            checkSize += index.prefixSum * 4;
+        }
+        if (checkSize != size) {
+            checkSize = 0;
+            for (Integer integer : columnOrder) {
+                IntIndex index = BufferManager.idToIndex.get(integer);
+                checkSize += index.prefixSum * 4;
+                System.out.println(index.prefixSum * 4 + " " + checkSize);
+            }
+            return false;
+        }
+        return true;
+    }
+
+    private boolean checkWindowSize() {
+        int checkSize = 0;
+        for (Integer index : columnOrder) {
+            IntIndex intIndex = BufferManager.idToIndex.get(index);
+            for (Integer startID: intIndex.loadedStartID) {
+                checkSize += intIndex.entryRefs[startID].positions.length * 4;
+            }
+        }
+        if (checkSize != size) {
+
+            return false;
+        }
+        return true;
+    }
+
     @Override
     public int getIndexData(IntIndex intIndex, int pos) throws Exception {
         int[] positions;
+        int cid = intIndex.cid;
         BufferStats.nrIndexLookups++;
-        long start = System.currentTimeMillis();
         if (intIndex.positions != null) {
             // cache hit
             BufferStats.nrCacheHit++;
             positions = intIndex.positions;
-            log("Column " + intIndex.cid + " is in the memory.");
-            columnOrder.remove(intIndex);
-            columnOrder.addFirst(intIndex);
-            long end = System.currentTimeMillis();
-            log("Time: " + (end - start));
-            log("Cache Lookup: " + BufferStats.nrIndexLookups +
-                    "\t Cache Hits: " + BufferStats.nrCacheHit + "\t Cache Miss: " + BufferStats.nrCacheMiss);
+//            log("Column " + intIndex.cid + " is in the memory.");
+            columnOrder.remove(cid);
+            columnOrder.addFirst(cid);
+//            log("Cache Lookup: " + BufferStats.nrIndexLookups +
+//                    "\tCache Hits: " + BufferStats.nrCacheHit + "\tCache Miss: " + BufferStats.nrCacheMiss);
             return positions[pos];
         }
         // cache miss
         BufferStats.nrCacheMiss++;
         int prefixSum = intIndex.prefixSum;
         int indexSize = prefixSum * 4;
-        log("Load " + intIndex.cid + " from the disk... The size: " + indexSize);
         // load data from the buffer
         SeekableByteChannel channel = intIndex.positionChannel;
         channel = channel.position(0);
@@ -99,9 +131,11 @@ public class LRUDataManager implements IDataManager {
         for (int i = 0; i < prefixSum; i++) {
             positions[i] = byteBuffer.getInt(4 * i);
         }
+//        positions = intIndex.test;
         // the column has been stored in the cache or the cache is full?
         while (capacity < size + indexSize && size > 0) {
-            IntIndex removeIndex = columnOrder.removeLast();
+            int removeID = columnOrder.removeLast();
+            IntIndex removeIndex = BufferManager.idToIndex.get(removeID);
             int colSize = removeIndex.prefixSum * 4;
             size -= colSize;
             log("Remove " + removeIndex.cid + " from the memory... The size: " + colSize);
@@ -109,47 +143,50 @@ public class LRUDataManager implements IDataManager {
             removeIndex.positions = null;
         }
         intIndex.positions = positions;
-        columnOrder.addFirst(intIndex);
+        columnOrder.addFirst(cid);
         size += positions.length * 4;
         log("Returning Data... The cache size: " + size);
-        long end = System.currentTimeMillis();
-        log("Time: " + (end - start));
+//        System.out.println("Cache Lookup: " + BufferStats.nrIndexLookups +
+//                "\tCache Hits: " + BufferStats.nrCacheHit + "\tCache Miss: " + BufferStats.nrCacheMiss);
         log("Cache Lookup: " + BufferStats.nrIndexLookups +
-                "\t Cache Hits: " + BufferStats.nrCacheHit + "\t Cache Miss: " + BufferStats.nrCacheMiss);
+                "\tCache Hits: " + BufferStats.nrCacheHit + "\tCache Miss: " + BufferStats.nrCacheMiss);
         return positions[pos];
     }
 
     @Override
     public int getDataInWindow(IntIndex intIndex, int pos) throws Exception {
-        int cid = intIndex.cid;
         BufferStats.nrIndexLookups++;
+        int cid = intIndex.cid;
         int length = BufferConfig.pageSize / 4;
-        int start = pos / length * length;
+        int startIndex = pos / length;
+        int start = startIndex * length;
         int offset = pos - start;
-        EntryRef entryRef = intIndex.keyToEntries.get(start);
-        if (entryRef != null) {
+
+        EntryRef entryRef = intIndex.entryRefs[startIndex];
+        int channelLength = intIndex.prefixSum - start;
+        length = Math.min(length, channelLength);
+        int indexSize = length * 4;
+        if (entryRef.positions != null) {
             // cache hit
             BufferStats.nrCacheHit++;
-            log("Column " + intIndex.cid + " starting from " + start + " is in the memory.");
+            JoinStats.cacheMiss = false;
+//            log("Column " + intIndex.cid + " starting from " + start + " is in the memory.");
             // move the index entry to the first.
-            indexOrder.remove(entryRef);
-            indexOrder.addFirst(entryRef);
-            log("Cache Lookup: " + BufferStats.nrIndexLookups +
-                    "\t Cache Hits: " + BufferStats.nrCacheHit + "\t Cache Miss: " + BufferStats.nrCacheMiss);
+            columnOrder.remove(cid);
+            columnOrder.addFirst(cid);
+//            log("Cache Lookup: " + BufferStats.nrIndexLookups +
+//                    "\t Cache Hits: " + BufferStats.nrCacheHit + "\t Cache Miss: " + BufferStats.nrCacheMiss);
+//            return intIndex.test[pos];
             return entryRef.positions[offset];
         }
         // cache miss
         BufferStats.nrCacheMiss++;
-
+        JoinStats.cacheMiss = true;
+        int[] positions = new int[length];
         // load data from the buffer
         SeekableByteChannel channel = intIndex.positionChannel;
-        int channelLength = (int) (channel.size() / 4);
-
-        length = Math.min(length, channelLength);
-        int indexSize = length * 4;
         log("Load " + intIndex.cid + " from the disk... The size: " + indexSize);
         channel = channel.position(start * 4);
-        int[] positions = new int[length];
         // create byte buffer
         ByteBuffer byteBuffer = ByteBuffer.allocate(indexSize);
         byteBuffer.order(ByteOrder.nativeOrder());
@@ -158,23 +195,39 @@ public class LRUDataManager implements IDataManager {
         for (int i = 0; i < length; i++) {
             positions[i] = byteBuffer.getInt(4 * i);
         }
+
         // the column has been stored in the cache or the cache is full?
         while (capacity < size + indexSize && size > 0) {
-            EntryRef removeEntry = indexOrder.removeLast();
-            intIndex.keyToEntries.remove(start);
-            int colSize = removeEntry.positions.length * 4;
-            size -= colSize;
-            log("Remove " + removeEntry.cid + " starting from " + start + " from the memory... The size: " + colSize);
-            log("Buffer: " + size);
+            int removeID = columnOrder.removeLast();
+            IntIndex removeIndex = BufferManager.idToIndex.get(removeID);
+            Iterator<Integer> iterator = removeIndex.loadedStartID.iterator();
+            while (iterator.hasNext()) {
+                Integer removeStartIndex = iterator.next();
+                EntryRef removeEntry = removeIndex.entryRefs[removeStartIndex];
+                int colSize = removeEntry.positions.length * 4;
+                removeEntry.positions = null;
+                size -= colSize;
+                iterator.remove();
+                if (capacity >= size + indexSize || size == 0) {
+                    break;
+                }
+            }
+            if (removeIndex.loadedStartID.size() > 0) {
+                columnOrder.addLast(removeID);
+            }
         }
-        entryRef = new EntryRef(cid, start, positions);
-        intIndex.keyToEntries.put(start, entryRef);
         // push the index entry to the first.
-        indexOrder.addFirst(entryRef);
-        size += positions.length * 4;
+        if (intIndex.loadedStartID.size() == 0) {
+            columnOrder.addFirst(cid);
+        }
+        intIndex.entryRefs[startIndex].positions = positions;
+        intIndex.loadedStartID.add(startIndex);
+        size += length * 4;
+
         log("Returning Data... The cache size: " + size);
         log("Cache Lookup: " + BufferStats.nrIndexLookups +
                 "\t Cache Hits: " + BufferStats.nrCacheHit + "\t Cache Miss: " + BufferStats.nrCacheMiss);
+//        return intIndex.test[pos];
         return positions[offset];
     }
 
@@ -183,6 +236,7 @@ public class LRUDataManager implements IDataManager {
         colToIndex.clear();
         columnOrder.clear();
         indexOrder.clear();
+        BufferManager.colToIndex.values().forEach(Index::clear);
         size = 0;
     }
 
@@ -196,6 +250,14 @@ public class LRUDataManager implements IDataManager {
             } catch (Exception e) {
                 e.printStackTrace();
             }
+        }
+    }
+
+    @Override
+    public void unloadIndex(IntIndex intIndex) {
+        boolean isMoved = columnOrder.remove(intIndex.cid);
+        if (isMoved) {
+            size -= intIndex.prefixSum * 4;
         }
     }
 

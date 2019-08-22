@@ -39,4 +39,6 @@ public interface IDataManager {
      * @param text	text to output
      */
     public void log(String text);
+
+    public void unloadIndex(IntIndex intIndex);
 }

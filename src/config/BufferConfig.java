@@ -17,5 +17,5 @@ public class BufferConfig {
     /**
      * Whether to load data by pages.
      */
-    public static boolean loadPage = false;
+    public static boolean loadPage = true;
 }

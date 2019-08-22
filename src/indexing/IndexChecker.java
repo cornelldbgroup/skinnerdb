@@ -34,7 +34,8 @@ public class IndexChecker {
 					}
 					// Ensure that index contains reference
 					int value = data.data[i];
-					int nextTuple = index.nextTuple(value, i-1);
+//					int nextTuple = index.nextTuple(value, i-1);
+					int nextTuple = index.nextTupleInPage(value, i-1);
 					if (nextTuple != i) {
 						System.out.println("Next indexed tuple should be " + 
 								i + ", but is " + nextTuple + " instead. " +

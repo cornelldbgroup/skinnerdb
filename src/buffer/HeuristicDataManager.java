@@ -4,9 +4,11 @@ import config.BufferConfig;
 import config.GeneralConfig;
 import config.LoggingConfig;
 import data.ColumnData;
+import indexing.Index;
 import indexing.IntIndex;
 import query.ColumnRef;
 import statistics.BufferStats;
+import statistics.JoinStats;
 
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -18,20 +20,19 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
 
-public class FIFODataManager implements IDataManager {
+public class HeuristicDataManager implements IDataManager {
     /**
      * the order of column touched by the system.
      */
-    private Queue<IntIndex> columnOrder;
+    private Deque<Integer> columnOrder;
     /**
      * the LRU cache for loaded columns.
      */
     private Map<EntryRef, int[]> colToIndex;
-//    private Table<Integer, Integer, EntryRef> entryCache;
     /**
      * the order of column touched by the system.
      */
-    private Queue<EntryRef> indexOrder;
+    private Deque<EntryRef> indexOrder;
     /**
      * the size of cache.
      */
@@ -45,7 +46,7 @@ public class FIFODataManager implements IDataManager {
      */
     private BufferedWriter writer;
 
-    public FIFODataManager() {
+    public HeuristicDataManager() {
         colToIndex = new HashMap<>();
         columnOrder = new LinkedList<>();
         indexOrder = new LinkedList<>();
@@ -57,6 +58,7 @@ public class FIFODataManager implements IDataManager {
             }
         }
     }
+
     @Override
     public ColumnData getData(ColumnRef columnRef) throws Exception {
         return null;
@@ -64,74 +66,42 @@ public class FIFODataManager implements IDataManager {
 
     @Override
     public int getIndexData(IntIndex intIndex, int pos) throws Exception {
-        int[] positions;
-        BufferStats.nrIndexLookups++;
-        if (intIndex.positions != null) {
-            // cache hit
-            BufferStats.nrCacheHit++;
-            positions = intIndex.positions;
-            log("Column " + intIndex.cid + " is in the memory.");
-            return positions[pos];
-        }
-        // cache miss
-        BufferStats.nrCacheMiss++;
-        int prefixSum = intIndex.prefixSum;
-        int indexSize = prefixSum * 4;
-        log("Load " + intIndex.cid + " from the disk... The size: " + indexSize);
-        // load data from the buffer
-        SeekableByteChannel channel = intIndex.positionChannel;
-        channel = channel.position(0);
-        positions = new int[prefixSum];
-        // create byte buffer
-        ByteBuffer byteBuffer = ByteBuffer.allocate(indexSize);
-        byteBuffer.order(ByteOrder.nativeOrder());
-        channel.read(byteBuffer);
-        byteBuffer.position(0);
-        for (int i = 0; i < prefixSum; i++) {
-            positions[i] = byteBuffer.getInt(4 * i);
-        }
-        // the column has been stored in the cache or the cache is full?
-        while (capacity < size + indexSize && size > 0) {
-            IntIndex removeIndex = columnOrder.remove();
-            int colSize = removeIndex.prefixSum * 4;
-            size -= colSize;
-            log("Remove " + removeIndex.cid + " from the memory... The size: " + colSize);
-            log("Buffer: " + size);
-            removeIndex.positions = null;
-        }
-        intIndex.positions = positions;
-        columnOrder.add(intIndex);
-        size += positions.length * 4;
-        log("Returning Data... The cache size: " + size);
-
-        return positions[pos];
+        return 0;
     }
 
     @Override
     public int getDataInWindow(IntIndex intIndex, int pos) throws Exception {
-        int cid = intIndex.cid;
         BufferStats.nrIndexLookups++;
+        int cid = intIndex.cid;
         int length = BufferConfig.pageSize / 4;
-        int start = pos / length * length;
+        int startIndex = pos / length;
+        int start = startIndex * length;
         int offset = pos - start;
-        EntryRef entryRef = intIndex.keyToEntries.get(start);
-        if (entryRef != null) {
+        EntryRef entryRef = intIndex.entryRefs[startIndex];
+        int channelLength = intIndex.prefixSum - start;
+        length = Math.min(length, channelLength);
+        int indexSize = length * 4;
+        if (entryRef.positions != null) {
             // cache hit
             BufferStats.nrCacheHit++;
-            log("Column " + intIndex.cid + " starting from " + start + " is in the memory.");
+            JoinStats.cacheMiss = false;
+//            log("Column " + intIndex.cid + " starting from " + start + " is in the memory.");
+            // move the index entry to the first.
+            columnOrder.remove(cid);
+            columnOrder.addFirst(cid);
+//            log("Cache Lookup: " + BufferStats.nrIndexLookups +
+//                    "\t Cache Hits: " + BufferStats.nrCacheHit + "\t Cache Miss: " + BufferStats.nrCacheMiss);
+//            return intIndex.test[pos];
             return entryRef.positions[offset];
         }
         // cache miss
         BufferStats.nrCacheMiss++;
+        JoinStats.cacheMiss = true;
+        int[] positions = new int[length];
         // load data from the buffer
         SeekableByteChannel channel = intIndex.positionChannel;
-        int channelLength = (int) (channel.size() / 4);
-
-        length = Math.min(length, channelLength);
-        int indexSize = length * 4;
         log("Load " + intIndex.cid + " from the disk... The size: " + indexSize);
         channel = channel.position(start * 4);
-        int[] positions = new int[length];
         // create byte buffer
         ByteBuffer byteBuffer = ByteBuffer.allocate(indexSize);
         byteBuffer.order(ByteOrder.nativeOrder());
@@ -140,21 +110,39 @@ public class FIFODataManager implements IDataManager {
         for (int i = 0; i < length; i++) {
             positions[i] = byteBuffer.getInt(4 * i);
         }
+
         // the column has been stored in the cache or the cache is full?
         while (capacity < size + indexSize && size > 0) {
-            EntryRef removeEntry = indexOrder.remove();
-            intIndex.keyToEntries.remove(start);
-            int colSize = removeEntry.positions.length * 4;
-            size -= colSize;
-            log("Remove " + removeEntry.cid + " starting from " + start + " from the memory... The size: " + colSize);
-            log("Buffer: " + size);
+            int removeID = columnOrder.removeLast();
+            IntIndex removeIndex = BufferManager.idToIndex.get(removeID);
+            Iterator<Integer> iterator = removeIndex.loadedStartID.iterator();
+            while (iterator.hasNext()) {
+                Integer removeStartIndex = iterator.next();
+                EntryRef removeEntry = removeIndex.entryRefs[removeStartIndex];
+                int colSize = removeEntry.positions.length * 4;
+                removeEntry.positions = null;
+                size -= colSize;
+                iterator.remove();
+                if (capacity >= size + indexSize || size == 0) {
+                    break;
+                }
+            }
+            if (removeIndex.loadedStartID.size() > 0) {
+                columnOrder.addLast(removeID);
+            }
         }
-        entryRef = new EntryRef(cid, start, positions);
-        intIndex.keyToEntries.put(start, entryRef);
         // push the index entry to the first.
-        indexOrder.add(entryRef);
-        size += positions.length * 4;
+        if (intIndex.loadedStartID.size() == 0) {
+            columnOrder.addFirst(cid);
+        }
+        intIndex.entryRefs[startIndex].positions = positions;
+        intIndex.loadedStartID.add(startIndex);
+        size += length * 4;
+
         log("Returning Data... The cache size: " + size);
+        log("Cache Lookup: " + BufferStats.nrIndexLookups +
+                "\t Cache Hits: " + BufferStats.nrCacheHit + "\t Cache Miss: " + BufferStats.nrCacheMiss);
+//        return intIndex.test[pos];
         return positions[offset];
     }
 
@@ -163,6 +151,7 @@ public class FIFODataManager implements IDataManager {
         colToIndex.clear();
         columnOrder.clear();
         indexOrder.clear();
+        BufferManager.colToIndex.values().forEach(Index::clear);
         size = 0;
     }
 
@@ -170,11 +159,17 @@ public class FIFODataManager implements IDataManager {
     public void log(String text) {
         if (LoggingConfig.MANAGER_VERBOSE) {
             try {
-                writer.write(text);
-                writer.write("\n");
-            } catch (IOException e) {
+//                writer.write(text);
+//                writer.write("\n");
+                System.out.println(text);
+            } catch (Exception e) {
                 e.printStackTrace();
             }
         }
+    }
+
+    @Override
+    public void unloadIndex(IntIndex intIndex) {
+
     }
 }
