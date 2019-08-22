@@ -2,6 +2,7 @@ package console;
 
 import java.io.File;
 import java.io.PrintWriter;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
@@ -33,6 +34,7 @@ import net.sf.jsqlparser.statement.select.Select;
 import print.RelationPrinter;
 import query.ColumnRef;
 import query.SQLexception;
+import unnesting.UnnestingVisitor;
 
 /**
  * Runs Skinner command line console.
@@ -228,6 +230,14 @@ public class SkinnerCmd {
 			if (select.getSelectBody() instanceof PlainSelect) {
 				PlainSelect plainSelect = (PlainSelect)select.getSelectBody();
 				try {
+					// TODO: remove this again (used only for testing)
+					UnnestingVisitor unnestor = new UnnestingVisitor();
+					unnestor.outerCols.add(new HashSet<ColumnRef>());
+					plainSelect.accept(unnestor);
+					System.out.println(unnestor.unnestedQueries.toString());
+					System.out.println(plainSelect);
+					plainSelect = null;
+					
 					Master.executeSelect(plainSelect, 
 							false, -1, -1, null, "testquery");
 					// Process final result

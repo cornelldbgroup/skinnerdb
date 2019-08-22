@@ -1,6 +1,7 @@
 package unnesting;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -15,18 +16,13 @@ import expressions.normalization.PlainVisitor;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.schema.Table;
 import net.sf.jsqlparser.statement.select.FromItem;
-import net.sf.jsqlparser.statement.select.FromItemVisitor;
 import net.sf.jsqlparser.statement.select.Join;
-import net.sf.jsqlparser.statement.select.LateralSubSelect;
 import net.sf.jsqlparser.statement.select.PlainSelect;
 import net.sf.jsqlparser.statement.select.SelectBody;
 import net.sf.jsqlparser.statement.select.SelectItem;
 import net.sf.jsqlparser.statement.select.SelectVisitor;
 import net.sf.jsqlparser.statement.select.SetOperationList;
-import net.sf.jsqlparser.statement.select.SubJoin;
 import net.sf.jsqlparser.statement.select.SubSelect;
-import net.sf.jsqlparser.statement.select.TableFunction;
-import net.sf.jsqlparser.statement.select.ValuesList;
 import net.sf.jsqlparser.statement.select.WithItem;
 import query.ColumnRef;
 import query.SQLexception;
@@ -122,19 +118,20 @@ public class UnnestingVisitor extends PlainVisitor implements SelectVisitor {
 			if (selectBody instanceof PlainSelect) {
 				// Recursively unnest sub-query
 				selectBody.accept(this);
-				// Add sub-query to sequence of simple queries
+				// Sub-query will be replaced by table reference
+				Table table = new Table(alias);
+				// Associate unnested sub-query with name
 				PlainSelect plainSelect = (PlainSelect)selectBody;
-				unnestedQueries.add(plainSelect);
+				plainSelect.setIntoTables(Arrays.asList(
+						new Table[] {table}));
 				queryNames.put(plainSelect, alias);
 				// Add references to sub-query columns to scope
 				Set<String> newCols = subqueryFields.pop();
 				for (String col : newCols) {
 					scopeCols.add(new ColumnRef("", col));
 					scopeCols.add(new ColumnRef(alias, col));					
-				}				
-				// Replace original from item by reference to 
-				// table that will contain sub-query result.
-				Table table = new Table(alias);
+				}
+				// Return table that will contain sub-query result
 				return (FromItem)table;
 			} else {
 				// (This case raises an exception before)
@@ -200,6 +197,8 @@ public class UnnestingVisitor extends PlainVisitor implements SelectVisitor {
 		// Add unnested sub-queries to FROM clause if any
 		// Resolve wildcard in SELECT clause
 		// Add fields required by outer scope to SELECT clause
+		// Add unnested query to query sequence
+		unnestedQueries.add(plainSelect);
 		// Register names of sub-query result fields
 		registerResultCols(plainSelect);
 		// Remove new outer scope
@@ -222,6 +221,5 @@ public class UnnestingVisitor extends PlainVisitor implements SelectVisitor {
 	public void visit(SubSelect subSelect) {
 		// TODO Auto-generated method stub
 		
-	}
-
+	}	
 }
