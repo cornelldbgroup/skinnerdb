@@ -17,6 +17,8 @@ import expressions.normalization.CopyVisitor;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.schema.Column;
 import net.sf.jsqlparser.schema.Table;
+import net.sf.jsqlparser.statement.select.AllColumns;
+import net.sf.jsqlparser.statement.select.AllTableColumns;
 import net.sf.jsqlparser.statement.select.FromItem;
 import net.sf.jsqlparser.statement.select.Join;
 import net.sf.jsqlparser.statement.select.PlainSelect;
@@ -186,9 +188,46 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 			}
 		}
 	}
-	
+	/**
+	 * Resolve wildcards in select clause, replacing them
+	 * by references to concrete columns of base tables or
+	 * nested queries.
+	 * 
+	 * @param plainSelect	replace wildcards in this query's select clause
+	 */
 	void resolveWildcards(PlainSelect plainSelect) {
-		
+		Map<String, List<String>> curAliasToCols = aliasToCols.peek();
+		List<SelectItem> originalItems = plainSelect.getSelectItems();
+		// Remove all columns wild card
+		List<SelectItem> noAllColumns = new ArrayList<>();
+		for (SelectItem originalItem : originalItems) {
+			if (originalItem instanceof AllColumns) {
+				for (String alias : curAliasToCols.keySet()) {
+					Table aliasTbl = new Table(alias);
+					AllTableColumns allTableCols = 
+							new AllTableColumns(aliasTbl);
+					noAllColumns.add(allTableCols);
+				}
+			} else {
+				noAllColumns.add(originalItem);
+			}
+		}
+		// Remove all table columns wild cards
+		List<SelectItem> noAllTblCols = new ArrayList<>();
+		for (SelectItem curItem : noAllColumns) {
+			if (curItem instanceof AllTableColumns) {
+				AllTableColumns allTblCols = (AllTableColumns)curItem;
+				Table table = allTblCols.getTable();
+				String tblName = table.getName();
+				for (String columnName : curAliasToCols.get(tblName)) {
+					Column col = new Column(table, columnName);
+					noAllTblCols.add(new SelectExpressionItem(col));
+				}
+			} else {
+				noAllTblCols.add(curItem);
+			}
+		}
+		plainSelect.setSelectItems(noAllTblCols);
 	}
 	/**
 	 * Register names of result columns for this query
