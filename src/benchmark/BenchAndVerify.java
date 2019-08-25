@@ -96,7 +96,8 @@ public class BenchAndVerify {
 			long preMillis = System.currentTimeMillis() - startMillis;
 			JoinProcessor.process(query, preSummary);
 			long postStartMillis = System.currentTimeMillis();
-			PostProcessor.process(query, preSummary);
+			PostProcessor.process(query, preSummary, 
+					NamingConfig.FINAL_RESULT_NAME, true);
 			long postMillis = System.currentTimeMillis() - postStartMillis;
 			long totalMillis = System.currentTimeMillis() - startMillis;
 			// Check consistency with Postgres results: unary preds

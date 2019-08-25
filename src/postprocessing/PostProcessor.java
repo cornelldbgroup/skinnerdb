@@ -209,15 +209,18 @@ public class PostProcessor {
 	 * Do post-processing for a query without any aggregates
 	 * (or group by clauses).
 	 * 
-	 * @param query			query to process
-	 * @param context		query processing context
+	 * @param query				query to process
+	 * @param context			query processing context
+	 * @param resultRelName		name of final result relation
+	 * @param tempResult		whether the result relation is temporary
 	 * @throws Exception
 	 */
 	static void treatNoAggregatesQuery(QueryInfo query, 
-			Context context) throws Exception {
+			Context context, String resultRelName, 
+			boolean tempResult) throws Exception {
 		// Create relation containing query result
-		String resultTbl = NamingConfig.FINAL_RESULT_NAME;
-		TableInfo result = new TableInfo(resultTbl, true);
+		String resultTbl = resultRelName;
+		TableInfo result = new TableInfo(resultTbl, tempResult);
 		CatalogManager.currentDB.nameToTable.put(resultTbl, result);
 		// Name of source relation
 		String joinRel = NamingConfig.JOINED_NAME;
@@ -259,13 +262,16 @@ public class PostProcessor {
 	 * 
 	 * @param query			query to process
 	 * @param context		query processing context
+	 * @param resultRelName	name of result relation
+	 * @param tempResul		whether result relation is temporary
 	 * @throws Exception
 	 */
 	static void treatAllRowsAggQuery(QueryInfo query, 
-			Context context) throws Exception {
+			Context context, String resultRelName, 
+			boolean tempResult) throws Exception {
 		// Create relation containing query result
-		String resultTbl = NamingConfig.FINAL_RESULT_NAME;
-		TableInfo result = new TableInfo(resultTbl, true);
+		String resultTbl = resultRelName;
+		TableInfo result = new TableInfo(resultTbl, tempResult);
 		CatalogManager.currentDB.nameToTable.put(resultTbl, result);
 		// Calculate aggregates
 		aggregate(query, context);
@@ -346,10 +352,13 @@ public class PostProcessor {
 	 * 
 	 * @param query			query to process
 	 * @param context		query processing context
+	 * @param resultRelName	name of final result relation
+	 * @param tempResult	whether result relation is temporary
 	 * @throws Exception
 	 */
 	static void treatGroupAggQuery(QueryInfo query, 
-			Context context) throws Exception {
+			Context context, String resultRelName, 
+			boolean tempResult) throws Exception {
 		// Execute group by
 		groupBy(query, context);
 		// Calculate aggregates
@@ -358,13 +367,12 @@ public class PostProcessor {
 		ExpressionInfo havingExpr = query.havingExpression;
 		boolean hasHaving = havingExpr!=null;
 		// Prepare treatment of SELECT clause
-		String resultRel = NamingConfig.FINAL_RESULT_NAME;
 		ColumnRef groupRef = context.groupRef;
 		int nrGroups = context.nrGroups;
 		TableInfo result = null;
 		if (!hasHaving) {
-			result = new TableInfo(resultRel, true);
-			CatalogManager.currentDB.nameToTable.put(resultRel, result);			
+			result = new TableInfo(resultRelName, tempResult);
+			CatalogManager.currentDB.nameToTable.put(resultRelName, result);			
 		}
 		// Create table to hold intermediate result before applying
 		// HAVING clause (filtering out some groups).
@@ -378,7 +386,7 @@ public class PostProcessor {
 					nrGroups, hasHaving?noHavingInfo:result, colName);
 		}
 		// Update statistics on result table
-		CatalogManager.updateStats(hasHaving?noHavingTbl:resultRel);
+		CatalogManager.updateStats(hasHaving?noHavingTbl:resultRelName);
 		// Does query have an ORDER BY clause?
 		if (!query.orderByExpressions.isEmpty()) {
 			// Generate table holding order by columns
@@ -401,7 +409,7 @@ public class PostProcessor {
 			}
 			// Sort result table
 			OrderBy.execute(orderRefs, query.orderByAsc, 
-					hasHaving?noHavingTbl:resultRel);
+					hasHaving?noHavingTbl:resultRelName);
 		}
 		// Apply having clause if any - TODO: treat having first
 		if (hasHaving) {
@@ -429,7 +437,7 @@ public class PostProcessor {
 			List<String> columnNames = new ArrayList<>();
 			columnNames.addAll(noHavingInfo.columnNames);
 			Materialize.execute(noHavingTbl, columnNames, 
-					havingGroups, null, resultRel);
+					havingGroups, null, resultRelName);
 		}
 	}
 	/**
@@ -446,23 +454,30 @@ public class PostProcessor {
 	 * Do post-processing (including aggregation, grouping, or sorting)
 	 * for given query and store final query result in result table.
 	 * 
-	 * @param query		query to process
-	 * @param context	query processing context
+	 * @param query			query to process
+	 * @param context		query processing context
+	 * @param resultRel		name of final result relation
+	 * @param tempResult	whether the result relation is temporary
 	 */
-	public static void process(QueryInfo query, Context context) throws Exception {
+	public static void process(QueryInfo query, Context context,
+			String resultRel, boolean tempResult) throws Exception {
 		// Distinguish type of query
 		switch (query.aggregationType) {
 		case NONE:
-			treatNoAggregatesQuery(query, context);
+			treatNoAggregatesQuery(query, context, 
+					resultRel, tempResult);
 			break;
 		case ALL_ROWS:
-			treatAllRowsAggQuery(query, context);
+			treatAllRowsAggQuery(query, context, 
+					resultRel, tempResult);
 			break;
 		case GROUPS:
-			treatGroupAggQuery(query, context);
+			treatGroupAggQuery(query, context, 
+					resultRel, tempResult);
 			break;
 		}
 		// Apply LIMIT clause
-		
+		// Update result table statistics
+		CatalogManager.updateStats(resultRel);
 	}
 }

@@ -2,7 +2,6 @@ package console;
 
 import java.io.File;
 import java.io.PrintWriter;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
@@ -12,13 +11,11 @@ import java.util.regex.Pattern;
 import benchmark.BenchUtil;
 import buffer.BufferManager;
 import catalog.CatalogManager;
-import catalog.info.ColumnInfo;
 import catalog.info.TableInfo;
 import compression.Compressor;
 import config.GeneralConfig;
 import config.NamingConfig;
 import config.StartupConfig;
-import data.ColumnData;
 import ddl.TableCreator;
 import diskio.LoadCSV;
 import diskio.PathUtil;
@@ -32,9 +29,7 @@ import net.sf.jsqlparser.statement.drop.Drop;
 import net.sf.jsqlparser.statement.select.PlainSelect;
 import net.sf.jsqlparser.statement.select.Select;
 import print.RelationPrinter;
-import query.ColumnRef;
 import query.SQLexception;
-import unnesting.UnnestingVisitor;
 
 /**
  * Runs Skinner command line console.
@@ -169,6 +164,7 @@ public class SkinnerCmd {
 	 * @param toRel			copy to this relation
 	 * @throws Exception
 	 */
+	/*
 	static void copyInto(String fromRel, String toRel) throws Exception {
 		// Copy schema
 		TableCreator.copyTable(fromRel, toRel);
@@ -193,6 +189,7 @@ public class SkinnerCmd {
 			colData.store(PathUtil.colToPath.get(colInfo));
 		}
 	}
+	*/
 	/**
 	 * Process input string as SQL statement.
 	 * 
@@ -229,38 +226,15 @@ public class SkinnerCmd {
 			Select select = (Select)sqlStatement;
 			if (select.getSelectBody() instanceof PlainSelect) {
 				PlainSelect plainSelect = (PlainSelect)select.getSelectBody();
+				boolean printResult = plainSelect.getIntoTables() == null;
 				try {
-					// TODO: remove this again (used only for testing)
-					UnnestingVisitor unnestor = new UnnestingVisitor();
-					unnestor.outerCols.add(new HashSet<ColumnRef>());
-					plainSelect.accept(unnestor);
-					System.out.println(unnestor.unnestedQueries.toString());
-					System.out.println(plainSelect);
-					plainSelect = null;
-					
 					Master.executeSelect(plainSelect, 
-							false, -1, -1, null, "testquery");
-					// Process final result
-					String resultRel = NamingConfig.FINAL_RESULT_NAME;
-					// Either copy to new table or display in console
-					List<Table> intoTables = plainSelect.getIntoTables();
-					if (intoTables == null) {
+							false, -1, -1, null);
+					// Display query result if no target tables specified
+					if (printResult) {
 						// Display on console
-						RelationPrinter.print(resultRel);
-					} else {
-						// Copy into newly created tables
-						for (Table intoTable : intoTables) {
-							String intoTblName = intoTable.getName();
-							copyInto(resultRel, intoTblName);
-							System.out.println("Copied query result to " 
-									+ intoTblName);
-						}
-						// Clean up before storing updated
-						// catalog on disk (to avoid storing
-						// information on temporary tables).
-						BufferManager.unloadTempData();
-						CatalogManager.removeTempTables();
-						CatalogManager.currentDB.storeDB();
+						RelationPrinter.print(
+								NamingConfig.FINAL_RESULT_NAME);
 					}
 				} catch (SQLexception e) {
 					 System.out.println(e.getMessage());
@@ -312,8 +286,8 @@ public class SkinnerCmd {
 				Select select = (Select)sqlStatement;
 				PlainSelect plainSelect = (PlainSelect)select.getSelectBody();
 				try {
-					Master.executeSelect(plainSelect, true, plotAtMost, 
-							plotEvery, plotDir, "testquery");
+					Master.executeSelect(plainSelect, true, 
+							plotAtMost, plotEvery, plotDir);
 					// Output final result
 					String resultRel = NamingConfig.FINAL_RESULT_NAME;
 					RelationPrinter.print(resultRel);					

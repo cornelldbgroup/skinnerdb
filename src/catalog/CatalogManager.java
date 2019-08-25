@@ -2,8 +2,10 @@ package catalog;
 
 import java.io.FileInputStream;
 import java.io.ObjectInputStream;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map.Entry;
+import java.util.Set;
 
 import catalog.info.ColumnInfo;
 import catalog.info.DbInfo;
@@ -69,17 +71,29 @@ public class CatalogManager {
 	 * Deletes all temporary tables after query processing is
 	 * finished.
 	 * 
+	 * @param except	do not remove those tables
+	 * 
 	 * @throws Exception
 	 */
-	public static void removeTempTables() throws Exception {
+	public static void removeTempTables(Set<String> except) throws Exception {
 		Iterator<Entry<String, TableInfo>> entries = 
 				currentDB.nameToTable.entrySet().iterator();
 		while (entries.hasNext()) {
 			Entry<String, TableInfo> entry = entries.next();
-			if (entry.getValue().tempTable) {
+			TableInfo tableInfo = entry.getValue();
+			if (tableInfo.tempTable && !except.contains(tableInfo.name)) {
 				entries.remove();
 			}
 		}
+	}
+	/**
+	 * Deletes all temporary tables after query processing is
+	 * finished.
+	 * 
+	 * @throws Exception
+	 */
+	public static void removeTempTables() throws Exception {
+		removeTempTables(new HashSet<String>());
 	}
 	/**
 	 * Updates statistics (e.g., cardinality) for

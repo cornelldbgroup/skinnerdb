@@ -4,7 +4,6 @@ import java.sql.Date;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.util.ArrayList;
-import java.util.Calendar;
 import java.util.List;
 
 import org.apache.commons.lang3.StringUtils;
@@ -71,7 +70,7 @@ public class RelationPrinter {
 			ColumnData data = BufferManager.getData(colRef);
 			colsData.add(data);
 		}
-		int cardinality = colsData.isEmpty()?0:colsData.get(0).getCardinality();
+		int cardinality = CatalogManager.getCardinality(tableName);
 		// Print out table content
 		for (int rowCtr=0; rowCtr<cardinality; ++rowCtr) {
 			for (int colCtr=0; colCtr<nrCols; ++colCtr) {

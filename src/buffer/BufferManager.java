@@ -1,8 +1,10 @@
 package buffer;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import catalog.CatalogManager;
@@ -187,11 +189,12 @@ public class BufferManager {
 	 * Unload all columns of temporary tables (typically after
 	 * query processing is finished).
 	 * 
+	 * @param except	names of tables to keep in each case
 	 * @throws Exception
 	 */
-	public static void unloadTempData() throws Exception {
+	public static void unloadTempData(Set<String> except) throws Exception {
 		for (TableInfo table : CatalogManager.currentDB.nameToTable.values()) {
-			if (table.tempTable) {
+			if (table.tempTable && !except.contains(table.name)) {
 				String tableName = table.name;
 				for (ColumnInfo colInfo : table.nameToCol.values()) {					
 					ColumnRef colRef = new ColumnRef(
@@ -200,6 +203,16 @@ public class BufferManager {
 				}
 			}
 		}
+	}
+	/**
+	/**
+	 * Unload all columns of temporary tables (typically after
+	 * query processing is finished).
+	 * 
+	 * @throws Exception
+	 */
+	public static void unloadTempData() throws Exception {
+		unloadTempData(new HashSet<String>());
 	}
 	/**
 	 * Log given text if buffer logging activated.

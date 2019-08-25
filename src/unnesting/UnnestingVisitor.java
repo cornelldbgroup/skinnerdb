@@ -2,6 +2,7 @@ package unnesting;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -48,16 +49,21 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 	 */
 	public int nextAttributeID = 0;
 	/**
-	 * Contans available column references in outer query scope
-	 * from the perspective of current sub-query on top.
-	 */
-	public Stack<Set<ColumnRef>> outerCols = new Stack<>();
-	/**
 	 * Sequence of simple queries (i.e., without nested queries)
 	 * such that processing queries in this order satisfies all
 	 * dependencies.
 	 */
 	public List<PlainSelect> unnestedQueries = new ArrayList<>();
+	/**
+	 * Contans available column references in outer query scope
+	 * from the perspective of current sub-query on top.
+	 */
+	public Stack<Set<ColumnRef>> outerCols = new Stack<>();
+	/**
+	 * Maps aliases in FROM clause to associated column names,
+	 * top element represents current sub-query.
+	 */
+	public Stack<Map<String, List<String>>> aliasToCols = new Stack<>();
 	/**
 	 * Contains the names of result fields of the last treated
 	 * sub-query on top.
@@ -75,18 +81,16 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 	 */
 	public Stack<Expression> addToWhere = new Stack<>();
 	/**
-	 * Extracts all possible column references to base tables
-	 * that appear in the given query's FROM clause (note: we
-	 * do not check whether the column references are unique
-	 * so this returns a superset of the column references that
-	 * can be used in queries).
+	 * Updates current scope and alias-to-columns mapping
+	 * based on base tables that appear in FROM clause of
+	 * given query.
 	 * 
 	 * @param plainSelect	extract columns for this query's FROM clause
-	 * @return				column references to base tables in FROM clause
 	 */
-	Set<ColumnRef> baseTableCols(PlainSelect plainSelect) {
-		// This will become the result set
-		Set<ColumnRef> baseTableCols = new HashSet<>();
+	void treatSimpleFrom(PlainSelect plainSelect) {
+		// Retrieve fields to update
+		Set<ColumnRef> curScopeCols = outerCols.peek();
+		Map<String, List<String>> curAliasToCols = aliasToCols.peek();
 		// Get all items in FROM clause
 		List<FromItem> fromItems = FromUtil.allFromItems(plainSelect);
 		// Iterate over base tables in FROM clause
@@ -100,25 +104,32 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 				// Extract associated column references
 				TableInfo tableInfo = CatalogManager.currentDB.
 						nameToTable.get(tableName);
+				// Update scope and mappings
+				List<String> curAliasCols = new ArrayList<>();
+				curAliasToCols.put(alias, curAliasCols);
 				for (ColumnInfo colInfo : tableInfo.nameToCol.values()) {
 					String colName = colInfo.name;
-					baseTableCols.add(new ColumnRef("", colName));
-					baseTableCols.add(new ColumnRef(alias, colName));
+					// Update current scope
+					curScopeCols.add(new ColumnRef("", colName));
+					curScopeCols.add(new ColumnRef(alias, colName));
+					// Update current alias to column mapping
+					curAliasCols.add(colName);
 				}
 			}
 		}
-		return baseTableCols;
 	}
 	/**
 	 * Unnests one single from item and returns unnested version.
 	 * Also updates the current column scope by adding references
-	 * to sub-query result columns.
+	 * to sub-query result columns and alias-to-column mapping.
 	 * 
 	 * @param fromItem		original from item to unnest
 	 * @param scopeCols		available columns in current scope
+	 * @param aliasToCols	maps aliases to associated columns
 	 * @return				updated from item after unnesting
 	 */
-	FromItem unnestFromItem(FromItem fromItem, Set<ColumnRef> scopeCols) {
+	FromItem unnestFromItem(FromItem fromItem, Set<ColumnRef> scopeCols,
+			Map<String, List<String>> aliasToCols) {
 		// Does from item need unnesting?
 		if (fromItem instanceof SubSelect) {
 			SubSelect subSelect = (SubSelect)fromItem;
@@ -133,12 +144,13 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 				PlainSelect plainSelect = (PlainSelect)selectBody;
 				plainSelect.setIntoTables(Arrays.asList(
 						new Table[] {table}));
-				// Add references to sub-query columns to scope
+				// Update scope and column mapping
 				List<String> newCols = subqueryFields.pop();
 				for (String col : newCols) {
 					scopeCols.add(new ColumnRef("", col));
 					scopeCols.add(new ColumnRef(alias, col));					
 				}
+				aliasToCols.put(alias, newCols);
 				// Return table that will contain sub-query result
 				return (FromItem)table;
 			} else {
@@ -155,20 +167,28 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 	 * to available column references in current scope.
 	 * 
 	 * @param plainSelect	query whose FROM clause is unnested
-	 * @param scopeCols		available columns in current scope
 	 */
-	void unnestFrom(PlainSelect plainSelect, Set<ColumnRef> scopeCols) {
+	void treatNestedFrom(PlainSelect plainSelect) {
+		// Retrieve current scope
+		Set<ColumnRef> curScopeCols = outerCols.peek();
+		Map<String, List<String>> curAliasToCols = aliasToCols.peek();
 		// Update first item in FROM clause
 		plainSelect.setFromItem(unnestFromItem(
-				plainSelect.getFromItem(), scopeCols));
+				plainSelect.getFromItem(), 
+				curScopeCols, curAliasToCols));
 		// Update remaining items in FROM clause
 		List<Join> joins = plainSelect.getJoins();
 		if (joins != null) {
 			for (Join join : joins) {
 				join.setRightItem(unnestFromItem(
-						join.getRightItem(), scopeCols));
+						join.getRightItem(), 
+						curScopeCols, curAliasToCols));
 			}
 		}
+	}
+	
+	void resolveWildcards(PlainSelect plainSelect) {
+		
 	}
 	/**
 	 * Register names of result columns for this query
@@ -224,15 +244,18 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 	
 	@Override
 	public void visit(PlainSelect plainSelect) {
-		// Collect column references from base tables in FROM clause
-		Set<ColumnRef> baseCols = baseTableCols(plainSelect);
-		// Register new outer scope for all nested queries
+		// Initialize new scope and new alias-to-column mapping
 		Set<ColumnRef> newOuterCols = new HashSet<>();
-		newOuterCols.addAll(baseCols);
 		newOuterCols.addAll(outerCols.peek());
 		outerCols.add(newOuterCols);
+		Map<String, List<String>> curAliasToCols = new HashMap<>();
+		aliasToCols.add(curAliasToCols);
+		// Treat base tables in FROM clause
+		treatSimpleFrom(plainSelect);
 		// Treat sub-queries in FROM clause
-		unnestFrom(plainSelect, newOuterCols);
+		treatNestedFrom(plainSelect);
+		// Resolve wildcard in SELECT clause if any
+		resolveWildcards(plainSelect);
 		// Unnest sub-queries in WHERE clause
 		Expression originalWhere = plainSelect.getWhere();
 		if (originalWhere != null) {
@@ -243,7 +266,7 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 		}
 		// Add unnested sub-queries to FROM clause if any
 		expandFrom(plainSelect);
-		// Resolve wildcard in SELECT clause
+		
 		
 		// Add fields required by outer scope to SELECT clause
 		// Add unnested query to query sequence
