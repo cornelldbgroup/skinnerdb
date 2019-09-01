@@ -64,6 +64,7 @@ import net.sf.jsqlparser.expression.operators.relational.RegExpMatchOperator;
 import net.sf.jsqlparser.expression.operators.relational.RegExpMySQLOperator;
 import net.sf.jsqlparser.schema.Column;
 import net.sf.jsqlparser.statement.select.SubSelect;
+import query.SQLexception;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -396,19 +397,21 @@ public class CopyVisitor extends SkinnerVisitor {
 
 	@Override
 	public void visit(ExistsExpression arg0) {
-		// TODO Auto-generated method stub
-		
+		sqlExceptions.add(new SQLexception("Error - exist "
+				+ "expressions are currently not supported"));
 	}
 
 	@Override
 	public void visit(AllComparisonExpression arg0) {
-		// TODO Auto-generated method stub
-		
+		sqlExceptions.add(new SQLexception("Error - 'ALL' "
+				+ "expressions are currently not supported"));
+
 	}
 
 	@Override
 	public void visit(AnyComparisonExpression arg0) {
-		// TODO Auto-generated method stub
+		sqlExceptions.add(new SQLexception("Error - 'ANY' "
+				+ "expressions are currently not supported"));
 		
 	}
 

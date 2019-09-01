@@ -18,7 +18,6 @@ import expressions.typing.ExpressionScope;
 import expressions.typing.TypeVisitor;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.Function;
-import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
 import types.SQLtype;
 
 /**
@@ -96,35 +95,6 @@ public class ExpressionInfo {
 	 */
 	public final List<Expression> conjuncts;
 	/**
-	 * Visits the given expression using the given visitor within a try-catch
-	 * block. Check whether visitor stored the root cause of the exception and
-	 * throw corresponding exception in that case. Otherwise throw original
-	 * exception (or execute peacefully). This is needed since the original
-	 * expression visitor interface does not consider exceptions.
-	 * 
-	 * @param expression	expression to visit
-	 * @param visitor		visit expression via this visitor
-	 * @throws Exception
-	 */
-	void tryVisit(Expression expression, SkinnerVisitor visitor) throws Exception {
-		try {
-			expression.accept(visitor);
-		} catch (Exception e) {
-			// Was exception caused by another exception that
-			// was not yet thrown?
-			if (!visitor.sqlExceptions.isEmpty()) {
-				throw visitor.sqlExceptions.get(0);
-			} else {
-				throw e;
-			}
-		}
-		// Check whether any errors occurred -
-		// throw corresponding exceptions if so.
-		if (!visitor.sqlExceptions.isEmpty()) {
-			throw visitor.sqlExceptions.get(0);
-		}
-	}
-	/**
 	 * Initializes the expression info.
 	 * 
 	 * @param queryInfo		meta-data about input query
@@ -140,29 +110,29 @@ public class ExpressionInfo {
 		// TODO: remove this.
 		SubstitutionVisitor substitutionVisitor = 
 				new SubstitutionVisitor(queryInfo.aliasToExpression);
-		tryVisit(originalExpression, substitutionVisitor);
+		VisitorUtil.tryVisit(originalExpression, substitutionVisitor);
 		this.afterSubstitution = substitutionVisitor.exprStack.pop();
 		log("Substituted:\t" + afterSubstitution);		
 		// Complete column references by inferring table aliases
 		NormalizeColumnsVisitor normalizationVisitor =
 				new NormalizeColumnsVisitor(queryInfo.columnToAlias);
-		tryVisit(afterSubstitution, normalizationVisitor);
+		VisitorUtil.tryVisit(afterSubstitution, normalizationVisitor);
 		this.afterNormalization = normalizationVisitor.exprStack.pop();
 		log("Normalized:\t" + afterNormalization);
 		// Makes implicit type casts explicit
 		TypeVisitor typeVisitor = new TypeVisitor(queryInfo);
-		tryVisit(afterNormalization, typeVisitor);
+		VisitorUtil.tryVisit(afterNormalization, typeVisitor);
 		// Simplifies the expression by replacing certain SQL constructs
 		// and resolving constant expressions.
 		SimplificationVisitor simplificationVisitor =
 				new SimplificationVisitor();
-		tryVisit(afterNormalization, simplificationVisitor);
+		VisitorUtil.tryVisit(afterNormalization, simplificationVisitor);
 		this.finalExpression = simplificationVisitor.opStack.pop();
 		log("Final:\t" + finalExpression.toString());
 		// Collect references in the given expression
 		CollectReferencesVisitor collectorVisitor =
 				new CollectReferencesVisitor();
-		tryVisit(finalExpression, collectorVisitor);
+		VisitorUtil.tryVisit(finalExpression, collectorVisitor);
 		this.aliasesMentioned = collectorVisitor.mentionedTables;
 		this.aliasIdxMentioned = new HashSet<>();
 		for (String alias : aliasesMentioned) {
@@ -178,7 +148,7 @@ public class ExpressionInfo {
 		log("Like expressions:\t" + likeExpressions.toString());
 		log("Aggregates: " + aggregates.toString());
 		// Final typing
-		tryVisit(finalExpression, typeVisitor);
+		VisitorUtil.tryVisit(finalExpression, typeVisitor);
 		this.expressionToType = typeVisitor.outputType;
 		this.resultType = expressionToType.get(finalExpression);
 		// Final scoping - generic scope defaults to per-tuple scope

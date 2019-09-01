@@ -9,6 +9,7 @@ import buffer.BufferManager;
 import catalog.CatalogManager;
 import config.LoggingConfig;
 import config.NamingConfig;
+import expressions.VisitorUtil;
 import joining.JoinProcessor;
 import net.sf.jsqlparser.schema.Table;
 import net.sf.jsqlparser.statement.select.PlainSelect;
@@ -59,7 +60,7 @@ public class Master {
 		}
 		// Unnest input query
 		UnnestingVisitor unnestor = new UnnestingVisitor();
-		select.accept(unnestor);
+		VisitorUtil.tryVisit(select, unnestor);
 		if (LoggingConfig.UNNESTING_VERBOSE) {
 			System.out.println("Sub-query sequence generated during unnesting: ");
 			System.out.println(unnestor.unnestedQueries);

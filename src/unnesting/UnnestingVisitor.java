@@ -15,7 +15,11 @@ import catalog.info.TableInfo;
 import config.NamingConfig;
 import expressions.normalization.CollectReferencesVisitor;
 import expressions.normalization.CopyVisitor;
+import expressions.normalization.SubstitutionVisitor;
+import net.sf.jsqlparser.expression.Alias;
 import net.sf.jsqlparser.expression.Expression;
+import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
+import net.sf.jsqlparser.expression.operators.relational.EqualsTo;
 import net.sf.jsqlparser.schema.Column;
 import net.sf.jsqlparser.schema.Table;
 import net.sf.jsqlparser.statement.select.AllColumns;
@@ -249,7 +253,7 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 						selectItem).getExpression();
 				selectNames.add(selectToName.get(selectExpr));
 			}
-			subqueryFields.add(selectNames);
+			subqueryFields.push(selectNames);
 		} catch (SQLexception e) {
 			sqlExceptions.add(e);
 		}
@@ -298,7 +302,7 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 		List<Expression> conjuncts = new ArrayList<>();
 		WhereUtil.extractConjuncts(where, conjuncts);
 		// Separate local and non-local predicates
-		Set<ColumnRef> curScope = scopeCols.peek();
+		Set<ColumnRef> curScope = scopeCols.pop();
 		List<Expression> localConjuncts = new ArrayList<>();
 		for (Expression conjunct : conjuncts) {
 			CollectReferencesVisitor collector = new CollectReferencesVisitor();
@@ -307,41 +311,133 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 			if (curScope.containsAll(collector.mentionedColumns)) {
 				localConjuncts.add(conjunct);
 			} else {
-				// This condition will be added to 
-				// WHERE clause of outer query.
-				addToOuterWhere.add(conjunct);
+				// Raise exceptions if there is no outer scope
+				// (which may allow to resolve unknown references).
+				if (scopeCols.isEmpty()) {
+					sqlExceptions.add(new SQLexception("Error - "
+							+ "predicate " + conjunct + " contains "
+							+ "unresolved references but no outer "
+							+ "scope is specified. Current scope: "
+							+ curScope.toString()));
+				}
+				Set<ColumnRef> outerScope = scopeCols.peek();
+				// Raise exception if predicate is no binary equality
+				// between two query columns.
+				if (conjunct instanceof EqualsTo) {
+					EqualsTo equalsTo = (EqualsTo)conjunct;
+					System.out.println(equalsTo);
+					if (!(equalsTo.getLeftExpression() instanceof Column) ||
+							!(equalsTo.getRightExpression() instanceof Column) ||
+							equalsTo.isNot()) {
+						sqlExceptions.add(new SQLexception("Error - "
+								+ "sub-queries may only be correlated "
+								+ "via binary equality predicates with "
+								+ "column references as operands ("
+								+ conjunct + ")"));
+					}
+				} else {
+					sqlExceptions.add(new SQLexception("Error - "
+							+ "sub-queries may only be correlated "
+							+ "via binary equality predicates ("
+							+ conjunct + ")"));
+				}
 				// Need to make sure that local
 				// references are still available
 				// in outer query scope.
 				List<SelectItem> selects = plainSelect.getSelectItems();
-				for (ColumnRef colRef : collector.mentionedColumns) {
-					if (curScope.contains(colRef)) {
-						// Substitute old column references
-						// Add to WHERE items of outer scope
+				try {
+					// Determine whether query contains aggregates
+					boolean isAggregation = SelectUtil.hasAggregates(selects);
+					// Iterate over columns mentioned in current predicate
+					for (ColumnRef oldColRef : collector.mentionedColumns) {
+						System.out.println("oldColRef: " + oldColRef);
+						System.out.println("curScope: " + curScope);
+						if (curScope.contains(oldColRef)) {
+							// Generate new unique column alias
+							String newColName = NamingConfig.SUBQUERY_COL_PRE 
+									+ nextAttributeID;
+							++nextAttributeID;
+							// Obtain string representation of old column
+							String aliasName = oldColRef.aliasName;
+							Table table = aliasName.isEmpty()?
+									null:new Table(aliasName);
+							String colName = oldColRef.columnName;
+							Column oldCol = new Column(table, colName);
+							String oldColString = oldCol.toString().toLowerCase();
+							// Create substitution map
+							Map<String, Expression> substitutionMap = 
+									new HashMap<>();
+							Column newCol = new Column(newColName);
+							substitutionMap.put(oldColString, newCol);
+							// Substitute column references
+							System.out.println("Pred before subst: " + conjunct);
+							SubstitutionVisitor substitutor = 
+									new SubstitutionVisitor(substitutionMap);
+							conjunct.accept(substitutor);
+							conjunct = substitutor.exprStack.pop();
+							System.out.println("Pred after subst: " + conjunct);
+							// Add new column to select items
+							SelectExpressionItem newItem = 
+									new SelectExpressionItem(oldCol);
+							Alias newColAlias = new Alias(newColName);
+							newItem.setAlias(newColAlias);
+							selects.add(newItem);
+							// Add new column to group by clause for aggregates
+							if (isAggregation) {
+								plainSelect.addGroupByColumnReference(oldCol);
+							}
+							// Add new column to outer query scope
+							ColumnRef newColRef = new ColumnRef("", newColName);
+							outerScope.add(newColRef);
+						}
 					}
+				} catch (SQLexception e) {
+					sqlExceptions.add(e);
 				}
-			}
-		}
+				// This condition will be added to 
+				// WHERE clause of outer query.
+				addToOuterWhere.push(conjunct);
+			} // whether local predicate
+		} // over conjucts
 		// Form WHERE clause from local predicates
 		Expression localWhere = WhereUtil.conjunction(localConjuncts);
 		plainSelect.setWhere(localWhere);
+		// Put current scope back on stack
+		scopeCols.push(curScope);
+	}
+	/**
+	 * Adds predicates to WHERE clause that were propagated up 
+	 * from nested sub-queries as they refer to columns that
+	 * are part of the outer scope.
+	 * 
+	 * @param plainSelect	add predicates to this query's WHERE clause
+	 */
+	void addNonLocalPreds(PlainSelect plainSelect) {
+		System.out.println("Add to outer where content: " + addToOuterWhere);
+		while (!addToOuterWhere.isEmpty()) {
+			Expression conjunct = addToOuterWhere.pop();
+			Expression curWhere = plainSelect.getWhere();
+			if (curWhere==null) {
+				plainSelect.setWhere(conjunct);
+			} else {
+				plainSelect.setWhere(new AndExpression(curWhere, conjunct));
+			}
+		}
 	}
 	
 	@Override
 	public void visit(PlainSelect plainSelect) {
 		// Initialize new scope and new alias-to-column mapping
 		Set<ColumnRef> newScopeCols = new HashSet<>();
-		scopeCols.add(newScopeCols);
+		scopeCols.push(newScopeCols);
 		Map<String, List<String>> curAliasToCols = new HashMap<>();
-		aliasToCols.add(curAliasToCols);
+		aliasToCols.push(curAliasToCols);
 		// Treat base tables in FROM clause
 		treatSimpleFrom(plainSelect);
 		// Treat sub-queries in FROM clause
 		treatNestedFrom(plainSelect);
 		// Resolve wildcard in SELECT clause if any
 		resolveWildcards(plainSelect);
-		// Single out predicates referencing outer scope
-		separateNonLocalPreds(plainSelect);
 		// Unnest sub-queries in WHERE clause
 		Expression originalWhere = plainSelect.getWhere();
 		if (originalWhere != null) {
@@ -352,9 +448,11 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 		}
 		// Add unnested sub-queries to FROM clause if any
 		expandFrom(plainSelect);
-		
-		
-		// Add fields required by outer scope to SELECT clause
+		// Tentatively add non-local predicates from
+		// nested queries to this WHERE clause.
+		addNonLocalPreds(plainSelect);
+		// Single out predicates referencing outer scope
+		separateNonLocalPreds(plainSelect);
 		// Add unnested query to query sequence
 		unnestedQueries.add(plainSelect);
 		// Register names of sub-query result fields
@@ -365,14 +463,14 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 
 	@Override
 	public void visit(SetOperationList setOpList) {
-		// TODO Auto-generated method stub
-		
+		sqlExceptions.add(new SQLexception("Error - "
+				+ "set operations are currently not supported"));
 	}
 
 	@Override
 	public void visit(WithItem withItem) {
-		// TODO Auto-generated method stub
-		
+		sqlExceptions.add(new SQLexception("Error - "
+				+ "'WITH' clauses are currently not supported"));
 	}
 	/**
 	 * This method is invoked for subselects in
@@ -387,6 +485,7 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 					+ "specified alias for anonymous "
 					+ "sub-query: " + subSelect));
 		} else {
+			System.out.println("Creating anonymous subquery for " + subSelect);
 			// Name anonymous sub-query
 			String alias = NamingConfig.SUBQUERY_PRE + nextSubqueryID;
 			++nextSubqueryID;
@@ -401,11 +500,18 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 						new Table[] {resultTable}));
 				// Replace nested sub-query by table reference
 				List<String> subqueryCols = subqueryFields.pop();
+				System.out.println("Subquery cols: " + subqueryCols);
 				String firstCol = subqueryCols.get(0);
-				exprStack.add(new Column(resultTable, firstCol));
+				exprStack.push(new Column(resultTable, firstCol));
+				// Add sub-query fields to scope
+				Set<ColumnRef> curScope = scopeCols.peek();
+				for (String subQueryCol : subqueryCols) {
+					curScope.add(new ColumnRef("", subQueryCol));
+					curScope.add(new ColumnRef(alias, subQueryCol));
+				}					
 				// Schedule table containing sub-query result to 
 				// be added to FROM clause.
-				addToThisFrom.add(resultTable);
+				addToThisFrom.push(resultTable);
 			} else {
 				sqlExceptions.add(new SQLexception("Error - "
 						+ "unsupported sub-query type: "

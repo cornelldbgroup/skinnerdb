@@ -38,7 +38,8 @@ public class CollectReferencesVisitor extends PlainVisitor {
 	@Override
 	public void visit(Column tableColumn) {
 		Table table = tableColumn.getTable();
-		String tableName = table==null?"":table.getName();
+		String tableName = table==null||table.getName()==null?
+				"":table.getName();
 		String columnName = tableColumn.getColumnName();
 		mentionedTables.add(tableName);
 		mentionedColumns.add(new ColumnRef(tableName, columnName));

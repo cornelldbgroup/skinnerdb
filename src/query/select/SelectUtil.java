@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import expressions.normalization.CollectReferencesVisitor;
 import net.sf.jsqlparser.expression.Alias;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.Function;
@@ -90,5 +91,32 @@ public class SelectUtil {
 
 		}
 		return exprToAlias;
+	}
+	/**
+	 * Returns true iff the given list of select items contains
+	 * aggregates (i.e., the associated query is an aggregate
+	 * query).
+	 * 
+	 * @param selectItems	list of items in query SELECT clause
+	 * @return				true iff at least one select item is an aggregate
+	 */
+	public static boolean hasAggregates(List<SelectItem> selectItems) 
+			throws SQLexception {
+		CollectReferencesVisitor collector = new CollectReferencesVisitor();
+		for (SelectItem selectItem : selectItems) {
+			if (selectItem instanceof SelectExpressionItem) {
+				SelectExpressionItem exprItem = 
+						(SelectExpressionItem)selectItem;
+				Expression expr = exprItem.getExpression();
+				expr.accept(collector);
+				if (!collector.aggregates.isEmpty()) {
+					return true;
+				}
+			} else {
+				throw new SQLexception("Error - unsupported type of "
+						+ "select expression: " + selectItem);
+			}
+		}
+		return false;
 	}
 }

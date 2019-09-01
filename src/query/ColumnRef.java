@@ -30,8 +30,8 @@ public class ColumnRef {
 	public boolean equals(Object other) {
 		if (other instanceof ColumnRef) {
 			ColumnRef otherRef = (ColumnRef)other;
-			return columnName.equals(otherRef.columnName) &&
-					aliasName.equals(otherRef.aliasName);
+			return columnName.equalsIgnoreCase(otherRef.columnName) &&
+					aliasName.equalsIgnoreCase(otherRef.aliasName);
 		} else {
 			return false;
 		}

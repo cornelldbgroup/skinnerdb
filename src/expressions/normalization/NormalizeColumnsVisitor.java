@@ -32,8 +32,9 @@ public class NormalizeColumnsVisitor extends CopyVisitor {
 	public void visit(Column arg0) {
 		Column newColumn = new Column();
 		String columnName = arg0.getColumnName().toLowerCase();
-		String tableName = arg0.getTable().getName()!=null?
-				arg0.getTable().getName().toLowerCase():
+		Table table = arg0.getTable();
+		String tableName = table!=null&&table.getName()!=null?
+				table.getName().toLowerCase():
 					columnToAlias.get(columnName);
 		// Check whether column was mapped to table
 		if (tableName==null) {
