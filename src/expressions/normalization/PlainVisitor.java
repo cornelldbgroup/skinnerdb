@@ -343,8 +343,7 @@ public class PlainVisitor extends SkinnerVisitor {
 
 	@Override
 	public void visit(ExtractExpression eexpr) {
-		// TODO Auto-generated method stub
-		
+		eexpr.getExpression().accept(this);
 	}
 
 	@Override

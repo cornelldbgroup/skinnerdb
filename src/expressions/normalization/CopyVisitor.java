@@ -482,8 +482,14 @@ public class CopyVisitor extends SkinnerVisitor {
 
 	@Override
 	public void visit(ExtractExpression arg0) {
-		// TODO Auto-generated method stub
-		
+		String name = arg0.getName();
+		arg0.getExpression().accept(this);
+		Expression newExpression = exprStack.pop();
+		// Create copy of extraction node
+		ExtractExpression newExtract = new ExtractExpression();
+		newExtract.setName(name);
+		newExtract.setExpression(newExpression);
+		exprStack.push(newExtract);
 	}
 
 	@Override

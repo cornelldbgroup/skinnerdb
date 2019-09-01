@@ -765,8 +765,10 @@ public class TypeVisitor extends SkinnerVisitor {
 
 	@Override
 	public void visit(ExtractExpression arg0) {
-		// TODO Auto-generated method stub
-		
+		Expression input = arg0.getExpression();
+		input.accept(this);
+		outputType.put(arg0, SQLtype.INT);
+		propagateScope(input, arg0);
 	}
 
 	@Override

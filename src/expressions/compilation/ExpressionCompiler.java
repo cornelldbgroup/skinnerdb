@@ -18,6 +18,7 @@ import org.objectweb.asm.Opcodes;
 
 import buffer.BufferManager;
 import query.ColumnRef;
+import query.SQLexception;
 import catalog.CatalogManager;
 import catalog.info.ColumnInfo;
 import config.LoggingConfig;
@@ -28,6 +29,7 @@ import data.StringData;
 import dk.brics.automaton.RegExp;
 import dk.brics.automaton.RunAutomaton;
 import expressions.ExpressionInfo;
+import expressions.SkinnerVisitor;
 import net.sf.jsqlparser.expression.AllComparisonExpression;
 import net.sf.jsqlparser.expression.AnalyticExpression;
 import net.sf.jsqlparser.expression.AnyComparisonExpression;
@@ -117,7 +119,7 @@ import org.objectweb.asm.util.TraceMethodVisitor;
  * @author immanueltrummer
  *
  */
-public class ExpressionCompiler implements ExpressionVisitor {
+public class ExpressionCompiler extends SkinnerVisitor {
 	/**
 	 * Used for generating a unique class name for newly compiled
 	 * expressions. Is incremented by one after each compilation.
@@ -631,6 +633,7 @@ public class ExpressionCompiler implements ExpressionVisitor {
 	 * @return	instance of newly generated evaluator class
 	 * @throws Exception
 	 */
+	/*
 	public ExpressionEvaluator getCompiledEvaluator() throws Exception {
 		// Copy stack content to expression interface
 		JavaType resultType = TypeUtil.toJavaType(
@@ -653,6 +656,7 @@ public class ExpressionCompiler implements ExpressionVisitor {
 				classWriter.toByteArray());
 		return (ExpressionEvaluator)expressionClass.newInstance();
 	}
+	*/
 	/**
 	 * Add code to swap two values of given Java type.
 	 * The values may either correspond to one single
@@ -711,6 +715,9 @@ public class ExpressionCompiler implements ExpressionVisitor {
 	 * @throws Exception
 	 */
 	public Object getBoolEval() throws Exception {
+		if (!sqlExceptions.isEmpty()) {
+			throw sqlExceptions.get(0);
+		}
 		// (Booleans are represented as integers -
 		// hence we can use standard swaps).
 		// Turn 0/1 value into -1/+1 value
@@ -746,6 +753,9 @@ public class ExpressionCompiler implements ExpressionVisitor {
 	 * @throws Exception
 	 */
 	void finalizeUnaryEval() throws Exception {
+		if (!sqlExceptions.isEmpty()) {
+			throw sqlExceptions.get(0);
+		}
 		// Obtain result type
 		SQLtype type = expressionInfo.resultType;
 		JavaType jType = TypeUtil.toJavaType(type);
@@ -1803,11 +1813,49 @@ public class ExpressionCompiler implements ExpressionVisitor {
 		// TODO Auto-generated method stub
 		
 	}
+	/**
+	 * Extract specific part from date given as Unix time.
+	 * 
+	 * @param dateSecs		seconds since 1st of January 1970
+	 * @param partID		ID of extracted part
+	 * @return				extracted time unit (integer)
+	 */
+	public static int extractFromDate(int dateSecs, int partID) {
+		calendar.setTimeInMillis(dateSecs * 1000l);
+		return calendar.get(partID);
+	}
 
 	@Override
 	public void visit(ExtractExpression arg0) {
-		// TODO Auto-generated method stub
-		
+		// Verify that input is of type 'date'
+		// Translate extracted part name into ID
+		String part = arg0.getName().toLowerCase();
+		Map<String, Integer> partToID = new HashMap<>();
+		// microseconds not supported
+		partToID.put("second", Calendar.SECOND);
+		partToID.put("minute", Calendar.MINUTE);
+		partToID.put("hour", Calendar.HOUR);
+		partToID.put("day", Calendar.DAY_OF_MONTH);
+		partToID.put("month", Calendar.MONTH);
+		// quarter currently not supported
+		partToID.put("year", Calendar.YEAR);
+		// second_microsecond not supported
+		// minute_microsecond not supported
+		// ...
+		if (!partToID.containsKey(part)) {
+			sqlExceptions.add(new SQLexception("Error - "
+					+ "unsupported extraction part: " 
+					+ part));
+		}
+		int partID = partToID.get(part);
+		// Put date seconds on top
+		evaluationVisitor.visitInsn(Opcodes.SWAP);
+		evaluationVisitor.visitLdcInsn(partID);
+		evaluationVisitor.visitMethodInsn(Opcodes.INVOKESTATIC, 
+				"expressions/compilation/ExpressionCompiler", 
+				"extractFromDate", "(II)I", false);
+		// Put not-null flag back on top
+		evaluationVisitor.visitInsn(Opcodes.SWAP);
 	}
 
 	@Override
