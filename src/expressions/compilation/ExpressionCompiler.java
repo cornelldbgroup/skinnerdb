@@ -1848,6 +1848,8 @@ public class ExpressionCompiler extends SkinnerVisitor {
 					+ part));
 		}
 		int partID = partToID.get(part);
+		// Add code for evaluating input expression
+		arg0.getExpression().accept(this);
 		// Put date seconds on top
 		evaluationVisitor.visitInsn(Opcodes.SWAP);
 		evaluationVisitor.visitLdcInsn(partID);

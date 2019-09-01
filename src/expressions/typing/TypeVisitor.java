@@ -623,7 +623,7 @@ public class TypeVisitor extends SkinnerVisitor {
 
 	@Override
 	public void visit(CaseExpression arg0) {
-		// Treat when expressions
+		// Type sub-expressions and determine common output type
 		SQLtype resultType = null;
 		for (Expression expr : arg0.getWhenClauses()) {
 			expr.accept(this);
@@ -631,30 +631,46 @@ public class TypeVisitor extends SkinnerVisitor {
 			SQLtype thisType = outputType.get(expr);
 			if (resultType == null) {
 				resultType = thisType;
+			} else {
+				resultType = TypeUtil.commonType(thisType, resultType);
 			}
+		}
+		Expression elseExpr = arg0.getElseExpression();
+		if (elseExpr != null) {
+			elseExpr.accept(this);
+			SQLtype elseType = outputType.get(elseExpr);
+			resultType = TypeUtil.commonType(elseType, resultType);
+		}
+		// Raise exception if no common type is found
+		if (resultType == null) {
+			sqlExceptions.add(new SQLexception("Error - "
+					+ "incompatible result types in case"
+					+ "statement: " + arg0));
+		}
+		// Add casts to as required type if necessary
+		List<Expression> castedWhens = new ArrayList<>();
+		for (Expression expr : arg0.getWhenClauses()) {
+			SQLtype thisType = outputType.get(expr);
 			if (!thisType.equals(resultType)) {
-				sqlExceptions.add(new SQLexception("Error - "
-						+ "inconsistent result types "
-						+ "of then clauses"));
+				Expression cast = newCast(expr, resultType);
+				castedWhens.add(cast);
+			} else {
+				castedWhens.add(expr);
+			}
+		}
+		arg0.setWhenClauses(castedWhens);
+		if (elseExpr != null) {
+			SQLtype elseType = outputType.get(elseExpr);
+			if (!elseType.equals(resultType)) {
+				Expression cast = newCast(elseExpr, resultType);
+				elseExpr = cast;
+				arg0.setElseExpression(cast);
 			}
 		}
 		// Treat switch expression if any
 		Expression switchExpr = arg0.getSwitchExpression();
 		if (switchExpr != null) {
 			switchExpr.accept(this);
-		}
-		// Treat else expression if any
-		Expression elseExpr = arg0.getElseExpression();
-		if (elseExpr != null) {
-			elseExpr.accept(this);
-			// Check for type and scope consistency
-			SQLtype elseType = outputType.get(elseExpr);
-			if (!elseType.equals(resultType)) {
-				sqlExceptions.add(new SQLexception("Error - "
-						+ "else clause '" + elseExpr + "' has "
-						+ "type " + elseType + ", inconsistent "
-						+ "with result type " + resultType));
-			}
 		}
 		// Add result type for case block
 		outputType.put(arg0, resultType);
@@ -665,7 +681,9 @@ public class TypeVisitor extends SkinnerVisitor {
 		if (switchExpr != null) {
 			propagateScope(switchExpr, arg0);
 		}
-		propagateScope(arg0.getElseExpression(), arg0);
+		if (elseExpr != null) {
+			propagateScope(arg0.getElseExpression(), arg0);
+		}
 	}
 
 	@Override

@@ -73,7 +73,9 @@ public class TypeUtil {
 	 */
 	public static SQLtype commonType(SQLtype type1, 
 			SQLtype type2) {
-		if (type1.equals(type2)) {
+		if (type1 == null || type2 == null) {
+			return null;
+		} else if (type1.equals(type2)) {
 			return type1;
 		} else if (specializes(type1, type2)) {
 			return type2;
