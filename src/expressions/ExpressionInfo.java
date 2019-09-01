@@ -9,6 +9,7 @@ import java.util.Set;
 import config.LoggingConfig;
 import query.ColumnRef;
 import query.QueryInfo;
+import query.where.WhereUtil;
 import expressions.normalization.CollectReferencesVisitor;
 import expressions.normalization.NormalizeColumnsVisitor;
 import expressions.normalization.SimplificationVisitor;
@@ -94,24 +95,6 @@ public class ExpressionInfo {
 	 * Decomposes expression into conjuncts.
 	 */
 	public final List<Expression> conjuncts;
-	/**
-	 * Extracts all conjuncts from a nested AND expression
-	 * via recursive calls. The result will be stored in
-	 * the second parameter.
-	 * 
-	 * @param condition	the remaining condition (no conjuncts extracted yet)
-	 * @param conjuncts	stores the resulting conjuncts
-	 */
-	static void extractConjuncts(Expression condition, 
-			List<Expression> conjuncts) {
-		if (condition instanceof AndExpression) {
-			AndExpression and = (AndExpression)condition;
-			extractConjuncts(and.getLeftExpression(), conjuncts);
-			extractConjuncts(and.getRightExpression(), conjuncts);
-		} else {
-			conjuncts.add(condition);
-		}
-	}
 	/**
 	 * Visits the given expression using the given visitor within a try-catch
 	 * block. Check whether visitor stored the root cause of the exception and
@@ -207,7 +190,7 @@ public class ExpressionInfo {
 		log("Expression scopes:\t" + expressionToScope.toString());
 		// Extract conjuncts
 		conjuncts = new ArrayList<Expression>();
-		extractConjuncts(finalExpression, conjuncts);
+		WhereUtil.extractConjuncts(finalExpression, conjuncts);
 		log("Conjuncts:\t" + conjuncts.toString());
 	}
 	/**

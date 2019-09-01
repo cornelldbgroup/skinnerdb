@@ -8,6 +8,7 @@ import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.Function;
 import net.sf.jsqlparser.expression.operators.relational.LikeExpression;
 import net.sf.jsqlparser.schema.Column;
+import net.sf.jsqlparser.schema.Table;
 
 /**
  * Collects all tables and columns referenced in a given expression.
@@ -36,7 +37,8 @@ public class CollectReferencesVisitor extends PlainVisitor {
 	public final Set<Function> aggregates = new HashSet<Function>();
 	@Override
 	public void visit(Column tableColumn) {
-		String tableName = tableColumn.getTable().getName();
+		Table table = tableColumn.getTable();
+		String tableName = table==null?"":table.getName();
 		String columnName = tableColumn.getColumnName();
 		mentionedTables.add(tableName);
 		mentionedColumns.add(new ColumnRef(tableName, columnName));

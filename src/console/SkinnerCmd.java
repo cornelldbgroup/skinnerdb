@@ -2,7 +2,6 @@ package console;
 
 import java.io.File;
 import java.io.PrintWriter;
-import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
 import java.util.Map.Entry;
@@ -22,7 +21,6 @@ import diskio.PathUtil;
 import execution.Master;
 import indexing.Indexer;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
-import net.sf.jsqlparser.schema.Table;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.create.table.CreateTable;
 import net.sf.jsqlparser.statement.drop.Drop;

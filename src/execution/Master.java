@@ -59,7 +59,6 @@ public class Master {
 		}
 		// Unnest input query
 		UnnestingVisitor unnestor = new UnnestingVisitor();
-		unnestor.outerCols.add(new HashSet<ColumnRef>());
 		select.accept(unnestor);
 		if (LoggingConfig.UNNESTING_VERBOSE) {
 			System.out.println("Sub-query sequence generated during unnesting: ");

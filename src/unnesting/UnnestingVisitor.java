@@ -13,6 +13,7 @@ import catalog.CatalogManager;
 import catalog.info.ColumnInfo;
 import catalog.info.TableInfo;
 import config.NamingConfig;
+import expressions.normalization.CollectReferencesVisitor;
 import expressions.normalization.CopyVisitor;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.schema.Column;
@@ -33,6 +34,7 @@ import query.ColumnRef;
 import query.SQLexception;
 import query.from.FromUtil;
 import query.select.SelectUtil;
+import query.where.WhereUtil;
 
 /**
  * Decomposes a query that may contain nested (potentially
@@ -57,10 +59,10 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 	 */
 	public List<PlainSelect> unnestedQueries = new ArrayList<>();
 	/**
-	 * Contans available column references in outer query scope
-	 * from the perspective of current sub-query on top.
+	 * Contans column references that became available in
+	 * certain sub-queries, the current sub-query is on top.
 	 */
-	public Stack<Set<ColumnRef>> outerCols = new Stack<>();
+	public Stack<Set<ColumnRef>> scopeCols = new Stack<>();
 	/**
 	 * Maps aliases in FROM clause to associated column names,
 	 * top element represents current sub-query.
@@ -75,13 +77,13 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 	 * List of references to tables containing sub-query results
 	 * that need to be added to FROM clause.
 	 */
-	public Stack<Table> addToFrom = new Stack<>();
+	public Stack<Table> addToThisFrom = new Stack<>();
 	/**
 	 * List of correlated predicates that need to be added to
 	 * WHERE clause (since they cannot be resolved in inner
 	 * scope).
 	 */
-	public Stack<Expression> addToWhere = new Stack<>();
+	public Stack<Expression> addToOuterWhere = new Stack<>();
 	/**
 	 * Updates current scope and alias-to-columns mapping
 	 * based on base tables that appear in FROM clause of
@@ -91,7 +93,7 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 	 */
 	void treatSimpleFrom(PlainSelect plainSelect) {
 		// Retrieve fields to update
-		Set<ColumnRef> curScopeCols = outerCols.peek();
+		Set<ColumnRef> curScopeCols = scopeCols.peek();
 		Map<String, List<String>> curAliasToCols = aliasToCols.peek();
 		// Get all items in FROM clause
 		List<FromItem> fromItems = FromUtil.allFromItems(plainSelect);
@@ -172,7 +174,7 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 	 */
 	void treatNestedFrom(PlainSelect plainSelect) {
 		// Retrieve current scope
-		Set<ColumnRef> curScopeCols = outerCols.peek();
+		Set<ColumnRef> curScopeCols = scopeCols.peek();
 		Map<String, List<String>> curAliasToCols = aliasToCols.peek();
 		// Update first item in FROM clause
 		plainSelect.setFromItem(unnestFromItem(
@@ -260,8 +262,8 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 	 * @param plainSelect	expand this query's FROM clause
 	 */
 	void expandFrom(PlainSelect plainSelect) {
-		while (!addToFrom.isEmpty()) {
-			Table toAdd = addToFrom.pop();
+		while (!addToThisFrom.isEmpty()) {
+			Table toAdd = addToThisFrom.pop();
 			FromItem firstItem = plainSelect.getFromItem();
 			if (firstItem == null) {
 				plainSelect.setFromItem(toAdd);
@@ -280,13 +282,56 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 			}
 		}
 	}
+	/**
+	 * Separate predicates that refer to columns in outer
+	 * (as opposed to current) query scope.
+	 * 
+	 * @param plainSelect	analyze WHERE clause of this query
+	 */
+	void separateNonLocalPreds(PlainSelect plainSelect) {
+		// Extract conjuncts in original WHERE clause
+		Expression where = plainSelect.getWhere();
+		if (where == null) {
+			// Nothing to do
+			return;
+		}
+		List<Expression> conjuncts = new ArrayList<>();
+		WhereUtil.extractConjuncts(where, conjuncts);
+		// Separate local and non-local predicates
+		Set<ColumnRef> curScope = scopeCols.peek();
+		List<Expression> localConjuncts = new ArrayList<>();
+		for (Expression conjunct : conjuncts) {
+			CollectReferencesVisitor collector = new CollectReferencesVisitor();
+			conjunct.accept(collector);
+			// Is it a local predicate?
+			if (curScope.containsAll(collector.mentionedColumns)) {
+				localConjuncts.add(conjunct);
+			} else {
+				// This condition will be added to 
+				// WHERE clause of outer query.
+				addToOuterWhere.add(conjunct);
+				// Need to make sure that local
+				// references are still available
+				// in outer query scope.
+				List<SelectItem> selects = plainSelect.getSelectItems();
+				for (ColumnRef colRef : collector.mentionedColumns) {
+					if (curScope.contains(colRef)) {
+						// Substitute old column references
+						// Add to WHERE items of outer scope
+					}
+				}
+			}
+		}
+		// Form WHERE clause from local predicates
+		Expression localWhere = WhereUtil.conjunction(localConjuncts);
+		plainSelect.setWhere(localWhere);
+	}
 	
 	@Override
 	public void visit(PlainSelect plainSelect) {
 		// Initialize new scope and new alias-to-column mapping
-		Set<ColumnRef> newOuterCols = new HashSet<>();
-		newOuterCols.addAll(outerCols.peek());
-		outerCols.add(newOuterCols);
+		Set<ColumnRef> newScopeCols = new HashSet<>();
+		scopeCols.add(newScopeCols);
 		Map<String, List<String>> curAliasToCols = new HashMap<>();
 		aliasToCols.add(curAliasToCols);
 		// Treat base tables in FROM clause
@@ -295,6 +340,8 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 		treatNestedFrom(plainSelect);
 		// Resolve wildcard in SELECT clause if any
 		resolveWildcards(plainSelect);
+		// Single out predicates referencing outer scope
+		separateNonLocalPreds(plainSelect);
 		// Unnest sub-queries in WHERE clause
 		Expression originalWhere = plainSelect.getWhere();
 		if (originalWhere != null) {
@@ -313,7 +360,7 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 		// Register names of sub-query result fields
 		registerResultCols(plainSelect);
 		// Remove new outer scope
-		outerCols.pop();
+		scopeCols.pop();
 	}
 
 	@Override
@@ -358,7 +405,7 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 				exprStack.add(new Column(resultTable, firstCol));
 				// Schedule table containing sub-query result to 
 				// be added to FROM clause.
-				addToFrom.add(resultTable);
+				addToThisFrom.add(resultTable);
 			} else {
 				sqlExceptions.add(new SQLexception("Error - "
 						+ "unsupported sub-query type: "
