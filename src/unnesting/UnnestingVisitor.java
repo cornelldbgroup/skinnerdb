@@ -325,7 +325,6 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 				// between two query columns.
 				if (conjunct instanceof EqualsTo) {
 					EqualsTo equalsTo = (EqualsTo)conjunct;
-					System.out.println(equalsTo);
 					if (!(equalsTo.getLeftExpression() instanceof Column) ||
 							!(equalsTo.getRightExpression() instanceof Column) ||
 							equalsTo.isNot()) {
@@ -350,8 +349,6 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 					boolean isAggregation = SelectUtil.hasAggregates(selects);
 					// Iterate over columns mentioned in current predicate
 					for (ColumnRef oldColRef : collector.mentionedColumns) {
-						System.out.println("oldColRef: " + oldColRef);
-						System.out.println("curScope: " + curScope);
 						if (curScope.contains(oldColRef)) {
 							// Generate new unique column alias
 							String newColName = NamingConfig.SUBQUERY_COL_PRE 
@@ -370,12 +367,10 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 							Column newCol = new Column(newColName);
 							substitutionMap.put(oldColString, newCol);
 							// Substitute column references
-							System.out.println("Pred before subst: " + conjunct);
 							SubstitutionVisitor substitutor = 
 									new SubstitutionVisitor(substitutionMap);
 							conjunct.accept(substitutor);
 							conjunct = substitutor.exprStack.pop();
-							System.out.println("Pred after subst: " + conjunct);
 							// Add new column to select items
 							SelectExpressionItem newItem = 
 									new SelectExpressionItem(oldCol);
@@ -413,7 +408,6 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 	 * @param plainSelect	add predicates to this query's WHERE clause
 	 */
 	void addNonLocalPreds(PlainSelect plainSelect) {
-		System.out.println("Add to outer where content: " + addToOuterWhere);
 		while (!addToOuterWhere.isEmpty()) {
 			Expression conjunct = addToOuterWhere.pop();
 			Expression curWhere = plainSelect.getWhere();
@@ -485,7 +479,6 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 					+ "specified alias for anonymous "
 					+ "sub-query: " + subSelect));
 		} else {
-			System.out.println("Creating anonymous subquery for " + subSelect);
 			// Name anonymous sub-query
 			String alias = NamingConfig.SUBQUERY_PRE + nextSubqueryID;
 			++nextSubqueryID;
@@ -500,7 +493,6 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 						new Table[] {resultTable}));
 				// Replace nested sub-query by table reference
 				List<String> subqueryCols = subqueryFields.pop();
-				System.out.println("Subquery cols: " + subqueryCols);
 				String firstCol = subqueryCols.get(0);
 				exprStack.push(new Column(resultTable, firstCol));
 				// Add sub-query fields to scope
