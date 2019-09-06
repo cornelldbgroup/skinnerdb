@@ -41,6 +41,10 @@ import org.apache.commons.lang3.StringUtils;
  */
 public class QueryInfo {
 	/**
+	 * number of query
+	 */
+	public int queryNum;
+	/**
 	 * Plain select statement query to execute.
 	 */
 	public final PlainSelect plainSelect;
@@ -627,6 +631,13 @@ public class QueryInfo {
 			System.out.println(logEntry);
 		}
 	}
+
+	public QueryInfo(int queryNum, PlainSelect plainSelect, boolean explain,
+					 int plotAtMost, int plotEvery, String plotDir) throws Exception {
+		this(plainSelect, explain, plotAtMost, plotEvery, plotDir);
+		this.queryNum = queryNum;
+	}
+
 	/**
 	 * Analyzes a select query to prepare processing.
 	 * 

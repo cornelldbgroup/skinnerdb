@@ -7,11 +7,13 @@ import java.io.PrintWriter;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.stream.Collectors;
 
+import multiquery.GlobalContext;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.Map.Entry;
@@ -46,6 +48,7 @@ import statistics.JoinStats;
  *
  */
 public class BenchAndVerify {
+
 	/**
 	 * Processes all queries in given directory.
 	 * 
@@ -70,9 +73,9 @@ public class BenchAndVerify {
 		System.out.println("Data loaded.");
 		Indexer.indexAll(StartupConfig.INDEX_CRITERIA);
 		// Read all queries from files
-		Map<String, PlainSelect> nameToQuery = 
+		Map<String, PlainSelect> nameToQuery =
 				BenchUtil.readAllQueries(args[1]);
-		// Open connection to Postgres 
+		// Open connection to Postgres
 		String url = "jdbc:postgresql:imdb_unicode_index";
 		Properties props = new Properties();
 		props.setProperty("user","postgres");
@@ -153,7 +156,7 @@ public class BenchAndVerify {
 			// Get cardinality of Skinner join result
 			int skinnerJoinCard = CatalogManager.getCardinality(
 					NamingConfig.JOINED_NAME);
-			System.out.println("PG Card: " + pgJoinCard + 
+			System.out.println("PG Card: " + pgJoinCard +
 					"; Skinner card: " + skinnerJoinCard);
 			assertEquals(pgJoinCard, skinnerJoinCard);
 			// Output final result for Postgres
