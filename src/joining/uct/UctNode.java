@@ -4,6 +4,7 @@ import joining.join.MultiWayJoin;
 import query.QueryInfo;
 import statistics.JoinStats;
 
+import java.sql.SQLOutput;
 import java.util.*;
 
 import config.JoinConfig;
@@ -198,88 +199,7 @@ public class UctNode {
             }
         }
     }
-    /**
-     * Select most interesting action to try next. Also updates
-     * list of unvisited actions.
-     *
-     * @param policy	policy used to select action
-     * @return index of action to try next
-     */
-    int selectAction(SelectionPolicy policy) {
-        // Are there untried actions?
-        if (!priorityActions.isEmpty()) {
-            int nrUntried = priorityActions.size();
-            int actionIndex = random.nextInt(nrUntried);
-            int action = priorityActions.get(actionIndex);
-            // Remove from untried actions and return
-            priorityActions.remove(actionIndex);
-            // System.out.println("Untried action: " + action);
-            return action;
-        } else {
-            /* When using the default selection policy (UCB1):
-             * We apply the UCT formula as no actions are untried.
-             * We iterate over all actions and calculate their
-             * UCT value, updating best action and best UCT value
-             * on the way. We start iterations with a randomly
-             * selected action to ensure that we pick a random
-             * action among the ones with maximal UCT value.
-             */
-            int offset = random.nextInt(nrActions);
-            int bestAction = -1;
-            double bestQuality = -1;
-            for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
-                // Calculate index of current action
-                int action = (offset + actionCtr) % nrActions;
-                // if heuristic is used, choose only from recommended actions
-                if (useHeuristic && recommendedActions.size() == 0) {
-                    throw new RuntimeException("there are no recommended exception and we are trying to use heuristic");
-                }
-                if (useHeuristic && !recommendedActions.contains(action))
-                    continue;
-                double meanReward = accumulatedReward[action] / nrTries[action];
-                double exploration = Math.sqrt(Math.log(nrVisits) / nrTries[action]);
-                // Assess the quality of the action according to policy
-                double quality = -1;
-                switch (policy) {
-                case UCB1:
-                	quality = meanReward + 
-                		JoinConfig.EXPLORATION_WEIGHT * exploration;
-                	break;
-                case MAX_REWARD:
-                case EPSILON_GREEDY:
-                	quality = meanReward;
-                	break;
-                case RANDOM:
-                	quality = random.nextDouble();
-                	break;
-                case RANDOM_UCB1:
-                	if (treeLevel==0) {
-                		quality = random.nextDouble();
-                	} else {
-                		quality = meanReward + 
-                				JoinConfig.EXPLORATION_WEIGHT * exploration;
-                	}
-                	break;
-                }
-                //double UB = meanReward + 1E-6 * exploration;
-                //double UB = meanReward + 1E-4 * exploration;
-                //double UB = meanReward + 1E-1 * exploration;
-                if (quality > bestQuality) {
-                    bestAction = action;
-                    bestQuality = quality;
-                }
-            }
-            // For epsilon greedy, return random action with
-            // probability epsilon.
-            if (policy.equals(SelectionPolicy.EPSILON_GREEDY)) {
-            	if (random.nextDouble()<=JoinConfig.EPSILON) {
-            		return random.nextInt(nrActions);
-            	}
-            }
-            // Otherwise: return best action.
-            return bestAction;
-        } // if there are unvisited actions
-    }
+
     /**
      * Updates UCT statistics after sampling.
      *
@@ -291,94 +211,107 @@ public class UctNode {
         ++nrTries[selectedAction];
         accumulatedReward[selectedAction] += reward;
     }
-    /**
-     * Randomly complete join order with remaining tables,
-     * invoke evaluation, and return obtained reward.
-     *
-     * @param joinOrder partially completed join order
-     * @return obtained reward
-     */
-    double playout(int[] joinOrder) throws Exception {
-        // Last selected table
-        int lastTable = joinOrder[treeLevel];
-        // Should we avoid Cartesian product joins?
-        if (useHeuristic) {
-            Set<Integer> newlyJoined = new HashSet<Integer>();
-            newlyJoined.addAll(joinedTables);
-            newlyJoined.add(lastTable);
-            // Iterate over join order positions to fill
-            List<Integer> unjoinedTablesShuffled = new ArrayList<Integer>();
-            unjoinedTablesShuffled.addAll(unjoinedTables);
-            Collections.shuffle(unjoinedTablesShuffled);
-            for (int posCtr = treeLevel + 1; posCtr < nrTables; ++posCtr) {
-                boolean foundTable = false;
-                for (int table : unjoinedTablesShuffled) {
-                    if (!newlyJoined.contains(table) &&
-                            query.connected(newlyJoined, table)) {
-                        joinOrder[posCtr] = table;
-                        newlyJoined.add(table);
-                        foundTable = true;
-                        break;
-                    }
-                }
-                if (!foundTable) {
-                    for (int table : unjoinedTablesShuffled) {
-                        if (!newlyJoined.contains(table)) {
-                            joinOrder[posCtr] = table;
-                            newlyJoined.add(table);
-                            break;
-                        }
-                    }
-                }
-            }
-        } else {
-            // Shuffle remaining tables
-            Collections.shuffle(unjoinedTables);
-            Iterator<Integer> unjoinedTablesIter = unjoinedTables.iterator();
-            // Fill in remaining join order positions
-            for (int posCtr = treeLevel + 1; posCtr < nrTables; ++posCtr) {
-                int nextTable = unjoinedTablesIter.next();
-                while (nextTable == lastTable) {
-                    nextTable = unjoinedTablesIter.next();
-                }
-                joinOrder[posCtr] = nextTable;
-            }
-        }
-        // Evaluate completed join order and return reward
-        return joinOp.execute(joinOrder);
-    }
+
     /**
      * Recursively sample from UCT tree and return reward.
      *
      * @param roundCtr  current round (used as timestamp for expansion)
      * @param joinOrder partially completed join order
-     * @param policy	policy used to select actions
      * @return achieved reward
      */
-    public double sample(long roundCtr, int[] joinOrder, 
-    		SelectionPolicy policy) throws Exception {
-        // Check if this is a (non-extendible) leaf node
-        if (nrActions == 0) {
-            // leaf node - evaluate join order and return reward
+    public double sample(long roundCtr, int[] joinOrder, int depth,
+    		int selectSwitch) throws Exception {
+        //System.out.println("roundCtr:" + roundCtr);
+        //System.out.println("selectSwitchFun:" + selectSwitchFun);
+        //System.out.println("order " + Arrays.toString(joinOrder));
+        if(depth == nrTables) {
+            //System.out.println("order " + Arrays.toString(joinOrder));
             return joinOp.execute(joinOrder);
+        }
+        //pick up action for the next step
+        int action = 0;
+        if(depth < selectSwitch) {
+            //explore the current best action
+            //System.out.println("explore new order=====");
+            action = explorationPolicy();
+            //System.out.println("explore:" + action);
         } else {
-            // inner node - select next action and expand tree if necessary
-            int action = selectAction(policy);
+            //select the new action
+            //System.out.println("exploit best order=====");
+            action = estimationPolicy();
+            //System.out.println("random:" + action);
+        }
+
+        int table = nextTable[action];
+        joinOrder[treeLevel] = table;
+        //System.out.println("table:" + table);
+        if (childNodes[action] == null) {
+            childNodes[action] = new UctNode(roundCtr, this, table);
+        }
+        UctNode child = childNodes[action];
+        double reward = child.sample(roundCtr, joinOrder, depth + 1, selectSwitch);
+        if(depth == selectSwitch) {
+            //System.out.println("update reward");
+            updateStatistics(action, reward);
+        }
+        return reward;
+    }
+
+    private int estimationPolicy() {
+        int offset = random.nextInt(nrActions);
+        int bestAction = -1;
+        double bestQuality = -1;
+        for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
+            // Calculate index of current action
+            int action = (offset + actionCtr) % nrActions;
+            if (useHeuristic && !recommendedActions.contains(action))
+                continue;
+            double meanReward = (nrTries[action] > 0) ? accumulatedReward[action] / nrTries[action] : 0;
+            //System.out.println("action:" + action);
+            //System.out.println("meanReward:" + meanReward);
+            if (meanReward > bestQuality) {
+                bestAction = action;
+                bestQuality = meanReward;
+            }
+        }
+        return bestAction;
+    }
+
+    private int explorationPolicy() {
+        int offset = random.nextInt(nrActions);
+        for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
+            int action = (offset + actionCtr) % nrActions;
+            if (useHeuristic && !recommendedActions.contains(action))
+                continue;
+            return action;
+        }
+        return offset;
+    }
+
+    public boolean getOptimalPolicy(int[] joinOrder, int roundCtr) {
+//        for (int i = 0; i < nrActions; i++) {
+//            System.out.println("reward:" + accumulatedReward[i]);
+//        }
+
+        if (treeLevel < nrTables) {
+            int action = estimationPolicy();
             int table = nextTable[action];
             joinOrder[treeLevel] = table;
-            // grow tree if possible
-            boolean canExpand = createdIn != roundCtr;
-            if (childNodes[action] == null && canExpand) {
+            if(childNodes[action] != null)
+                return childNodes[action].getOptimalPolicy(joinOrder, roundCtr);
+            else {
                 childNodes[action] = new UctNode(roundCtr, this, table);
+                UctNode child = childNodes[action];
+                child.getOptimalPolicy(joinOrder, roundCtr);
+                return false;
             }
-            // evaluate via recursive invocation or via playout
-            UctNode child = childNodes[action];
-            double reward = (child != null) ?
-                    child.sample(roundCtr, joinOrder, policy):
-                    	playout(joinOrder);
-            // update UCT statistics and return reward
-            updateStatistics(action, reward);
-            return reward;
         }
+
+        //System.out.println(Arrays.toString(joinOrder));
+        return true;
+    }
+
+    public void executePhaseWithBudget(int[] joinOrder) throws Exception {
+        joinOp.execute(joinOrder);
     }
 }

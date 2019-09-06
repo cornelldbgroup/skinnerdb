@@ -21,7 +21,7 @@ public class OldJoin extends MultiWayJoin {
     /**
      * Number of steps per episode.
      */
-    public final int budget;
+    public int budget;
     /**
      * Re-initialized in each invocation:
      * stores the remaining budget for
@@ -115,8 +115,9 @@ public class OldJoin extends MultiWayJoin {
 	@Override
 	public double execute(int[] order) throws Exception {
     	log("Context:\t" + preSummary.toString());
-    	log("Join order:\t" + Arrays.toString(order));
-    	log("Aliases:\t" + Arrays.toString(query.aliases));
+    	//log("Join order:\t" + Arrays.toString(order));
+    	//System.out.println("Join order:\t" + Arrays.toString(order));
+        log("Aliases:\t" + Arrays.toString(query.aliases));
     	log("Cardinalities:\t" + Arrays.toString(cardinalities));
     	// Treat special case: at least one input relation is empty
     	for (int tableCtr=0; tableCtr<nrJoined; ++tableCtr) {

@@ -17,9 +17,15 @@ public class JoinConfig {
 	public static final SelectionPolicy DEFAULT_SELECTION =
 			SelectionPolicy.UCB1;
 	/**
-	 * Number of steps performed per episode.
+	 * Number of steps performed during learning phase
 	 */
-	public static int BUDGET_PER_EPISODE = 500;
+	public static int BUDGET_LEARNING = 80;
+	/**
+	 * Number of steps performed during execution phase
+	 */
+	public static int BUDGET_EXECUTION = 5000;
+
+	public static int SAMPLE_PER_LEARN = 20;
 	/**
 	 * Weight for UCT exploration term (used to select
 	 * most interesting action to try next). This

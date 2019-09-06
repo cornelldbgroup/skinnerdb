@@ -41,6 +41,10 @@ import org.apache.commons.lang3.StringUtils;
  */
 public class QueryInfo {
 	/**
+	 *
+	 */
+	public String queryName = "";
+	/**
 	 * Plain select statement query to execute.
 	 */
 	public final PlainSelect plainSelect;
@@ -181,6 +185,12 @@ public class QueryInfo {
 	 * Class of aggregation query.
 	 */
 	public final AggregationType aggregationType;
+
+	public QueryInfo(PlainSelect value, boolean b, int i, int i1, String s, String key) throws Exception {
+		this(value, b, i, i1, s);
+		this.queryName = key;
+	}
+
 	/**
 	 * Extract information from the FROM clause (e.g.,
 	 * all tables referenced with their aliases, the

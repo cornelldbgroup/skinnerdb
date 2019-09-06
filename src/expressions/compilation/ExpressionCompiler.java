@@ -861,7 +861,7 @@ public class ExpressionCompiler implements ExpressionVisitor {
 	    Printer printer = new Textifier();
 	    int lineCtr = 1;
 	    TraceMethodVisitor traceVisitor = new TraceMethodVisitor(printer);
-	    for (FieldNode fieldNode : classNode.fields) {
+	    for (FieldNode fieldNode : (List<FieldNode>) classNode.fields) {
 	    	System.out.println(lineCtr + "\t" + fieldNode.name);
 	    	++lineCtr;
 	    }
