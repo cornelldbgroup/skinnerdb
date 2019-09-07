@@ -4,6 +4,7 @@ import java.util.stream.Collectors;
 
 
 import buffer.BufferManager;
+import buffer.HeuristicDataManager;
 import config.LoggingConfig;
 import config.NamingConfig;
 import config.PreConfig;
@@ -34,6 +35,7 @@ public class Preprocessor {
 	 * without an exception being thrown.
 	 */
 	public static boolean hadError = false;
+	public static QueryInfo queryInfo;
 	/**
 	 * Translates a column reference using a table
 	 * alias into one using the original table.
@@ -274,20 +276,28 @@ public class Preprocessor {
 		// Iterate over columns in equi-joins
 		long startMillis = System.currentTimeMillis();
 		Set<ColumnRef> values = new HashSet<>();
+		Map<ColumnRef, Integer> dbRefToTid = new HashMap<>();
 		for (ColumnRef queryRef: query.equiJoinCols) {
 			ColumnRef dbRef = preSummary.columnMapping.get(queryRef);
 			values.add(dbRef);
+			int tid = query.aliasToIndex.get(queryRef.aliasName);
+			dbRefToTid.putIfAbsent(dbRef, tid);
 		}
 
 		values.parallelStream().forEach(dbRef -> {
 			try {
 				// Create index (unless it exists already)
-				Indexer.index(dbRef);
+				Indexer.index(dbRef, dbRefToTid.get(dbRef));
 			} catch (Exception e) {
 				System.err.println("Error creating index for " + dbRef);
 				e.printStackTrace();
 			}
 		});
+
+		if (BufferManager.manager instanceof HeuristicDataManager) {
+			((HeuristicDataManager)BufferManager.manager).setup(query.nrJoined);
+		}
+
 		long totalMillis = System.currentTimeMillis() - startMillis;
 		log("Created all indices in " + totalMillis + " ms.");
 	}

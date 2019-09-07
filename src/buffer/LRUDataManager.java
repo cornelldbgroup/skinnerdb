@@ -6,6 +6,7 @@ import config.LoggingConfig;
 import data.*;
 import indexing.Index;
 import indexing.IntIndex;
+import joining.plan.LeftDeepPlan;
 import query.ColumnRef;
 import statistics.BufferStats;
 import statistics.JoinStats;
@@ -161,7 +162,7 @@ public class LRUDataManager implements IDataManager {
         int startIndex = pos / length;
         int start = startIndex * length;
         int offset = pos - start;
-
+//        log("Column: " + intIndex.cid + "\tPage: " + start);
         EntryRef entryRef = intIndex.entryRefs[startIndex];
         int channelLength = intIndex.prefixSum - start;
         length = Math.min(length, channelLength);
@@ -174,8 +175,6 @@ public class LRUDataManager implements IDataManager {
             // move the index entry to the first.
             columnOrder.remove(cid);
             columnOrder.addFirst(cid);
-//            log("Cache Lookup: " + BufferStats.nrIndexLookups +
-//                    "\t Cache Hits: " + BufferStats.nrCacheHit + "\t Cache Miss: " + BufferStats.nrCacheMiss);
 //            return intIndex.test[pos];
             return entryRef.positions[offset];
         }
@@ -185,7 +184,7 @@ public class LRUDataManager implements IDataManager {
         int[] positions = new int[length];
         // load data from the buffer
         SeekableByteChannel channel = intIndex.positionChannel;
-        log("Load " + intIndex.cid + " from the disk... The size: " + indexSize);
+//        log("Load " + intIndex.cid + " starting from " + start + " from the disk... The size: " + indexSize);
         channel = channel.position(start * 4);
         // create byte buffer
         ByteBuffer byteBuffer = ByteBuffer.allocate(indexSize);
@@ -208,6 +207,7 @@ public class LRUDataManager implements IDataManager {
                 removeEntry.positions = null;
                 size -= colSize;
                 iterator.remove();
+                log("Remove " + removeIndex.cid + " starting from " + start + " from the memory... The size: " + colSize);
                 if (capacity >= size + indexSize || size == 0) {
                     break;
                 }
@@ -224,9 +224,8 @@ public class LRUDataManager implements IDataManager {
         intIndex.loadedStartID.add(startIndex);
         size += length * 4;
 
-        log("Returning Data... The cache size: " + size);
-        log("Cache Lookup: " + BufferStats.nrIndexLookups +
-                "\t Cache Hits: " + BufferStats.nrCacheHit + "\t Cache Miss: " + BufferStats.nrCacheMiss);
+//        log("Returning Data... The cache size: " + size);
+//        log("Cache Lookup: " + BufferStats.nrIndexLookups + "\t Cache Hits: " + BufferStats.nrCacheHit + "\t Cache Miss: " + BufferStats.nrCacheMiss);
 //        return intIndex.test[pos];
         return positions[offset];
     }
@@ -244,9 +243,9 @@ public class LRUDataManager implements IDataManager {
     public void log(String text) {
         if (LoggingConfig.MANAGER_VERBOSE) {
             try {
-//                writer.write(text);
-//                writer.write("\n");
-                System.out.println(text);
+                writer.write(text);
+                writer.write("\n");
+//                System.out.println(text);
             } catch (Exception e) {
                 e.printStackTrace();
             }

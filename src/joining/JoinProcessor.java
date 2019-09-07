@@ -52,6 +52,7 @@ public class JoinProcessor {
         JoinStats.nrUctNodes = 0;
         JoinStats.nrPlansTried = 0;
         JoinStats.nrSamples = 0;
+		JoinStats.nrRounds = 0;
 		BufferStats.initBufferStats();
 		// Initialize logging for new query
 		nrLogEntries = 0;
@@ -104,6 +105,7 @@ public class JoinProcessor {
 		double maxReward = Double.NEGATIVE_INFINITY;
 		while (!joinOp.isFinished()) {
 			++roundCtr;
+			JoinStats.roundCtr = roundCtr;
 			double reward = root.sample(roundCtr, joinOrder, policy);
 			// Count reward except for final sample
 			if (!joinOp.isFinished()) {

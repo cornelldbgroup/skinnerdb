@@ -26,6 +26,10 @@ public class State {
 	 */
 	public int[] tupleIndices;
 	/**
+	 * The round count when the latest progress is updated.
+	 */
+	public long episode;
+	/**
 	 * Initializes tuple indices to appropriate size.
 	 * 
 	 * @param nrTables	number of joined tables
@@ -35,6 +39,7 @@ public class State {
 		//Arrays.fill(tupleIndices, -1);
 		Arrays.fill(tupleIndices, 0);
 		lastIndex = 0;
+		episode = 0;
 		//lastMove = JoinMove.RIGHT;
 	}
 	/**

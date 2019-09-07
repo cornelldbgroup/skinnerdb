@@ -22,17 +22,9 @@ import java.util.*;
 
 public class HeuristicDataManager implements IDataManager {
     /**
-     * the order of column touched by the system.
+     * order list
      */
-    private Deque<Integer> columnOrder;
-    /**
-     * the LRU cache for loaded columns.
-     */
-    private Map<EntryRef, int[]> colToIndex;
-    /**
-     * the order of column touched by the system.
-     */
-    private Deque<EntryRef> indexOrder;
+    private Deque<Integer>[] orders;
     /**
      * the size of cache.
      */
@@ -47,9 +39,7 @@ public class HeuristicDataManager implements IDataManager {
     private BufferedWriter writer;
 
     public HeuristicDataManager() {
-        colToIndex = new HashMap<>();
-        columnOrder = new LinkedList<>();
-        indexOrder = new LinkedList<>();
+
         if (LoggingConfig.MANAGER_VERBOSE) {
             try {
                 writer = Files.newBufferedWriter(Paths.get("log.txt"), StandardCharsets.UTF_8);
@@ -73,6 +63,9 @@ public class HeuristicDataManager implements IDataManager {
     public int getDataInWindow(IntIndex intIndex, int pos) throws Exception {
         BufferStats.nrIndexLookups++;
         int cid = intIndex.cid;
+        int tid = intIndex.tid;
+        Deque<Integer> tableOrder = orders[tid];
+
         int length = BufferConfig.pageSize / 4;
         int startIndex = pos / length;
         int start = startIndex * length;
@@ -85,10 +78,9 @@ public class HeuristicDataManager implements IDataManager {
             // cache hit
             BufferStats.nrCacheHit++;
             JoinStats.cacheMiss = false;
+            tableOrder.remove(cid);
+            tableOrder.addFirst(cid);
 //            log("Column " + intIndex.cid + " starting from " + start + " is in the memory.");
-            // move the index entry to the first.
-            columnOrder.remove(cid);
-            columnOrder.addFirst(cid);
 //            log("Cache Lookup: " + BufferStats.nrIndexLookups +
 //                    "\t Cache Hits: " + BufferStats.nrCacheHit + "\t Cache Miss: " + BufferStats.nrCacheMiss);
 //            return intIndex.test[pos];
@@ -112,32 +104,9 @@ public class HeuristicDataManager implements IDataManager {
         }
 
         // the column has been stored in the cache or the cache is full?
-        while (capacity < size + indexSize && size > 0) {
-            int removeID = columnOrder.removeLast();
-            IntIndex removeIndex = BufferManager.idToIndex.get(removeID);
-            Iterator<Integer> iterator = removeIndex.loadedStartID.iterator();
-            while (iterator.hasNext()) {
-                Integer removeStartIndex = iterator.next();
-                EntryRef removeEntry = removeIndex.entryRefs[removeStartIndex];
-                int colSize = removeEntry.positions.length * 4;
-                removeEntry.positions = null;
-                size -= colSize;
-                iterator.remove();
-                if (capacity >= size + indexSize || size == 0) {
-                    break;
-                }
-            }
-            if (removeIndex.loadedStartID.size() > 0) {
-                columnOrder.addLast(removeID);
-            }
-        }
-        // push the index entry to the first.
-        if (intIndex.loadedStartID.size() == 0) {
-            columnOrder.addFirst(cid);
-        }
-        intIndex.entryRefs[startIndex].positions = positions;
-        intIndex.loadedStartID.add(startIndex);
-        size += length * 4;
+        removeElements(indexSize);
+        // push the index entry to the order position.
+        addElements(intIndex, startIndex, positions);
 
         log("Returning Data... The cache size: " + size);
         log("Cache Lookup: " + BufferStats.nrIndexLookups +
@@ -146,11 +115,9 @@ public class HeuristicDataManager implements IDataManager {
         return positions[offset];
     }
 
+
     @Override
     public void clearCache() {
-        colToIndex.clear();
-        columnOrder.clear();
-        indexOrder.clear();
         BufferManager.colToIndex.values().forEach(Index::clear);
         size = 0;
     }
@@ -159,9 +126,9 @@ public class HeuristicDataManager implements IDataManager {
     public void log(String text) {
         if (LoggingConfig.MANAGER_VERBOSE) {
             try {
-//                writer.write(text);
-//                writer.write("\n");
-                System.out.println(text);
+                writer.write(text);
+                writer.write("\n");
+//                System.out.println(text);
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -172,4 +139,57 @@ public class HeuristicDataManager implements IDataManager {
     public void unloadIndex(IntIndex intIndex) {
 
     }
+
+
+    private void addElements(IntIndex intIndex, int startIndex, int[] positions) {
+        int tid = intIndex.tid;
+        int cid = intIndex.cid;
+        Deque<Integer> tableOrder = orders[tid];
+
+        if (intIndex.pageOrder.size() == 0) {
+            tableOrder.addFirst(cid);
+        }
+        else {
+            tableOrder.remove(cid);
+            tableOrder.addFirst(cid);
+        }
+        intIndex.pageOrder.addLast(startIndex);
+        intIndex.entryRefs[startIndex].positions = positions;
+        size += positions.length * 4;
+    }
+
+    private void removeElements(int indexSize) {
+        while (capacity < size + indexSize && size > 0) {
+            int removeID = -1;
+            Deque<Integer> deque = null;
+            for (int i = 0; i < JoinStats.order.length; i++) {
+                int tid = JoinStats.order[i];
+                deque = orders[tid];
+                if (deque.size() > 0) {
+                    removeID = deque.removeLast();
+                }
+            }
+            IntIndex removeIndex = BufferManager.idToIndex.get(removeID);
+            while (removeIndex.pageOrder.size() > 0) {
+                Integer removeStartIndex = removeIndex.pageOrder.removeFirst();
+                EntryRef removeEntry = removeIndex.entryRefs[removeStartIndex];
+
+                int colSize = removeEntry.positions.length * 4;
+                removeEntry.positions = null;
+                size -= colSize;
+                if (capacity >= size + indexSize || size == 0) {
+                    break;
+                }
+            }
+            if (removeIndex.pageOrder.size() > 0) {
+                deque.addLast(removeID);
+            }
+        }
+    }
+
+    public void setup(int nrTables) {
+        orders = new LinkedList[nrTables];
+        Arrays.fill(orders, new LinkedList<>());
+    }
+
 }

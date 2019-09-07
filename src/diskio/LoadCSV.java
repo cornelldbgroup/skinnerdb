@@ -14,6 +14,7 @@ import catalog.info.TableInfo;
 import catalog.stats.TableStats;
 import config.GeneralConfig;
 import config.BufferConfig;
+import config.LoadConfig;
 import data.ColumnData;
 import data.DoubleData;
 import data.IntData;
@@ -40,7 +41,8 @@ public class LoadCSV {
 	 */
 	static int lineCount(String path) throws Exception {
 		BufferedReader reader = new BufferedReader(new FileReader(path));
-		int nrRows = BufferConfig.maxRows;
+		int nrRows = LoadConfig.maxRows;
+		int factor = LoadConfig.factor;
 		@SuppressWarnings("unused")
 		String line = null;
 		int lineCtr = 0;
@@ -48,6 +50,7 @@ public class LoadCSV {
 			++lineCtr;
 		}
 		reader.close();
+		lineCtr = lineCtr * factor;
 		return lineCtr;
 	}
 	/**
@@ -106,7 +109,9 @@ public class LoadCSV {
 		CSVReader csvReader = new CSVReader(new FileReader(csvPath));
 		String[] inputFields;
 		int rowCtr = 0;
-		int nrRows = BufferConfig.maxRows;
+		int nrRows = LoadConfig.maxRows;
+		int factor = LoadConfig.factor;
+		int stride = data.get(0).cardinality / factor;
 		while ((inputFields = csvReader.readNext()) != null && rowCtr < nrRows) {
 			for (int colCtr=0; colCtr<nrColumns; ++colCtr) {
 				String field = inputFields[colCtr];
@@ -116,30 +121,38 @@ public class LoadCSV {
 				data.get(colCtr).isNull.set(rowCtr, isNull);
 				try {
 					switch (columnTypes[colCtr]) {
-					case ANY_TYPE:
-						throw new Exception("Cannot parse undetermined type");
-					case BYTE:
-					case INT:
-						IntData intData = ((IntData)data.get(colCtr));
-						intData.data[rowCtr] = isNull?0:Integer.parseInt(field);
-						break;
-					case LONG:
-						LongData longData = ((LongData)data.get(colCtr));
-						longData.data[rowCtr] = isNull?0:Long.parseLong(field);
-						break;
-					case DOUBLE:
-						DoubleData doubleData = ((DoubleData)data.get(colCtr));
-						doubleData.data[rowCtr] = isNull?0:Double.parseDouble(field);
-						break;
-					case STRING:
-						StringData stringData = ((StringData)data.get(colCtr));
-						stringData.data[rowCtr] = isNull?nullRepresentation:field; 
-						break;
-					default:
-						throw new Exception("Unsupported type: " + columnTypes[colCtr]);
-					}					
+						case ANY_TYPE:
+							throw new Exception("Cannot parse undetermined type");
+						case BYTE:
+						case INT:
+							IntData intData = ((IntData)data.get(colCtr));
+							for (int i = 0; i < factor; i++) {
+								intData.data[i * stride + rowCtr] = isNull?0:Integer.parseInt(field);
+							}
+							break;
+						case LONG:
+							LongData longData = ((LongData)data.get(colCtr));
+							for (int i = 0; i < factor; i++) {
+								longData.data[i * stride + rowCtr] = isNull?0:Long.parseLong(field);
+							}
+							break;
+						case DOUBLE:
+							DoubleData doubleData = ((DoubleData)data.get(colCtr));
+							for (int i = 0; i < factor; i++) {
+								doubleData.data[i * stride + rowCtr] = isNull?0:Double.parseDouble(field);
+							}
+							break;
+						case STRING:
+							StringData stringData = ((StringData)data.get(colCtr));
+							for (int i = 0; i < factor; i++) {
+								stringData.data[i * stride + rowCtr] = isNull?nullRepresentation:field;
+							}
+							break;
+						default:
+							throw new Exception("Unsupported type: " + columnTypes[colCtr]);
+					}
 				} catch (Exception e) {
-					System.err.println("Error parsing field " + field + 
+					System.err.println("Error parsing field " + field +
 							" in column " + colCtr + " of line " + rowCtr);
 					throw e;
 				}
@@ -149,6 +162,7 @@ public class LoadCSV {
 				System.out.println("Loaded " + rowCtr + " rows");
 			}
 		}
+
 		csvReader.close();
 	}
 	/**

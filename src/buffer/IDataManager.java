@@ -2,6 +2,7 @@ package buffer;
 
 import data.ColumnData;
 import indexing.IntIndex;
+import joining.plan.LeftDeepPlan;
 import query.ColumnRef;
 
 public interface IDataManager {

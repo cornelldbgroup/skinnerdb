@@ -7,7 +7,9 @@ import config.IndexingMode;
 import data.ColumnData;
 import data.IntData;
 import diskio.PathUtil;
+import preprocessing.Preprocessor;
 import query.ColumnRef;
+import query.QueryInfo;
 
 import java.io.File;
 import java.nio.file.Files;
@@ -37,6 +39,12 @@ public class Indexer {
 				BufferManager.colToIndex.put(colRef, index);
 			}
 		}
+	}
+
+	public static void index(ColumnRef colRef, int tid) throws Exception {
+		index(colRef);
+		IntIndex index = (IntIndex) BufferManager.colToIndex.get(colRef);
+		index.tid = tid;
 	}
 	/**
 	 * Creates an index for each key/foreign key column.

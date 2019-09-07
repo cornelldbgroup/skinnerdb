@@ -86,8 +86,11 @@ public class Compressor {
 			System.out.println("Encoding " + colRef.toString());
 			StringData rawData = (StringData)BufferManager.getData(colRef);
 			for (String string : rawData.data) {
+				if (string == null) {
+					System.out.println("123");
+				}
 				strings.add(string);
-			}			
+			}
 		}
 		return new Dictionary(strings);
 	}

@@ -67,4 +67,16 @@ public class JoinStats {
      * Number of cache miss.
      */
     public static int nrCacheMiss = 0;
+    /**
+     * Number of round count.
+     */
+    public static int nrRounds = 0;
+    /**
+     * current join order.
+     */
+    public static int[] order;
+    /**
+     * Number of episodes.
+     */
+    public static long roundCtr;
 }

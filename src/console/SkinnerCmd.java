@@ -86,7 +86,9 @@ public class SkinnerCmd {
 				for (Entry<String, PlainSelect> entry : nameToQuery.entrySet()) {
 					String queryName = entry.getKey();
 					PlainSelect query = entry.getValue();
-					BenchUtil.benchQuery(queryName, query, benchOut);
+					for (int i = 0; i < 3; i++) {
+						BenchUtil.benchQuery(queryName, query, benchOut);
+					}
 				}
 				// Close benchmark result file
 				benchOut.close();				
@@ -149,6 +151,7 @@ public class SkinnerCmd {
 						processInput(sqlCmd);				
 					} catch (Exception e) {
 						System.err.println("Error processing command " + sqlCmd);
+						e.printStackTrace();
 					}
 				}
 				scanner.close();				

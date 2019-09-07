@@ -64,7 +64,7 @@ public class BufferManager {
 	 * Implementation of buffer management algorithm.
 	 */
 	public final static IDataManager manager =
-			new LRUDataManager();
+			new HeuristicDataManager();
 
 	/**
 	 * Loads dictionary from hard disk.

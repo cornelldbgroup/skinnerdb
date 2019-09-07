@@ -14,6 +14,7 @@ import config.LoggingConfig;
 import data.IntData;
 import diskio.PathUtil;
 import org.omg.PortableInterceptor.SYSTEM_EXCEPTION;
+import preprocessing.Preprocessor;
 import query.ColumnRef;
 import statistics.BufferStats;
 import statistics.JoinStats;
@@ -54,6 +55,10 @@ public class IntIndex extends Index {
      */
     public final int cid;
     /**
+     * Reference to a specific table id.
+     */
+    public int tid;
+    /**
      * Cardinality of indexed table.
      */
     public final int cardinality;
@@ -93,6 +98,10 @@ public class IntIndex extends Index {
      * Set of pages that are stored in the memory currently.
      */
     public Set<Integer> loadedStartID;
+    /**
+     * Order of pages that are stored in the memory currently.
+     */
+    public Deque<Integer> pageOrder;
     /**
      * After indexing: if inMemory is not enable,
      * store the positions array to the file by java NIO.
@@ -144,6 +153,7 @@ public class IntIndex extends Index {
         keyToNumber = HashIntIntMaps.newMutableMap(nrKeys);
         keyToMeta = new HashMap<>();
         loadedStartID = new HashSet<>();
+        pageOrder = new LinkedList<>();
         int prefixSum = 0;
 
         for (Map.Entry<Integer, List<Integer>> entry: groupByValue.entrySet()) {
@@ -502,6 +512,7 @@ public class IntIndex extends Index {
     public void clear() {
         positions = null;
         loadedStartID.clear();
+        pageOrder.clear();
         for (EntryRef entryRef : entryRefs) {
             entryRef.positions = null;
         }

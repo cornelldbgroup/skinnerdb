@@ -19,6 +19,6 @@ public class GeneralConfig {
 	/**
 	 * The size of cache in bytes
 	 */
-	public static int cacheSize = 10000000;
+	public static int cacheSize = 100000000;
 
 }

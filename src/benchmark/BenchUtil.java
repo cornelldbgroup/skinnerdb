@@ -82,6 +82,7 @@ public class BenchUtil {
 		System.out.println(sql.toString());
 		long startMillis = System.currentTimeMillis();
 		QueryInfo query = new QueryInfo(sql, false, -1, -1, null);
+		Preprocessor.queryInfo = query;
 		Context preSummary = Preprocessor.process(query);
 		System.out.println("Finish Pre-processing");
 		long joinStart = System.currentTimeMillis();

@@ -5,6 +5,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import buffer.BufferManager;
 import config.LoggingConfig;
 import config.PreConfig;
 import expressions.ExpressionInfo;
@@ -12,6 +13,7 @@ import expressions.compilation.KnaryBoolEval;
 import joining.plan.JoinOrder;
 import joining.plan.LeftDeepPlan;
 import joining.progress.ProgressTracker;
+import joining.progress.SlimProgressTracker;
 import joining.progress.State;
 import preprocessing.Context;
 import query.QueryInfo;
@@ -40,7 +42,7 @@ public class OldJoin extends MultiWayJoin {
     /**
      * Avoids redundant evaluation work by tracking evaluation progress.
      */
-    public final ProgressTracker tracker;
+    public final SlimProgressTracker tracker;
     /**
      * Associates each table index with unary predicates.
      */
@@ -66,7 +68,8 @@ public class OldJoin extends MultiWayJoin {
         super(query, preSummary);
         this.budget = budget;
         this.planCache = new HashMap<>();
-        this.tracker = new ProgressTracker(nrJoined, cardinalities);
+//        this.tracker = new ProgressTracker(nrJoined, cardinalities);
+        this.tracker = new SlimProgressTracker(nrJoined, cardinalities);
         // Collect unary predicates
         this.unaryPreds = new KnaryBoolEval[nrJoined];
         for (ExpressionInfo unaryExpr : query.wherePredicates) {
@@ -118,6 +121,7 @@ public class OldJoin extends MultiWayJoin {
     	log("Join order:\t" + Arrays.toString(order));
     	log("Aliases:\t" + Arrays.toString(query.aliases));
     	log("Cardinalities:\t" + Arrays.toString(cardinalities));
+    	JoinStats.order = order;
     	// Treat special case: at least one input relation is empty
     	for (int tableCtr=0; tableCtr<nrJoined; ++tableCtr) {
     		if (cardinalities[tableCtr]==0) {
@@ -132,6 +136,7 @@ public class OldJoin extends MultiWayJoin {
             plan = new LeftDeepPlan(query, preSummary, predToEval, order);
             planCache.put(joinOrder, plan);
         }
+
         log(plan.toString());
         // Execute from starting state, save progress, return progress
         State state = tracker.continueFrom(joinOrder);
@@ -141,6 +146,7 @@ public class OldJoin extends MultiWayJoin {
         double reward = reward(joinOrder.order, 
         		tupleIndexDelta, offsets);
         tracker.updateProgress(joinOrder, state);
+        JoinStats.nrRounds++;
         return reward;
 	}
 	/**
@@ -196,6 +202,8 @@ public class OldJoin extends MultiWayJoin {
      * @param state   last tuple visited in each base table before start
      */
     private void executeWithBudget(LeftDeepPlan plan, State state, int[] offsets) {
+//        BufferManager.manager.log("Join: " + Arrays.toString(plan.joinOrder.order));
+//        BufferManager.manager.log("Offsets: " + Arrays.toString(offsets));
         // Extract variables for convenient access
         int nrTables = query.nrJoined;
         int[] tupleIndices = new int[nrTables];

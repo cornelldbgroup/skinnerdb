@@ -23,8 +23,8 @@ def agg_results(fileData, attrs):
         name = fname[:-4]
         value_list = [name]
         for attr in attrs:
-            attr_list = map(lambda x: float(x[attr]), fileData[fname])
-            avg = sum(attr_list) / 1000
+            attr_list = list(map(lambda x: float(x[attr]), fileData[fname]))
+            avg = sum(attr_list) / 1000 / len(attr_list) * 113
             value_list.append(str(avg))
         print("\t".join(value_list))
 fileData = load_files("../data/cache")

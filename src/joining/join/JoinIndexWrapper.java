@@ -170,6 +170,15 @@ public class JoinIndexWrapper {
 		int curTuple = tupleIndices[nextTable];
 		return nextIndex.iterNextHigher(curTuple);
 	}
+
+	/**
+	 * Get the nextIndex field.
+	 *
+	 * @return	Index on join column to use.
+	 */
+	public IntIndex getNextIndex() {
+		return nextIndex;
+	}
 	@Override
 	public String toString() {
 		return "Prior table:\t" + priorTable + "; Next:\t" + nextTable;
