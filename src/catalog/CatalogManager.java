@@ -30,6 +30,16 @@ public class CatalogManager {
 	 */
 	public static DbStats currentStats;
 	/**
+	 * Returns description of table with given name
+	 * in current database.
+	 * 
+	 * @param tableName	name of table to describe
+	 * @return			information on table schema
+	 */
+	public static TableInfo getTable(String tableName) {
+		return currentDB.nameToTable.get(tableName);
+	}
+	/**
 	 * Returns description of referenced column in current database.
 	 * 
 	 * @param columnRef	reference to column

@@ -77,6 +77,12 @@ public class NamingConfig {
 	 */
 	public static final String ORDER_NAME = "order.";
 	/**
+	 * Name of table in which the result is stored before
+	 * applying the LIMIT clause (if a LIMIT clause is
+	 * specified).
+	 */
+	public static final String PRE_LIMIT_TBL = "prelimit.";
+	/**
 	 * Name of the table containing final query result.
 	 */
 	public static final String FINAL_RESULT_NAME = "result.";

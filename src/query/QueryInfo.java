@@ -15,9 +15,9 @@ import config.LoggingConfig;
 import expressions.ExpressionInfo;
 import expressions.aggregates.AggInfo;
 import expressions.typing.ExpressionScope;
-import net.sf.jsqlparser.expression.Alias;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.Function;
+import net.sf.jsqlparser.expression.LongValue;
 import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
 import net.sf.jsqlparser.expression.operators.relational.EqualsTo;
 import net.sf.jsqlparser.schema.Column;
@@ -26,6 +26,7 @@ import net.sf.jsqlparser.statement.select.AllColumns;
 import net.sf.jsqlparser.statement.select.AllTableColumns;
 import net.sf.jsqlparser.statement.select.FromItem;
 import net.sf.jsqlparser.statement.select.Join;
+import net.sf.jsqlparser.statement.select.Limit;
 import net.sf.jsqlparser.statement.select.OrderByElement;
 import net.sf.jsqlparser.statement.select.PlainSelect;
 import net.sf.jsqlparser.statement.select.SelectExpressionItem;
@@ -184,6 +185,11 @@ public class QueryInfo {
 	 * Class of aggregation query.
 	 */
 	public final AggregationType aggregationType;
+	/**
+	 * Number of tuples specified in LIMIT clause, if any,
+	 * or -1 if no LIMIT specified.
+	 */
+	public final int limit;
 	/**
 	 * Extract information from the FROM clause (e.g.,
 	 * all tables referenced with their aliases, the
@@ -591,6 +597,32 @@ public class QueryInfo {
 		}
 	}
 	/**
+	 * Extracts the limit on the number of result tuples
+	 * and returns -1 if none specified.
+	 * 
+	 * @param plainSelect	input query
+	 * @return				result tuple limit or -1 if none specified
+	 * @throws Exception
+	 */
+	static int getLimit(PlainSelect plainSelect) throws Exception {
+		Limit limitObj = plainSelect.getLimit();
+		// No limit specified?
+		if (limitObj == null) {
+			return -1;
+		}
+		Expression limitExpr = limitObj.getRowCount();
+		// No row limit specified?
+		if (limitExpr == null) {
+			return -1;
+		}
+		// Only constant row limits are supported
+		if (!(limitExpr instanceof LongValue)) {
+			throw new SQLexception("Error - only constant limits supported");
+		} else {
+			return (int)(((LongValue)limitExpr).getValue());
+		}
+	}
+	/**
 	 * Analyzes a select query to prepare processing.
 	 * 
 	 * @param plainSelect	a plain select query
@@ -644,5 +676,8 @@ public class QueryInfo {
 		// Set aggregation type
 		aggregationType = getAggregationType();
 		log("Aggregation type:\t" + aggregationType);
+		// Set result tuple limit
+		limit = getLimit(plainSelect);
+		log("Limit:\t" + limit);
 	}
 }

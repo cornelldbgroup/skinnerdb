@@ -461,22 +461,40 @@ public class PostProcessor {
 	 */
 	public static void process(QueryInfo query, Context context,
 			String resultRel, boolean tempResult) throws Exception {
+		// Store full result in preliminary table if limit specified 
+		boolean hasLimit = query.limit!=-1;
+		String preLimitResult = hasLimit?NamingConfig.PRE_LIMIT_TBL:resultRel;
+		boolean preLimitTemp = hasLimit?true:tempResult;
 		// Distinguish type of query
 		switch (query.aggregationType) {
 		case NONE:
 			treatNoAggregatesQuery(query, context, 
-					resultRel, tempResult);
+					preLimitResult, preLimitTemp);
 			break;
 		case ALL_ROWS:
 			treatAllRowsAggQuery(query, context, 
-					resultRel, tempResult);
+					preLimitResult, preLimitTemp);
 			break;
 		case GROUPS:
 			treatGroupAggQuery(query, context, 
-					resultRel, tempResult);
+					preLimitResult, preLimitTemp);
 			break;
 		}
-		// Apply LIMIT clause
+		// Apply LIMIT clause if any
+		if (hasLimit) {
+			// Add final result table in catalog
+			TableInfo resultInfo = new TableInfo(resultRel, tempResult);
+			CatalogManager.currentDB.addTable(resultInfo);
+			// Fill with subset of pre-limit result rows
+			List<Integer> limitRows = new ArrayList<>();
+			int limit = query.limit;
+			for (int rowCtr=0; rowCtr<limit; ++rowCtr) {
+				limitRows.add(rowCtr);
+			}
+			operators.Materialize.execute(preLimitResult, 
+					resultInfo.columnNames, limitRows, null, 
+					resultRel);
+		}
 		// Update result table statistics
 		CatalogManager.updateStats(resultRel);
 	}
