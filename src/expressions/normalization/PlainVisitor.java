@@ -215,7 +215,7 @@ public class PlainVisitor extends SkinnerVisitor {
 	public void visit(InExpression inExpression) {
 		inExpression.getLeftExpression().accept(this);
 		List<Expression> expressionsInList = ((ExpressionList)
-				inExpression.getLeftItemsList()).getExpressions();
+				inExpression.getRightItemsList()).getExpressions();
 		for (Expression expr : expressionsInList) {
 			expr.accept(this);
 		}

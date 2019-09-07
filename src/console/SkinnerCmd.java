@@ -101,9 +101,9 @@ public class SkinnerCmd {
 	static void processLoadCmd(String input) throws Exception {
 		// Load data from file into table
 		String[] inputFrags = input.split("\\s");
-		if (inputFrags.length != 4) {
+		if (inputFrags.length != 5) {
 			System.out.println("Error - specify table name, "
-					+ "path to .csv file, and null "
+					+ "path to .csv file, separator, and null "
 					+ "value representation, "
 					+ "separated by spaces.");
 		} else {
@@ -118,8 +118,16 @@ public class SkinnerCmd {
 				String csvPath = inputFrags[2];
 				// Does input path exist?
 				if (fileOrError(csvPath)) {
-					String nullRepresentation = inputFrags[3];
-					LoadCSV.load(csvPath, table, nullRepresentation);					
+					String separatorStr = inputFrags[3];
+					if (separatorStr.length()!=1) {
+						System.out.println("Inadmissible separator: " +
+								separatorStr + " (requires one character)");
+					} else {
+						char separator = separatorStr.charAt(0);
+						String nullRepresentation = inputFrags[4];
+						LoadCSV.load(csvPath, table, 
+								separator, nullRepresentation);						
+					}
 				}
 			}
 		}
@@ -337,7 +345,7 @@ public class SkinnerCmd {
 			System.out.println("'help' for help");
 			System.out.println("'index all' to index each column");
 			System.out.println("'list' to list database tables");
-			System.out.println("'load <table> < CSV file> <NULL representation>' "
+			System.out.println("'load <table> <CSV file> <separator> <NULL representation>' "
 					+ "to load table data from .csv file");
 			System.out.println("'quit' for quit");
 			System.out.println("Write SQL queries in a single line");

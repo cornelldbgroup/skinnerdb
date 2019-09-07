@@ -90,11 +90,12 @@ public class LoadCSV {
 	 * @param csvPath				path to source CSV file
 	 * @param table					table for which to parse data
 	 * @param data					store parsed data here
+	 * @param separator				sign separating fields in .csv file
 	 * @param nullRepresentation	representation of null values
 	 */
 	static void parseData(String csvPath, TableInfo table, 
-			List<ColumnData> data, String nullRepresentation) 
-					throws Exception {
+			List<ColumnData> data, char separator, 
+			String nullRepresentation) throws Exception {
 		// Extract column types for quick access
 		int nrColumns = table.columnNames.size();
 		SQLtype[] columnTypes = new SQLtype[nrColumns];
@@ -104,7 +105,8 @@ public class LoadCSV {
 			columnTypes[colCtr] = column.type;
 		}
 		// Open CSV file for reading
-		CSVReader csvReader = new CSVReader(new FileReader(csvPath));
+		CSVReader csvReader = new CSVReader(
+				new FileReader(csvPath), separator);
 		String[] inputFields;
 		int rowCtr = 0;
 		while ((inputFields = csvReader.readNext()) != null) {
@@ -139,25 +141,29 @@ public class LoadCSV {
 						IntData dateData = ((IntData)data.get(colCtr));
 						if (!isNull) {
 							Date date = Date.valueOf(field);
-							dateData.data[rowCtr] = (int)date.getTime()/1000;							
+							dateData.data[rowCtr] = (int)(
+									date.getTime()/(long)1000);							
 						}
 						break;
 					case TIME:
 						IntData timeData = ((IntData)data.get(colCtr));
 						if (!isNull) {
 							Time time = Time.valueOf(field);
-							timeData.data[rowCtr] = (int)time.getTime()/1000;
+							timeData.data[rowCtr] = (int)(
+									time.getTime()/(long)1000);
 						}
 						break;
 					case TIMESTAMP:
 						IntData tsData = ((IntData)data.get(colCtr));
 						if (!isNull) {
 							Timestamp ts = Timestamp.valueOf(field);
-							tsData.data[rowCtr] = (int)ts.getTime()/1000;
+							tsData.data[rowCtr] = (int)(
+									ts.getTime()/(long)1000);
 						}
 						break;
 					default:
-						throw new Exception("Unsupported type: " + columnTypes[colCtr]);
+						throw new Exception("Unsupported type: " + 
+								columnTypes[colCtr]);
 					}					
 				} catch (Exception e) {
 					System.err.println("Error parsing field " + field + 
@@ -203,11 +209,12 @@ public class LoadCSV {
 	 * 
 	 * @param csvPath				path to source CSV file
 	 * @param table					table whose content to override
+	 * @param separator				character separating CSV fields
 	 * @param nullRepresentation	how the null value is represented
 	 * @throws Exception
 	 */
 	public static void load(String csvPath, TableInfo table, 
-			String nullRepresentation) throws Exception {
+			char separator, String nullRepresentation) throws Exception {
 		System.out.println("Loading data for table " + table);
 		// Determine number of lines in CSV file
 		int cardinality = lineCount(csvPath);
@@ -215,7 +222,7 @@ public class LoadCSV {
 		// Create objects for holding data
 		List<ColumnData> data = initData(table, cardinality);
 		// Parse data from CSV file
-		parseData(csvPath, table, data, nullRepresentation);
+		parseData(csvPath, table, data, separator, nullRepresentation);
 		// Store column data to hard disk
 		storeData(table, data);
 		System.out.println("Stored table on disk");

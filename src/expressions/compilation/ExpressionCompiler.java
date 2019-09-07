@@ -186,7 +186,7 @@ public class ExpressionCompiler extends SkinnerVisitor {
 	 * involve adding a given number of months to a
 	 * date or timestamp expression.
 	 */
-	static Calendar calendar = Calendar.getInstance();
+	//static Calendar calendar = Calendar.getInstance();
 	/**
 	 * Initializes fields and writes expression evaluator boilerplate code.
 	 * 
@@ -1106,9 +1106,17 @@ public class ExpressionCompiler extends SkinnerVisitor {
 	 * @return			seconds since January 1st 1970 after addition
 	 */
 	public static int addMonths(int dateSecs, int months) {
-		calendar.setTimeInMillis(dateSecs * 1000l);
-		calendar.add(Calendar.MONTH, months);
-		return (int)(calendar.getTimeInMillis()/1000);
+		Calendar calendar = Calendar.getInstance();
+		try {
+			calendar.setTimeInMillis((long)dateSecs * (long)1000);
+			calendar.add(Calendar.MONTH, months);			
+		} catch (Exception e) {
+			System.out.println("dateSecs: " + dateSecs);
+			System.out.println("months: " + months);
+			System.out.println(calendar);
+			e.printStackTrace();
+		}
+		return (int)(calendar.getTimeInMillis()/(long)1000);
 	}
 	/**
 	 * Adds code to treat the addition or subtraction of a
@@ -1821,7 +1829,8 @@ public class ExpressionCompiler extends SkinnerVisitor {
 	 * @return				extracted time unit (integer)
 	 */
 	public static int extractFromDate(int dateSecs, int partID) {
-		calendar.setTimeInMillis(dateSecs * 1000l);
+		Calendar calendar = Calendar.getInstance();
+		calendar.setTimeInMillis((long)dateSecs * (long)1000);
 		return calendar.get(partID);
 	}
 

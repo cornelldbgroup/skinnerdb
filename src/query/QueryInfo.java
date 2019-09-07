@@ -259,7 +259,7 @@ public class QueryInfo {
 	 * @param tblAlias		add columns for this table alias
 	 * @param selectItems	add columns to this select item list
 	 */
-	void addAllColumns(String tblAlias, List<SelectExpressionItem> selectItems) {
+	void addAllColumns(String tblAlias, List<SelectItem> selectItems) {
 		String tableName = aliasToTable.get(tblAlias);
 		TableInfo tblInfo = CatalogManager.currentDB.nameToTable.get(tableName);
 		Table table = new Table(tblAlias);
@@ -274,11 +274,12 @@ public class QueryInfo {
 	void treatSelectClause() throws Exception {
 		// Expand SELECT clause into list of simple select items
 		// (i.e., resolve all wildcards).
-		List<SelectExpressionItem> selectItems = new ArrayList<>();
+		List<SelectItem> selectItems = new ArrayList<>();
 		// Expand SELECT clause into list of expressions
 		for (SelectItem selectItem : plainSelect.getSelectItems()) {
+			System.out.println(selectItem);
 			if (selectItem instanceof SelectExpressionItem) {
-				selectItems.add((SelectExpressionItem)selectItem);
+				selectItems.add(selectItem);
 			} else if (selectItem instanceof AllTableColumns) {
 				AllTableColumns allTblCols = (AllTableColumns)selectItem;
 				String aliasName = allTblCols.getTable().getName();
@@ -294,12 +295,12 @@ public class QueryInfo {
 		}
 		// Name items in select clause
 		Map<Expression, String> selectExprToAlias = 
-				SelectUtil.assignAliases(
-						plainSelect.getSelectItems());
+				SelectUtil.assignAliases(selectItems);
 		// Update fields associated with select clause
-		for (Entry<Expression, String> entry : selectExprToAlias.entrySet()) {
-			Expression expr = entry.getKey();
-			String alias = entry.getValue();
+		for (SelectItem selectItem : selectItems) {
+			SelectExpressionItem exprItem = (SelectExpressionItem)selectItem;
+			Expression expr = exprItem.getExpression();
+			String alias = selectExprToAlias.get(expr);
 			ExpressionInfo exprInfo = new ExpressionInfo(this, expr);
 			selectExpressions.add(exprInfo);
 			aliasToExpression.put(alias, exprInfo.finalExpression);
@@ -600,6 +601,7 @@ public class QueryInfo {
 	 */
 	public QueryInfo(PlainSelect plainSelect, boolean explain,
 			int plotAtMost, int plotEvery, String plotDir) throws Exception {
+		log("Input query: " + plainSelect);
 		this.plainSelect = plainSelect;
 		this.explain = explain;
 		this.plotAtMost = plotAtMost;
