@@ -555,7 +555,10 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 				// Add sub-query fields to scope
 				Set<ColumnRef> curScope = scopeCols.peek();
 				for (String subQueryCol : subqueryCols) {
-					curScope.add(new ColumnRef("", subQueryCol));
+					// Only allow fully qualified references -
+					// the only references should be generated
+					// during unnesting anyway.
+					//curScope.add(new ColumnRef("", subQueryCol));
 					curScope.add(new ColumnRef(alias, subQueryCol));
 				}					
 				// Schedule table containing sub-query result to 

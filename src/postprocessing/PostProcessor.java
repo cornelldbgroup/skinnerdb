@@ -474,12 +474,14 @@ public class PostProcessor {
 			Materialize.execute(NamingConfig.RESULT_NO_HAVING, 
 					noHavingResInfo.columnNames, havingGroups, 
 					null, resultRelName, tempResult);
-			// Filter order table to having groups
-			TableInfo noHavingOrderInfo = CatalogManager.getTable(
-					NamingConfig.ORDER_NO_HAVING);
-			Materialize.execute(NamingConfig.ORDER_NO_HAVING, 
-					noHavingOrderInfo.columnNames, havingGroups, 
-					null, NamingConfig.ORDER_NAME, true);
+			// Filter order table to having groups if applicable
+			if (hasOrder) {
+				TableInfo noHavingOrderInfo = CatalogManager.getTable(
+						NamingConfig.ORDER_NO_HAVING);
+				Materialize.execute(NamingConfig.ORDER_NO_HAVING, 
+						noHavingOrderInfo.columnNames, havingGroups, 
+						null, NamingConfig.ORDER_NAME, true);				
+			}
 		} else {
 			// No having clause specified - insert into final result table
 			addPerGroupSelTbl(query, context, resultRelName, tempResult);
@@ -545,9 +547,11 @@ public class PostProcessor {
 		if (hasLimit) {
 			// Add final result table in catalog
 			TableInfo preLimitInfo = CatalogManager.getTable(preLimitResult);
+			CatalogManager.updateStats(preLimitResult);
+			int preLimitCard = CatalogManager.getCardinality(preLimitResult);
 			// Fill with subset of pre-limit result rows
 			List<Integer> limitRows = new ArrayList<>();
-			int limit = query.limit;
+			int limit = Math.min(query.limit, preLimitCard);
 			for (int rowCtr=0; rowCtr<limit; ++rowCtr) {
 				limitRows.add(rowCtr);
 			}

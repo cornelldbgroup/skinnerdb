@@ -616,7 +616,7 @@ public class TypeVisitor extends SkinnerVisitor {
 		// Check for special case: columns representing 
 		// unnested sub-queries.
 		if (tableName.startsWith(NamingConfig.SUBQUERY_PRE)) {
-			outputScope.put(arg0, ExpressionScope.PER_GROUP);
+			outputScope.put(arg0, ExpressionScope.ANY_SCOPE);
 		} else {
 			outputScope.put(arg0, ExpressionScope.PER_TUPLE);
 		}

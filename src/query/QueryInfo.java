@@ -12,6 +12,7 @@ import catalog.CatalogManager;
 import catalog.info.ColumnInfo;
 import catalog.info.TableInfo;
 import config.LoggingConfig;
+import config.NamingConfig;
 import expressions.ExpressionInfo;
 import expressions.aggregates.AggInfo;
 import expressions.typing.ExpressionScope;
@@ -248,14 +249,18 @@ public class QueryInfo {
 		for (Entry<String, String> entry : aliasToTable.entrySet()) {
 			String alias = entry.getKey();
 			String table = entry.getValue();
-			for (ColumnInfo columnInfo : CatalogManager.currentDB.
-					nameToTable.get(table).nameToCol.values()) {
-				String columnName = columnInfo.name;
-				if (columnToAlias.containsKey(columnName)) {
-					columnToAlias.put(columnName, null);
-				} else {
-					columnToAlias.put(columnName, alias);
-				}
+			// Disallow implicit references for tables added during
+			// unnesting to represent the results of sub-queries.
+			if (!table.startsWith(NamingConfig.SUBQUERY_PRE)) {
+				for (ColumnInfo columnInfo : CatalogManager.currentDB.
+						nameToTable.get(table).nameToCol.values()) {
+					String columnName = columnInfo.name;
+					if (columnToAlias.containsKey(columnName)) {
+						columnToAlias.put(columnName, null);
+					} else {
+						columnToAlias.put(columnName, alias);
+					}
+				}				
 			}
 		}
 	}
@@ -478,8 +483,8 @@ public class QueryInfo {
 			exprsWithAggs.add(havingExpression);			
 		}
 		// Collect aggregates with additional information
-		for (ExpressionInfo selectExpr : selectExpressions) {
-			for (Function agg : selectExpr.aggregates) {
+		for (ExpressionInfo exprWithAgg: exprsWithAggs) {
+			for (Function agg : exprWithAgg.aggregates) {
 				aggregates.add(new AggInfo(this, agg));
 			}
 		}
