@@ -33,18 +33,19 @@ public class Materialize {
 	 * @param rowList		list of row indices to copy, can be null
 	 * @param rowBitSet		rows to copy in BitSet representation, can be null
 	 * @param targetRelName	name of target table
+	 * @param tempResult	whether to create temporary result relation
 	 * @throws Exception
 	 */
 	public static void execute(String sourceRelName, List<String> columnNames,
-			List<Integer> rowList, BitSet rowBitSet, String targetRelName) 
-					throws Exception {
+			List<Integer> rowList, BitSet rowBitSet, String targetRelName,
+			boolean tempResult) throws Exception {
 		// Generate references to source columns
 		List<ColumnRef> sourceColRefs = new ArrayList<ColumnRef>();
 		for (String columnName : columnNames) {
 			sourceColRefs.add(new ColumnRef(sourceRelName, columnName));
 		}
 		// Update catalog, inserting materialized table
-		TableInfo resultTable = new TableInfo(targetRelName, true);
+		TableInfo resultTable = new TableInfo(targetRelName, tempResult);
 		CatalogManager.currentDB.addTable(resultTable);
 		for (ColumnRef sourceColRef : sourceColRefs) {
 			// Add result column to result table, using type of source column

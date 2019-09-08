@@ -460,7 +460,18 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 			// Replace where clause by unnested version
 			plainSelect.setWhere(WhereUtil.conjunction(unnestedConjuncts));
 		}
-
+	}
+	/**
+	 * Unnest queries in HAVING clause if any.
+	 * 
+	 * @param plainSelect	treat HAVING clause of this query
+	 */
+	void treatHaving(PlainSelect plainSelect) {
+		Expression originalHaving = plainSelect.getHaving();
+		if (originalHaving != null) {
+			originalHaving.accept(this);
+			plainSelect.setHaving(exprStack.pop());
+		}
 	}
 	
 	@Override
@@ -480,6 +491,8 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 		resolveWildcards(plainSelect);
 		// Unnest sub-queries in WHERE clause
 		treatWhere(plainSelect);
+		// Unnest sub-queries in HAVING clause
+		treatHaving(plainSelect);
 		// Add unnested sub-queries to FROM clause if any
 		expandFrom(plainSelect);
 		// Tentatively add non-local predicates from

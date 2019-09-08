@@ -348,6 +348,94 @@ public class PostProcessor {
 		}
 	}
 	/**
+	 * Adds newly created relation containing for each item in
+	 * the SELECT clause of the input query a new column.
+	 * 
+	 * @param query			treat SELECT clause of this query			
+	 * @param context		execution context specifying mappings
+	 * @param targetRel		name of target relation to create
+	 * @param tempResult	whether target relation is temporary
+	 * @throws Exception
+	 */
+	static void addPerGroupSelTbl(QueryInfo query, Context context, 
+			String targetRel, boolean tempResult) throws Exception {
+		// Retrieve information on groups
+		ColumnRef groupRef = context.groupRef;
+		int nrGroups = context.nrGroups;
+		// Generate table holding result
+		TableInfo targetInfo = new TableInfo(targetRel, tempResult);
+		CatalogManager.currentDB.addTable(targetInfo);
+		// Treat items in SELECT clause
+		for (ExpressionInfo selInfo : query.selectExpressions) {
+			String colName = query.selectToAlias.get(selInfo);
+			addPerGroupCol(query, context, selInfo, groupRef, 
+					nrGroups, targetInfo, colName);
+		}
+		// Update statistics on result table
+		CatalogManager.updateStats(targetRel);
+	}
+	/**
+	 * Adds table containing for each item in the input query's
+	 * ORDER BY clause a column containing corresponding per-group
+	 * values.
+	 * 
+	 * @param query			treat ORDER BY clause of this query
+	 * @param context		execution context specifying mappings
+	 * @param targetRel		name of target relation to create
+	 * @param tempResult	whether target relation is temporary
+	 * @throws Exception
+	 */
+	static void addPerGroupOrderTbl(QueryInfo query, Context context, 
+			String targetRel, boolean tempResult) throws Exception {
+		// Retrieve information on groups
+		ColumnRef groupRef = context.groupRef;
+		int nrGroups = context.nrGroups;
+		// Generate table holding order by columns
+		TableInfo orderInfo = new TableInfo(targetRel, true);
+		CatalogManager.currentDB.addTable(orderInfo);
+		// Iterate over order by expressions
+		int nrOrderCols = 0;
+		for (ExpressionInfo expr : query.orderByExpressions) {
+			// Add corresponding result column
+			String colName = "orderby" + nrOrderCols;
+			++nrOrderCols;
+			addPerGroupCol(query, context, expr, groupRef, 
+					nrGroups, orderInfo, colName);
+		}
+	}
+	/**
+	 * Returns indices of groups (which is at the same time the
+	 * indices of rows containing corresponding results) that
+	 * satisfy the condition in the HAVING clause.
+	 * 
+	 * @param query			query whose HAVING clause to process
+	 * @param context		execution context containing column mappings
+	 * @param havingExpr	condition specified in HAVING clause
+	 * @return				indices of rows satisfying HAVING clause
+	 * @throws Exception
+	 */
+	static List<Integer> havingRows(QueryInfo query, 
+			Context context) throws Exception {
+		ExpressionInfo havingExpr = query.havingExpression;
+		// Generate table containing result of having expression
+		String havingTbl = NamingConfig.HAVING_TBL_NAME;
+		TableInfo havingInfo = new TableInfo(havingTbl, true);
+		CatalogManager.currentDB.addTable(havingInfo);
+		addPerGroupCol(query, context, havingExpr, context.groupRef, 
+				context.nrGroups, havingInfo, NamingConfig.HAVING_COL_NAME);
+		ColumnRef havingRef = new ColumnRef(havingTbl, 
+				NamingConfig.HAVING_COL_NAME);
+		// Collect indices of group passing the having predicate
+		int[] groupHaving = ((IntData)BufferManager.getData(havingRef)).data;
+		List<Integer> havingGroups = new ArrayList<>();
+		for (int groupCtr=0; groupCtr<context.nrGroups; ++groupCtr) {
+			if (groupHaving[groupCtr]>0) {
+				havingGroups.add(groupCtr);
+			}
+		}
+		return havingGroups;
+	}
+	/**
 	 * Treat a query that aggregates over groups of rows.
 	 * 
 	 * @param query			query to process
@@ -366,78 +454,51 @@ public class PostProcessor {
 		// Determine whether query has HAVING clause
 		ExpressionInfo havingExpr = query.havingExpression;
 		boolean hasHaving = havingExpr!=null;
-		// Prepare treatment of SELECT clause
-		ColumnRef groupRef = context.groupRef;
-		int nrGroups = context.nrGroups;
-		TableInfo result = null;
-		if (!hasHaving) {
-			result = new TableInfo(resultRelName, tempResult);
-			CatalogManager.currentDB.nameToTable.put(resultRelName, result);			
-		}
-		// Create table to hold intermediate result before applying
-		// HAVING clause (filtering out some groups).
-		String noHavingTbl = NamingConfig.RESULT_NO_HAVING;
-		TableInfo noHavingInfo = new TableInfo(noHavingTbl, true);
-		CatalogManager.currentDB.nameToTable.put(noHavingTbl, noHavingInfo);
-		// Treat items in SELECT clause
-		for (ExpressionInfo selInfo : query.selectExpressions) {
-			String colName = query.selectToAlias.get(selInfo);
-			addPerGroupCol(query, context, selInfo, groupRef, 
-					nrGroups, hasHaving?noHavingInfo:result, colName);
-		}
-		// Update statistics on result table
-		CatalogManager.updateStats(hasHaving?noHavingTbl:resultRelName);
-		// Does query have an ORDER BY clause?
-		if (!query.orderByExpressions.isEmpty()) {
-			// Generate table holding order by columns
-			String orderTbl = NamingConfig.ORDER_NAME;
-			TableInfo orderInfo = new TableInfo(orderTbl, true);
-			CatalogManager.currentDB.nameToTable.put(orderTbl, orderInfo);
-			// Iterate over order by expressions
-			int nrOrderCols = 0;
-			for (ExpressionInfo expr : query.orderByExpressions) {
-				// Add corresponding result column
-				String colName = "orderby" + nrOrderCols;
-				++nrOrderCols;
-				addPerGroupCol(query, context, expr, groupRef, 
-						nrGroups, orderInfo, colName);
-			}
-			// Collect columns to sort
-			List<ColumnRef> orderRefs = new ArrayList<>();
-			for (int orderCtr=0; orderCtr<nrOrderCols; ++orderCtr) {
-				orderRefs.add(new ColumnRef(orderTbl, "orderby" + orderCtr));
-			}
-			// Sort result table
-			OrderBy.execute(orderRefs, query.orderByAsc, 
-					hasHaving?noHavingTbl:resultRelName);
-		}
-		// Apply having clause if any - TODO: treat having first
+		// Determine whether query has ORDER BY clause
+		boolean hasOrder = !query.orderByExpressions.isEmpty();
+		// Different treatment for queries with/without HAVING
 		if (hasHaving) {
-			// Generate table containing result of having expression
-			String havingTbl = NamingConfig.HAVING_TBL_NAME;
-			TableInfo havingInfo = new TableInfo(havingTbl, true);
-			CatalogManager.currentDB.nameToTable.put(havingTbl, havingInfo);
-			// Generate column containing result of having expression
-			// TODO: we assume that HAVING clause refers to aggregates.
-			String aggRel = NamingConfig.AGG_TBL_NAME;
-			String havingCol = NamingConfig.HAVING_COL_NAME;
-			ColumnRef havingRef = new ColumnRef(havingTbl, havingCol);
-			MapRows.execute(aggRel, havingExpr, context.columnMapping, 
-					context.aggToData, context.groupRef, context.nrGroups, 
-					havingRef);
-			// Collect indices of group passing the having predicate
-			int[] groupHaving = ((IntData)BufferManager.getData(havingRef)).data;
-			List<Integer> havingGroups = new ArrayList<>();
-			for (int groupCtr=0; groupCtr<nrGroups; ++groupCtr) {
-				if (groupHaving[groupCtr]>0) {
-					havingGroups.add(groupCtr);
-				}
+			// Having clause specified - insertinto intermediate result table
+			addPerGroupSelTbl(query, context, 
+					NamingConfig.RESULT_NO_HAVING, true);
+			// Get groups satisfying HAVING clause
+			List<Integer> havingGroups = havingRows(query, context);
+			// Prepare sorting if ORDER BY clause is specified
+			if (hasOrder) {
+				addPerGroupOrderTbl(query, context, 
+						NamingConfig.ORDER_NO_HAVING, true);
 			}
-			// Materialize groups satisfying HAVING clause predicate
-			List<String> columnNames = new ArrayList<>();
-			columnNames.addAll(noHavingInfo.columnNames);
-			Materialize.execute(noHavingTbl, columnNames, 
-					havingGroups, null, resultRelName);
+			// Filter result to having groups
+			TableInfo noHavingResInfo = CatalogManager.getTable(
+					NamingConfig.RESULT_NO_HAVING);
+			Materialize.execute(NamingConfig.RESULT_NO_HAVING, 
+					noHavingResInfo.columnNames, havingGroups, 
+					null, resultRelName, tempResult);
+			// Filter order table to having groups
+			TableInfo noHavingOrderInfo = CatalogManager.getTable(
+					NamingConfig.ORDER_NO_HAVING);
+			Materialize.execute(NamingConfig.ORDER_NO_HAVING, 
+					noHavingOrderInfo.columnNames, havingGroups, 
+					null, NamingConfig.ORDER_NAME, true);
+		} else {
+			// No having clause specified - insert into final result table
+			addPerGroupSelTbl(query, context, resultRelName, tempResult);
+			// Prepare sorting if ORDER BY clause is specified
+			if (hasOrder) {
+				// Add table containing values for order-by items
+				addPerGroupOrderTbl(query, context, 
+						NamingConfig.ORDER_NAME, true);				
+			}
+		}
+		// Sort result table if applicable
+		if (hasOrder) {
+			String orderTbl = NamingConfig.ORDER_NAME;
+			TableInfo orderInfo = CatalogManager.getTable(orderTbl);
+			List<ColumnRef> orderRefs = new ArrayList<>();
+			for (String orderCol : orderInfo.columnNames) {
+				orderRefs.add(new ColumnRef(orderTbl, orderCol));
+			}
+			OrderBy.execute(orderRefs, query.orderByAsc, resultRelName);			
 		}
 	}
 	/**
@@ -492,7 +553,7 @@ public class PostProcessor {
 			}
 			operators.Materialize.execute(preLimitResult, 
 					preLimitInfo.columnNames, limitRows, null, 
-					resultRel);
+					resultRel, true);
 		}
 		// Update result table statistics
 		CatalogManager.updateStats(resultRel);

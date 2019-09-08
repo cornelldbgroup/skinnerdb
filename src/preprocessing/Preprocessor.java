@@ -213,7 +213,8 @@ public class Preprocessor {
 					filter(c -> c.aliasName.equals(alias)).
 					map(c -> c.columnName).collect(Collectors.toList());
 			String targetRelName = NamingConfig.IDX_FILTERED_PRE + alias;
-			Materialize.execute(table, requiredCols, rows, null, targetRelName);
+			Materialize.execute(table, requiredCols, rows, 
+					null, targetRelName, true);
 			// Update pre-processing summary
 			for (String colName : requiredCols) {
 				ColumnRef queryRef = new ColumnRef(alias, colName);
@@ -254,7 +255,7 @@ public class Preprocessor {
 			columnNames.add(colRef.columnName);
 		}
 		Materialize.execute(tableName, columnNames, 
-				satisfyingRows, null, filteredName);
+				satisfyingRows, null, filteredName, true);
 		// Update pre-processing summary
 		for (ColumnRef srcRef : requiredCols) {
 			String columnName = srcRef.columnName;

@@ -8,6 +8,7 @@ import java.util.Map;
 import buffer.BufferManager;
 import catalog.CatalogManager;
 import catalog.info.ColumnInfo;
+import config.NamingConfig;
 import expressions.SkinnerVisitor;
 import net.sf.jsqlparser.expression.AllComparisonExpression;
 import net.sf.jsqlparser.expression.AnalyticExpression;
@@ -612,7 +613,13 @@ public class TypeVisitor extends SkinnerVisitor {
 							+ "was not resolved"));
 		}
 		outputType.put(arg0, column.type);
-		outputScope.put(arg0, ExpressionScope.PER_TUPLE);
+		// Check for special case: columns representing 
+		// unnested sub-queries.
+		if (tableName.startsWith(NamingConfig.SUBQUERY_PRE)) {
+			outputScope.put(arg0, ExpressionScope.PER_GROUP);
+		} else {
+			outputScope.put(arg0, ExpressionScope.PER_TUPLE);
+		}
 	}
 
 	@Override

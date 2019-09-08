@@ -65,6 +65,11 @@ public class NamingConfig {
 	 */
 	public static final String RESULT_NO_HAVING = "nohavingresult.";
 	/**
+	 * Name of table containing columns to order by before
+	 * filtering groups via the HAVING clause.
+	 */
+	public static final String ORDER_NO_HAVING = "nohavingorder.";
+	/**
 	 * Name of table containing result of evaluating having clause.
 	 */
 	public static final String HAVING_TBL_NAME = "having.";
