@@ -1,6 +1,9 @@
 package multiquery;
 
+import catalog.CatalogManager;
 import expressions.ExpressionInfo;
+import joining.plan.JoinOrder;
+import joining.result.ResultTuple;
 import query.QueryInfo;
 import utils.Pair;
 
@@ -13,11 +16,15 @@ public class GlobalContext {
      */
     public static HashMap<Pair<Integer, Integer>, Set<Integer>> commonJoins;
 
+    public static HashMap<String, Integer> tableOrder;
+
     public static boolean[] queryStatus;
 
     public static int nrQuery = 0;
 
     public static int firstUnfinishedNum  = 0;
+
+    public static Map<JoinOrder, Set<ResultTuple>> joinedResultTuples = new HashMap<>();
 
 //    For now, we don't consider share binary predicates
 //    public static void initCommonUnary(List<QueryInfo> queries) {
@@ -64,21 +71,24 @@ public class GlobalContext {
 //        }
 //    }
 
-    public static void initCommonJoin(List<QueryInfo> queries) {
+    public static void initCommonJoin(QueryInfo[] queries) {
         commonJoins = new HashMap<>();
-        nrQuery = queries.size();
+        tableOrder = new HashMap<>();
+        nrQuery = queries.length;
+        int tableGlobalIdx = 0;
+        for (String tableName : CatalogManager.currentDB.nameToTable.keySet()) {
+            tableOrder.put(tableName, tableGlobalIdx);
+            tableGlobalIdx++;
+         }
         //default status is finish
         queryStatus = new boolean[nrQuery];
         for (QueryInfo query : queries) {
-            List<ExpressionInfo> unaryExpressions = query.unaryPredicates;
             Set<Integer> unaryTables = new HashSet<>();
             //tables which are involved in unary predicates
-            for(ExpressionInfo unaryExpression : unaryExpressions) {
-                for(ExpressionInfo expressionInfo: query.unaryPredicates) {
-                    unaryTables.addAll(expressionInfo.aliasIdxMentioned);
-                }
+            for(ExpressionInfo expressionInfo: query.unaryPredicates) {
+                unaryTables.addAll(expressionInfo.aliasIdxMentioned);
             }
-
+            //join tables
             for(Set<Integer> joins: query.joinedIndices) {
                 Pair<Integer, Integer> pair = new Pair<Integer, Integer>();
                 int i = 0;
@@ -90,13 +100,19 @@ public class GlobalContext {
                     i++;
                 }
                 if(!unaryTables.contains(pair.getFirst()) && !unaryTables.contains(pair.getSecond())) {
-                    commonJoins.putIfAbsent(pair, new HashSet<Integer>());
-                    commonJoins.get(pair).add(query.queryNum);
+                    String table1 = query.aliasToTable.get(query.aliases[pair.getFirst()]);
+                    String table2 = query.aliasToTable.get(query.aliases[pair.getSecond()]);
+                    int realIdx1 = tableOrder.get(table1);
+                    int realIdx2 = tableOrder.get(table2);
+                    Pair readIdxPair = new Pair<>(realIdx1, realIdx2);
+                    commonJoins.putIfAbsent(readIdxPair, new HashSet<Integer>());
+                    commonJoins.get(readIdxPair).add(query.queryNum);
                 }
             }
         }
         System.out.println("reuse join candidates:");
-        commonJoins.forEach((i, j) -> System.out.println("table:" + i.getFirst() + ", join table" + i.getSecond() + ", involved queries" + j.toString()));
+        commonJoins.forEach((i, j) -> System.out.println("table:" + i.getFirst() + " join table " + i.getSecond() + ", involved queries" + j.toString()));
+        tableOrder.forEach((i, j) -> System.out.println(i +", " + j));
     }
 
     public static void aheadFirstUnfinish() {

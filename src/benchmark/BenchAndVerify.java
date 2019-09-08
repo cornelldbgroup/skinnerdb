@@ -97,7 +97,7 @@ public class BenchAndVerify {
 					false, -1, -1, null);
 			Context preSummary = Preprocessor.process(query);
 			long preMillis = System.currentTimeMillis() - startMillis;
-			JoinProcessor.process(query, preSummary);
+			//JoinProcessor.process(query, preSummary);
 			long postStartMillis = System.currentTimeMillis();
 			PostProcessor.process(query, preSummary);
 			long postMillis = System.currentTimeMillis() - postStartMillis;

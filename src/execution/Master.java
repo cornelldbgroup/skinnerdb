@@ -36,7 +36,7 @@ public class Master {
 		// Filter, projection, and indexing for join phase
 		Context context = Preprocessor.process(query);
 		// Join filtered tables
-		JoinProcessor.process(query, context);
+		//JoinProcessor.process(query, context);
 		// Aggregation, grouping, and sorting if required
 		PostProcessor.process(query, context);
 	}

@@ -13,6 +13,7 @@ import joining.plan.JoinOrder;
 import joining.plan.LeftDeepPlan;
 import joining.progress.ProgressTracker;
 import joining.progress.State;
+import multiquery.GlobalContext;
 import preprocessing.Context;
 import query.QueryInfo;
 import statistics.JoinStats;
@@ -125,8 +126,14 @@ public class OldJoin extends MultiWayJoin {
     			return 1;
     		}
     	}
+
     	// Lookup or generate left-deep query plan
         JoinOrder joinOrder = new JoinOrder(order);
+        //check whether there are reused joins
+        if(GlobalContext.joinedResultTuples.containsKey(joinOrder)) {
+            //recovery the join result
+        }
+
         LeftDeepPlan plan = planCache.get(joinOrder);
         if (plan == null) {
             plan = new LeftDeepPlan(query, preSummary, predToEval, order);
@@ -212,80 +219,84 @@ public class OldJoin extends MultiWayJoin {
         // Execute join order until budget depleted or all input finished -
         // at each iteration start, tuple indices contain next tuple
         // combination to look at.
-        while (remainingBudget > 0 && joinIndex >= 0) {
-        	++JoinStats.nrIterations;
-        	//log("Offsets:\t" + Arrays.toString(offsets));
-        	//log("Indices:\t" + Arrays.toString(tupleIndices));
-            // Get next table in join order
-            int nextTable = plan.joinOrder.order[joinIndex];
-            int nextCardinality = cardinalities[nextTable];
-            //System.out.println("index:"+joinIndex+", next table:"+nextTable);
-            // Integrate table offset
-            tupleIndices[nextTable] = Math.max(
-                    offsets[nextTable], tupleIndices[nextTable]);
-            // Evaluate all applicable predicates on joined tuples
-            KnaryBoolEval unaryPred = unaryPreds[nextTable];
-            if ((PreConfig.PRE_FILTER || unaryPred == null || 
-            		unaryPred.evaluate(tupleIndices)>0) &&
-            		evaluateAll(applicablePreds.get(joinIndex), tupleIndices)) {
-            	++JoinStats.nrTuples;
-                // Do we have a complete result row?
-                if(joinIndex == plan.joinOrder.order.length - 1) {
-                    // Complete result row -> add to result
-                	++nrResultTuples;
-                    result.add(tupleIndices);
-                    tupleIndices[nextTable] = proposeNext(
-                    		joinIndices.get(joinIndex), nextTable, tupleIndices);
-                    // Have reached end of current table? -> we backtrack.
-                    while (tupleIndices[nextTable] >= nextCardinality) {
-                        tupleIndices[nextTable] = 0;
-                        --joinIndex;
-                        if (joinIndex < 0) {
-                            break;
-                        }
-                        nextTable = plan.joinOrder.order[joinIndex];
-                        nextCardinality = cardinalities[nextTable];
-                        tupleIndices[nextTable] += 1;
-                    }
-                } else {
-                    // No complete result row -> complete further
-                    joinIndex++;
-                    //System.out.println("Current Join Index2:"+ joinIndex);
-                }
-            } else {
-                // At least one of applicable predicates evaluates to false -
-                // try next tuple in same table.
-                tupleIndices[nextTable] = proposeNext(
-                		joinIndices.get(joinIndex), nextTable, tupleIndices);
-                // Have reached end of current table? -> we backtrack.
-                while (tupleIndices[nextTable] >= nextCardinality) {
-                    tupleIndices[nextTable] = 0;
-                    --joinIndex;
-                    if (joinIndex < 0) {
-                        break;
-                    }
-                    nextTable = plan.joinOrder.order[joinIndex];
-                    nextCardinality = cardinalities[nextTable];
-                    tupleIndices[nextTable] += 1;
-                }
-            }
-            --remainingBudget;
+        for(int i = 0; i < plan.joinOrder.nrJoinedTables ;i++) {
+            //change the multi-way join to produce the intermediate result
         }
-        // Store tuple index deltas used to calculate reward
-        for (int tableCtr = 0; tableCtr < nrTables; ++tableCtr) {
-            int start = Math.max(offsets[tableCtr], state.tupleIndices[tableCtr]);
-            int end = Math.max(offsets[tableCtr], tupleIndices[tableCtr]);
-            tupleIndexDelta[tableCtr] = end - start;
-            if (joinIndex == -1 && tableCtr == plan.joinOrder.order[0] &&
-                    tupleIndexDelta[tableCtr] <= 0) {
-                tupleIndexDelta[tableCtr] = cardinalities[tableCtr] - start;
-            }
-        }
-        // Save final state
-        state.lastIndex = joinIndex;
-        for (int tableCtr = 0; tableCtr < nrTables; ++tableCtr) {
-            state.tupleIndices[tableCtr] = tupleIndices[tableCtr];
-        }
+
+//        while (remainingBudget > 0 && joinIndex >= 0) {
+//        	++JoinStats.nrIterations;
+//        	//log("Offsets:\t" + Arrays.toString(offsets));
+//        	//log("Indices:\t" + Arrays.toString(tupleIndices));
+//            // Get next table in join order
+//            int nextTable = plan.joinOrder.order[joinIndex];
+//            int nextCardinality = cardinalities[nextTable];
+//            //System.out.println("index:"+joinIndex+", next table:"+nextTable);
+//            // Integrate table offset
+//            tupleIndices[nextTable] = Math.max(
+//                    offsets[nextTable], tupleIndices[nextTable]);
+//            // Evaluate all applicable predicates on joined tuples
+//            KnaryBoolEval unaryPred = unaryPreds[nextTable];
+//            if ((PreConfig.PRE_FILTER || unaryPred == null ||
+//            		unaryPred.evaluate(tupleIndices)>0) &&
+//            		evaluateAll(applicablePreds.get(joinIndex), tupleIndices)) {
+//            	++JoinStats.nrTuples;
+//                // Do we have a complete result row?
+//                if(joinIndex == plan.joinOrder.order.length - 1) {
+//                    // Complete result row -> add to result
+//                	++nrResultTuples;
+//                    result.add(tupleIndices);
+//                    tupleIndices[nextTable] = proposeNext(
+//                    		joinIndices.get(joinIndex), nextTable, tupleIndices);
+//                    // Have reached end of current table? -> we backtrack.
+//                    while (tupleIndices[nextTable] >= nextCardinality) {
+//                        tupleIndices[nextTable] = 0;
+//                        --joinIndex;
+//                        if (joinIndex < 0) {
+//                            break;
+//                        }
+//                        nextTable = plan.joinOrder.order[joinIndex];
+//                        nextCardinality = cardinalities[nextTable];
+//                        tupleIndices[nextTable] += 1;
+//                    }
+//                } else {
+//                    // No complete result row -> complete further
+//                    joinIndex++;
+//                    //System.out.println("Current Join Index2:"+ joinIndex);
+//                }
+//            } else {
+//                // At least one of applicable predicates evaluates to false -
+//                // try next tuple in same table.
+//                tupleIndices[nextTable] = proposeNext(
+//                		joinIndices.get(joinIndex), nextTable, tupleIndices);
+//                // Have reached end of current table? -> we backtrack.
+//                while (tupleIndices[nextTable] >= nextCardinality) {
+//                    tupleIndices[nextTable] = 0;
+//                    --joinIndex;
+//                    if (joinIndex < 0) {
+//                        break;
+//                    }
+//                    nextTable = plan.joinOrder.order[joinIndex];
+//                    nextCardinality = cardinalities[nextTable];
+//                    tupleIndices[nextTable] += 1;
+//                }
+//            }
+//            --remainingBudget;
+//        }
+//        // Store tuple index deltas used to calculate reward
+//        for (int tableCtr = 0; tableCtr < nrTables; ++tableCtr) {
+//            int start = Math.max(offsets[tableCtr], state.tupleIndices[tableCtr]);
+//            int end = Math.max(offsets[tableCtr], tupleIndices[tableCtr]);
+//            tupleIndexDelta[tableCtr] = end - start;
+//            if (joinIndex == -1 && tableCtr == plan.joinOrder.order[0] &&
+//                    tupleIndexDelta[tableCtr] <= 0) {
+//                tupleIndexDelta[tableCtr] = cardinalities[tableCtr] - start;
+//            }
+//        }
+//        // Save final state
+//        state.lastIndex = joinIndex;
+//        for (int tableCtr = 0; tableCtr < nrTables; ++tableCtr) {
+//            state.tupleIndices[tableCtr] = tupleIndices[tableCtr];
+//        }
     }
     @Override
     public boolean isFinished() {

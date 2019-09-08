@@ -29,25 +29,30 @@ public class MultiQueryBenchmark {
         //Indexer.indexAll(StartupConfig.INDEX_CRITERIA);
         String queryDir = "/home/jw2544/Documents/multi-query/imdb/queries/";
         Map<String, PlainSelect> nameToQuery = BenchUtil.readAllQueries(queryDir);
-        List<QueryInfo> queries = new ArrayList<>();
-        List<Context> preSummaries = new ArrayList<>();
+        int nrQueries = nameToQuery.size();
+        QueryInfo[] queries = new QueryInfo[nrQueries];
+        Context[] preSummaries = new Context[nrQueries];
         int queryNum = 0;
         for (Map.Entry<String, PlainSelect> entry : nameToQuery.entrySet()) {
             QueryInfo query = new QueryInfo(queryNum, entry.getValue(),
                     false, -1, -1, null);
-            queries.add(query);
+            queries[queryNum] = query;
+            preSummaries[queryNum] = Preprocessor.process(query);
             queryNum++;
-            //Maybe wrong, will change it later
-            preSummaries.add(Preprocessor.process(query));
         }
         GlobalContext.initCommonJoin(queries);
+        JoinProcessor.process(queries, preSummaries);
+        /*
         while(GlobalContext.firstUnfinishedNum > 0) {
             //we don't enable preprocessing, preprocessing is also on the UCT search
             int triedQuery = GlobalContext.firstUnfinishedNum;
             JoinProcessor.process(queries.get(triedQuery), preSummaries.get(triedQuery));
 
+            if(queries)
             GlobalContext.aheadFirstUnfinish();
         }
+        */
+
         //may be apply post-processing
     }
 
