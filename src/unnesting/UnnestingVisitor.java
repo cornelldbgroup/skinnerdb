@@ -80,10 +80,10 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 	 */
 	public Stack<List<String>> subqueryFields = new Stack<>();
 	/**
-	 * List of references to tables containing sub-query results
-	 * that need to be added to FROM clause.
+	 * Contains on top tables containing sub-query results
+	 * that need to be added to FROM clause of current query.
 	 */
-	public Stack<Table> addToThisFrom = new Stack<>();
+	public Stack<List<Table>> addToFrom = new Stack<>();
 	/**
 	 * List of correlated predicates that need to be added to
 	 * WHERE clause (since they cannot be resolved in inner
@@ -268,8 +268,8 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 	 * @param plainSelect	expand this query's FROM clause
 	 */
 	void expandFrom(PlainSelect plainSelect) {
-		while (!addToThisFrom.isEmpty()) {
-			Table toAdd = addToThisFrom.pop();
+		List<Table> addToThisFrom = addToFrom.peek();
+		for (Table toAdd : addToThisFrom) {
 			FromItem firstItem = plainSelect.getFromItem();
 			if (firstItem == null) {
 				plainSelect.setFromItem(toAdd);
@@ -470,6 +470,8 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 		scopeCols.push(newScopeCols);
 		Map<String, List<String>> curAliasToCols = new HashMap<>();
 		aliasToCols.push(curAliasToCols);
+		List<Table> curAddToFrom = new ArrayList<>();
+		addToFrom.push(curAddToFrom);
 		// Treat base tables in FROM clause
 		treatSimpleFrom(plainSelect);
 		// Treat sub-queries in FROM clause
@@ -491,6 +493,10 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 		registerResultCols(plainSelect);
 		// Remove new outer scope
 		scopeCols.pop();
+		// Remove alias to column mapping
+		aliasToCols.pop();
+		// Remove tables to add to from clause
+		addToFrom.pop();
 	}
 
 	@Override
@@ -511,7 +517,6 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 	 */
 	@Override
 	public void visit(SubSelect subSelect) {
-		System.out.println("Treating subselect: " + subSelect);
 		// Check for alias - should not have any
 		if (subSelect.getAlias() != null) {
 			sqlExceptions.add(new SQLexception("Error -"
@@ -542,8 +547,7 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 				}					
 				// Schedule table containing sub-query result to 
 				// be added to FROM clause.
-				addToThisFrom.push(resultTable);
-				System.out.println("addToThisFrom: " + addToThisFrom);
+				addToFrom.peek().add(resultTable);
 			} else {
 				sqlExceptions.add(new SQLexception("Error - "
 						+ "unsupported sub-query type: "

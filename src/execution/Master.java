@@ -66,6 +66,7 @@ public class Master {
 			System.out.println(unnestor.unnestedQueries);
 		}
 		// Process sub-queries in order
+		Set<String> subQueryResults = new HashSet<>();
 		int nrSubQueries = unnestor.unnestedQueries.size();
 		for (int subQueryCtr=0; subQueryCtr<nrSubQueries; ++subQueryCtr) {
 			// Retrieve next sub-query
@@ -85,10 +86,9 @@ public class Master {
 			PostProcessor.process(subQueryInfo, context, 
 					resultRel, tempResult);
 			// Clean up intermediate results except result table
-			Set<String> tablesToKeep = new HashSet<>();
-			tablesToKeep.add(resultRel);
-			BufferManager.unloadTempData(tablesToKeep);
-			CatalogManager.removeTempTables(tablesToKeep);
+			subQueryResults.add(resultRel);
+			BufferManager.unloadTempData(subQueryResults);
+			CatalogManager.removeTempTables(subQueryResults);
 		}
 	}
 }
