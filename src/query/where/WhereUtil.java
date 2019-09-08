@@ -3,6 +3,7 @@ package query.where;
 import java.util.List;
 
 import net.sf.jsqlparser.expression.Expression;
+import net.sf.jsqlparser.expression.Parenthesis;
 import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
 
 /**
@@ -22,7 +23,16 @@ public class WhereUtil {
 	 */
 	public static void extractConjuncts(Expression condition, 
 			List<Expression> conjuncts) {
-		if (condition instanceof AndExpression) {
+		if (condition instanceof Parenthesis) {
+			Parenthesis parenthesis = (Parenthesis)condition;
+			Expression inParen = parenthesis.getExpression();
+			// Break up nested AND expression if possible
+			if (inParen instanceof AndExpression) {
+				extractConjuncts(parenthesis.getExpression(), conjuncts);
+			} else {
+				conjuncts.add(condition);
+			}
+		} else if (condition instanceof AndExpression) {
 			AndExpression and = (AndExpression)condition;
 			extractConjuncts(and.getLeftExpression(), conjuncts);
 			extractConjuncts(and.getRightExpression(), conjuncts);

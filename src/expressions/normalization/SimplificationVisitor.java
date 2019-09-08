@@ -3,7 +3,10 @@ package expressions.normalization;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 
 import buffer.BufferManager;
 import data.Dictionary;
@@ -74,6 +77,7 @@ import net.sf.jsqlparser.expression.operators.relational.RegExpMySQLOperator;
 import net.sf.jsqlparser.schema.Column;
 import net.sf.jsqlparser.statement.create.table.ColDataType;
 import net.sf.jsqlparser.statement.select.SubSelect;
+import query.where.WhereUtil;
 
 /**
  * Rewrites the original SQL query into a simplified query.
@@ -363,6 +367,34 @@ public class SimplificationVisitor extends SkinnerVisitor {
 			opStack.push(new AndExpression(op1, op2));
 		}
 	}
+	/**
+	 * Separates a list of input expressions into expressions
+	 * that match one element in another given list of expressions
+	 * (textual matching) and the remaining elements.
+	 * 
+	 * @param inputs		triage those expressions
+	 * @param comparisons	compare input against those expressions
+	 * @param matches		will contain input matching comparison list
+	 * @param noMatches		will contain input not matching comparison
+	 */
+	void triageByComparison(List<Expression> inputs, List<Expression> comparisons, 
+			List<Expression> matches, List<Expression> nonMatches) {
+		// Prepare fast string comparisons
+		Set<String> comparisonStrs = new HashSet<>();
+		for (Expression comparison : comparisons) {
+			comparisonStrs.add(comparison.toString());
+		}
+		// Triage input expressions
+		Iterator<Expression> inputIter = inputs.iterator();
+		while (inputIter.hasNext()) {
+			Expression input = inputIter.next();
+			if (comparisonStrs.contains(input.toString())) {
+				matches.add(input);
+			} else {
+				nonMatches.add(input);
+			}
+		}
+	}
 
 	@Override
 	public void visit(OrExpression arg0) {
@@ -379,7 +411,44 @@ public class SimplificationVisitor extends SkinnerVisitor {
 		} else if (op1 instanceof NullValue && op2 instanceof NullValue) {
 			opStack.push(new NullValue());
 		} else {
-			opStack.push(new OrExpression(op1, op2));
+			// Check whether we can extract common conjuncts
+			// that appear on both sides of disjunction.
+			List<Expression> leftConjuncts = new ArrayList<>();
+			List<Expression> rightConjuncts = new ArrayList<>();
+			WhereUtil.extractConjuncts(op1, leftConjuncts);
+			WhereUtil.extractConjuncts(op2, rightConjuncts);
+			// Triage conjuncts into common and unique expressions
+			List<Expression> leftUnique = new ArrayList<>();
+			List<Expression> leftCommon = new ArrayList<>();
+			List<Expression> rightUnique = new ArrayList<>();
+			List<Expression> rightCommon = new ArrayList<>();
+			triageByComparison(leftConjuncts, rightConjuncts, 
+					leftCommon, leftUnique);
+			triageByComparison(rightConjuncts, leftConjuncts, 
+					rightCommon, rightUnique);
+			// Did we find common expressions?
+			if (leftCommon.isEmpty()) {
+				opStack.push(new OrExpression(op1, op2));				
+			} else {
+				Expression andLeft = WhereUtil.conjunction(leftUnique);
+				Expression andRight = WhereUtil.conjunction(rightUnique);
+				// Create conjunction between non-unique predicates,
+				// simplify if possible.
+				Expression newOr = null;
+				if (andLeft != null && andRight != null) {
+					newOr = new OrExpression(andLeft, andRight);
+				} else if (andLeft == null && andRight != null) {
+					newOr = andRight;
+				} else if (andLeft != null && andRight == null) {
+					newOr = andLeft;
+				}
+				// Create conjunction between unique and non-uniqe
+				// parts, simplify if possible.
+				Expression andCommon = WhereUtil.conjunction(leftCommon);
+				Expression newAnd = newOr==null?andCommon:
+						new AndExpression(andCommon, newOr);
+				opStack.push(newAnd);
+			}
 		}
 	}
 
@@ -516,7 +585,7 @@ public class SimplificationVisitor extends SkinnerVisitor {
 			}
 		} else {
 			System.err.println("Unsupported IN expression");
-		}		
+		}
 	}
 
 	@Override

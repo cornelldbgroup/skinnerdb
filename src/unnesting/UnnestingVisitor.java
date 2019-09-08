@@ -20,6 +20,8 @@ import net.sf.jsqlparser.expression.Alias;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
 import net.sf.jsqlparser.expression.operators.relational.EqualsTo;
+import net.sf.jsqlparser.expression.operators.relational.InExpression;
+import net.sf.jsqlparser.expression.operators.relational.ItemsList;
 import net.sf.jsqlparser.schema.Column;
 import net.sf.jsqlparser.schema.Table;
 import net.sf.jsqlparser.statement.select.AllColumns;
@@ -418,6 +420,48 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 			}
 		}
 	}
+	/**
+	 * Unnests WHERE clause of input query.
+	 * 
+	 * @param plainSelect	rewrite WHERE clause of this query
+	 */
+	void treatWhere(PlainSelect plainSelect) {
+		Expression originalWhere = plainSelect.getWhere();
+		if (originalWhere != null) {
+			// Decompose where clause into conjuncts
+			List<Expression> conjuncts = new ArrayList<>();
+			WhereUtil.extractConjuncts(originalWhere, conjuncts);
+			// Rewrite each conjunct separately
+			List<Expression> unnestedConjuncts = new ArrayList<>();
+			for (Expression conjunct : conjuncts) {
+				// Treat special case: expression in sub-query result
+				if (conjunct instanceof InExpression) {
+					InExpression inExpr = (InExpression)conjunct;
+					Expression left = inExpr.getLeftExpression();
+					ItemsList right = inExpr.getRightItemsList();
+					if (left != null && !inExpr.isNot() && 
+							right instanceof SubSelect) {
+						left.accept(this);
+						Expression unnestedLeft = exprStack.pop();
+						SubSelect rightSubSel = (SubSelect)right;
+						rightSubSel.accept(this);
+						Expression unnestedRight = exprStack.pop();
+						EqualsTo unnestedConjunct = new EqualsTo();
+						unnestedConjunct.setLeftExpression(unnestedLeft);
+						unnestedConjunct.setRightExpression(unnestedRight);
+						unnestedConjuncts.add(unnestedConjunct);
+						continue;
+					}
+				}
+				// Default unnesting strategy
+				conjunct.accept(this);
+				unnestedConjuncts.add(exprStack.pop());
+			}
+			// Replace where clause by unnested version
+			plainSelect.setWhere(WhereUtil.conjunction(unnestedConjuncts));
+		}
+
+	}
 	
 	@Override
 	public void visit(PlainSelect plainSelect) {
@@ -433,13 +477,7 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 		// Resolve wildcard in SELECT clause if any
 		resolveWildcards(plainSelect);
 		// Unnest sub-queries in WHERE clause
-		Expression originalWhere = plainSelect.getWhere();
-		if (originalWhere != null) {
-			// Replace where clause by unnested version
-			originalWhere.accept(this);
-			Expression newWhere = exprStack.pop();
-			plainSelect.setWhere(newWhere);
-		}
+		treatWhere(plainSelect);
 		// Add unnested sub-queries to FROM clause if any
 		expandFrom(plainSelect);
 		// Tentatively add non-local predicates from
@@ -473,6 +511,7 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 	 */
 	@Override
 	public void visit(SubSelect subSelect) {
+		System.out.println("Treating subselect: " + subSelect);
 		// Check for alias - should not have any
 		if (subSelect.getAlias() != null) {
 			sqlExceptions.add(new SQLexception("Error -"
@@ -504,6 +543,7 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 				// Schedule table containing sub-query result to 
 				// be added to FROM clause.
 				addToThisFrom.push(resultTable);
+				System.out.println("addToThisFrom: " + addToThisFrom);
 			} else {
 				sqlExceptions.add(new SQLexception("Error - "
 						+ "unsupported sub-query type: "

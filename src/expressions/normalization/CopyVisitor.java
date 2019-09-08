@@ -292,7 +292,10 @@ public class CopyVisitor extends SkinnerVisitor {
 			exprStack.push(new InExpression(newLeft, 
 					new ExpressionList(newRightExprs)));
 		} else {
-			System.err.println("Unsupported right hand side of IN");
+			sqlExceptions.add(new SQLexception(
+					"Error - unsupported right hand side of IN " + 
+							"(type: " + arg0.getRightItemsList().getClass() 
+							+ ")"));
 		}
 	}
 

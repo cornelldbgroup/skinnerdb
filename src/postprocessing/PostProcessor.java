@@ -483,8 +483,7 @@ public class PostProcessor {
 		// Apply LIMIT clause if any
 		if (hasLimit) {
 			// Add final result table in catalog
-			TableInfo resultInfo = new TableInfo(resultRel, tempResult);
-			CatalogManager.currentDB.addTable(resultInfo);
+			TableInfo preLimitInfo = CatalogManager.getTable(preLimitResult);
 			// Fill with subset of pre-limit result rows
 			List<Integer> limitRows = new ArrayList<>();
 			int limit = query.limit;
@@ -492,7 +491,7 @@ public class PostProcessor {
 				limitRows.add(rowCtr);
 			}
 			operators.Materialize.execute(preLimitResult, 
-					resultInfo.columnNames, limitRows, null, 
+					preLimitInfo.columnNames, limitRows, null, 
 					resultRel);
 		}
 		// Update result table statistics

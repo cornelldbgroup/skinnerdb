@@ -10,7 +10,7 @@ where
 	and p_container = 'LG CAN'
 	and l_quantity < (
 		select
-			'0.2'::fixeddecimal * avg(l_quantity)
+			0.2 * avg(l_quantity)
 		from
 			lineitem
 		where
