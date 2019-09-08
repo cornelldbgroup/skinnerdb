@@ -103,10 +103,10 @@ public class UctNode {
      * @param useHeuristic 	whether to avoid Cartesian products
      * @param joinOp		multi-way join operator allowing fast join order switching
      */
-    public UctNode(long roundCtr, QueryInfo query, 
-    		boolean useHeuristic, MultiWayJoin joinOp) {
-    	// Count node generation
-    	++JoinStats.nrUctNodes;
+    public UctNode(long roundCtr, QueryInfo query,
+                   boolean useHeuristic, MultiWayJoin joinOp) {
+        // Count node generation
+        ++JoinStats.nrUctNodes;
         this.query = query;
         this.nrTables = query.nrJoined;
         createdIn = roundCtr;
@@ -142,8 +142,8 @@ public class UctNode {
      * @param joinedTable new joined table
      */
     public UctNode(long roundCtr, UctNode parent, int joinedTable) {
-    	// Count node generation
-    	++JoinStats.nrUctNodes;
+        // Count node generation
+        ++JoinStats.nrUctNodes;
         createdIn = roundCtr;
         treeLevel = parent.treeLevel + 1;
         nrActions = parent.nrActions - 1;
@@ -241,25 +241,25 @@ public class UctNode {
                 // Assess the quality of the action according to policy
                 double quality = -1;
                 switch (policy) {
-                case UCB1:
-                	quality = meanReward + 
-                		JoinConfig.EXPLORATION_WEIGHT * exploration;
-                	break;
-                case MAX_REWARD:
-                case EPSILON_GREEDY:
-                	quality = meanReward;
-                	break;
-                case RANDOM:
-                	quality = random.nextDouble();
-                	break;
-                case RANDOM_UCB1:
-                	if (treeLevel==0) {
-                		quality = random.nextDouble();
-                	} else {
-                		quality = meanReward + 
-                				JoinConfig.EXPLORATION_WEIGHT * exploration;
-                	}
-                	break;
+                    case UCB1:
+                        quality = meanReward +
+                                JoinConfig.EXPLORATION_WEIGHT * exploration;
+                        break;
+                    case MAX_REWARD:
+                    case EPSILON_GREEDY:
+                        quality = meanReward;
+                        break;
+                    case RANDOM:
+                        quality = random.nextDouble();
+                        break;
+                    case RANDOM_UCB1:
+                        if (treeLevel==0) {
+                            quality = random.nextDouble();
+                        } else {
+                            quality = meanReward +
+                                    JoinConfig.EXPLORATION_WEIGHT * exploration;
+                        }
+                        break;
                 }
                 //double UB = meanReward + 1E-6 * exploration;
                 //double UB = meanReward + 1E-4 * exploration;
@@ -272,9 +272,9 @@ public class UctNode {
             // For epsilon greedy, return random action with
             // probability epsilon.
             if (policy.equals(SelectionPolicy.EPSILON_GREEDY)) {
-            	if (random.nextDouble()<=JoinConfig.EPSILON) {
-            		return random.nextInt(nrActions);
-            	}
+                if (random.nextDouble()<=JoinConfig.EPSILON) {
+                    return random.nextInt(nrActions);
+                }
             }
             // Otherwise: return best action.
             return bestAction;
@@ -298,7 +298,7 @@ public class UctNode {
      * @param joinOrder partially completed join order
      * @return obtained reward
      */
-    double playout(int[] joinOrder) throws Exception {
+    void playout(int[] joinOrder) throws Exception {
         // Last selected table
         int lastTable = joinOrder[treeLevel];
         // Should we avoid Cartesian product joins?
@@ -344,8 +344,6 @@ public class UctNode {
                 joinOrder[posCtr] = nextTable;
             }
         }
-        // Evaluate completed join order and return reward
-        return joinOp.execute(joinOrder);
     }
     /**
      * Recursively sample from UCT tree and return reward.
@@ -355,12 +353,13 @@ public class UctNode {
      * @param policy	policy used to select actions
      * @return achieved reward
      */
-    public double sample(long roundCtr, int[] joinOrder, 
-    		SelectionPolicy policy) throws Exception {
+    public void sample(long roundCtr, int[] joinOrder,
+                         SelectionPolicy policy) throws Exception {
         // Check if this is a (non-extendible) leaf node
         if (nrActions == 0) {
             // leaf node - evaluate join order and return reward
-            return joinOp.execute(joinOrder);
+            // return full join order
+
         } else {
             // inner node - select next action and expand tree if necessary
             int action = selectAction(policy);
@@ -373,12 +372,67 @@ public class UctNode {
             }
             // evaluate via recursive invocation or via playout
             UctNode child = childNodes[action];
-            double reward = (child != null) ?
-                    child.sample(roundCtr, joinOrder, policy):
-                    	playout(joinOrder);
+            if (child != null)
+                child.sample(roundCtr, joinOrder, policy);
+            else
+                playout(joinOrder);
+
             // update UCT statistics and return reward
-            updateStatistics(action, reward);
-            return reward;
+            //updateStatistics(action, reward);
+            //return reward;
         }
     }
+
+    public void ahead(long roundCtr, int[] joinOrder, int curDepth, int prefixLen, SelectionPolicy policy) throws Exception {
+        if(curDepth > prefixLen) {
+            sample(roundCtr, joinOrder, policy);
+        } else {
+            int table = joinOrder[curDepth];
+            for (int action = 0; action < nrActions; action++) {
+                if (nextTable[action] == table) {
+                    if (childNodes[action] == null)
+                        childNodes[action] = new UctNode(roundCtr, this, table);
+                    childNodes[action].ahead(roundCtr, joinOrder, curDepth + 1, prefixLen, policy);
+                    break;
+                }
+            }
+        }
+    }
+
+//    private int bestAction() {
+//        int offset = random.nextInt(nrActions);
+//        int bestAction = -1;
+//        double bestQuality = -1;
+//        for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
+//            // Calculate index of current action
+//            int action = (offset + actionCtr) % nrActions;
+//            if (useHeuristic && !recommendedActions.contains(action))
+//                continue;
+//            double meanReward = (nrTries[action] > 0) ? accumulatedReward[action] / nrTries[action] : 0;
+//            //System.out.println("action:" + action);
+//            //System.out.println("meanReward:" + meanReward);
+//            if (meanReward > bestQuality) {
+//                bestAction = action;
+//                bestQuality = meanReward;
+//            }
+//        }
+//        return bestAction;
+//    }
+
+//    public boolean getOptimalPolicy(int[] joinOrder, int roundCtr) {
+//        if (treeLevel < nrTables) {
+//            int action = bestAction();
+//            int table = nextTable[action];
+//            joinOrder[treeLevel] = table;
+//            if(childNodes[action] != null)
+//                return childNodes[action].getOptimalPolicy(joinOrder, roundCtr);
+//            else {
+//                childNodes[action] = new UctNode(roundCtr, this, table);
+//                UctNode child = childNodes[action];
+//                child.getOptimalPolicy(joinOrder, roundCtr);
+//                return false;
+//            }
+//        }
+//        return true;
+//    }
 }

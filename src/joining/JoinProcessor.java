@@ -1,9 +1,7 @@
 package joining;
 
 import java.nio.file.Paths;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.List;
+import java.util.*;
 
 import config.LoggingConfig;
 import config.NamingConfig;
@@ -17,32 +15,33 @@ import multiquery.GlobalContext;
 import operators.Materialize;
 import preprocessing.Context;
 import query.ColumnRef;
+import query.CommonQueryPrefix;
 import query.QueryInfo;
 import statistics.JoinStats;
 import visualization.TreePlotter;
 
 /**
  * Controls the join phase.
- * 
- * @author immanueltrummer
  *
+ * @author immanueltrummer
  */
 public class JoinProcessor {
-	/**
-	 * The number of join-related log entries
-	 * generated for the current query.
-	 */
-	static int nrLogEntries = 0;
-	/**
-	 * Executes the join phase and stores result in relation.
-	 * Also updates mapping from query column references to
-	 * database columns.
-	 * 
-	 * @param queries		query to queries
-	 * @param preSummaries	query execution contexts
-	 */
-	public static void process(QueryInfo[] queries,
-							   Context[] preSummaries) throws Exception {
+    /**
+     * The number of join-related log entries
+     * generated for the current query.
+     */
+    static int nrLogEntries = 0;
+
+    /**
+     * Executes the join phase and stores result in relation.
+     * Also updates mapping from query column references to
+     * database columns.
+     *
+     * @param queries      query to queries
+     * @param preSummaries query execution contexts
+     */
+    public static void process(QueryInfo[] queries,
+                               Context[] preSummaries) throws Exception {
         // Initialize statistics
 //        JoinStats.nrTuples = 0;
 //        JoinStats.nrIndexLookups = 0;
@@ -52,35 +51,65 @@ public class JoinProcessor {
 //        JoinStats.nrUctNodes = 0;
 //        JoinStats.nrPlansTried = 0;
 //        JoinStats.nrSamples = 0;
-		// Initialize logging for new query
+        // Initialize logging for new query
 //		nrLogEntries = 0;
-		// Initialize multi-way join operator
+        // Initialize multi-way join operator
 
-		SelectionPolicy policy = JoinConfig.DEFAULT_SELECTION;
-		int nrQueries = queries.length;
-		OldJoin[] oldJoins = new OldJoin[nrQueries];
-		// Initialize UCT join order search tree
-		UctNode[] roots = new UctNode[nrQueries];
-		int[] roundCtr = new int[nrQueries];
-		for(int i = 0; i < nrQueries ;i++) {
-			oldJoins[i] = new OldJoin(queries[i], preSummaries[i], JoinConfig.BUDGET_PER_EPISODE);
-			roots[i] = new UctNode(0, queries[i], true, oldJoins[i]);
-			roundCtr[i] = 0;
-		}
+        SelectionPolicy policy = JoinConfig.DEFAULT_SELECTION;
+        int nrQueries = queries.length;
+        OldJoin[] oldJoins = new OldJoin[nrQueries];
 
-		while(GlobalContext.firstUnfinishedNum > 0) {
-			//we don't enable preprocessing, preprocessing is also on the UCT search
-			int triedQuery = GlobalContext.firstUnfinishedNum;
-			QueryInfo query = queries[triedQuery];
-			int[] joinOrder = new int[query.nrJoined];
-			roots[triedQuery].sample(roundCtr[triedQuery], joinOrder, policy);
-			GlobalContext.queryStatus[triedQuery] = oldJoins[triedQuery].isFinished();
-			GlobalContext.aheadFirstUnfinish();
-		}
+        // Initialize UCT join order search tree
+        UctNode[] roots = new UctNode[nrQueries];
+        //int[] roundCtr = new int[nrQueries];
+        int roundCtr = 0;
+		for (int i = 0; i < nrQueries; i++) {
+            oldJoins[i] = new OldJoin(queries[i], preSummaries[i], JoinConfig.BUDGET_PER_EPISODE);
+            roots[i] = new UctNode(0, queries[i], true, oldJoins[i]);
+            //roundCtr[i] = 0;
+        }
+
+        while (GlobalContext.firstUnfinishedNum > 0) {
+            //we don't enable preprocessing, preprocessing is also on the UCT search
+            int startQuery = GlobalContext.firstUnfinishedNum;
+            int[][] orderList = new int[nrQueries][];
+            ArrayList[] batchGroup = new ArrayList[nrQueries];
+            int prefixLen = 0;
+            for (int i = 0; i < nrQueries; i++) {
+                int triedQuery = (startQuery + i) % nrQueries;
+                QueryInfo query = queries[triedQuery];
+                if(GlobalContext.queryStatus[triedQuery])
+                	continue;
+                int[] joinOrder = new int[query.nrJoined];
+                if (i > 0) {
+                    CommonQueryPrefix commonQueryPrefix = query.findShortOrders(orderList);
+                    if (commonQueryPrefix != null) {
+                        if (batchGroup[commonQueryPrefix.shift] == null)
+                            batchGroup[commonQueryPrefix.shift] = new ArrayList<Integer>();
+                        batchGroup[commonQueryPrefix.shift].add(triedQuery);
+                        prefixLen = commonQueryPrefix.prefixLen;
+                        System.arraycopy(commonQueryPrefix.joinOrder, 0, joinOrder, 0, commonQueryPrefix.prefixLen);
+                    }
+                }
+                if(prefixLen > 0)
+					roots[triedQuery].ahead(roundCtr, joinOrder, 0, prefixLen, policy);
+                	//roots[triedQuery].ahead(roundCtr[triedQuery], joinOrder, 0, prefixLen, policy);
+                else
+					roots[triedQuery].sample(roundCtr, joinOrder, policy);
+	                //roots[triedQuery].sample(roundCtr[triedQuery], joinOrder, policy);
+                //roundCtr[triedQuery]++;
+                roundCtr++;
+				orderList[i] = joinOrder;
+                System.out.println("query: " + triedQuery + ", join order: " + Arrays.toString(joinOrder));
+                //Run batch query process
+
+                //GlobalContext.queryStatus[triedQuery] = oldJoins[triedQuery].isFinished();
+            }
+            GlobalContext.aheadFirstUnfinish();
+        }
 
 
-
-		// Initialize counters and variables
+        // Initialize counters and variables
 
 //		long roundCtr = 0;
 //		// Initialize exploration weight
@@ -207,17 +236,18 @@ public class JoinProcessor {
 //			ColumnRef newRef = new ColumnRef(targetRelName, newColName);
 //			context.columnMapping.put(postCol, newRef);
 //		}
-	}
-	/**
-	 * Print out log entry if the maximal number of log
-	 * entries has not been reached yet.
-	 * 
-	 * @param logEntry	log entry to print
-	 */
-	static void log(String logEntry) {
-		if (nrLogEntries < LoggingConfig.MAX_JOIN_LOGS) {
-			++nrLogEntries;
-			System.out.println(logEntry);
-		}
-	}
+    }
+
+    /**
+     * Print out log entry if the maximal number of log
+     * entries has not been reached yet.
+     *
+     * @param logEntry log entry to print
+     */
+    static void log(String logEntry) {
+        if (nrLogEntries < LoggingConfig.MAX_JOIN_LOGS) {
+            ++nrLogEntries;
+            System.out.println(logEntry);
+        }
+    }
 }

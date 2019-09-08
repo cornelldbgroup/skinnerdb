@@ -1,11 +1,6 @@
 package query;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.Map.Entry;
 
 import catalog.CatalogManager;
@@ -691,5 +686,33 @@ public class QueryInfo {
 		// Set aggregation type
 		aggregationType = getAggregationType();
 		log("Aggregation type:\t" + aggregationType);
+	}
+
+	public CommonQueryPrefix findShortOrders(int[][] orders) {
+		int maxPrefixLen = 0;
+		int[] selectOrder = null;
+		int basedQueryNum = 0;
+		for(int i = 0; i < orders.length ; i++) {
+			int[] order= orders[i];
+			int curPrefixLen = findSamePrefixLen(order);
+			if (curPrefixLen > maxPrefixLen) {
+				selectOrder = order;
+				maxPrefixLen = curPrefixLen;
+				basedQueryNum = i;
+			}
+		}
+		if(selectOrder != null) {
+			return new CommonQueryPrefix(maxPrefixLen, Arrays.copyOf(selectOrder, maxPrefixLen), basedQueryNum);
+		} else
+			return null;
+	}
+
+	public int findSamePrefixLen(int[] order) {
+		int prefixLen = 0;
+		for(; prefixLen < order.length - 1; prefixLen++) {
+			if(!joinedIndices.contains(new HashSet<>(order[prefixLen], order[prefixLen+1])))
+				break;
+		}
+		return prefixLen;
 	}
 }
