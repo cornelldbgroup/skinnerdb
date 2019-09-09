@@ -28,7 +28,7 @@ public class MinMaxAggregate {
 	 * 
 	 * @param sourceRef		reference to source column
 	 * @param nrGroups		number of groups
-	 * @param groupData		assigns source rows to group IDs
+	 * @param groupRef		assigns source rows to group IDs
 	 * @param isMax			whether to calculate maximum (otherwise: minimum)
 	 * @param targetRef		store results in this column
 	 * @throws Exception

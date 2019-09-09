@@ -510,6 +510,7 @@ public class QueryInfo {
 				aggregates.add(new AggInfo(this, agg));
 			}
 		}
+
 	}
 	/**
 	 * Collects columns required for steps after pre-processing.

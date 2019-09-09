@@ -1,9 +1,13 @@
 package preprocessing;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.IntToDoubleFunction;
 
+import data.ColumnData;
 import query.ColumnRef;
 
 /**
@@ -45,6 +49,15 @@ public class Context {
 	 * to columns containing corresponding (per-group) results.
 	 */
 	public Map<String, ColumnRef> aggToData = new HashMap<>();
+	/**
+	 * Maps aggregation columns
+	 * to a unique index.
+	 */
+	public Map<ColumnRef, Integer> colToIndex = new HashMap<>();
+	/**
+	 * Array of Column data, where index is the column index.
+	 */
+	public ColumnData[] results;
 	
 	@Override
 	public String toString() {

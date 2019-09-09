@@ -2,6 +2,7 @@ package execution;
 
 import joining.JoinProcessor;
 import net.sf.jsqlparser.statement.select.PlainSelect;
+import postprocessing.ParallelPostProcessopr;
 import postprocessing.PostProcessor;
 import preprocessing.Context;
 import preprocessing.Preprocessor;
@@ -43,7 +44,8 @@ public class Master {
 		System.out.println("Finish Join");
 		long postStart = System.currentTimeMillis();
 		// Aggregation, grouping, and sorting if required
-		PostProcessor.process(query, context);
+//		PostProcessor.process(query, context);
+		ParallelPostProcessopr.process(query, context);
 		System.out.println("Finish Post-processing");
 		long end = System.currentTimeMillis();
 		System.out.println((joinStart - preStart) + " " + (postStart - joinStart) + " " + (end - postStart));

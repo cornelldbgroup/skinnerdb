@@ -183,9 +183,9 @@ public class JoinProcessor {
 		int nrTuples = tuples.size();
 		log("Materializing join result with " + nrTuples + " tuples ...");
 		String targetRelName = NamingConfig.JOINED_NAME;
-		Materialize.execute(tuples, query.aliasToIndex, 
+		Materialize.executeContext(tuples, query.aliasToIndex,
 				query.colsForPostProcessing, 
-				context.columnMapping, targetRelName);
+				context.columnMapping, targetRelName, context);
 		// Update processing context
 		context.columnMapping.clear();
 		for (ColumnRef postCol : query.colsForPostProcessing) {

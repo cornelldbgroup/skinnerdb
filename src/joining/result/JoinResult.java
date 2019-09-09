@@ -1,5 +1,7 @@
 package joining.result;
 
+import config.ParallelConfig;
+
 import java.util.*;
 import java.util.Map.Entry;
 
@@ -17,7 +19,7 @@ public class JoinResult {
 	 * captures the tuple index for one of the
 	 * join tables).
 	 */
-	public Set<ResultTuple> tuples = new HashSet<>();
+	public LinkedHashSet<ResultTuple> tuples = new LinkedHashSet<>();
 	/**
 	 * Number of tables being joined.
 	 */
@@ -72,7 +74,7 @@ public class JoinResult {
 	 * 
 	 * @return	set of result tuples
 	 */
-	public Collection<ResultTuple> getTuples() {
+	public LinkedHashSet<ResultTuple> getTuples() {
 		return tuples;
 		/*
 		List<ResultTuple> tuples = new ArrayList<>();
