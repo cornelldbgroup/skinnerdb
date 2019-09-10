@@ -4,6 +4,7 @@ import buffer.BufferManager;
 import catalog.CatalogManager;
 import config.IndexingMode;
 import data.ColumnData;
+import data.DoubleData;
 import data.IntData;
 import query.ColumnRef;
 
@@ -27,7 +28,11 @@ public class Indexer {
 				IntData intData = (IntData)data;
 				IntIndex index = new IntIndex(intData);
 				BufferManager.colToIndex.put(colRef, index);
-			}					
+			} else if (data instanceof DoubleData) {
+				DoubleData doubleData = (DoubleData)data;
+				DoubleIndex index = new DoubleIndex(doubleData);
+				BufferManager.colToIndex.put(colRef, index);
+			}
 		}
 	}
 	/**

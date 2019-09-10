@@ -2,7 +2,8 @@
 select
 	l_suppkey as supplier_no,
 	sum(l_extendedprice * (1 - l_discount)) as total_revenue
-into revenue0
+into 
+	revenue0
 from
 	lineitem
 where
@@ -32,5 +33,5 @@ where
 order by
 	s_suppkey;
 
-drop view revenue0;
+drop table revenue0;
 

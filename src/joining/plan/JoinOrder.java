@@ -1,8 +1,6 @@
 package joining.plan;
 
 import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Set;
 
 /**
  * Represents a join order (as opposed to a

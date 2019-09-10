@@ -5,8 +5,8 @@ import java.util.Set;
 
 import buffer.BufferManager;
 import config.LoggingConfig;
-import data.IntData;
-import indexing.IntIndex;
+import data.ColumnData;
+import indexing.Index;
 import preprocessing.Context;
 import query.ColumnRef;
 import query.QueryInfo;
@@ -14,12 +14,12 @@ import query.QueryInfo;
 /**
  * Uses index on join column to identify next
  * tuple to satisfy binary equality condition
- * on two integer columns.
+ * on two columns.
  * 
  * @author immanueltrummer
  *
  */
-public class JoinIndexWrapper {
+public abstract class JoinIndexWrapper {
 	/**
 	 * Prior table in join order from
 	 * which we obtain value for lookup.
@@ -33,11 +33,11 @@ public class JoinIndexWrapper {
 	/**
 	 * Reference to prior column data.
 	 */
-	final IntData priorData;
+	final ColumnData priorData;
 	/**
 	 * Index on join column to use.
 	 */
-	final IntIndex nextIndex;
+	final Index nextIndex;
 	/**
 	 * Initialize index wrapper for
 	 * given query and join order.
@@ -66,11 +66,11 @@ public class JoinIndexWrapper {
 		// Get column data reference for prior table
 		ColumnRef priorQueryCol = pos1<pos2?col1:col2;
 		ColumnRef priorDbCol = preSummary.columnMapping.get(priorQueryCol);
-		priorData = (IntData)BufferManager.getData(priorDbCol);
+		priorData = BufferManager.getData(priorDbCol);
 		// Get index for next table
 		ColumnRef nextQueryCol = pos1<pos2?col2:col1;
 		ColumnRef nextDbCol = preSummary.columnMapping.get(nextQueryCol);
-		nextIndex = (IntIndex)BufferManager.colToIndex.get(nextDbCol);
+		nextIndex = BufferManager.colToIndex.get(nextDbCol);
 		// Generate logging output
 		if (LoggingConfig.INDEX_WRAPPER_VERBOSE) {
 			System.out.println("Initialized join index wrapper: ");
@@ -118,12 +118,7 @@ public class JoinIndexWrapper {
 	 * @param tupleIndices	current tuple indices
 	 * @return	next interesting tuple index or cardinality
 	 */
-	public int nextIndex(int[] tupleIndices) {
-		int priorTuple = tupleIndices[priorTable];
-		int priorVal = priorData.data[priorTuple];
-		int curTuple = tupleIndices[nextTable];
-		return nextIndex.nextTuple(priorVal, curTuple);
-	}
+	public abstract int nextIndex(int[] tupleIndices);
 	/**
 	 * Returns number of tuples indexed in next
 	 * table for given value in prior table.
@@ -131,43 +126,11 @@ public class JoinIndexWrapper {
 	 * @param tupleIndices	current tuple indices
 	 * @return	number of indexed tuples in next table
 	 */
-	public int nrIndexed(int[] tupleIndices) {
-		int priorTuple = tupleIndices[priorTable];
-		int priorVal = priorData.data[priorTuple];
-		return nextIndex.nrIndexed(priorVal);
-	}
-	/**
-	 * Initializes iterator over tuples in next table
-	 * which match tuple value in prior table.
-	 * 
-	 * @param tupleIndices	tuple indices for base tables
-	 */
-	public void initIter(int[] tupleIndices) {
-		int priorTuple = tupleIndices[priorTable];
-		int priorVal = priorData.data[priorTuple];
-		nextIndex.initIter(priorVal);
-	}
-	/**
-	 * Returns next element of iterator.
-	 * 
-	 * @return	next element in iterator
-	 */
-	public int iterNext() {
-		return nextIndex.iterNext();
-	}
-	/**
-	 * Returns next tuple from iterator whose
-	 * index exceeds the current tuple index.
-	 * Advances iterator accordingly.
-	 * 
-	 * @param tupleIndices	tuple indices for base tables
-	 */
-	public int iterNextHigher(int[] tupleIndices) {
-		int curTuple = tupleIndices[nextTable];
-		return nextIndex.iterNextHigher(curTuple);
-	}
+	public abstract int nrIndexed(int[] tupleIndices);
+	
 	@Override
 	public String toString() {
-		return "Prior table:\t" + priorTable + "; Next:\t" + nextTable;
+		return "Prior table:\t" + priorTable + 
+				"; Next:\t" + nextTable;
 	}
 }

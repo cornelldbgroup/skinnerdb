@@ -1,47 +1,47 @@
 package indexing;
 
-import com.koloboke.collect.map.IntIntCursor;
-import com.koloboke.collect.map.IntIntMap;
-import com.koloboke.collect.map.hash.HashIntIntMaps;
+import com.koloboke.collect.map.DoubleIntCursor;
+import com.koloboke.collect.map.DoubleIntMap;
+import com.koloboke.collect.map.hash.HashDoubleIntMaps;
 
 import config.LoggingConfig;
-import data.IntData;
+import data.DoubleData;
 import statistics.JoinStats;
 
 /**
- * Indexes integer values (not necessarily unique).
+ * Indexes double values (not necessarily unique).
  * 
  * @author immanueltrummer
  *
  */
-public class IntIndex extends Index {
+public class DoubleIndex extends Index {
 	/**
-	 * Integer data that the index refers to.
+	 * Double data that the index refers to.
 	 */
-	public final IntData intData;
+	public final DoubleData doubleData;
 	/**
 	 * After indexing: maps search key to index
 	 * of first position at which associated
 	 * information is stored.
 	 */
-	public IntIntMap keyToPositions;
+	public DoubleIntMap keyToPositions;
 	/**
-	 * Create index on the given integer column.
+	 * Create index on the given double column.
 	 * 
-	 * @param intData	integer data to index
+	 * @param doubleData	double data to index
 	 */
-	public IntIndex(IntData intData) {
-		super(intData.cardinality);
+	public DoubleIndex(DoubleData doubleData) {
+		super(doubleData.cardinality);
 		long startMillis = System.currentTimeMillis();
 		// Extract info
-		this.intData = intData;
-		int[] data = intData.data;
+		this.doubleData = doubleData;
+		double[] data = doubleData.data;
 		// Count number of occurrences for each value
-		IntIntMap keyToNr = HashIntIntMaps.newMutableMap();
+		DoubleIntMap keyToNr = HashDoubleIntMaps.newMutableMap();
 		for (int i=0; i<cardinality; ++i) {
 			// Don't index null values
-			if (!intData.isNull.get(i)) {
-				int value = data[i];
+			if (!doubleData.isNull.get(i)) {
+				double value = data[i];
 				int nr = keyToNr.getOrDefault(value, 0);
 				keyToNr.put(value, nr+1);				
 			}
@@ -49,11 +49,11 @@ public class IntIndex extends Index {
 		// Assign each key to the appropriate position offset
 		int nrKeys = keyToNr.size();
 		log("Number of keys:\t" + nrKeys);
-		keyToPositions = HashIntIntMaps.newMutableMap(nrKeys);
+		keyToPositions = HashDoubleIntMaps.newMutableMap(nrKeys);
 		int prefixSum = 0;
-		IntIntCursor keyToNrCursor = keyToNr.cursor();
+		DoubleIntCursor keyToNrCursor = keyToNr.cursor();
 		while (keyToNrCursor.moveNext()) {
-			int key = keyToNrCursor.key();
+			double key = keyToNrCursor.key();
 			keyToPositions.put(key, prefixSum);
 			// Advance offset taking into account
 			// space for row indices and one field
@@ -65,8 +65,8 @@ public class IntIndex extends Index {
 		// Generate position information
 		positions = new int[prefixSum];
 		for (int i=0; i<cardinality; ++i) {
-			if (!intData.isNull.get(i)) {
-				int key = data[i];
+			if (!doubleData.isNull.get(i)) {
+				double key = data[i];
 				int startPos = keyToPositions.get(key);
 				positions[startPos] += 1;
 				int offset = positions[startPos];
@@ -80,8 +80,6 @@ public class IntIndex extends Index {
 			log("Created index for integer column with cardinality " + 
 					cardinality + " in " + totalMillis + " ms.");
 		}
-		// Check index if enabled
-		IndexChecker.checkIndex(intData, this);
 	}
 	/**
 	 * Returns index of next tuple with given value
@@ -92,7 +90,7 @@ public class IntIndex extends Index {
 	 * @param prevTuple		index of last tuple
 	 * @return 	index of next tuple or cardinality
 	 */
-	public int nextTuple(int value, int prevTuple) {
+	public int nextTuple(double value, int prevTuple) {
 		// Get start position for indexed values
 		int firstPos = keyToPositions.getOrDefault(value, -1);
 		// No indexed values?
@@ -139,7 +137,7 @@ public class IntIndex extends Index {
 	 * @param value	count indexed tuples for this value
 	 * @return		number of indexed values
 	 */
-	public int nrIndexed(int value) {
+	public int nrIndexed(double value) {
 		int firstPos = keyToPositions.getOrDefault(value, -1);
 		if (firstPos<0) {
 			return 0;

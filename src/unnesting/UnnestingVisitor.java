@@ -146,14 +146,14 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 			String alias = subSelect.getAlias().getName().toLowerCase();
 			SelectBody selectBody = subSelect.getSelectBody();
 			if (selectBody instanceof PlainSelect) {
-				// Recursively unnest sub-query
-				selectBody.accept(this);
 				// Sub-query will be replaced by table reference
 				Table table = new Table(alias);
 				// Associate unnested sub-query with name
 				PlainSelect plainSelect = (PlainSelect)selectBody;
 				plainSelect.setIntoTables(Arrays.asList(
 						new Table[] {table}));
+				// Recursively unnest sub-query
+				selectBody.accept(this);
 				// Update scope and column mapping
 				List<String> newCols = subqueryFields.pop();
 				for (String col : newCols) {
@@ -295,6 +295,7 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 	 * @param plainSelect	analyze WHERE clause of this query
 	 */
 	void separateNonLocalPreds(PlainSelect plainSelect) {
+		System.out.println(plainSelect);
 		// Extract conjuncts in original WHERE clause
 		Expression where = plainSelect.getWhere();
 		if (where == null) {
@@ -342,6 +343,8 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 							+ "via binary equality predicates ("
 							+ conjunct + ")"));
 				}
+				// Obtain table that will contain sub-query result
+				Table resultTbl = plainSelect.getIntoTables().get(0);
 				// Need to make sure that local
 				// references are still available
 				// in outer query scope.
@@ -366,7 +369,7 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 							// Create substitution map
 							Map<String, Expression> substitutionMap = 
 									new HashMap<>();
-							Column newCol = new Column(newColName);
+							Column newCol = new Column(resultTbl, newColName);
 							substitutionMap.put(oldColString, newCol);
 							// Substitute column references
 							SubstitutionVisitor substitutor = 
@@ -544,10 +547,10 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 			if (selectBody instanceof PlainSelect) {
 				PlainSelect plainSelect = (PlainSelect)selectBody;
 				// Rewrite sub-query and add to query list
-				plainSelect.accept(this);
 				Table resultTable = new Table(alias);
 				plainSelect.setIntoTables(Arrays.asList(
 						new Table[] {resultTable}));
+				plainSelect.accept(this);
 				// Replace nested sub-query by table reference
 				List<String> subqueryCols = subqueryFields.pop();
 				String firstCol = subqueryCols.get(0);
