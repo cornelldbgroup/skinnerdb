@@ -20,13 +20,15 @@ public class CreateDB {
 	 * @param args	database name, database directory
 	 */
 	public static void main(String[] args) throws Exception {
-		if (args.length != 2) {
-			System.out.println("Error - specify database name "
-					+ "and database directory!");
-			return;
-		}
-		String name = args[0];
-		String dbDir = args[1];
+//		if (args.length != 2) {
+//			System.out.println("Error - specify database name "
+//					+ "and database directory!");
+//			return;
+//		}
+		String name = "imdb";
+				//args[0];
+		String dbDir = "/home/jw2544/imdbl/";
+				//args[1];
 		PathUtil.initSchemaPaths(dbDir);
 		CatalogManager.currentDB = new DbInfo(name);
 		PathUtil.initDataPaths(CatalogManager.currentDB);

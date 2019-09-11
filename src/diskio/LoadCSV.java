@@ -46,7 +46,7 @@ public class LoadCSV {
 			++lineCtr;
 		}
 		reader.close();
-		return lineCtr;
+		return Math.min(lineCtr, 10000);
 	}
 	/**
 	 * Initializes objects holding column data for given table.
@@ -144,6 +144,10 @@ public class LoadCSV {
 			++rowCtr;
 			if (rowCtr % 100000 == 0) {
 				System.out.println("Loaded " + rowCtr + " rows");
+			}
+			//Todo change
+			if (rowCtr > 9999) {
+				break;
 			}
 		}
 		csvReader.close();

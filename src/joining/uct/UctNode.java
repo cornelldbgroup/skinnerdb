@@ -76,10 +76,10 @@ public class UctNode {
      * Associates each action index with a next table to join.
      */
     public final int[] nextTable;
-    /**
-     * Evaluates a given join order and accumulates results.
-     */
-    final MultiWayJoin joinOp;
+//    /**
+//     * Evaluates a given join order and accumulates results.
+//     */
+//    final MultiWayJoin joinOp;
     /**
      * Indicates whether the search space is restricted to
      * join orders that avoid Cartesian products. This
@@ -101,10 +101,9 @@ public class UctNode {
      * @param roundCtr     	current round number
      * @param query        	the query which is optimized
      * @param useHeuristic 	whether to avoid Cartesian products
-     * @param joinOp		multi-way join operator allowing fast join order switching
      */
     public UctNode(long roundCtr, QueryInfo query,
-                   boolean useHeuristic, MultiWayJoin joinOp) {
+                   boolean useHeuristic) {
         // Count node generation
         ++JoinStats.nrUctNodes;
         this.query = query;
@@ -126,7 +125,7 @@ public class UctNode {
             unjoinedTables.add(tableCtr);
             nextTable[tableCtr] = tableCtr;
         }
-        this.joinOp = joinOp;
+//        this.joinOp = joinOp;
         this.useHeuristic = useHeuristic;
         recommendedActions = new HashSet<Integer>();
         for (int action = 0; action < nrActions; ++action) {
@@ -164,7 +163,7 @@ public class UctNode {
             accumulatedReward[actionCtr] = 0;
             nextTable[actionCtr] = unjoinedTables.get(actionCtr);
         }
-        this.joinOp = parent.joinOp;
+//        this.joinOp = parent.joinOp;
         // Calculate recommended actions if heuristic is activated
         this.useHeuristic = parent.useHeuristic;
         if (useHeuristic) {
@@ -384,7 +383,7 @@ public class UctNode {
     }
 
     public void ahead(long roundCtr, int[] joinOrder, int curDepth, int prefixLen, SelectionPolicy policy) throws Exception {
-        if(curDepth > prefixLen) {
+        if(curDepth >= prefixLen) {
             sample(roundCtr, joinOrder, policy);
         } else {
             int table = joinOrder[curDepth];

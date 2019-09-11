@@ -688,11 +688,11 @@ public class QueryInfo {
 		log("Aggregation type:\t" + aggregationType);
 	}
 
-	public CommonQueryPrefix findShortOrders(int[][] orders) {
+	public CommonQueryPrefix findShortOrders(int[][] orders, int orderLen) {
 		int maxPrefixLen = 0;
 		int[] selectOrder = null;
 		int basedQueryNum = 0;
-		for(int i = 0; i < orders.length ; i++) {
+		for(int i = 0; i < orderLen ; i++) {
 			int[] order= orders[i];
 			int curPrefixLen = findSamePrefixLen(order);
 			if (curPrefixLen > maxPrefixLen) {
@@ -710,7 +710,10 @@ public class QueryInfo {
 	public int findSamePrefixLen(int[] order) {
 		int prefixLen = 0;
 		for(; prefixLen < order.length - 1; prefixLen++) {
-			if(!joinedIndices.contains(new HashSet<>(order[prefixLen], order[prefixLen+1])))
+			HashSet<Integer> testSet = new HashSet();
+			testSet.add(order[prefixLen]);
+			testSet.add(order[prefixLen + 1]);
+			if(!joinedIndices.contains(testSet) && !joinedIndices.contains(testSet))
 				break;
 		}
 		return prefixLen;

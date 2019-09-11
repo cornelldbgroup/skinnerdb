@@ -330,13 +330,14 @@ public class SkinnerCmd {
 	 */
 	public static void main(String[] args) throws Exception {
 		// Verify number of command line arguments
-		if (args.length != 1) {
-			System.out.println("Error - specify the path"
-					+ " to database directory!");
-			return;
-		}
+//		if (args.length != 1) {
+//			System.out.println("Error - specify the path"
+//					+ " to database directory!");
+//			return;
+//		}
 		// Load database schema and initialize path mapping
-		dbDir = args[0];
+		//dbDir = args[0];
+		String dbDir = "/home/jw2544/imdbl/";
 		PathUtil.initSchemaPaths(dbDir);
 		CatalogManager.loadDB(PathUtil.schemaPath);
 		PathUtil.initDataPaths(CatalogManager.currentDB);

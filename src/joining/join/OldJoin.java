@@ -50,6 +50,7 @@ public class OldJoin extends MultiWayJoin {
      * indices when comparing start state and final state.
      */
     public final int[] tupleIndexDelta;
+
     /**
      * Counts number of log entries made.
      */

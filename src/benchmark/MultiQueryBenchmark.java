@@ -18,7 +18,8 @@ import java.util.Map;
 public class MultiQueryBenchmark {
 
     public static void main(String[] args) throws Exception {
-        String dbDir = "/home/jw2544/dataset/skinnerimdb/";
+        String dbDir = "/home/jw2544/imdbl/";
+                //"/home/jw2544/dataset/skinnerimdb/";//"/home/jw2544/imdbl/";
         PathUtil.initSchemaPaths(dbDir);
         CatalogManager.loadDB(PathUtil.schemaPath);
         PathUtil.initDataPaths(CatalogManager.currentDB);

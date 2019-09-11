@@ -79,7 +79,6 @@ public class BufferManager {
 		colToData.clear();
 		// Load dictionary from disk
 		loadDictionary();
-		/*
 		// Collect columns to load in parallel
 		List<ColumnRef> colsToLoad = new ArrayList<ColumnRef>();
 		for (TableInfo table : CatalogManager.currentDB.nameToTable.values()) {
@@ -100,7 +99,6 @@ public class BufferManager {
 			}
 		});
 		System.out.println("Loaded database.");
-		 */
 	}
 	/**
 	 * Loads data for specified column from hard disk.

@@ -6,6 +6,7 @@ import java.util.*;
 import config.LoggingConfig;
 import config.NamingConfig;
 import config.JoinConfig;
+import joining.join.BatchQueryJoin;
 import joining.join.OldJoin;
 import joining.result.ResultTuple;
 import joining.uct.ExplorationWeightPolicy;
@@ -57,32 +58,33 @@ public class JoinProcessor {
 
         SelectionPolicy policy = JoinConfig.DEFAULT_SELECTION;
         int nrQueries = queries.length;
-        OldJoin[] oldJoins = new OldJoin[nrQueries];
+        //OldJoin[] oldJoins = new OldJoin[nrQueries];
+        BatchQueryJoin batchQueryJoin = new BatchQueryJoin(queries, preSummaries);
 
         // Initialize UCT join order search tree
         UctNode[] roots = new UctNode[nrQueries];
         //int[] roundCtr = new int[nrQueries];
         int roundCtr = 0;
 		for (int i = 0; i < nrQueries; i++) {
-            oldJoins[i] = new OldJoin(queries[i], preSummaries[i], JoinConfig.BUDGET_PER_EPISODE);
-            roots[i] = new UctNode(0, queries[i], true, oldJoins[i]);
+            //oldJoins[i] = new OldJoin(queries[i], preSummaries[i], JoinConfig.BUDGET_PER_EPISODE);
+            roots[i] = new UctNode(0, queries[i], true);
             //roundCtr[i] = 0;
         }
 
-        while (GlobalContext.firstUnfinishedNum > 0) {
+        while (GlobalContext.firstUnfinishedNum >= 0) {
             //we don't enable preprocessing, preprocessing is also on the UCT search
             int startQuery = GlobalContext.firstUnfinishedNum;
             int[][] orderList = new int[nrQueries][];
             ArrayList[] batchGroup = new ArrayList[nrQueries];
-            int prefixLen = 0;
             for (int i = 0; i < nrQueries; i++) {
+                int prefixLen = 0;
                 int triedQuery = (startQuery + i) % nrQueries;
                 QueryInfo query = queries[triedQuery];
                 if(GlobalContext.queryStatus[triedQuery])
                 	continue;
                 int[] joinOrder = new int[query.nrJoined];
                 if (i > 0) {
-                    CommonQueryPrefix commonQueryPrefix = query.findShortOrders(orderList);
+                    CommonQueryPrefix commonQueryPrefix = query.findShortOrders(orderList, i);
                     if (commonQueryPrefix != null) {
                         if (batchGroup[commonQueryPrefix.shift] == null)
                             batchGroup[commonQueryPrefix.shift] = new ArrayList<Integer>();
@@ -101,10 +103,9 @@ public class JoinProcessor {
                 roundCtr++;
 				orderList[i] = joinOrder;
                 System.out.println("query: " + triedQuery + ", join order: " + Arrays.toString(joinOrder));
-                //Run batch query process
-
-                //GlobalContext.queryStatus[triedQuery] = oldJoins[triedQuery].isFinished();
             }
+            //Run batch query process
+            batchQueryJoin.execute(orderList, batchGroup, startQuery);
             GlobalContext.aheadFirstUnfinish();
         }
 

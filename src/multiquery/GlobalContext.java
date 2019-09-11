@@ -90,6 +90,8 @@ public class GlobalContext {
             }
             //join tables
             for(Set<Integer> joins: query.joinedIndices) {
+                if(joins.size() == 0)
+                    continue;
                 Pair<Integer, Integer> pair = new Pair<Integer, Integer>();
                 int i = 0;
                 for(Integer tableIdx: joins) {
@@ -100,6 +102,9 @@ public class GlobalContext {
                     i++;
                 }
                 if(!unaryTables.contains(pair.getFirst()) && !unaryTables.contains(pair.getSecond())) {
+                    System.out.println(Arrays.toString(query.aliases));
+                    System.out.println(pair.getFirst());
+                    System.out.println(query.aliases[pair.getFirst()]);
                     String table1 = query.aliasToTable.get(query.aliases[pair.getFirst()]);
                     String table2 = query.aliasToTable.get(query.aliases[pair.getSecond()]);
                     int realIdx1 = tableOrder.get(table1);
