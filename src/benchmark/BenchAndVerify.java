@@ -1,7 +1,5 @@
 package benchmark;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-
 import java.io.PrintStream;
 import java.io.PrintWriter;
 import java.sql.Connection;
@@ -112,7 +110,9 @@ public class BenchAndVerify {
 			// Check consistency with Postgres results: unary preds
 			for (ExpressionInfo expr : query.unaryPredicates) {
 				// Unary predicates must refer to one table
-				assertEquals(expr.aliasesMentioned.size(), 1);
+				if (expr.aliasesMentioned.size() != 1) {
+					throw new Exception("Alias " + expr + " must mention one table!");
+				}
 				// Get cardinality after PG filtering
 				String alias = expr.aliasesMentioned.iterator().next();
 				String table = query.aliasToTable.get(alias);
@@ -139,7 +139,10 @@ public class BenchAndVerify {
 				ColumnRef colRef = new ColumnRef(filteredName, columnName);
 				int skinnerCardinality = BufferManager.colToData.get(colRef).getCardinality();
 				System.out.println("Skinner card:\t" + skinnerCardinality);
-				assertEquals(pgCardinality, skinnerCardinality);
+				if (pgCardinality != skinnerCardinality) {
+					throw new Exception("Inconsistent cardinality for "
+							+ "expression " + expr + "!");
+				}
 			}
 			// Check consistency with Postgres: join result size
 			StringBuilder sqlBuilder = new StringBuilder();
@@ -165,7 +168,10 @@ public class BenchAndVerify {
 					NamingConfig.JOINED_NAME);
 			System.out.println("PG Card: " + pgJoinCard + 
 					"; Skinner card: " + skinnerJoinCard);
-			assertEquals(pgJoinCard, skinnerJoinCard);
+			if (pgJoinCard != skinnerJoinCard) {
+				throw new Exception("Inconsistent join result"
+						+ "cardinality!");
+			}
 			// Output final result for Postgres
 			StringBuilder pgBuilder = new StringBuilder();
 			PlainSelect plainSelect = entry.getValue();
