@@ -84,7 +84,7 @@ public class JoinProcessor {
                 	continue;
                 int[] joinOrder = new int[query.nrJoined];
                 if (i > 0) {
-                    CommonQueryPrefix commonQueryPrefix = query.findShortOrders(orderList, i);
+                    CommonQueryPrefix commonQueryPrefix = query.findShortOrders(startQuery, orderList, i);
                     if (commonQueryPrefix != null) {
                         if (batchGroup[commonQueryPrefix.shift] == null)
                             batchGroup[commonQueryPrefix.shift] = new ArrayList<Integer>();

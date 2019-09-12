@@ -6,10 +6,13 @@ import java.util.Map.Entry;
 import catalog.CatalogManager;
 import catalog.info.ColumnInfo;
 import catalog.info.TableInfo;
+import com.sun.org.apache.bcel.internal.generic.GotoInstruction;
+import com.sun.org.apache.bcel.internal.generic.INEG;
 import config.LoggingConfig;
 import expressions.ExpressionInfo;
 import expressions.aggregates.AggInfo;
 import expressions.typing.ExpressionScope;
+import multiquery.GlobalContext;
 import net.sf.jsqlparser.expression.Alias;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.Function;
@@ -27,6 +30,9 @@ import net.sf.jsqlparser.statement.select.SelectExpressionItem;
 import net.sf.jsqlparser.statement.select.SelectItem;
 import net.sf.jsqlparser.util.cnfexpression.CNFConverter;
 import org.apache.commons.lang3.StringUtils;
+import utils.Pair;
+
+import javax.management.Query;
 
 /**
  * Contains information on the query to execute.
@@ -180,6 +186,12 @@ public class QueryInfo {
 	 * Class of aggregation query.
 	 */
 	public final AggregationType aggregationType;
+
+	/**
+	 *
+	 */
+	public HashSet<Integer>[] joinsInfo;
+
 	/**
 	 * Extract information from the FROM clause (e.g.,
 	 * all tables referenced with their aliases, the
@@ -439,6 +451,29 @@ public class QueryInfo {
 					}
 				} // if join predicate
 			} // over where conjuncts
+
+			joinsInfo = new HashSet[nrJoined];
+			for(Set<Integer> joinIndex : joinedIndices) {
+				if(joinIndex.size() != 2)
+					continue;
+				boolean flag = true;
+				int leftJoinTable = 0;
+				int rightJoinTable = 0;
+				for(Integer tableIdx: joinIndex) {
+					if (flag)
+						leftJoinTable = tableIdx;
+					else
+						rightJoinTable = tableIdx;
+					flag = false;
+				}
+				if(joinsInfo[leftJoinTable] == null)
+					joinsInfo[leftJoinTable] = new HashSet<Integer>();
+				if(joinsInfo[rightJoinTable] == null)
+					joinsInfo[rightJoinTable] = new HashSet<Integer>();
+				joinsInfo[leftJoinTable].add(rightJoinTable);
+				joinsInfo[rightJoinTable].add(leftJoinTable);
+			}
+
 		} // if where clause
 	}
 	/**
@@ -688,34 +723,144 @@ public class QueryInfo {
 		log("Aggregation type:\t" + aggregationType);
 	}
 
-	public CommonQueryPrefix findShortOrders(int[][] orders, int orderLen) {
+	public CommonQueryPrefix findShortOrders(int startQuery, int[][] orders, int orderLen) {
 		int maxPrefixLen = 0;
-		int[] selectOrder = null;
+		ArrayList<Integer> selectOrder = null;
 		int basedQueryNum = 0;
 		for(int i = 0; i < orderLen ; i++) {
 			int[] order= orders[i];
-			int curPrefixLen = findSamePrefixLen(order);
-			if (curPrefixLen > maxPrefixLen) {
-				selectOrder = order;
-				maxPrefixLen = curPrefixLen;
+			ArrayList<Integer> prefix = findSamePrefixLen((startQuery + i) % GlobalContext.nrQuery, order);
+			if (prefix.size() > maxPrefixLen) {
+				selectOrder = prefix;
+				maxPrefixLen = prefix.size();
 				basedQueryNum = i;
 			}
 		}
+
 		if(selectOrder != null) {
-			return new CommonQueryPrefix(maxPrefixLen, Arrays.copyOf(selectOrder, maxPrefixLen), basedQueryNum);
+			System.out.println("Based Query Order: " + Arrays.toString(orders[basedQueryNum]) + ", reuse order:" + selectOrder.toString());
+			System.out.println("Based Query: "+ this.queryNum +", Reused Query: " + (startQuery + basedQueryNum) % GlobalContext.nrQuery + ", reuse length: " + maxPrefixLen);
+			return new CommonQueryPrefix(maxPrefixLen, selectOrder.stream().mapToInt(i -> i).toArray(), basedQueryNum);
 		} else
 			return null;
 	}
 
-	public int findSamePrefixLen(int[] order) {
-		int prefixLen = 0;
-		for(; prefixLen < order.length - 1; prefixLen++) {
-			HashSet<Integer> testSet = new HashSet();
-			testSet.add(order[prefixLen]);
-			testSet.add(order[prefixLen + 1]);
-			if(!joinedIndices.contains(testSet) && !joinedIndices.contains(testSet))
+	public ArrayList<Integer> findSamePrefixLen(int testQuery, int[] order) {
+		ArrayList<Integer> prefix = new ArrayList<>();
+		HashSet<Integer> previousTableSet = new HashSet<>();
+		HashSet<Integer> previousBasedTableSet = new HashSet<>();
+		for(int prefixLen = 0; prefixLen < order.length - 1; prefixLen++) {
+			boolean canAdd = false;
+			int basedLeftIdx = order[prefixLen];
+			int basedRightIdx = order[prefixLen + 1];
+			String leftTableOriginName = GlobalContext.aliasesTable[testQuery][basedLeftIdx];
+			String rightTableOriginName = GlobalContext.aliasesTable[testQuery][basedRightIdx];
+			int leftOriginIdx = GlobalContext.findGlobalIdxByTableName(leftTableOriginName);
+			int rightOriginIdx = GlobalContext.findGlobalIdxByTableName(rightTableOriginName);
+			QueryInfo queryInfo = GlobalContext.queryInfos[testQuery];
+
+//			if(leftOriginIdx > rightOriginIdx) {
+//				int tmp = rightOriginIdx;
+//				rightOriginIdx = leftOriginIdx;
+//				leftOriginIdx = tmp;
+//			}
+//			Pair<Integer, Integer> originTableIndices = new Pair<>(leftOriginIdx, rightOriginIdx);
+
+			boolean flag = false;
+			HashSet<Integer> originTableIndices = new HashSet();
+			if(prefixLen == 0) {
+				originTableIndices.add(leftOriginIdx);
+				originTableIndices.add(rightOriginIdx);
+			} else {
+				originTableIndices.add(rightOriginIdx);
+				for(Integer table : previousBasedTableSet) {
+					int oriTableIdx = GlobalContext.findGlobalIdxByTableName(GlobalContext.aliasesTable[testQuery][table]);
+					originTableIndices.add(oriTableIdx);
+					if(GlobalContext.commonJoins.containsKey(originTableIndices))
+						break;
+					else
+						originTableIndices.remove(oriTableIdx);
+				}
+			}
+			if(GlobalContext.commonJoins.containsKey(originTableIndices) && GlobalContext.commonJoins.get(originTableIndices).containsKey(this.queryNum)) {
+				int leftTableToAdd = 0;
+				int rightTableToAdd = 0;
+				for(HashSet<Integer> tableToAddSet : GlobalContext.commonJoins.get(originTableIndices).get(this.queryNum)) {
+					boolean first = true;
+					for(Integer table : tableToAddSet) {
+						if(first)
+							leftTableToAdd = table;
+						else
+							rightTableToAdd = table;
+						first = false;
+					}
+					if(previousTableSet.contains(leftTableToAdd) && !previousTableSet.contains(rightTableToAdd)) {
+						flag = true;
+						break;
+					} else if (previousTableSet.contains(rightTableToAdd) && !previousTableSet.contains(leftTableToAdd)) {
+						int tmp = leftTableToAdd;
+						leftTableToAdd = rightTableToAdd;
+						rightTableToAdd = tmp;
+						flag = true;
+						break;
+					}
+				}
+
+				if(prefixLen > 0 && !flag) {
+					System.out.println("bbbbbbb");
+					System.out.println(previousTableSet.toString());
+					System.out.println(leftTableToAdd + " "+ rightTableToAdd);
+					System.out.println("bbbbbbb");
+					break;
+				}
+
+				//dangerous here
+//				if(this.aliasToTable.get(this.aliases[leftTableToAdd]).equals(rightTableOriginName)) {
+//					int tmp = leftTableToAdd;
+//					leftTableToAdd = rightTableToAdd;
+//					rightTableToAdd = tmp;
+//				}
+
+				if(prefixLen == 0) {
+					previousBasedTableSet.add(basedLeftIdx);
+					previousTableSet.add(leftTableToAdd);
+					prefix.add(leftTableToAdd);
+					canAdd = true;
+
+				} else {
+
+					//Test whether it is possible to treat rightTable as the next join table
+					HashSet<Integer> s1 = new HashSet<>();
+					for (Integer s : this.joinsInfo[rightTableToAdd]) {
+						if (previousTableSet.contains(s)) {
+							s1.add(GlobalContext.findGlobalIdxByTableName(GlobalContext.aliasesTable[this.queryNum][s]));
+						}
+					}
+
+					HashSet<Integer> s2 = new HashSet<>();
+					for (Integer s : queryInfo.joinsInfo[basedRightIdx]) {
+						if (previousBasedTableSet.contains(s)) {
+							s2.add(GlobalContext.findGlobalIdxByTableName(GlobalContext.aliasesTable[testQuery][s]));
+						}
+					}
+
+					canAdd = (s1.equals(s2));
+				}
+
+				if(canAdd) {
+					previousTableSet.add(rightTableToAdd);
+					previousBasedTableSet.add(basedRightIdx);
+					prefix.add(rightTableToAdd);
+				}
+				//Pair<Integer, Integer> tableIndices = GlobalContext.commonJoins.get(originTableIndices).get(queryNum).get(0);
+
+				//previousTableSet.add(tableIndices.getFirst());
+				//previousTableSet.add(tableIndices.getSecond());
+			}
+
+			if(!canAdd)
 				break;
 		}
-		return prefixLen;
+		return prefix;
 	}
 }

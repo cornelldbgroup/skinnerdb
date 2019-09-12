@@ -14,7 +14,7 @@ public class GlobalContext {
     /**
      * common join info
      */
-    public static HashMap<Pair<Integer, Integer>, Set<Integer>> commonJoins;
+    public static HashMap<HashSet<Integer>, HashMap<Integer, List<HashSet<Integer>>>> commonJoins;
 
     public static HashMap<String, Integer> tableOrder;
 
@@ -24,7 +24,9 @@ public class GlobalContext {
 
     public static int firstUnfinishedNum  = 0;
 
-    public static Map<JoinOrder, Set<ResultTuple>> joinedResultTuples = new HashMap<>();
+    public static String[][] aliasesTable;
+
+    public static QueryInfo[] queryInfos;
 
 //    For now, we don't consider share binary predicates
 //    public static void initCommonUnary(List<QueryInfo> queries) {
@@ -75,14 +77,20 @@ public class GlobalContext {
         commonJoins = new HashMap<>();
         tableOrder = new HashMap<>();
         nrQuery = queries.length;
+        queryInfos = queries;
+        aliasesTable = new String[nrQuery][];
         int tableGlobalIdx = 0;
         for (String tableName : CatalogManager.currentDB.nameToTable.keySet()) {
             tableOrder.put(tableName, tableGlobalIdx);
             tableGlobalIdx++;
-         }
+        }
         //default status is finish
         queryStatus = new boolean[nrQuery];
-        for (QueryInfo query : queries) {
+        for(int i = 0; i < queries.length ; i++)  {
+            QueryInfo query = queries[i];
+            aliasesTable[i] = new String[query.nrJoined];
+            for(int j = 0; j < query.nrJoined ; j++)
+                aliasesTable[i][j] = query.aliasToTable.get(query.aliases[j]);
             Set<Integer> unaryTables = new HashSet<>();
             //tables which are involved in unary predicates
             for(ExpressionInfo expressionInfo: query.unaryPredicates) {
@@ -92,31 +100,41 @@ public class GlobalContext {
             for(Set<Integer> joins: query.joinedIndices) {
                 if(joins.size() == 0)
                     continue;
-                Pair<Integer, Integer> pair = new Pair<Integer, Integer>();
-                int i = 0;
+                int firstIdx = 0;
+                int secondIdx = 0;
+                boolean firstIt = true;
                 for(Integer tableIdx: joins) {
-                    if (i == 0)
-                        pair.setFirst(tableIdx);
+                    if (firstIt)
+                        firstIdx = tableIdx;
                     else
-                        pair.setSecond(tableIdx);
-                    i++;
+                        secondIdx = tableIdx;
+                    firstIt = false;
                 }
-                if(!unaryTables.contains(pair.getFirst()) && !unaryTables.contains(pair.getSecond())) {
-                    System.out.println(Arrays.toString(query.aliases));
-                    System.out.println(pair.getFirst());
-                    System.out.println(query.aliases[pair.getFirst()]);
-                    String table1 = query.aliasToTable.get(query.aliases[pair.getFirst()]);
-                    String table2 = query.aliasToTable.get(query.aliases[pair.getSecond()]);
+                if(firstIdx > secondIdx) {
+                    int tmp = secondIdx;
+                    secondIdx = firstIdx;
+                    firstIdx = tmp;
+                }
+//                Pair<Integer, Integer> pair = new Pair<Integer, Integer>(firstIdx, secondIdx);
+                HashSet<Integer> joinIdx = new HashSet<>();
+                joinIdx.addAll(joins);
+                if(!unaryTables.contains(firstIdx) && !unaryTables.contains(secondIdx)) {
+                    String table1 = query.aliasToTable.get(query.aliases[firstIdx]);
+                    String table2 = query.aliasToTable.get(query.aliases[secondIdx]);
+                    System.out.println(table1 + " " + table2);
                     int realIdx1 = tableOrder.get(table1);
                     int realIdx2 = tableOrder.get(table2);
-                    Pair readIdxPair = new Pair<>(realIdx1, realIdx2);
-                    commonJoins.putIfAbsent(readIdxPair, new HashSet<Integer>());
-                    commonJoins.get(readIdxPair).add(query.queryNum);
+                    HashSet<Integer> realIndices = new HashSet<>();
+                    realIndices.add(realIdx1);
+                    realIndices.add(realIdx2);
+                    commonJoins.putIfAbsent(realIndices, new HashMap<>());
+                    commonJoins.get(realIndices).putIfAbsent(query.queryNum, new ArrayList<>());
+                    commonJoins.get(realIndices).get(query.queryNum).add(joinIdx);
                 }
             }
         }
         System.out.println("reuse join candidates:");
-        commonJoins.forEach((i, j) -> System.out.println("table:" + i.getFirst() + " join table " + i.getSecond() + ", involved queries" + j.toString()));
+        commonJoins.forEach((i, j) -> System.out.println("table:" + i.toString() + ", involved queries" + j.toString()));
         tableOrder.forEach((i, j) -> System.out.println(i +", " + j));
     }
 
@@ -127,5 +145,9 @@ public class GlobalContext {
                 break;
         }
         firstUnfinishedNum = -1;
+    }
+
+    public static int findGlobalIdxByTableName(String tableName) {
+        return tableOrder.get(tableName);
     }
 }

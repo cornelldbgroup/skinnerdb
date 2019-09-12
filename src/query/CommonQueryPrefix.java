@@ -1,5 +1,7 @@
 package query;
 
+import java.util.ArrayList;
+
 public class CommonQueryPrefix {
 
     public int prefixLen;
