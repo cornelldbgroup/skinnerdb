@@ -58,7 +58,7 @@ public class BenchAndVerify {
 	 */
 	public static void main(String[] args) throws Exception {
 		// Check for command line parameters
-		if (args.length != 5) {
+		if (args.length != 4 && args.length != 5) {
 			System.out.println("Specify Skinner DB dir, "
 					+ "query directory, Postgres DB name, "
 					+ "Postgres user, and Postgres password!");
@@ -69,7 +69,7 @@ public class BenchAndVerify {
 		String queryDir = args[1];
 		String PgDB = args[2];
 		String PgUser = args[3];
-		String PgPassword = args[4];
+		String PgPassword = args.length==5?args[4]:"";
 		PathUtil.initSchemaPaths(SkinnerDbDir);
 		CatalogManager.loadDB(PathUtil.schemaPath);
 		PathUtil.initDataPaths(CatalogManager.currentDB);
