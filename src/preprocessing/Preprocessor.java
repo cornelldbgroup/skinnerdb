@@ -181,7 +181,7 @@ public class Preprocessor {
 			// Compare predicate against indexes
 			conjunct.accept(indexTest);
 			// Can conjunct be evaluated only from indices?
-			if (indexTest.canUseIndex) {
+			if (indexTest.canUseIndex && PreConfig.CONSIDER_INDICES) {
 				indexedConjuncts.add(conjunct);
 			} else {
 				nonIndexedConjuncts.add(conjunct);

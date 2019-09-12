@@ -13,4 +13,9 @@ public class PreConfig {
 	 * during pre-processing step.
 	 */
 	public static final boolean PRE_FILTER = true;
+	/**
+	 * Whether to consider using indices for evaluating
+	 * unary equality predicates.
+	 */
+	public static final boolean CONSIDER_INDICES = false;
 }

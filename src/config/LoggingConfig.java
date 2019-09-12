@@ -11,11 +11,11 @@ public class LoggingConfig {
 	/**
 	 * Whether to log sub-queries generated during unnesting.
 	 */
-	public final static boolean UNNESTING_VERBOSE = true;
+	public final static boolean UNNESTING_VERBOSE = false;
 	/**
 	 * Whether to log intermediate steps during query analysis.
 	 */
-	public final static boolean QUERY_ANALYSIS_VERBOSE = true;
+	public final static boolean QUERY_ANALYSIS_VERBOSE = false;
 	/**
 	 * Whether to log expressions after each transformation stage.
 	 */
