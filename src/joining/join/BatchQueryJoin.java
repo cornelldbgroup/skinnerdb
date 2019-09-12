@@ -189,11 +189,11 @@ public class BatchQueryJoin {
 
         for (int i = 0; i < nrQueries; i++) {
             int[] order = orders[i];
-            int readIdx = (startQuery + i) % nrQueries;
+            int realIdx = (startQuery + i) % nrQueries;
             int nrTable = order.length;
             int[] tupleIndices = new int[nrTable];
             int[] offsets = new int[nrTable];
-            LeftDeepPlan plan = plans[readIdx];
+            LeftDeepPlan plan = plans[realIdx];
             List<List<KnaryBoolEval>> applicablePreds = plan.applicablePreds;
             List<List<JoinIndexWrapper>> joinIndices = plan.joinIndices;
             HashMap<Integer, List<Integer>> currentBatchGroup = batchGroups[i];
@@ -201,15 +201,22 @@ public class BatchQueryJoin {
                 //should recovery table offsets
                 int joinIndex = 0;
                 while (offsets[0] < limit && joinIndex < nrTable && joinIndex >= 0) {
+
+//                    if(currentBatchGroup.containsKey(joinIndex)) {
+//                        for(Integer reuseQuery : currentBatchGroup.get(joinIndex)) {
+//
+//                        }
+//                    }
+
                     //next table
                     int nextTable = plan.joinOrder.order[joinIndex];
-                    int nextCardinality = cardinalities[readIdx][nextTable];
+                    int nextCardinality = cardinalities[realIdx][nextTable];
                     //System.out.println("index:"+joinIndex+", next table:"+nextTable);
                     // Integrate table offset
                     tupleIndices[nextTable] = Math.max(
                             offsets[nextTable], tupleIndices[nextTable]);
                     // Evaluate all applicable predicates on joined tuples
-                    KnaryBoolEval unaryPred = unaryPreds[readIdx][nextTable];
+                    KnaryBoolEval unaryPred = unaryPreds[realIdx][nextTable];
                     if ((PreConfig.PRE_FILTER || unaryPred == null ||
                             unaryPred.evaluate(tupleIndices) > 0) &&
                             evaluateAll(applicablePreds.get(joinIndex), tupleIndices)) {
@@ -217,8 +224,8 @@ public class BatchQueryJoin {
                         // Do we have a complete result row?
                         if (joinIndex == plan.joinOrder.order.length - 1) {
                             // Complete result row -> add to result
-                            result[readIdx].add(tupleIndices);
-                            tupleIndices[nextTable] = proposeNext(readIdx, joinIndices.get(joinIndex), nextTable, tupleIndices);
+                            result[realIdx].add(tupleIndices);
+                            tupleIndices[nextTable] = proposeNext(realIdx, joinIndices.get(joinIndex), nextTable, tupleIndices);
                             // Have reached end of current table? -> we backtrack.
                             while (tupleIndices[nextTable] >= nextCardinality) {
                                 tupleIndices[nextTable] = 0;
@@ -227,7 +234,7 @@ public class BatchQueryJoin {
                                     break;
                                 }
                                 nextTable = plan.joinOrder.order[joinIndex];
-                                nextCardinality = cardinalities[readIdx][nextTable];
+                                nextCardinality = cardinalities[realIdx][nextTable];
                                 tupleIndices[nextTable] += 1;
                             }
                         } else {
@@ -238,7 +245,7 @@ public class BatchQueryJoin {
                     } else {
                         // At least one of applicable predicates evaluates to false -
                         // try next tuple in same table.
-                        tupleIndices[nextTable] = proposeNext(readIdx, joinIndices.get(joinIndex), nextTable, tupleIndices);
+                        tupleIndices[nextTable] = proposeNext(realIdx, joinIndices.get(joinIndex), nextTable, tupleIndices);
                         // Have reached end of current table? -> we backtrack.
                         while (tupleIndices[nextTable] >= nextCardinality) {
                             tupleIndices[nextTable] = 0;
@@ -247,7 +254,7 @@ public class BatchQueryJoin {
                                 break;
                             }
                             nextTable = plan.joinOrder.order[joinIndex];
-                            nextCardinality = cardinalities[readIdx][nextTable];
+                            nextCardinality = cardinalities[realIdx][nextTable];
                             tupleIndices[nextTable] += 1;
                         }
                     }

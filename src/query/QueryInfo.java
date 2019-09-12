@@ -738,8 +738,9 @@ public class QueryInfo {
 		}
 
 		if(selectOrder != null) {
-			System.out.println("Based Query Order: " + Arrays.toString(orders[basedQueryNum]) + ", reuse order:" + selectOrder.toString());
-			System.out.println("Based Query: "+ this.queryNum +", Reused Query: " + (startQuery + basedQueryNum) % GlobalContext.nrQuery + ", reuse length: " + maxPrefixLen);
+			System.out.println("reuse order:" + selectOrder.toString());
+			//System.out.println("Based Query Order: " + Arrays.toString(orders[basedQueryNum]) + ", reuse order:" + selectOrder.toString());
+			//System.out.println("Based Query: "+ this.queryNum +", Reused Query: " + (startQuery + basedQueryNum) % GlobalContext.nrQuery + ", reuse length: " + maxPrefixLen);
 			return new CommonQueryPrefix(maxPrefixLen, selectOrder.stream().mapToInt(i -> i).toArray(), basedQueryNum);
 		} else
 			return null;
@@ -807,10 +808,10 @@ public class QueryInfo {
 				}
 
 				if(prefixLen > 0 && !flag) {
-					System.out.println("bbbbbbb");
-					System.out.println(previousTableSet.toString());
-					System.out.println(leftTableToAdd + " "+ rightTableToAdd);
-					System.out.println("bbbbbbb");
+//					System.out.println("bbbbbbb");
+//					System.out.println(previousTableSet.toString());
+//					System.out.println(leftTableToAdd + " "+ rightTableToAdd);
+//					System.out.println("bbbbbbb");
 					break;
 				}
 
