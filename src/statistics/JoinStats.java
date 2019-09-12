@@ -9,6 +9,10 @@ package statistics;
  *
  */
 public class JoinStats {
+	/**
+	 * Duration of join phase in milliseconds.
+	 */
+	public static long joinMillis = 0;
     /**
      * Number of (complete and partial) tuples considered
      * during the last invocation.
@@ -59,4 +63,8 @@ public class JoinStats {
      * (calculated based on table offsets after query evaluation).
      */
     public static double totalWork = 0;
+    /**
+     * Number of tuples in join result (before post-processing).
+     */
+    public static int skinnerJoinCard = 0;
 }

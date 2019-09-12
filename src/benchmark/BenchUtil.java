@@ -7,19 +7,15 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.TreeMap;
 
-import buffer.BufferManager;
 import catalog.CatalogManager;
 import config.NamingConfig;
-import joining.JoinProcessor;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.select.PlainSelect;
 import net.sf.jsqlparser.statement.select.Select;
-import postprocessing.PostProcessor;
-import preprocessing.Context;
-import preprocessing.Preprocessor;
-import query.QueryInfo;
 import statistics.JoinStats;
+import statistics.PostStats;
+import statistics.PreStats;
 
 /**
  * Several auxiliary methods for benchmarking SkinnerDB.
@@ -67,36 +63,24 @@ public class BenchUtil {
 				+ "MaxReward\tTotalWork");
 	}
 	/**
-	 * Executes given query, measures various metrics and writes
-	 * into new row via given writer.
+	 * Writes out statistics concerning last query execution
+	 * into given benchmark result file.
 	 * 
 	 * @param queryName		name of query to process
-	 * @param sql			the query SQL
+	 * @param totalMillis	total milliseconds of query execution
 	 * @param benchOut		channel for benchmark results
 	 * @throws Exception
 	 */
-	public static void benchQuery(String queryName, PlainSelect sql, 
+	public static void writeStats(String queryName, long totalMillis, 
 			PrintWriter benchOut) throws Exception {
-		System.out.println(queryName);
-		System.out.println(sql.toString());
-		long startMillis = System.currentTimeMillis();
-		QueryInfo query = new QueryInfo(sql, false, -1, -1, null);
-		Context preSummary = Preprocessor.process(query);
-		long preMillis = System.currentTimeMillis() - startMillis;
-		JoinProcessor.process(query, preSummary);
-		long postStartMillis = System.currentTimeMillis();
-		PostProcessor.process(query, preSummary, 
-				NamingConfig.FINAL_RESULT_NAME, true);
-		long postMillis = System.currentTimeMillis() - postStartMillis;
-		long totalMillis = System.currentTimeMillis() - startMillis;
 		// Get cardinality of Skinner join result
 		int skinnerJoinCard = CatalogManager.getCardinality(
 				NamingConfig.JOINED_NAME);
 		// Generate output
 		benchOut.print(queryName + "\t");
 		benchOut.print(totalMillis + "\t");
-		benchOut.print(preMillis + "\t");
-		benchOut.print(postMillis + "\t");
+		benchOut.print(PreStats.preMillis + "\t");
+		benchOut.print(PostStats.postMillis + "\t");
 		benchOut.print(JoinStats.nrTuples + "\t");
 		benchOut.print(JoinStats.nrIterations + "\t");
 		benchOut.print(JoinStats.nrIndexLookups + "\t");
@@ -110,8 +94,5 @@ public class BenchUtil {
 		benchOut.print(JoinStats.maxReward + "\t");
 		benchOut.println(JoinStats.totalWork);
 		benchOut.flush();
-		// Clean up
-		BufferManager.unloadTempData();
-		CatalogManager.removeTempTables();
 	}
 }

@@ -24,6 +24,7 @@ import preprocessing.Context;
 import print.RelationPrinter;
 import query.ColumnRef;
 import query.QueryInfo;
+import statistics.PostStats;
 
 /**
  * Uses the result of the join phase as input and
@@ -524,6 +525,8 @@ public class PostProcessor {
 	 */
 	public static void process(QueryInfo query, Context context,
 			String resultRel, boolean tempResult) throws Exception {
+		// Start counter
+		long startMillis = System.currentTimeMillis();
 		// Store full result in preliminary table if limit specified 
 		boolean hasLimit = query.limit!=-1;
 		String preLimitResult = hasLimit?NamingConfig.PRE_LIMIT_TBL:resultRel;
@@ -561,5 +564,7 @@ public class PostProcessor {
 		}
 		// Update result table statistics
 		CatalogManager.updateStats(resultRel);
+		// Measure time and store as statistics
+		PostStats.postMillis = System.currentTimeMillis() - startMillis;
 	}
 }

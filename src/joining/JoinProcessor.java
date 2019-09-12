@@ -4,6 +4,7 @@ import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Collection;
 
+import catalog.CatalogManager;
 import config.LoggingConfig;
 import config.NamingConfig;
 import config.JoinConfig;
@@ -43,6 +44,7 @@ public class JoinProcessor {
 	public static void process(QueryInfo query, 
 			Context context) throws Exception {
         // Initialize statistics
+		long startMillis = System.currentTimeMillis();
         JoinStats.nrTuples = 0;
         JoinStats.nrIndexLookups = 0;
         JoinStats.nrIndexEntries = 0;
@@ -189,6 +191,11 @@ public class JoinProcessor {
 			ColumnRef newRef = new ColumnRef(targetRelName, newColName);
 			context.columnMapping.put(postCol, newRef);
 		}
+		// Store number of join result tuples
+		JoinStats.skinnerJoinCard = CatalogManager.
+				getCardinality(NamingConfig.JOINED_NAME);
+		// Measure execution time for join phase
+		JoinStats.joinMillis = System.currentTimeMillis() - startMillis;
 	}
 	/**
 	 * Print out log entry if the maximal number of log

@@ -85,7 +85,12 @@ public class SkinnerCmd {
 				for (Entry<String, PlainSelect> entry : nameToQuery.entrySet()) {
 					String queryName = entry.getKey();
 					PlainSelect query = entry.getValue();
-					BenchUtil.benchQuery(queryName, query, benchOut);
+					System.out.println(queryName);
+					System.out.println(query.toString());
+					long startMillis = System.currentTimeMillis();
+					processSQL(query.toString(), true);
+					long totalMillis = System.currentTimeMillis() - startMillis;
+					BenchUtil.writeStats(queryName, totalMillis, benchOut);
 				}
 				// Close benchmark result file
 				benchOut.close();				
@@ -164,45 +169,14 @@ public class SkinnerCmd {
 		}
 	}
 	/**
-	 * Copies content and schema from source to new target relation.
-	 * 
-	 * @param fromRel		copy from this relation
-	 * @param toRel			copy to this relation
-	 * @throws Exception
-	 */
-	/*
-	static void copyInto(String fromRel, String toRel) throws Exception {
-		// Copy schema
-		TableCreator.copyTable(fromRel, toRel);
-		// Copy data in buffer
-		TableInfo fromInfo = CatalogManager.currentDB.nameToTable.get(fromRel);
-		for (String col : fromInfo.columnNames) {
-			ColumnRef fromRef = new ColumnRef(fromRel, col);
-			ColumnRef toRef = new ColumnRef(toRel, col);
-			ColumnData colData = BufferManager.getData(fromRef);
-			BufferManager.colToData.put(toRef, colData);
-		}
-		// Update statistics of new table
-		CatalogManager.updateStats(toRel);
-		// Store new table on hard disk
-		TableInfo toInfo = CatalogManager.currentDB.nameToTable.get(toRel);
-		for (Entry<String, ColumnInfo> entry : toInfo.nameToCol.entrySet()) {
-			String col = entry.getKey();
-			ColumnInfo colInfo = entry.getValue();
-			// Get associated data
-			ColumnRef colRef = new ColumnRef(toRel, col);
-			ColumnData colData = BufferManager.colToData.get(colRef);
-			colData.store(PathUtil.colToPath.get(colInfo));
-		}
-	}
-	*/
-	/**
 	 * Process input string as SQL statement.
 	 * 
-	 * @param input	input text
+	 * @param input		input text
+	 * @param benchRun	whether this is a benchmark run (query results
+	 * 					are not printed for benchmark runs)
 	 * @throws Exception
 	 */
-	static void processSQL(String input) throws Exception {
+	static void processSQL(String input, boolean benchRun) throws Exception {
 		// Try parsing as SQL query
 		Statement sqlStatement = null;
 		try {
@@ -237,7 +211,8 @@ public class SkinnerCmd {
 					Master.executeSelect(plainSelect, 
 							false, -1, -1, null);
 					// Display query result if no target tables specified
-					if (printResult) {
+					// and if this is not a benchmark run.
+					if (!benchRun && printResult) {
 						// Display on console
 						RelationPrinter.print(
 								NamingConfig.FINAL_RESULT_NAME);
@@ -360,7 +335,7 @@ public class SkinnerCmd {
 			// Nothing to do ...
 		} else {
 			try {
-				processSQL(input);				
+				processSQL(input, false);				
 			} catch (SQLexception e) {
 				System.out.println(e.getMessage());
 			}

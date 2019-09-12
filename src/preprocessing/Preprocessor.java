@@ -29,6 +29,7 @@ import operators.Materialize;
 import print.RelationPrinter;
 import query.ColumnRef;
 import query.QueryInfo;
+import statistics.PreStats;
 
 /**
  * Filters query tables via unary predicates and stores
@@ -66,6 +67,8 @@ public class Preprocessor {
 	 * @return 				summary of pre-processing steps
 	 */
 	public static Context process(QueryInfo query) throws Exception {
+		// Start counter
+		long startMillis = System.currentTimeMillis();
 		// Reset error flag
 		hadError = false;
 		// Collect columns required for joins and post-processing
@@ -136,6 +139,8 @@ public class Preprocessor {
 		// Create missing indices for columns involved in equi-joins.
 		log("Creating indices ...");			
 		createJoinIndices(query, preSummary);
+		// Measure processing time
+		PreStats.preMillis = System.currentTimeMillis() - startMillis;
 		return preSummary;
 	}
 	/**
