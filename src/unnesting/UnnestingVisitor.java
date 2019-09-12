@@ -295,7 +295,6 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 	 * @param plainSelect	analyze WHERE clause of this query
 	 */
 	void separateNonLocalPreds(PlainSelect plainSelect) {
-		System.out.println(plainSelect);
 		// Extract conjuncts in original WHERE clause
 		Expression where = plainSelect.getWhere();
 		if (where == null) {

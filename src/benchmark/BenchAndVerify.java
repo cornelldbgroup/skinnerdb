@@ -38,9 +38,9 @@ import query.QueryInfo;
 import statistics.JoinStats;
 
 /**
- * Benchmarks pre- and join-processing stage and compares
- * the output sizes against the sizes of results produced
- * by Postgres.
+ * Benchmarks pre-, join, and post-processing stage and compares
+ * the output sizes against the sizes of results produced by
+ * Postgres.
  * 
  * @author immanueltrummer
  *
@@ -49,19 +49,28 @@ public class BenchAndVerify {
 	/**
 	 * Processes all queries in given directory.
 	 * 
-	 * @param args	first argument is DB directory, 
+	 * @param args	first argument is Skinner DB directory, 
 	 * 				second argument is query directory
+	 * 				third argument is Postgres database name
+	 * 				fourth argument is Postgres user name
+	 * 				fifth argument is Postgres user password
 	 * @throws Exception
 	 */
 	public static void main(String[] args) throws Exception {
 		// Check for command line parameters
-		if (args.length != 2) {
-			System.out.println("Specify DB dir and query directory!");
+		if (args.length != 5) {
+			System.out.println("Specify Skinner DB dir, "
+					+ "query directory, Postgres DB name, "
+					+ "Postgres user, and Postgres password!");
 			return;
 		}
 		// Initialize database
-		String dbDir = args[0];
-		PathUtil.initSchemaPaths(dbDir);
+		String SkinnerDbDir = args[0];
+		String queryDir = args[1];
+		String PgDB = args[2];
+		String PgUser = args[3];
+		String PgPassword = args[4];
+		PathUtil.initSchemaPaths(SkinnerDbDir);
 		CatalogManager.loadDB(PathUtil.schemaPath);
 		PathUtil.initDataPaths(CatalogManager.currentDB);
 		System.out.println("Loading data ...");
@@ -71,12 +80,12 @@ public class BenchAndVerify {
 		Indexer.indexAll(StartupConfig.INDEX_CRITERIA);
 		// Read all queries from files
 		Map<String, PlainSelect> nameToQuery = 
-				BenchUtil.readAllQueries(args[1]);
+				BenchUtil.readAllQueries(queryDir);
 		// Open connection to Postgres 
-		String url = "jdbc:postgresql:imdb_unicode_index";
+		String url = "jdbc:postgresql:" + PgDB;
 		Properties props = new Properties();
-		props.setProperty("user","postgres");
-		props.setProperty("password","");
+		props.setProperty("user",PgUser);
+		props.setProperty("password",PgPassword);
 		Connection connection = DriverManager.getConnection(url, props);
 		java.sql.Statement pgStatement = connection.createStatement();
 		// Open benchmark result file
@@ -84,7 +93,7 @@ public class BenchAndVerify {
 		PrintStream pgOut = new PrintStream("pgResults.txt");
 		PrintStream skinnerOut = new PrintStream("skinnerResults.txt");
 		PrintStream console = System.out;
-		// Measure preprocessing time for each query
+		// Measure pre-processing time for each query
 		BenchUtil.writeBenchHeader(benchOut);
 		for (Entry<String, PlainSelect> entry : nameToQuery.entrySet()) {
 			System.out.println(entry.getKey());
