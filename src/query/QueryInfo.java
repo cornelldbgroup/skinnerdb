@@ -287,7 +287,6 @@ public class QueryInfo {
 		List<SelectItem> selectItems = new ArrayList<>();
 		// Expand SELECT clause into list of expressions
 		for (SelectItem selectItem : plainSelect.getSelectItems()) {
-			System.out.println(selectItem);
 			if (selectItem instanceof SelectExpressionItem) {
 				selectItems.add(selectItem);
 			} else if (selectItem instanceof AllTableColumns) {

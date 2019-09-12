@@ -17,5 +17,5 @@ public class PreConfig {
 	 * Whether to consider using indices for evaluating
 	 * unary equality predicates.
 	 */
-	public static final boolean CONSIDER_INDICES = false;
+	public static final boolean CONSIDER_INDICES = true;
 }
