@@ -19,49 +19,45 @@ import java.util.*;
 
 public class BatchQueryJoin {
 
-    /**
-     * The query for which join orders are evaluated.
-     */
-    protected final QueryInfo[] queries;
-
-    /**
-     * Summarizes pre-processing steps.
-     */
-    protected final Context[] preSummaries;
-
+    public final static int limit = 1000;
     /**
      * At i-th position: cardinality of i-th joined table
      * (after pre-processing).
      */
     public final int[][] cardinalities;
-
     /**
      * Collects result tuples and contains
      * finally a complete result.
      */
     public final JoinResult[] result;
-
     /**
      * Avoids redundant planning work by storing left deep plans.
      */
     public final Map<JoinOrder, LeftDeepPlan>[] planCache;
-
+    /**
+     * The query for which join orders are evaluated.
+     */
+    protected final QueryInfo[] queries;
+    /**
+     * Summarizes pre-processing steps.
+     */
+    protected final Context[] preSummaries;
     /**
      * Maps non-equi join predicates to compiled evaluators.
      */
     protected final Map<Expression, KnaryBoolEval>[] predToEvals;
-
     /**
      * Associates each table index with unary predicates.
      */
     final KnaryBoolEval[][] unaryPreds;
-
     /**
      *
      */
     public int nrQueries;
 
-    public final static int limit = 1000;
+    public int[][] orders;
+
+    public HashMap<Integer, int[]>[] batchGroups;
 
     /**
      * Initializes join operator for given query
@@ -154,7 +150,7 @@ public class BatchQueryJoin {
      * @param tupleIndices  current tuple indices
      * @return next proposed tuple index
      */
-    int proposeNext(int query, List<JoinIndexWrapper> indexWrappers,
+    int proposeNext(int[] cardinality, List<JoinIndexWrapper> indexWrappers,
                     int curTable, int[] tupleIndices) {
         if (indexWrappers.isEmpty()) {
             return tupleIndices[curTable] + 1;
@@ -162,7 +158,7 @@ public class BatchQueryJoin {
         int max = -1;
         for (JoinIndexWrapper wrapper : indexWrappers) {
             int nextRaw = wrapper.nextIndex(tupleIndices);
-            int next = nextRaw < 0 ? cardinalities[query][curTable] : nextRaw;
+            int next = nextRaw < 0 ? cardinality[curTable] : nextRaw;
             max = Math.max(max, next);
         }
         if (max < 0) {
@@ -172,8 +168,7 @@ public class BatchQueryJoin {
         return max;
     }
 
-    public double execute(int[][] orders, ArrayList[] batchGroup, int startQuery) throws Exception {
-        HashMap<Integer, List<Integer>>[] batchGroups = new HashMap[nrQueries];
+    public double execute(int[][] orders, HashMap<Integer, int[]>[] batchGroups, int startQuery) throws Exception {
         LeftDeepPlan[] plans = new LeftDeepPlan[nrQueries];
         for (int i = 0; i < nrQueries; i++) {
             int[] order = orders[i];
@@ -187,81 +182,150 @@ public class BatchQueryJoin {
             plans[i] = plan;
         }
 
-        for (int i = 0; i < nrQueries; i++) {
-            int[] order = orders[i];
-            int realIdx = (startQuery + i) % nrQueries;
-            int nrTable = order.length;
-            int[] tupleIndices = new int[nrTable];
-            int[] offsets = new int[nrTable];
-            LeftDeepPlan plan = plans[realIdx];
-            List<List<KnaryBoolEval>> applicablePreds = plan.applicablePreds;
-            List<List<JoinIndexWrapper>> joinIndices = plan.joinIndices;
-            HashMap<Integer, List<Integer>> currentBatchGroup = batchGroups[i];
-            for (int start = 0; start < nrTable; start++) {
-                //should recovery table offsets
-                int joinIndex = 0;
-                while (offsets[0] < limit && joinIndex < nrTable && joinIndex >= 0) {
+        this.batchGroups = batchGroups;
+        int nrTable = orders[startQuery].length;
+        int offset[] = new int[nrTable];
+        reuseJoin(startQuery, 0, nrTable);
 
-//                    if(currentBatchGroup.containsKey(joinIndex)) {
-//                        for(Integer reuseQuery : currentBatchGroup.get(joinIndex)) {
+//        for (int i = 0; i < nrQueries; i++) {
+//            int[] order = orders[i];
+//            int realIdx = (startQuery + i) % nrQueries;
+//            int nrTable = order.length;
+//            int[] tupleIndices = new int[nrTable];
+//            int[] offsets = new int[nrTable];
+//            LeftDeepPlan plan = plans[realIdx];
+//            List<List<KnaryBoolEval>> applicablePreds = plan.applicablePreds;
+//            List<List<JoinIndexWrapper>> joinIndices = plan.joinIndices;
+//            HashMap<Integer, List<Integer>> currentBatchGroup = batchGroups[i];
+//            for (int start = 0; start < nrTable; start++) {
+//                //should recovery table offsets
+//                int joinIndex = 0;
+//                while (offsets[0] < limit && joinIndex < nrTable && joinIndex >= 0) {
+//
+//                    System.out.println("Table: " + order[joinIndex]);
+//                    if( currentBatchGroup.containsKey(joinIndex)) {
+//                        List<Integer> reusedQueries = currentBatchGroup.get(joinIndex);
+//                        for(Integer reusedQuery : reusedQueries) {
+//                            int[] reusedQueryOrder = orders[reusedQuery];
+//                            int nrReuseQueryTable = reusedQueryOrder.length;
+//                            System.out.println(reusedQueryOrder);
+//                            int[] reusedTupleIndices = new int[nrReuseQueryTable];
+//                            System.arraycopy(tupleIndices, 0, reusedTupleIndices, 0, joinIndex);
+//                            int reuseJoinIndex = joinIndex;
+//                            while(reuseJoinIndex < nrTable && reuseJoinIndex >= joinIndex) {
+//
+//                            }
 //
 //                        }
 //                    }
+//
+////                    if(currentBatchGroup.containsKey(joinIndex)) {
+////                        for(Integer reuseQuery : currentBatchGroup.get(joinIndex)) {
+////
+////                        }
+////                    }
+//
+//
+//                }
+//            }
+//        }
+        return 0;
+    }
 
-                    //next table
-                    int nextTable = plan.joinOrder.order[joinIndex];
-                    int nextCardinality = cardinalities[realIdx][nextTable];
-                    //System.out.println("index:"+joinIndex+", next table:"+nextTable);
-                    // Integrate table offset
-                    tupleIndices[nextTable] = Math.max(
-                            offsets[nextTable], tupleIndices[nextTable]);
-                    // Evaluate all applicable predicates on joined tuples
-                    KnaryBoolEval unaryPred = unaryPreds[realIdx][nextTable];
-                    if ((PreConfig.PRE_FILTER || unaryPred == null ||
-                            unaryPred.evaluate(tupleIndices) > 0) &&
-                            evaluateAll(applicablePreds.get(joinIndex), tupleIndices)) {
-                        ++JoinStats.nrTuples;
-                        // Do we have a complete result row?
-                        if (joinIndex == plan.joinOrder.order.length - 1) {
-                            // Complete result row -> add to result
-                            result[realIdx].add(tupleIndices);
-                            tupleIndices[nextTable] = proposeNext(realIdx, joinIndices.get(joinIndex), nextTable, tupleIndices);
-                            // Have reached end of current table? -> we backtrack.
-                            while (tupleIndices[nextTable] >= nextCardinality) {
-                                tupleIndices[nextTable] = 0;
-                                --joinIndex;
-                                if (joinIndex < 0) {
-                                    break;
-                                }
-                                nextTable = plan.joinOrder.order[joinIndex];
-                                nextCardinality = cardinalities[realIdx][nextTable];
-                                tupleIndices[nextTable] += 1;
-                            }
-                        } else {
-                            // No complete result row -> complete further
-                            joinIndex++;
-                            //System.out.println("Current Join Index2:"+ joinIndex);
-                        }
-                    } else {
-                        // At least one of applicable predicates evaluates to false -
-                        // try next tuple in same table.
-                        tupleIndices[nextTable] = proposeNext(realIdx, joinIndices.get(joinIndex), nextTable, tupleIndices);
-                        // Have reached end of current table? -> we backtrack.
-                        while (tupleIndices[nextTable] >= nextCardinality) {
-                            tupleIndices[nextTable] = 0;
-                            --joinIndex;
-                            if (joinIndex < 0) {
-                                break;
-                            }
-                            nextTable = plan.joinOrder.order[joinIndex];
-                            nextCardinality = cardinalities[realIdx][nextTable];
-                            tupleIndices[nextTable] += 1;
-                        }
-                    }
+    private void reuseJoin(int queryNum, int startIdx, int endIdx) {
+        //join table
+        int[] cardinality = this.cardinalities[queryNum];
+        int[] order = orders[queryNum];
+        int[] offsets = null;
+        int[] tupleIndices = null;
+
+        LeftDeepPlan plan = planCache[queryNum].get(order);
+        List<List<KnaryBoolEval>> applicablePreds = plan.applicablePreds;
+        List<List<JoinIndexWrapper>> joinIndices = plan.joinIndices;
+        KnaryBoolEval[] unarys = unaryPreds[queryNum];
+        HashMap<Integer, int[]> currentBatchGroup = batchGroups[queryNum];
+
+        //next table
+        int joinIndex = startIdx;
+        int nextTable = order[joinIndex];
+        int nextCardinality = cardinality[nextTable];
+        //System.out.println("index:"+joinIndex+", next table:"+nextTable);
+        // Integrate table offset
+        tupleIndices[nextTable] = Math.max(
+                offsets[nextTable], tupleIndices[nextTable]);
+        // Evaluate all applicable predicates on joined tuples
+        KnaryBoolEval unaryPred = unarys[nextTable];
+        if ((PreConfig.PRE_FILTER || unaryPred == null ||
+                unaryPred.evaluate(tupleIndices) > 0) &&
+                evaluateAll(applicablePreds.get(joinIndex), tupleIndices)) {
+            ++JoinStats.nrTuples;
+
+            if (currentBatchGroup.containsKey(joinIndex)) {
+                int[] reusedQueries = currentBatchGroup.get(joinIndex);
+                for (Integer reusedQuery : reusedQueries) {
+                    int[] reusedQueryOrder = orders[reusedQuery];
+                    int nrReuseQueryTable = reusedQueryOrder.length;
+                    System.out.println(reusedQueryOrder);
+                    int[] reusedTupleIndices = new int[nrReuseQueryTable];
+                    System.arraycopy(tupleIndices, 0, reusedTupleIndices, 0, joinIndex);
+
+//                    LeftDeepPlan plan = planCache[reusedQuery].get(reusedQueryOrder);
+//                    List<List<KnaryBoolEval>> reuseApplicablePreds = plan.applicablePreds;
+//                    List<List<JoinIndexWrapper>> reuseJoinIndices = plan.joinIndices;
+//                    reuseJoin(reusedQueryOrder, cardinalities[reusedQuery], offsets, reusedTupleIndices, reuseJoinIndices, reuseApplicablePreds
+//                            , unaryPreds[reusedQuery], reuseJoinIndex, nrReuseQueryTable, batchGroups[reusedQuery]);
+
+                    reuseJoin(reusedQuery, joinIndex, nrReuseQueryTable);
                 }
             }
+
+            // Do we have a complete result row?
+            if (joinIndex == endIdx) {
+                // Complete result row -> add to result
+                //result[realIdx].add(tupleIndices);
+
+                tupleIndices[nextTable] = proposeNext(cardinality, joinIndices.get(joinIndex), nextTable, tupleIndices);
+                // Have reached end of current table? -> we backtrack.
+                while (tupleIndices[nextTable] >= nextCardinality) {
+                    tupleIndices[nextTable] = 0;
+                    --joinIndex;
+                    if (joinIndex < 0) {
+                        break;
+                    }
+                    nextTable = order[joinIndex];
+                    nextCardinality = cardinality[nextTable];
+                    tupleIndices[nextTable] += 1;
+                }
+
+
+            } else {
+                // No complete result row -> complete further
+                joinIndex++;
+                //System.out.println("Current Join Index2:"+ joinIndex);
+            }
+
+
+        } else {
+
+            // At least one of applicable predicates evaluates to false -
+            // try next tuple in same table.
+            tupleIndices[nextTable] = proposeNext(cardinality, joinIndices.get(joinIndex), nextTable, tupleIndices);
+            // Have reached end of current table? -> we backtrack.
+            while (tupleIndices[nextTable] >= nextCardinality) {
+                tupleIndices[nextTable] = 0;
+                --joinIndex;
+                if (joinIndex < 0) {
+                    break;
+                }
+                nextTable = order[joinIndex];
+                nextCardinality = cardinality[nextTable];
+                tupleIndices[nextTable] += 1;
+            }
+
         }
-        return 0;
+
+
+
     }
 
 }

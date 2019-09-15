@@ -75,7 +75,8 @@ public class JoinProcessor {
             //we don't enable preprocessing, preprocessing is also on the UCT search
             int startQuery = GlobalContext.firstUnfinishedNum;
             int[][] orderList = new int[nrQueries][];
-            ArrayList[] batchGroup = new ArrayList[nrQueries];
+            //ArrayList[] batchGroup = new ArrayList[nrQueries];
+            HashMap<Integer, int[]>[] batchGroups = new HashMap[nrQueries];
             for (int i = 0; i < nrQueries; i++) {
                 int prefixLen = 0;
                 int triedQuery = (startQuery + i) % nrQueries;
@@ -86,9 +87,10 @@ public class JoinProcessor {
                 if (i > 0) {
                     CommonQueryPrefix commonQueryPrefix = query.findShortOrders(startQuery, orderList, i);
                     if (commonQueryPrefix != null) {
-                        if (batchGroup[commonQueryPrefix.shift] == null)
-                            batchGroup[commonQueryPrefix.shift] = new ArrayList<Integer>();
-                        batchGroup[commonQueryPrefix.shift].add(triedQuery);
+                        if (batchGroups[startQuery] == null)
+                            batchGroups[startQuery] = new HashMap<>();
+                        //batchGroup[commonQueryPrefix.shift].add(triedQuery);
+                        batchGroups[startQuery].put(triedQuery, joinOrder);
                         prefixLen = commonQueryPrefix.prefixLen;
                         System.arraycopy(commonQueryPrefix.joinOrder, 0, joinOrder, 0, commonQueryPrefix.prefixLen);
                     }
@@ -105,7 +107,7 @@ public class JoinProcessor {
                 System.out.println("query: " + triedQuery + ", join order: " + Arrays.toString(joinOrder));
             }
             //Run batch query process
-            batchQueryJoin.execute(orderList, batchGroup, startQuery);
+            batchQueryJoin.execute(orderList, batchGroups, startQuery);
             GlobalContext.aheadFirstUnfinish();
         }
 
