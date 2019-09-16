@@ -47,6 +47,7 @@
                                 </descriptorRef>
                             </descriptorRefs>
                             <finalName>Skinner</finalName>
+                            <attach>false</attach>
                         </configuration>
                         <phase>package</phase>
                         <goals>
@@ -67,6 +68,7 @@
                                 </descriptorRef>
                             </descriptorRefs>
                             <finalName>CreateDb</finalName>
+                            <attach>false</attach>
                         </configuration>
                         <phase>package</phase>
                         <goals>
