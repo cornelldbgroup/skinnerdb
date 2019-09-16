@@ -142,9 +142,9 @@ public class BatchQueryJoin {
      * @return true iff all predicates evaluate to true
      */
     boolean evaluateAll(List<KnaryBoolEval> preds, int[] tupleIndices) {
-        System.out.println("ssss"+ preds.size());
+        System.out.println("ssss" + preds.size());
         for (KnaryBoolEval pred : preds) {
-            System.out.println("pred"+ pred.toString());
+            System.out.println("pred" + pred.toString());
             if (pred.evaluate(tupleIndices) <= 0) {
                 return false;
             }
@@ -178,7 +178,7 @@ public class BatchQueryJoin {
         return max;
     }
 
-    public double execute(int[][] orders, HashMap<Integer, List<Integer>>[] batchGroups, int startQuery) throws Exception {
+    public double[] execute(int[][] orders, HashMap<Integer, List<Integer>>[] batchGroups, int startQuery) throws Exception {
         //LeftDeepPlan[] plans = new LeftDeepPlan[nrQueries];
         for (int i = 0; i < nrQueries; i++) {
             int realIdx = (startQuery + i) % nrQueries;
@@ -195,17 +195,18 @@ public class BatchQueryJoin {
         this.orders = orders;
         this.batchGroups = batchGroups;
         boolean[] isVisit = new boolean[nrQueries];
-        for(int i = 0; i < batchGroups.length;i++) {
+        int[] nrTuples = new int[nrQueries];
+        for (int i = 0; i < batchGroups.length; i++) {
             int executedQuery = (startQuery + i) % nrQueries;
             //if(batchGroup != null) {
-            if(!isVisit[executedQuery]) {
+            if (!isVisit[executedQuery]) {
                 int[] order = orders[executedQuery];
                 int nrTable = order.length;
                 int[] tupleIndices = new int[nrTable];
                 int firstTable = order[0];
                 int firstTableStartIdx = progress[executedQuery].containsKey(firstTable) ? progress[executedQuery].get(firstTable) : 0;
                 tupleIndices[firstTable] = firstTableStartIdx;
-                reuseJoin(executedQuery, 0, nrTable, tupleIndices, firstTableStartIdx, isVisit);
+                reuseJoin(executedQuery, 0, nrTable, tupleIndices, firstTableStartIdx, isVisit, nrTuples);
             }
             //}
         }
@@ -215,58 +216,29 @@ public class BatchQueryJoin {
             if (progress[i].containsKey(firstTable)) {
                 int totalProgress = progress[i].get(firstTable) + currentProgress;
                 progress[i].put(firstTable, totalProgress);
-                if(totalProgress >= cardinalities[i][firstTable])
+                if (totalProgress >= cardinalities[i][firstTable])
                     GlobalContext.queryStatus[i] = true;
             } else
                 progress[i].put(firstTable, currentProgress);
         }
 
-//        for (int i = 0; i < nrQueries; i++) {
-//            int[] order = orders[i];
-//            int realIdx = (startQuery + i) % nrQueries;
-//            int nrTable = order.length;
-//            int[] tupleIndices = new int[nrTable];
-//            int[] offsets = new int[nrTable];
-//            LeftDeepPlan plan = plans[realIdx];
-//            List<List<KnaryBoolEval>> applicablePreds = plan.applicablePreds;
-//            List<List<JoinIndexWrapper>> joinIndices = plan.joinIndices;
-//            HashMap<Integer, List<Integer>> currentBatchGroup = batchGroups[i];
-//            for (int start = 0; start < nrTable; start++) {
-//                //should recovery table offsets
-//                int joinIndex = 0;
-//                while (offsets[0] < limit && joinIndex < nrTable && joinIndex >= 0) {
-//
-//                    System.out.println("Table: " + order[joinIndex]);
-//                    if( currentBatchGroup.containsKey(joinIndex)) {
-//                        List<Integer> reusedQueries = currentBatchGroup.get(joinIndex);
-//                        for(Integer reusedQuery : reusedQueries) {
-//                            int[] reusedQueryOrder = orders[reusedQuery];
-//                            int nrReuseQueryTable = reusedQueryOrder.length;
-//                            System.out.println(reusedQueryOrder);
-//                            int[] reusedTupleIndices = new int[nrReuseQueryTable];
-//                            System.arraycopy(tupleIndices, 0, reusedTupleIndices, 0, joinIndex);
-//                            int reuseJoinIndex = joinIndex;
-//                            while(reuseJoinIndex < nrTable && reuseJoinIndex >= joinIndex) {
-//
-//                            }
-//
-//                        }
-//                    }
-//
-////                    if(currentBatchGroup.containsKey(joinIndex)) {
-////                        for(Integer reuseQuery : currentBatchGroup.get(joinIndex)) {
-////
-////                        }
-////                    }
-//
-//
-//                }
-//            }
-//        }
-        return 0;
+        double[] rewards = new double[nrQueries];
+        for (int i = 0; i < nrQueries; i++) {
+            rewards[i] = rewardFun(nrTuples[i], i, orders[i].length);
+        }
+
+        return rewards;
     }
 
-    private void reuseJoin(int queryNum, int startIdx, int endIdx, int[] tupleIndices, int firstTableStartIdx, boolean[] isVisit) {
+    double rewardFun(int nrTuple, int queryNum, int nrTable) {
+        long totalCard = 0;
+        for (int i = 0; i < nrTable; i++) {
+            totalCard += cardinalities[queryNum][i];
+        }
+        return totalCard / nrTuple;
+    }
+
+    private void reuseJoin(int queryNum, int startIdx, int endIdx, int[] tupleIndices, int firstTableStartIdx, boolean[] isVisit, int[] nrTuples) {
         //join table
         isVisit[queryNum] = true;
         int[] cardinality = this.cardinalities[queryNum];
@@ -290,7 +262,11 @@ public class BatchQueryJoin {
 
         //next table
         int joinIndex = startIdx;
+        int[] commonPrefixReward = new int[order.length];
         while (joinIndex >= startIdx && joinIndex < endIdx && tupleIndices[0] < firstTableEndIdx) {
+
+            commonPrefixReward[joinIndex]++;
+            nrTuples[queryNum]++;
 
             int nextTable = order[joinIndex];
             int nextCardinality = cardinality[nextTable];
@@ -304,7 +280,7 @@ public class BatchQueryJoin {
             System.out.println("card:" + nextCardinality);
             System.out.println("join len:" + joinIndex);
             System.out.println("tuples" + Arrays.toString(tupleIndices));
-            System.out.println("apps size"+ applicablePreds.size());
+            System.out.println("apps size" + applicablePreds.size());
             if ((PreConfig.PRE_FILTER || unaryPred == null ||
                     unaryPred.evaluate(tupleIndices) > 0) &&
                     evaluateAll(applicablePreds.get(joinIndex), tupleIndices)) {
@@ -317,9 +293,10 @@ public class BatchQueryJoin {
                         int nrReuseQueryTable = reusedQueryOrder.length;
                         //System.out.println(Arrays.toString(reusedQueryOrder));
                         int[] reusedTupleIndices = new int[nrReuseQueryTable];
-                        for(int i=0; i < joinIndex; i++) {
+                        for (int i = 0; i < joinIndex; i++) {
                             int reusedTable = reusedQueryOrder[i];
                             reusedTupleIndices[reusedTable] = tupleIndices[order[i]];
+                            nrTuples[reusedTable] += commonPrefixReward[i];
                         }
 
                         //System.arraycopy(tupleIndices, 0, reusedTupleIndices, 0, joinIndex);
@@ -330,7 +307,8 @@ public class BatchQueryJoin {
                         //                    reuseJoin(reusedQueryOrder, cardinalities[reusedQuery], offsets, reusedTupleIndices, reuseJoinIndices, reuseApplicablePreds
                         //                            , unaryPreds[reusedQuery], reuseJoinIndex, nrReuseQueryTable, batchGroups[reusedQuery]);
 
-                        reuseJoin(reusedQuery, joinIndex, nrReuseQueryTable, reusedTupleIndices, firstTableStartIdx, isVisit);
+
+                        reuseJoin(reusedQuery, joinIndex, nrReuseQueryTable, reusedTupleIndices, firstTableStartIdx, isVisit, nrTuples);
                     }
                 }
 
