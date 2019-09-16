@@ -75,6 +75,27 @@
                             <goal>single</goal>
                         </goals>
                     </execution>
+                    <execution>
+                        <id>build-BenchAndVerify</id>
+                        <configuration>
+                            <appendAssemblyId>false</appendAssemblyId>
+                            <archive>
+                                <manifest>
+                                    <mainClass>benchmark.BenchAndVerify</mainClass>
+                                </manifest>
+                            </archive>
+                            <descriptorRefs>
+                                <descriptorRef>jar-with-dependencies
+                                </descriptorRef>
+                            </descriptorRefs>
+                            <finalName>BenchAndVerify</finalName>
+                            <attach>false</attach>
+                        </configuration>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>single</goal>
+                        </goals>
+                    </execution>
                 </executions>
             </plugin>
         </plugins>
