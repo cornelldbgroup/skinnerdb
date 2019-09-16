@@ -76,7 +76,7 @@ public class JoinProcessor {
             int startQuery = GlobalContext.firstUnfinishedNum;
             int[][] orderList = new int[nrQueries][];
             //ArrayList[] batchGroup = new ArrayList[nrQueries];
-            HashMap<Integer, int[]>[] batchGroups = new HashMap[nrQueries];
+            HashMap<Integer, List<Integer>>[] batchGroups = new HashMap[nrQueries];
             for (int i = 0; i < nrQueries; i++) {
                 int prefixLen = 0;
                 int triedQuery = (startQuery + i) % nrQueries;
@@ -87,11 +87,12 @@ public class JoinProcessor {
                 if (i > 0) {
                     CommonQueryPrefix commonQueryPrefix = query.findShortOrders(startQuery, orderList, i);
                     if (commonQueryPrefix != null) {
-                        if (batchGroups[startQuery] == null)
-                            batchGroups[startQuery] = new HashMap<>();
-                        //batchGroup[commonQueryPrefix.shift].add(triedQuery);
-                        batchGroups[startQuery].put(triedQuery, joinOrder);
+                        int reusedQuery = commonQueryPrefix.reusedQuery;
+                        if (batchGroups[reusedQuery] == null)
+                            batchGroups[reusedQuery] = new HashMap<>();
                         prefixLen = commonQueryPrefix.prefixLen;
+                        batchGroups[reusedQuery].putIfAbsent(prefixLen, new ArrayList<>());
+                        batchGroups[reusedQuery].get(prefixLen).add(triedQuery);
                         System.arraycopy(commonQueryPrefix.joinOrder, 0, joinOrder, 0, commonQueryPrefix.prefixLen);
                     }
                 }

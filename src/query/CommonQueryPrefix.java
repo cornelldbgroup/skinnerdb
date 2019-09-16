@@ -8,11 +8,11 @@ public class CommonQueryPrefix {
 
     public int[] joinOrder;
 
-    public int shift;
+    public int reusedQuery;
 
-    public CommonQueryPrefix(int prefixLen, int[] joinOrder, int shift) {
+    public CommonQueryPrefix(int prefixLen, int[] joinOrder, int reusedQuery) {
         this.prefixLen = prefixLen;
         this.joinOrder = joinOrder;
-        this.shift = shift;
+        this.reusedQuery = reusedQuery;
     }
 }
