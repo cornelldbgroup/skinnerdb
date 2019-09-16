@@ -1,7 +1,7 @@
 # SkinnerDB
 
 This repository contains a very early version of a (slightly refined) re-implementation of SkinnerDB,
-described in the paper <a href="https://dl.acm.org/citation.cfm?id=3275600">SkinnerDB: Regret-bounded query evaluation via reinforcement learning</a> at SIGMOD 2019 (see video recording of SIGMOD talk <a href="https://www.youtube.com/watch?v=QRYVnKaZ9fw">here</a>).
+described in the paper <a href="">SkinnerDB: Regret-bounded query evaluation via reinforcement learning</a> at SIGMOD 2019 (see video recording of SIGMOD talk <a href="https://www.youtube.com/watch?v=QRYVnKaZ9fw">here</a>).
 
 This source code is currently under development and **NOT CONSIDERED STABLE**.
 
@@ -11,22 +11,20 @@ We expect to release the first stable version in the next months.
 
 The <a href="http://www.vldb.org/pvldb/vol9/p204-leis.pdf">join order benchmark</a> is a popular benchmark for query optimizers. Execute the following steps to run SkinnerDB on that benchmark:
 
-<ol>
-<li>Download the IMDB database in the SkinnerDB format <a href="https://drive.google.com/file/d/1UCXtiPvVlwzUCWxKM6ic-XqIryk4OTgE/view?usp=sharing">here</a>. Decompress the linked .zip file.</li>
-<li>Download this GitHub repository (the master branch!) which already contains the join order benchmark queries in the sub-folder imdb/queries.</li>
-<li>Run `mvn package` to compile the code.</li>
-<li>Start SkinnerDB using the executable .jar file in the target sub-folder. For Linux, use the following command in the jars directory (while replacing /path/to/skinner/data by the path to the decompressed IMDB database):
-<p>
-<code>
-java -jar -Xmx16G -XX:+UseConcMarkSweepGC Skinner.jar /path/to/skinner/data
-</code>
-</p>
+
+1. Download the IMDB database in the SkinnerDB format <a href="https://drive.google.com/file/d/1UCXtiPvVlwzUCWxKM6ic-XqIryk4OTgE/view?usp=sharing">here</a>. Decompress the linked .zip file.</li>
+2. Download this GitHub repository (the master branch!) which already contains the join order benchmark queries in the sub-folder imdb/queries.</li>
+3. Run `mvn package` to compile the code.</li>
+4. Start SkinnerDB using the executable .jar file in the target sub-folder. For Linux, use the following command in the jars directory (while replacing /path/to/skinner/data by the path to the decompressed IMDB database):
 The settings for garbage collector (<code>-XX:+UseConcMarkSweepGC</code>) and heap space (<code>-Xmx16G</code>) work best for our benchmarking platform but may need to be revised for different machines.
-</li>
-<li>Optionally, create indexes on all columns using the <code>index all</code>
+```
+java -jar -Xmx16G -XX:+UseConcMarkSweepGC Skinner.jar /path/to/skinner/data
+```
+
+
+5. Optionally, create indexes on all columns using the <code>index all</code>
 command in the SkinnerDB console. Note that you need to re-create indexes after each startup as the current version does not store indexes on disk.</li>
-<li>Run a benchmark using the <code>bench ../imdb/queries outputfile.txt</code> command in the SkinnerDB console (you may need to adapt the relative path to the directory containing benchmark queries, replace <code>outputfile.txt</code> by a file name of your choosing).</li>
-</ol>
+6. Run a benchmark using the <code>bench ../imdb/queries outputfile.txt</code> command in the SkinnerDB console (you may need to adapt the relative path to the directory containing benchmark queries, replace <code>outputfile.txt</code> by a file name of your choosing).</li>
 
 After running the benchmark, benchmark results can be found in the specified output file. Benchmark results include per-query times for each of the processing phases (pre-processing, join phase, and post-processing) as well as many other statistics such as the number of tuples generated (column "Tuples") or the number of UCT tree nodes generated (column "NrUctNodes").
 
