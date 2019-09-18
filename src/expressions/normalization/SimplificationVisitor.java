@@ -72,6 +72,7 @@ import net.sf.jsqlparser.expression.operators.relational.NotEqualsTo;
 import net.sf.jsqlparser.expression.operators.relational.RegExpMatchOperator;
 import net.sf.jsqlparser.expression.operators.relational.RegExpMySQLOperator;
 import net.sf.jsqlparser.schema.Column;
+import net.sf.jsqlparser.statement.create.table.ColDataType;
 import net.sf.jsqlparser.statement.select.SubSelect;
 
 /**
@@ -101,25 +102,77 @@ public class SimplificationVisitor extends SkinnerVisitor {
 	@Override
 	public void visit(Function arg0) {
 		// Visit function parameter expressions
-		List<Expression> params = arg0.getParameters().getExpressions();
-		for (Expression param : params) {
-			param.accept(this);
-		}
-		// Combine rewritten operands in expression list
-		int nrParams = params.size();
 		List<Expression> newParams = new ArrayList<Expression>();
-		for (int i=0; i<nrParams; ++i) {
-			newParams.add(0, opStack.pop());
+		ExpressionList paramList = arg0.getParameters();
+		if (paramList != null) {
+			List<Expression> params = paramList.getExpressions();
+			for (Expression param : params) {
+				param.accept(this);
+			}
+			// Combine rewritten operands in expression list
+			int nrParams = params.size();
+			for (int i=0; i<nrParams; ++i) {
+				newParams.add(0, opStack.pop());
+			}			
 		}
 		// Create new function expression and push on the stack
 		Function newFunction = new Function();
-		newFunction.setName(arg0.getName());
 		newFunction.setDistinct(arg0.isDistinct());
 		newFunction.setEscaped(arg0.isEscaped());
 		newFunction.setKeep(arg0.getKeep());
-		newFunction.setParameters(new ExpressionList(params));
-		newFunction.setAllColumns(arg0.isAllColumns());
-		opStack.push(newFunction);
+		// Certain standard functions are rewritten into base functions
+		String fctName = arg0.getName().toLowerCase();
+		if (fctName.equals("count")) {
+			newFunction.setName("sum");
+			newFunction.setAllColumns(false);
+			List<Expression> sumParams = new ArrayList<>();
+			// Do we count all rows?
+			if (arg0.isAllColumns()) {
+				sumParams.add(new LongValue(1));
+			} else {
+				IsNullExpression countRowCondition = new IsNullExpression();
+				countRowCondition.setNot(true);
+				countRowCondition.setLeftExpression(newParams.get(0));
+				WhenClause whenClause = new WhenClause();
+				whenClause.setWhenExpression(countRowCondition);
+				List<Expression> whenExprs = new ArrayList<>();
+				whenExprs.add(whenClause);
+				whenClause.setThenExpression(new LongValue(1));
+				CaseExpression caseClause = new CaseExpression();
+				caseClause.setWhenClauses(whenExprs);
+				caseClause.setElseExpression(new LongValue(0));
+				sumParams.add(caseClause);
+			}
+			newFunction.setParameters(new ExpressionList(sumParams));
+			opStack.push(newFunction);
+		} else if (fctName.equals("avg")) {
+			// Sum over average input expression and cast to double
+			newFunction.setName("sum");
+			newFunction.setAllColumns(false);
+			newFunction.setParameters(new ExpressionList(newParams));
+			CastExpression newCast = new CastExpression();
+			newCast.setLeftExpression(newFunction);
+			ColDataType doubleType = new ColDataType();
+			doubleType.setDataType("double");
+			newCast.setType(doubleType);
+			// Divide by the count of average input
+			Function divisorFct = new Function();
+			divisorFct.setAllColumns(false);
+			divisorFct.setDistinct(false);
+			divisorFct.setEscaped(false);
+			divisorFct.setName("count");
+			divisorFct.setParameters(new ExpressionList(newParams));
+			Division division = new Division();
+			division.setLeftExpression(newCast);
+			division.setRightExpression(divisorFct);
+			// Still need to rewrite the count statement
+			division.accept(this);
+		} else {
+			newFunction.setName(arg0.getName());
+			newFunction.setAllColumns(arg0.isAllColumns());	
+			newFunction.setParameters(new ExpressionList(newParams));
+			opStack.push(newFunction);
+		}
 	}
 
 	@Override
@@ -515,14 +568,43 @@ public class SimplificationVisitor extends SkinnerVisitor {
 
 	@Override
 	public void visit(CaseExpression arg0) {
-		// TODO Auto-generated method stub
-		
+		// Copy case expression
+		CaseExpression caseCopy = new CaseExpression();
+		// Copy when clauses
+		List<Expression> whenExprsCopy = new ArrayList<>();
+		for (Expression whenExpr : arg0.getWhenClauses()) {
+			whenExpr.accept(this);
+			whenExprsCopy.add(opStack.pop());
+		}
+		caseCopy.setWhenClauses(whenExprsCopy);
+		// Copy switch expression if any
+		Expression switchExpr = arg0.getSwitchExpression();
+		if (switchExpr != null) {
+			switchExpr.accept(this);
+			Expression switchCopy = opStack.pop();
+			caseCopy.setSwitchExpression(switchCopy);
+		}
+		// Copy else expression if any
+		Expression elseExpr = arg0.getElseExpression();
+		if (elseExpr != null) {
+			elseExpr.accept(this);
+			Expression elseCopy = opStack.pop();
+			caseCopy.setElseExpression(elseCopy);
+		}
+		// Put copy on stack
+		opStack.push(caseCopy);
 	}
 
 	@Override
 	public void visit(WhenClause arg0) {
-		// TODO Auto-generated method stub
-		
+		arg0.getWhenExpression().accept(this);
+		Expression whenCopy = opStack.pop();
+		arg0.getThenExpression().accept(this);
+		Expression thenCopy = opStack.pop();
+		WhenClause clauseCopy = new WhenClause();
+		clauseCopy.setWhenExpression(whenCopy);
+		clauseCopy.setThenExpression(thenCopy);
+		opStack.push(clauseCopy);
 	}
 
 	@Override

@@ -20,7 +20,7 @@ public class IndexChecker {
 	 * @param index		index
 	 * @return			true iff index passes all checks
 	 */
-	public static boolean checkIndex(IntData data, IntIndex index) {
+	public static boolean checkIndex(IntData data, Index index) {
 		// Is index checking enabled?
 		if (CheckConfig.CHECK_INDICES) {
 			System.out.println("Verifying index on table with "

@@ -110,7 +110,9 @@ public class LoadCSV {
 		while ((inputFields = csvReader.readNext()) != null && rowCtr < maxRows) {
 			for (int colCtr=0; colCtr<nrColumns; ++colCtr) {
 				String field = inputFields[colCtr];
-				boolean isNull = field.equals(nullRepresentation);
+				boolean isNull = field==null||
+						field.isEmpty()||
+						field.equals(nullRepresentation);
 				data.get(colCtr).isNull.set(rowCtr, isNull);
 				try {
 					switch (columnTypes[colCtr]) {
@@ -130,7 +132,8 @@ public class LoadCSV {
 						doubleData.data[rowCtr] = isNull?0:Double.parseDouble(field);
 						break;
 					case STRING:
-						((StringData)data.get(colCtr)).data[rowCtr] = field; 
+						StringData stringData = ((StringData)data.get(colCtr));
+						stringData.data[rowCtr] = isNull?nullRepresentation:field; 
 						break;
 					default:
 						throw new Exception("Unsupported type: " + columnTypes[colCtr]);

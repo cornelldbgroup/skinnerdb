@@ -6,6 +6,7 @@ import java.util.Set;
 import buffer.BufferManager;
 import config.LoggingConfig;
 import data.IntData;
+import indexing.Index;
 import indexing.IntIndex;
 import preprocessing.Context;
 import query.ColumnRef;
@@ -37,7 +38,7 @@ public class JoinIndexWrapper {
 	/**
 	 * Index on join column to use.
 	 */
-	final IntIndex nextIndex;
+	final Index nextIndex;
 	/**
 	 * Initialize index wrapper for
 	 * given query and join order.
@@ -70,7 +71,7 @@ public class JoinIndexWrapper {
 		// Get index for next table
 		ColumnRef nextQueryCol = pos1<pos2?col2:col1;
 		ColumnRef nextDbCol = preSummary.columnMapping.get(nextQueryCol);
-		nextIndex = (IntIndex)BufferManager.colToIndex.get(nextDbCol);
+		nextIndex = BufferManager.colToIndex.get(nextDbCol);
 		// Generate logging output
 		if (LoggingConfig.INDEX_WRAPPER_VERBOSE) {
 			System.out.println("Initialized join index wrapper: ");
@@ -132,14 +133,20 @@ public class JoinIndexWrapper {
 	 *
 	 * @param tupleIndices	current tuple indices
 	 * @param tid			thread id
-	 * @param nrThreads		number of threads
 	 * @return	next interesting tuple index or cardinality
 	 */
-	public int nextIndexInScope(int[] tupleIndices, int tid, int nrThreads) {
+	public int nextIndexInScope(int[] tupleIndices, int tid) {
 		int priorTuple = tupleIndices[priorTable];
 		int priorVal = priorData.data[priorTuple];
 		int curTuple = tupleIndices[nextTable];
-		return nextIndex.nextTuple(priorVal, curTuple);
+		return nextIndex.nextTupleInScope(priorVal, curTuple, tid);
+	}
+
+	boolean evaluateInScope(int[] tupleIndices, int splitTable, int tid) {
+		int priorTuple = tupleIndices[priorTable];
+		int priorVal = priorData.data[priorTuple];
+		int curTuple = tupleIndices[nextTable];
+		return nextIndex.evaluate(priorVal, curTuple, splitTable, nextTable, tid);
 	}
 
 	/**

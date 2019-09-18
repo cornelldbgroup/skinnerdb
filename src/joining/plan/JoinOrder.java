@@ -1,8 +1,6 @@
 package joining.plan;
 
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.*;
 
 /**
  * Represents a join order (as opposed to a
@@ -45,6 +43,39 @@ public class JoinOrder {
 		newOrder[newNrTables - 1] = newTable;
 		return new JoinOrder(newOrder);
 	}
+
+	/**
+	 * Hash codes considering join order and split table.
+	 *
+	 * @param splitTable
+	 * @return
+	 */
+	public int splitHashCode(int splitTable) {
+		int len = order.length;
+		int hash = 0;
+		int card = 1;
+		for (int table : order) {
+			hash += table * card;
+			card *= len;
+			if (table == splitTable) {
+				break;
+			}
+		}
+		return hash;
+	}
+
+	public int getPrefixKey(int prefixLen) {
+		int len = order.length;
+		int hash = 0;
+		int card = 1;
+		for (int i = 0; i < prefixLen; i++) {
+			int table = order[i];
+			hash += table * card;
+			card *= len;
+		}
+		return hash;
+	}
+
 	/**
 	 * Two join orders are equal if they order tables equally.
 	 */

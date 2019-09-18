@@ -185,6 +185,10 @@ public class QueryInfo {
 	 * number of items in the from clause etc.).
 	 */
 	void extractFromInfo() throws Exception {
+		// Check if FROM clause exists
+		if (plainSelect.getFromItem() == null) {
+			throw new SQLexception("Error - no FROM clause");
+		}
 		// Extract all from items
 		List<FromItem> fromItems = new ArrayList<>();
 		fromItems.add(plainSelect.getFromItem());
@@ -525,6 +529,24 @@ public class QueryInfo {
 			colsForPostProcessing.addAll(havingExpression.columnsMentioned);			
 		}
 		colsForPostProcessing.addAll(extractCols(orderByExpressions));
+		// Add dummy column if no columns are selected for post-processing
+		// (otherwise certain queries would not be treated correctly,
+		// e.g. if select clause contains constant expressions).
+		if (colsForPostProcessing.isEmpty()) {
+			// (assumes from clause)
+			String alias = aliases[0];
+			String table = aliasToTable.get(alias);
+			TableInfo tableInfo = CatalogManager.
+					currentDB.nameToTable.get(table);
+			// If at least one table in the from clause
+			// has no columns then the join result is
+			// empty so no dummy columns are required.
+			if (!tableInfo.columnNames.isEmpty()) {
+				String column = tableInfo.columnNames.get(0);
+				ColumnRef colRef = new ColumnRef(alias, column);
+				colsForPostProcessing.add(colRef);
+			}
+		}
 	}
 	/**
 	 * Extracts a list of all columns mentioned in a list of

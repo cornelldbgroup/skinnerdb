@@ -19,13 +19,14 @@ public class JoinConfig {
 	/**
 	 * Number of steps performed per episode.
 	 */
-	public static int BUDGET_PER_EPISODE = 500;
+	public static int BUDGET_PER_EPISODE = 100;
 	/**
 	 * Weight for UCT exploration term (used to select
 	 * most interesting action to try next). This
 	 * factor may be dynamically adapted.
 	 */
 	public static double EXPLORATION_WEIGHT = 1E-5;
+	public static double PARA_EXPLORATION_WEIGHT = 1E-10;
 	/**
 	 * Determines how the weight for the exploration term
 	 * of the UCT algorithm is updated over time.

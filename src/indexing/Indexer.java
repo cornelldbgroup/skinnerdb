@@ -3,6 +3,7 @@ package indexing;
 import buffer.BufferManager;
 import catalog.CatalogManager;
 import config.IndexingMode;
+import config.ParallelConfig;
 import data.ColumnData;
 import data.IntData;
 import query.ColumnRef;
@@ -25,7 +26,8 @@ public class Indexer {
 			ColumnData data = BufferManager.getData(colRef);
 			if (data instanceof IntData) {
 				IntData intData = (IntData)data;
-				IntIndex index = new IntIndex(intData);
+//				IntIndex index = new IntIndex(intData);
+				ThreadIntIndex index = new ThreadIntIndex(intData, ParallelConfig.EXE_THREADS);
 				BufferManager.colToIndex.put(colRef, index);
 			}					
 		}

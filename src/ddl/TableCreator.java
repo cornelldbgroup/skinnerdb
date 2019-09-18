@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.apache.commons.lang3.StringUtils;
 
+import buffer.BufferManager;
 import catalog.CatalogManager;
 import catalog.info.ColumnInfo;
 import catalog.info.TableInfo;
@@ -14,6 +15,7 @@ import data.StringData;
 import diskio.PathUtil;
 import net.sf.jsqlparser.statement.create.table.ColumnDefinition;
 import net.sf.jsqlparser.statement.create.table.CreateTable;
+import query.ColumnRef;
 import query.SQLexception;
 import types.JavaType;
 import types.SQLtype;
@@ -72,26 +74,37 @@ public class TableCreator {
 		}
 		// Add data paths for new column content
 		PathUtil.initDataPaths(CatalogManager.currentDB);
-		// Initialize with empty data
+		// Initialize with empty data (on disk and in memory)
 		for (ColumnInfo colInfo : table.nameToCol.values()) {
+			String colName = colInfo.name;
+			ColumnRef colRef = new ColumnRef(tableName, colName);
 			String dataPath = PathUtil.colToPath.get(colInfo);
 			SQLtype type = colInfo.type;
 			JavaType jType = TypeUtil.toJavaType(type);
 			switch (jType) {
 			case INT:
-				new IntData(0).store(dataPath);
+				IntData intData = new IntData(0);
+				intData.store(dataPath);
+				BufferManager.colToData.put(colRef, intData);
 				break;
 			case LONG:
-				new LongData(0).store(dataPath);
+				LongData longData = new LongData(0);
+				longData.store(dataPath);
+				BufferManager.colToData.put(colRef, longData);
 				break;
 			case DOUBLE:
-				new DoubleData(0).store(dataPath);
+				DoubleData doubleData = new DoubleData(0);
+				doubleData.store(dataPath);
+				BufferManager.colToData.put(colRef, doubleData);
 				break;
 			case STRING:
-				new StringData(0).store(dataPath);
+				StringData stringData = new StringData(0);
+				stringData.store(dataPath);
+				BufferManager.colToData.put(colRef, stringData);
 				break;
 			}
 		}
+		CatalogManager.updateStats(tableName);
 		return table;
 	}
 }

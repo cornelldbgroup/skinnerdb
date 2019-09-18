@@ -6,11 +6,13 @@ import expressions.ExpressionInfo;
 import expressions.compilation.KnaryBoolEval;
 import joining.plan.JoinOrder;
 import joining.plan.LeftDeepPlan;
+import joining.progress.ParallelProgressTracker;
 import joining.progress.ProgressTracker;
 import joining.progress.State;
 import preprocessing.Context;
 import query.QueryInfo;
 import statistics.JoinStats;
+import statistics.StatsInstance;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -19,10 +21,6 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class ModJoin extends DPJoin {
-    /**
-     * Number of steps per episode.
-     */
-    public final int budget;
     /**
      * Re-initialized in each invocation:
      * stores the remaining budget for
@@ -41,7 +39,8 @@ public class ModJoin extends DPJoin {
     /**
      * Avoids redundant evaluation work by tracking evaluation progress.
      */
-    public final ProgressTracker tracker;
+    public ParallelProgressTracker tracker;
+//    public final ProgressTracker tracker;
     /**
      * Associates each table index with unary predicates.
      */
@@ -56,6 +55,10 @@ public class ModJoin extends DPJoin {
      */
     int logCtr = 0;
     /**
+     * Whether the join phase is terminated
+     */
+    public boolean isFinished = false;
+    /**
      * Initializes join algorithm for given input query.
      *
      * @param query			query to process
@@ -63,11 +66,10 @@ public class ModJoin extends DPJoin {
      * @param budget		budget per episode
      */
     public ModJoin(QueryInfo query, Context preSummary,
-                   int budget, int nrThreads) throws Exception {
-        super(query, preSummary, nrThreads);
-        this.budget = budget;
+                   int budget, int nrThreads, int tid) throws Exception {
+        super(query, preSummary, budget, nrThreads, tid);
         this.planCache = new ConcurrentHashMap<>();
-        this.tracker = new ProgressTracker(nrJoined, cardinalities);
+//        this.tracker = new ProgressTracker(nrJoined, cardinalities);
         // Collect unary predicates
         this.unaryPreds = new KnaryBoolEval[nrJoined];
         for (ExpressionInfo unaryExpr : query.wherePredicates) {
@@ -103,7 +105,8 @@ public class ModJoin extends DPJoin {
             // Fully processed tuples from this table
             progress += tupleIndexDelta[curTable] * weight;
         }
-        return 0.5*progress + 0.5*nrResultTuples/(double)budget;
+//        return 0.5*progress + 0.5*nrResultTuples/(double)budget;
+        return progress;
     }
     /**
      * Executes a given join order for a given budget of steps
@@ -114,15 +117,12 @@ public class ModJoin extends DPJoin {
      * @param order   table join order
      */
     @Override
-    public double execute(int[] order, int tid) throws Exception {
-        log("Context:\t" + preSummary.toString());
-        log("Join order:\t" + Arrays.toString(order));
-        log("Aliases:\t" + Arrays.toString(query.aliases));
-        log("Cardinalities:\t" + Arrays.toString(cardinalities));
+    public double execute(int[] order, int splitTable, int roundCtr) throws Exception {
+        long start = System.currentTimeMillis();
         // Treat special case: at least one input relation is empty
         for (int tableCtr=0; tableCtr<nrJoined; ++tableCtr) {
             if (cardinalities[tableCtr]==0) {
-                tracker.isFinished = true;
+                isFinished = true;
                 return 1;
             }
         }
@@ -133,15 +133,33 @@ public class ModJoin extends DPJoin {
             plan = new LeftDeepPlan(query, preSummary, predToEval, order);
             planCache.putIfAbsent(joinOrder, plan);
         }
-        log(plan.toString());
+        long start1 = System.currentTimeMillis();
+        int splitHash = joinOrder.splitHashCode(splitTable);
+        long start2 = System.currentTimeMillis();
         // Execute from starting state, save progress, return progress
-        State state = tracker.continueFrom(joinOrder);
-        //logger.println("Start state " + state);
+//        State state = tracker.continueFrom(joinOrder);
+        State state = tracker.continueFrom(joinOrder, splitHash, tid, splitTable, null);
+        long start3 = System.currentTimeMillis();
+        writeLog("Round: " + roundCtr + "\t" + Arrays.toString(order) + "\t Split: " + splitTable);
+        writeLog("Start state: " + state.toString());
+//        int[] offsets = tracker.getTableOffset();
         int[] offsets = tracker.tableOffset;
-        executeWithBudget(plan, state, offsets, tid);
+        executeWithBudget(plan, splitTable, state, offsets, tid);
+        long start4 = System.currentTimeMillis();
+        writeLog("End state: " + state.toString());
         double reward = reward(joinOrder.order,
                 tupleIndexDelta, offsets);
-        tracker.updateProgress(joinOrder, state);
+        // Get the first table whose cardinality is larger than 1.
+        int firstTable = getFirstLargeTable(order);
+//        tracker.updateProgress(joinOrder, state);
+        long start5 = System.currentTimeMillis();
+        tracker.updateProgress(joinOrder, splitHash, state, tid, roundCtr, splitTable, firstTable);
+        long start6 = System.currentTimeMillis();
+        lastState = state;
+        lastTable = splitTable;
+        long end = System.currentTimeMillis();
+        writeLog("Time Details: " + (start1 - start) + " " + (start2 - start1) + " " + (start3 - start2) + " "
+                + (start4 - start3) + " " + (start5 - start4) + " " + (start6 - start5) + " " + (end - start6));
         return reward;
     }
     /**
@@ -155,12 +173,24 @@ public class ModJoin extends DPJoin {
      */
     boolean evaluateAll(List<KnaryBoolEval> preds, int[] tupleIndices) {
         for (KnaryBoolEval pred : preds) {
-            if (pred.evaluate(tupleIndices)<=0) {
+            if (pred.evaluate(tupleIndices) <= 0) {
+                return false;
+            }
+
+        }
+        return true;
+    }
+
+    boolean evaluateInScope(List<JoinIndexWrapper> indexWrappers, int[] tupleIndices,
+                            int splitTable, int tid) {
+        for (JoinIndexWrapper wrapper : indexWrappers) {
+            if (!wrapper.evaluateInScope(tupleIndices, splitTable, tid)) {
                 return false;
             }
         }
         return true;
     }
+
     /**
      * Propose next tuple index to consider, based on a set of
      * indices on the join column.
@@ -170,7 +200,7 @@ public class ModJoin extends DPJoin {
      * @param tid	        thread id
      * @return				next join index
      */
-    int proposeNextInScope(int[] joinOrder, List<JoinIndexWrapper> indexWrappers,
+    int proposeNextInScope(int[] joinOrder, int splitTable, List<JoinIndexWrapper> indexWrappers,
                     int curIndex, int[] tupleIndices, int tid) {
         int nextTable = joinOrder[curIndex];
         int nextCardinality = cardinalities[nextTable];
@@ -179,8 +209,9 @@ public class ModJoin extends DPJoin {
         }
         int max = -1;
         for (JoinIndexWrapper wrapper : indexWrappers) {
-            int nextRaw = wrapper.nextIndexInScope(tupleIndices, tid, nrThreads);
-            int next = nextRaw<0?cardinalities[nextTable]:nextRaw;
+            int nextRaw = splitTable == nextTable ?
+                    wrapper.nextIndexInScope(tupleIndices, tid) : wrapper.nextIndex(tupleIndices);
+            int next = nextRaw < 0 ? cardinalities[nextTable] : nextRaw;
             max = Math.max(max, next);
         }
         if (max<0) {
@@ -200,8 +231,6 @@ public class ModJoin extends DPJoin {
             nextCardinality = cardinalities[nextTable];
             tupleIndices[nextTable] += 1;
         }
-
-
         return curIndex;
     }
     /**
@@ -214,17 +243,16 @@ public class ModJoin extends DPJoin {
      * @param offsets last fully treated index for each table
      * @param state   last tuple visited in each base table before start
      */
-    private void executeWithBudget(LeftDeepPlan plan, State state, int[] offsets, int tid) {
+    private void executeWithBudget(LeftDeepPlan plan, int splitTable, State state, int[] offsets, int tid) {
         // Extract variables for convenient access
         int nrTables = query.nrJoined;
         int[] tupleIndices = new int[nrTables];
         List<List<KnaryBoolEval>> applicablePreds = plan.applicablePreds;
         List<List<JoinIndexWrapper>> joinIndices = plan.joinIndices;
         // Initialize state and flags to prepare budgeted execution
-        int joinIndex = state.lastIndex;
-        for (int tableCtr = 0; tableCtr < nrTables; ++tableCtr) {
-            tupleIndices[tableCtr] = state.tupleIndices[tableCtr];
-        }
+//        int joinIndex = state.lastIndex;
+        int joinIndex = 1;
+        System.arraycopy(state.tupleIndices, 0, tupleIndices, 0, nrTables);
         int remainingBudget = budget;
         // Number of completed tuples added
         nrResultTuples = 0;
@@ -232,7 +260,8 @@ public class ModJoin extends DPJoin {
         // at each iteration start, tuple indices contain next tuple
         // combination to look at.
         while (remainingBudget > 0 && joinIndex >= 0) {
-            ++JoinStats.nrIterations;
+
+            ++statsInstance.nrIterations;
             //log("Offsets:\t" + Arrays.toString(offsets));
             //log("Indices:\t" + Arrays.toString(tupleIndices));
             // Get next table in join order
@@ -243,10 +272,14 @@ public class ModJoin extends DPJoin {
                     offsets[nextTable], tupleIndices[nextTable]);
             // Evaluate all applicable predicates on joined tuples
             KnaryBoolEval unaryPred = unaryPreds[nextTable];
+
+
             if ((PreConfig.PRE_FILTER || unaryPred == null ||
                     unaryPred.evaluate(tupleIndices)>0) &&
-                    evaluateAll(applicablePreds.get(joinIndex), tupleIndices)) {
-                ++JoinStats.nrTuples;
+//                    evaluateAll(applicablePreds.get(joinIndex), tupleIndices)
+                    evaluateInScope(joinIndices.get(joinIndex), tupleIndices, splitTable, tid)
+            ) {
+                ++statsInstance.nrTuples;
                 // Do we have a complete result row?
                 if(joinIndex == plan.joinOrder.order.length - 1) {
                     // Complete result row -> add to result
@@ -254,7 +287,7 @@ public class ModJoin extends DPJoin {
                     result.add(tupleIndices);
 
                     joinIndex = proposeNextInScope(
-                            plan.joinOrder.order, joinIndices.get(joinIndex), nextTable, tupleIndices, tid);
+                            plan.joinOrder.order, splitTable, joinIndices.get(joinIndex), joinIndex, tupleIndices, tid);
                 } else {
                     // No complete result row -> complete further
                     joinIndex++;
@@ -264,7 +297,7 @@ public class ModJoin extends DPJoin {
                 // At least one of applicable predicates evaluates to false -
                 // try next tuple in same table.
                 joinIndex = proposeNextInScope(
-                        plan.joinOrder.order, joinIndices.get(joinIndex), nextTable, tupleIndices, tid);
+                        plan.joinOrder.order, splitTable, joinIndices.get(joinIndex), joinIndex, tupleIndices, tid);
             }
             --remainingBudget;
         }
@@ -280,13 +313,11 @@ public class ModJoin extends DPJoin {
         }
         // Save final state
         state.lastIndex = joinIndex;
-        for (int tableCtr = 0; tableCtr < nrTables; ++tableCtr) {
-            state.tupleIndices[tableCtr] = tupleIndices[tableCtr];
-        }
+        System.arraycopy(tupleIndices, 0, state.tupleIndices, 0, nrTables);
     }
     @Override
     public boolean isFinished() {
-        return tracker.isFinished;
+        return lastState.isFinished();
     }
     /**
      * Output log text unless the maximal number

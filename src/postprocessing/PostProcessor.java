@@ -19,7 +19,9 @@ import operators.MapRows;
 import operators.Materialize;
 import operators.MinMaxAggregate;
 import operators.OrderBy;
+import operators.SumAggregate;
 import preprocessing.Context;
+import print.RelationPrinter;
 import query.ColumnRef;
 import query.QueryInfo;
 
@@ -96,6 +98,10 @@ public class PostProcessor {
 	 */
 	static void aggregate(QueryInfo queryInfo, Context context) 
 			throws Exception {
+		// Generate table for holding aggregation input
+		String aggSrcTbl = NamingConfig.AGG_SRC_TBL_NAME;
+		TableInfo aggSrcTblInfo = new TableInfo(aggSrcTbl, true);
+		CatalogManager.currentDB.nameToTable.put(aggSrcTbl, aggSrcTblInfo);
 		// Generate table for holding aggregation results
 		String aggTbl = NamingConfig.AGG_TBL_NAME;
 		TableInfo aggTblInfo = new TableInfo(aggTbl, true);
@@ -117,7 +123,7 @@ public class PostProcessor {
 				// Input is complex expression - generate data
 				String joinRel = NamingConfig.JOINED_NAME;
 				String sourceCol = NamingConfig.AGG_SRC_COL_PRE + aggInputCtr;
-				sourceRef = new ColumnRef(aggTbl, sourceCol);
+				sourceRef = new ColumnRef(aggSrcTbl, sourceCol);
 				++aggInputCtr;
 				MapRows.execute(joinRel, aggInput, 
 						context.columnMapping, null, 
@@ -136,6 +142,10 @@ public class PostProcessor {
 			int nrGroups = context.nrGroups;
 			ColumnRef groupRef = context.groupRef;
 			switch (aggInfo.aggFunction) {
+			case SUM:
+				SumAggregate.execute(sourceRef, nrGroups, 
+						groupRef, targetRef);
+				break;
 			case MIN:
 				MinMaxAggregate.execute(sourceRef, nrGroups, 
 						groupRef, false, targetRef);
@@ -144,7 +154,14 @@ public class PostProcessor {
 				MinMaxAggregate.execute(sourceRef, nrGroups, 
 						groupRef, true, targetRef);
 				break;
+			default:
+				throw new Exception("Error - aggregate " + aggInfo +
+						" should have been rewritten");
 			}
+		}
+		// Print out aggregation table if activated
+		if (LoggingConfig.PRINT_INTERMEDIATES) {
+			RelationPrinter.print(aggTbl);
 		}
 	}
 	/**

@@ -95,26 +95,30 @@ public class CopyVisitor extends SkinnerVisitor {
 
 	@Override
 	public void visit(Function arg0) {
-		// Visit function parameter expressions
-		List<Expression> params = arg0.getParameters().getExpressions();
-		for (Expression param : params) {
-			param.accept(this);
-		}
-		// Combine rewritten operands in expression list
-		int nrParams = params.size();
-		List<Expression> newParams = new ArrayList<Expression>();
-		for (int i=0; i<nrParams; ++i) {
-			newParams.add(0, exprStack.pop());
-		}
 		// Create new function expression and push on the stack
 		Function newFunction = new Function();
 		newFunction.setName(arg0.getName());
 		newFunction.setDistinct(arg0.isDistinct());
 		newFunction.setEscaped(arg0.isEscaped());
 		newFunction.setKeep(arg0.getKeep());
-		newFunction.setParameters(new ExpressionList(newParams));
 		newFunction.setAllColumns(arg0.isAllColumns());
 		exprStack.push(newFunction);
+		// Visit function parameter expressions
+		ExpressionList paramList = arg0.getParameters();
+		if (paramList != null) {
+			// Copy parameters
+			List<Expression> params = paramList.getExpressions();
+			for (Expression param : params) {
+				param.accept(this);
+			}
+			// Combine rewritten operands in expression list
+			int nrParams = params.size();
+			List<Expression> newParams = new ArrayList<Expression>();
+			for (int i=0; i<nrParams; ++i) {
+				newParams.add(0, exprStack.pop());
+			}
+			newFunction.setParameters(new ExpressionList(newParams));			
+		}
 	}
 
 	@Override
@@ -352,14 +356,43 @@ public class CopyVisitor extends SkinnerVisitor {
 
 	@Override
 	public void visit(CaseExpression arg0) {
-		// TODO Auto-generated method stub
-		
+		// Copy case expression
+		CaseExpression caseCopy = new CaseExpression();
+		// Copy when clauses
+		List<Expression> whenExprsCopy = new ArrayList<>();
+		for (Expression whenExpr : arg0.getWhenClauses()) {
+			whenExpr.accept(this);
+			whenExprsCopy.add(exprStack.pop());
+		}
+		caseCopy.setWhenClauses(whenExprsCopy);
+		// Copy switch expression if any
+		Expression switchExpr = arg0.getSwitchExpression();
+		if (switchExpr != null) {
+			switchExpr.accept(this);
+			Expression switchCopy = exprStack.pop();
+			caseCopy.setSwitchExpression(switchCopy);
+		}
+		// Copy else expression if any
+		Expression elseExpr = arg0.getElseExpression();
+		if (elseExpr != null) {
+			elseExpr.accept(this);
+			Expression elseCopy = exprStack.pop();
+			caseCopy.setElseExpression(elseCopy);
+		}
+		// Put copy on stack
+		exprStack.push(caseCopy);
 	}
 
 	@Override
 	public void visit(WhenClause arg0) {
-		// TODO Auto-generated method stub
-		
+		arg0.getWhenExpression().accept(this);
+		Expression whenCopy = exprStack.pop();
+		arg0.getThenExpression().accept(this);
+		Expression thenCopy = exprStack.pop();
+		WhenClause clauseCopy = new WhenClause();
+		clauseCopy.setWhenExpression(whenCopy);
+		clauseCopy.setThenExpression(thenCopy);
+		exprStack.push(clauseCopy);
 	}
 
 	@Override

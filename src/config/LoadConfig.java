@@ -10,5 +10,5 @@ public class LoadConfig {
     /**
      * the number of rows to load
      */
-    public static final int MAXROWS = 100000;
+    public static final int MAXROWS = Integer.MAX_VALUE;
 }

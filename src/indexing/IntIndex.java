@@ -5,6 +5,7 @@ import com.koloboke.collect.map.IntIntMap;
 import com.koloboke.collect.map.hash.HashIntIntMaps;
 
 import config.LoggingConfig;
+import config.ParallelConfig;
 import data.IntData;
 import statistics.JoinStats;
 
@@ -150,6 +151,22 @@ public class IntIndex extends Index {
 		// No suitable tuple found
 		return cardinality;
 	}
+
+	/**
+	 * Returns index of next tuple with given value
+	 * or cardinality of indexed table if no such
+	 * tuple exists.
+	 *
+	 * @param value			indexed value
+	 * @param prevTuple		index of last tuple
+	 * @param tid			thread id
+	 * @return 	index of next tuple or cardinality
+	 */
+	public int nextTupleInScope(int value, int prevTuple, int tid) {
+
+		// No suitable tuple found
+		return cardinality;
+	}
 	/**
 	 * Returns the number of entries indexed
 	 * for the given value.
@@ -192,6 +209,12 @@ public class IntIndex extends Index {
 			return positions[iterPos];
 		}
 	}
+
+	@Override
+	public boolean evaluate(int priorVal, int curIndex, int splitTable, int nextTable, int tid) {
+		return false;
+	}
+
 	/**
 	 * Returns next indexed tuple from remaining
 	 * iterator entries after given prior tuple.

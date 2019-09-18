@@ -1,6 +1,7 @@
 package execution;
 
 import joining.JoinProcessor;
+import joining.ParallelJoinProcessor;
 import net.sf.jsqlparser.statement.select.PlainSelect;
 import postprocessing.PostProcessor;
 import preprocessing.Context;
@@ -33,11 +34,21 @@ public class Master {
 		// Analyze input query
 		QueryInfo query = new QueryInfo(select, explain, 
 				plotAtMost, plotEvery, plotDir);
+		long preStart = System.currentTimeMillis();
 		// Filter, projection, and indexing for join phase
 		Context context = Preprocessor.process(query);
+		System.out.println("Finish Pre");
+		long joinStart = System.currentTimeMillis();
 		// Join filtered tables
-		JoinProcessor.process(query, context);
+//		JoinProcessor.process(query, context);
+		ParallelJoinProcessor.process(query, context);
+		System.out.println("Finish Join");
+		long postStart = System.currentTimeMillis();
 		// Aggregation, grouping, and sorting if required
 		PostProcessor.process(query, context);
+		System.out.println("Finish Post");
+		long end = System.currentTimeMillis();
+		System.out.println("Pre: " + (joinStart - preStart) + "\tJoin: " +
+				(postStart - joinStart) + "\tPost: " + (end - postStart));
 	}
 }

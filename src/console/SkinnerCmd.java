@@ -1,9 +1,13 @@
 package console;
 
 import java.io.File;
+import java.io.PrintWriter;
+import java.util.Map;
 import java.util.Scanner;
+import java.util.Map.Entry;
 import java.util.regex.Pattern;
 
+import benchmark.BenchUtil;
 import buffer.BufferManager;
 import catalog.CatalogManager;
 import catalog.info.TableInfo;
@@ -51,6 +55,41 @@ public class SkinnerCmd {
 			System.out.println("Error - input file at " +
 					filePath + " does not exist");
 			return false;
+		}
+	}
+	/**
+	 * Processes a command for benchmarking all queries in a
+	 * given directory.
+	 * 
+	 * @param input		input command
+	 * @throws Exception
+	 */
+	static void processBenchCmd(String input) throws Exception {
+		String[] inputFrags = input.split("\\s");
+		if (inputFrags.length != 3) {
+			System.out.println("Error - specify only path "
+					+ "to directory containing queries and "
+					+ "name of output file");
+		} else {
+			// Check whether directory exists
+			String dirPath = inputFrags[1];
+			if (fileOrError(dirPath)) {
+				// Open benchmark result file and write header
+				String outputName = inputFrags[2];
+				PrintWriter benchOut = new PrintWriter(outputName);
+				BenchUtil.writeBenchHeader(benchOut);
+				// Load all queries to benchmark
+				Map<String, PlainSelect> nameToQuery = 
+						BenchUtil.readAllQueries(dirPath);
+				// Iterate over queries
+				for (Entry<String, PlainSelect> entry : nameToQuery.entrySet()) {
+					String queryName = entry.getKey();
+					PlainSelect query = entry.getValue();
+					BenchUtil.benchQuery(queryName, query, benchOut);
+				}
+				// Close benchmark result file
+				benchOut.close();				
+			}
 		}
 	}
 	/**
@@ -108,6 +147,7 @@ public class SkinnerCmd {
 						System.out.println("Processing statement '" + sqlCmd + "'");
 						processInput(sqlCmd);				
 					} catch (Exception e) {
+						e.printStackTrace();
 						System.err.println("Error processing command " + sqlCmd);
 					}
 				}
@@ -242,6 +282,8 @@ public class SkinnerCmd {
 		if (input.equals("quit")) {
 			// Terminate console
 			return false;
+		} else if (input.startsWith("bench")) {
+			processBenchCmd(input);
 		} else if (input.equals("compress")) {
 			Compressor.compress();
 		} else if (input.startsWith("exec")) {
@@ -250,6 +292,7 @@ public class SkinnerCmd {
 			String[] inputFrags = input.split("\\s");
 			processExplain(inputFrags);
 		} else if (input.equals("help")) {
+			System.out.println("'bench <query Dir> <output file>' to benchmark queries in *.sql files");
 			System.out.println("'compress' to compress database");
 			System.out.println("'exec <SQL file>' to execute file");
 			System.out.println("'explain <Plot Dir> <Plot Bound> "
@@ -287,11 +330,14 @@ public class SkinnerCmd {
 	 */
 	public static void main(String[] args) throws Exception {
 		// Verify number of command line arguments
-		if (args.length != 1) {
+		if (args.length < 1) {
 			System.out.println("Error - specify the path"
 					+ " to database directory!");
 			return;
 		}
+
+		String preInput = args.length == 2 ? "exec " + args[1] : null;
+
 		// Load database schema and initialize path mapping
 		dbDir = args[0];
 		PathUtil.initSchemaPaths(dbDir);
@@ -312,13 +358,14 @@ public class SkinnerCmd {
 		boolean continueProcessing = true;
 		while (continueProcessing) {
 			System.out.print("> ");
-			String input = scanner.nextLine();
+			String input = preInput == null ? scanner.nextLine() : preInput;
 			try {
 				continueProcessing = processInput(input);								
 			} catch (Exception e) {
 				System.err.println("Error processing command: ");
 				e.printStackTrace();
 			}
+			continueProcessing = continueProcessing && args.length == 1;
 		}
 		scanner.close();
 	}

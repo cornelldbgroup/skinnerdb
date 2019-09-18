@@ -49,12 +49,11 @@ public class LeftDeepPlan {
 			Map<Expression, KnaryBoolEval> evalMap, int[] order) 
 					throws Exception {
 		// Count generated plan
-		++JoinStats.nrPlansTried;
+//		++JoinStats.nrPlansTried;
 		int nrTables = query.nrJoined;
 		this.joinOrder = new JoinOrder(order);
 		// Initialize remaining predicates
-		List<ExpressionInfo> remainingEquiPreds = new ArrayList<>();
-		remainingEquiPreds.addAll(query.equiJoinPreds);
+		List<ExpressionInfo> remainingEquiPreds = new ArrayList<>(query.equiJoinPreds);
 		List<ExpressionInfo> remainingPreds = new ArrayList<>();
 		for (ExpressionInfo predInfo : query.wherePredicates) {
 			if (predInfo.aliasesMentioned.size()>1) {
@@ -86,18 +85,18 @@ public class LeftDeepPlan {
 				}
 			}
 			// Iterate over remaining other predicates
-			Iterator<ExpressionInfo> generalPredsIter = 
-					remainingPreds.iterator();
-			while (generalPredsIter.hasNext()) {
-				ExpressionInfo pred = generalPredsIter.next();
-				if (availableTables.containsAll(
-						pred.aliasIdxMentioned)) {
-					KnaryBoolEval evaluator = evalMap.get(
-							pred.finalExpression);
-					applicablePreds.get(joinCtr).add(evaluator);
-					generalPredsIter.remove();
-				}
-			}
+//			Iterator<ExpressionInfo> generalPredsIter =
+//					remainingPreds.iterator();
+//			while (generalPredsIter.hasNext()) {
+//				ExpressionInfo pred = generalPredsIter.next();
+//				if (availableTables.containsAll(
+//						pred.aliasIdxMentioned)) {
+//					KnaryBoolEval evaluator = evalMap.get(
+//							pred.finalExpression);
+//					applicablePreds.get(joinCtr).add(evaluator);
+//					generalPredsIter.remove();
+//				}
+//			}
 		} // over join positions
 	}
 	@Override
