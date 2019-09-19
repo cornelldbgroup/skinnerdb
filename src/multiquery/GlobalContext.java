@@ -142,7 +142,7 @@ public class GlobalContext {
         for(int i = 0; i < nrQuery; i++) {
             firstUnfinishedNum = (firstUnfinishedNum + 1) % nrQuery;
             if(!queryStatus[firstUnfinishedNum])
-                break;
+                return;
         }
         firstUnfinishedNum = -1;
     }

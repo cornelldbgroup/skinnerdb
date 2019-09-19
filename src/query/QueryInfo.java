@@ -6,8 +6,6 @@ import java.util.Map.Entry;
 import catalog.CatalogManager;
 import catalog.info.ColumnInfo;
 import catalog.info.TableInfo;
-import com.sun.org.apache.bcel.internal.generic.GotoInstruction;
-import com.sun.org.apache.bcel.internal.generic.INEG;
 import config.LoggingConfig;
 import expressions.ExpressionInfo;
 import expressions.aggregates.AggInfo;
@@ -28,11 +26,8 @@ import net.sf.jsqlparser.statement.select.OrderByElement;
 import net.sf.jsqlparser.statement.select.PlainSelect;
 import net.sf.jsqlparser.statement.select.SelectExpressionItem;
 import net.sf.jsqlparser.statement.select.SelectItem;
-import net.sf.jsqlparser.util.cnfexpression.CNFConverter;
 import org.apache.commons.lang3.StringUtils;
 import utils.Pair;
-
-import javax.management.Query;
 
 /**
  * Contains information on the query to execute.
@@ -728,20 +723,23 @@ public class QueryInfo {
 		ArrayList<Integer> selectOrder = null;
 		int shift = 0;
 		for(int i = 0; i < orderLen ; i++) {
-			int[] order= orders[i];
-			ArrayList<Integer> prefix = findSamePrefixLen((startQuery + i) % GlobalContext.nrQuery, order);
+			int realIdx = (startQuery + i) % GlobalContext.nrQuery;
+			int[] order= orders[realIdx];
+			if(order == null)
+				continue;
+			ArrayList<Integer> prefix = findSamePrefixLen(realIdx, order);
 			if (prefix.size() > maxPrefixLen) {
 				selectOrder = prefix;
 				maxPrefixLen = prefix.size();
-				shift = i;
+				shift = realIdx;
 			}
 		}
 
 		if(selectOrder != null) {
-			System.out.println("reuse order:" + selectOrder.toString());
+			//System.out.println("reuse order:" + selectOrder.toString());
 			//System.out.println("Based Query Order: " + Arrays.toString(orders[basedQueryNum]) + ", reuse order:" + selectOrder.toString());
 			//System.out.println("Based Query: "+ this.queryNum +", Reused Query: " + (startQuery + basedQueryNum) % GlobalContext.nrQuery + ", reuse length: " + maxPrefixLen);
-			return new CommonQueryPrefix(maxPrefixLen, selectOrder.stream().mapToInt(i -> i).toArray(), (startQuery + shift) % GlobalContext.nrQuery);
+			return new CommonQueryPrefix(maxPrefixLen, selectOrder.stream().mapToInt(i -> i).toArray(), shift);
 		} else
 			return null;
 	}
@@ -816,11 +814,11 @@ public class QueryInfo {
 				}
 
 				//dangerous here
-//				if(this.aliasToTable.get(this.aliases[leftTableToAdd]).equals(rightTableOriginName)) {
-//					int tmp = leftTableToAdd;
-//					leftTableToAdd = rightTableToAdd;
-//					rightTableToAdd = tmp;
-//				}
+				if(prefixLen == 0 &&this.aliasToTable.get(this.aliases[leftTableToAdd]).equals(rightTableOriginName)) {
+					int tmp = leftTableToAdd;
+					leftTableToAdd = rightTableToAdd;
+					rightTableToAdd = tmp;
+				}
 
 				if(prefixLen == 0) {
 					previousBasedTableSet.add(basedLeftIdx);

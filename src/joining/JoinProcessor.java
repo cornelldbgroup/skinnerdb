@@ -104,14 +104,34 @@ public class JoinProcessor {
 	                //roots[triedQuery].sample(roundCtr[triedQuery], joinOrder, policy);
                 //roundCtr[triedQuery]++;
                 roundCtr++;
-				orderList[i] = joinOrder;
-                System.out.println("query: " + triedQuery + ", join order: " + Arrays.toString(joinOrder));
+				orderList[triedQuery] = joinOrder;
+                //System.out.println("query: " + triedQuery + ", join order: " + Arrays.toString(joinOrder));
             }
             //Run batch query process
-            batchQueryJoin.execute(orderList, batchGroups, startQuery);
+//            for (int i = 0; i < nrQueries; i++) {
+//                System.out.println("join order:" + Arrays.toString(orderList[i]) + ", status" + GlobalContext.queryStatus[i]);
+//            }
+
+            System.out.println("***************************");
+            double[] reward = batchQueryJoin.execute(orderList, batchGroups, startQuery);
+            for (int i = 0; i < nrQueries; i++) {
+                if(GlobalContext.queryStatus[i])
+                    continue;
+                //System.out.println("join order:" + Arrays.toString(orderList[i]));
+                //System.out.println(reward[i]);
+                roots[i].updateReward(reward[i], orderList[i], 0);
+            }
             GlobalContext.aheadFirstUnfinish();
+            System.out.println("========================");
+            for (int i = 0; i < nrQueries; i++) {
+                System.out.println("status:" + GlobalContext.queryStatus[i]);
+            }
+            System.out.println("first:" + GlobalContext.firstUnfinishedNum);
         }
 
+//        for (int i = 0; i < nrQueries; i++) {
+//            System.out.println("status:" + GlobalContext.queryStatus[i]);
+//        }
 
         // Initialize counters and variables
 

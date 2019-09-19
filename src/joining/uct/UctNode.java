@@ -235,8 +235,10 @@ public class UctNode {
                 }
                 if (useHeuristic && !recommendedActions.contains(action))
                     continue;
-                double meanReward = accumulatedReward[action] / nrTries[action];
-                double exploration = Math.sqrt(Math.log(nrVisits) / nrTries[action]);
+                double meanReward = (nrTries[action] > 0) ? accumulatedReward[action] / nrTries[action] : 0;
+                double exploration = (nrTries[action] > 0) ? Math.sqrt(Math.log(nrVisits) / nrTries[action]) : 0;
+//                System.out.println("mean:"+ meanReward);
+//                System.out.println("exploration:"+ exploration);
                 // Assess the quality of the action according to policy
                 double quality = -1;
                 switch (policy) {
@@ -362,6 +364,7 @@ public class UctNode {
         } else {
             // inner node - select next action and expand tree if necessary
             int action = selectAction(policy);
+//            System.out.println(action);
             int table = nextTable[action];
             joinOrder[treeLevel] = table;
             // grow tree if possible
@@ -394,6 +397,21 @@ public class UctNode {
                     childNodes[action].ahead(roundCtr, joinOrder, curDepth + 1, prefixLen, policy);
                     break;
                 }
+            }
+        }
+    }
+
+    public void updateReward(double reward, int[] joinOrder, int curDepth) {
+        if(curDepth >= joinOrder.length)
+            return;
+        int table = joinOrder[curDepth];
+        for (int action = 0; action < nrActions; action++) {
+            if (nextTable[action] == table) {
+                if (childNodes[action] != null) {
+                    updateStatistics(action, reward);
+                    childNodes[action].updateReward(reward, joinOrder, curDepth + 1);
+                }
+                break;
             }
         }
     }

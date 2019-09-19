@@ -7,6 +7,7 @@ import expressions.ExpressionInfo;
 import expressions.compilation.EvaluatorType;
 import expressions.compilation.ExpressionCompiler;
 import expressions.compilation.KnaryBoolEval;
+import joining.plan.JoinOrder;
 import joining.plan.LeftDeepPlan;
 import joining.result.JoinResult;
 import multiquery.GlobalContext;
@@ -17,12 +18,20 @@ import statistics.JoinStats;
 import utils.Pair;
 
 import java.awt.*;
+import java.lang.reflect.Array;
 import java.util.*;
 import java.util.List;
 
 public class BatchQueryJoin {
 
-    public final static float limitPrecent = 0.05f;
+    //public final static float limitPrecent = 0.05f;
+    public final static int limit = 3;
+
+    /**
+     * Number of steps per episode.
+     */
+    //public final int budget = 500;
+
     /**
      * At i-th position: cardinality of i-th joined table
      * (after pre-processing).
@@ -36,7 +45,7 @@ public class BatchQueryJoin {
     /**
      * Avoids redundant planning work by storing left deep plans.
      */
-    public final Map<int[], LeftDeepPlan>[] planCache;
+    final Map<JoinOrder, LeftDeepPlan>[] planCache;
     /**
      * The query for which join orders are evaluated.
      */
@@ -64,6 +73,8 @@ public class BatchQueryJoin {
 
     public HashMap<Integer, Integer>[] progress;
 
+    public final long[] totalCardinality;
+
 
     /**
      * Initializes join operator for given query
@@ -84,12 +95,14 @@ public class BatchQueryJoin {
         this.predToEvals = new HashMap[nrQueries];
         this.progress = new HashMap[nrQueries];
         this.unaryPreds = new KnaryBoolEval[nrQueries][];
+        this.totalCardinality = new long[nrQueries];
         int i = 0;
         for (QueryInfo query : queries) {
-            planCache[i] = new HashMap<int[], LeftDeepPlan>();
+            planCache[i] = new HashMap<JoinOrder, LeftDeepPlan>();
             cardinalities[i] = new int[query.nrJoined];
             predToEvals[i] = new HashMap<>();
             progress[i] = new HashMap<>();
+            totalCardinality[i] = 1;
             for (Map.Entry<String, Integer> entry :
                     query.aliasToIndex.entrySet()) {
                 String alias = entry.getKey();
@@ -97,6 +110,9 @@ public class BatchQueryJoin {
                 int index = entry.getValue();
                 int cardinality = CatalogManager.getCardinality(table);
                 cardinalities[i][index] = cardinality;
+                totalCardinality[i] *= cardinality;
+                if(totalCardinality[i] < 0)
+                    totalCardinality[i] = 1000000000l;
             }
 
             for (ExpressionInfo predInfo : query.wherePredicates) {
@@ -142,9 +158,9 @@ public class BatchQueryJoin {
      * @return true iff all predicates evaluate to true
      */
     boolean evaluateAll(List<KnaryBoolEval> preds, int[] tupleIndices) {
-        System.out.println("ssss" + preds.size());
+        //System.out.println("ssss" + preds.size());
         for (KnaryBoolEval pred : preds) {
-            System.out.println("pred" + pred.toString());
+            //System.out.println("pred" + pred.toString());
             if (pred.evaluate(tupleIndices) <= 0) {
                 return false;
             }
@@ -171,10 +187,13 @@ public class BatchQueryJoin {
             int next = nextRaw < 0 ? cardinality[curTable] : nextRaw;
             max = Math.max(max, next);
         }
-        if (max < 0) {
-            System.out.println(Arrays.toString(tupleIndices));
-            System.out.println(indexWrappers.toString());
-        }
+//        if(max > cardinality[curTable]) {
+//            System.out.println("error");
+//        }
+//        if (max < 0) {
+//            System.out.println(Arrays.toString(tupleIndices));
+//            System.out.println(indexWrappers.toString());
+//        }
         return max;
     }
 
@@ -183,11 +202,13 @@ public class BatchQueryJoin {
         for (int i = 0; i < nrQueries; i++) {
             int realIdx = (startQuery + i) % nrQueries;
             int[] order = orders[realIdx];
+            if(GlobalContext.queryStatus[realIdx])
+                continue;
             //JoinOrder joinOrder = new JoinOrder(order);
-            LeftDeepPlan plan = planCache[realIdx].get(order);
+            LeftDeepPlan plan = planCache[realIdx].get(new JoinOrder(order));
             if (plan == null) {
                 plan = new LeftDeepPlan(queries[realIdx], preSummaries[realIdx], predToEvals[realIdx], order);
-                planCache[realIdx].put(order, plan);
+                planCache[realIdx].put(new JoinOrder(order), plan);
             }
             //plans[i] = plan;
         }
@@ -199,20 +220,23 @@ public class BatchQueryJoin {
         for (int i = 0; i < batchGroups.length; i++) {
             int executedQuery = (startQuery + i) % nrQueries;
             //if(batchGroup != null) {
-            if (!isVisit[executedQuery]) {
+            if (!isVisit[executedQuery] && !GlobalContext.queryStatus[executedQuery]) {
                 int[] order = orders[executedQuery];
                 int nrTable = order.length;
                 int[] tupleIndices = new int[nrTable];
                 int firstTable = order[0];
-                int firstTableStartIdx = progress[executedQuery].containsKey(firstTable) ? progress[executedQuery].get(firstTable) : 0;
+                int firstTableStartIdx = progress[executedQuery].getOrDefault(firstTable, 0);
                 tupleIndices[firstTable] = firstTableStartIdx;
                 reuseJoin(executedQuery, 0, nrTable, tupleIndices, firstTableStartIdx, isVisit, nrTuples);
             }
             //}
         }
         for (int i = 0; i < nrQueries; i++) {
+            if(GlobalContext.queryStatus[i])
+                continue;
             int firstTable = orders[i][0];
-            int currentProgress = (int) (cardinalities[i][firstTable] * limitPrecent);
+            //int currentProgress = (int) Math.ceil((double) cardinalities[i][firstTable] * limitPrecent);
+            int currentProgress = limit;
             if (progress[i].containsKey(firstTable)) {
                 int totalProgress = progress[i].get(firstTable) + currentProgress;
                 progress[i].put(firstTable, totalProgress);
@@ -224,30 +248,38 @@ public class BatchQueryJoin {
 
         double[] rewards = new double[nrQueries];
         for (int i = 0; i < nrQueries; i++) {
-            rewards[i] = rewardFun(nrTuples[i], i, orders[i].length);
+            if(GlobalContext.queryStatus[i])
+                continue;
+            rewards[i] = nrTuples[i] > 0 ? 1d / (double) nrTuples[i] : 0;
+                    //(double) totalCardinality[i];
+            //rewards[i] = rewardFun(nrTuples[i], i, orders[i].length);
         }
-
+        System.out.println(Arrays.toString(rewards));
         return rewards;
     }
 
-    double rewardFun(int nrTuple, int queryNum, int nrTable) {
-        long totalCard = 0;
-        for (int i = 0; i < nrTable; i++) {
-            totalCard += cardinalities[queryNum][i];
-        }
-        return totalCard / nrTuple;
-    }
+//    double rewardFun(int nrTuple, int queryNum, int nrTable) {
+//        long totalCard = 0;
+//        for (int i = 0; i < nrTable; i++) {
+//            totalCard += cardinalities[queryNum][i];
+//        }
+//        return totalCard / nrTuple;
+//    }
 
     private void reuseJoin(int queryNum, int startIdx, int endIdx, int[] tupleIndices, int firstTableStartIdx, boolean[] isVisit, int[] nrTuples) {
+//        System.out.println("queryNum:" + queryNum + ", join order:" + Arrays.toString(orders[queryNum]));
         //join table
         isVisit[queryNum] = true;
         int[] cardinality = this.cardinalities[queryNum];
         int[] order = orders[queryNum];
+
+//        System.out.println("Cardinality:" + Arrays.toString(cardinality));
+
         //int[] offsets = null;
         //int[] tupleIndices = new int[order.length];
-        HashMap<Integer, Integer> progressCurrentQuery = progress[queryNum];
+        //HashMap<Integer, Integer> progressCurrentQuery = progress[queryNum];
 
-        LeftDeepPlan plan = planCache[queryNum].get(order);
+        LeftDeepPlan plan = planCache[queryNum].get(new JoinOrder(order));
         List<List<KnaryBoolEval>> applicablePreds = plan.applicablePreds;
         List<List<JoinIndexWrapper>> joinIndices = plan.joinIndices;
         KnaryBoolEval[] unarys = unaryPreds[queryNum];
@@ -257,8 +289,8 @@ public class BatchQueryJoin {
 //        int firstTableStartIdx = progressCurrentQuery.containsKey(firstTable) ? progressCurrentQuery.get(firstTable) : 0;
 //        tupleIndices[firstTable] = firstTableStartIdx;
 
-        int firstTableEndIdx = Math.min(firstTableStartIdx + (int) (cardinality[order[0]] * limitPrecent), cardinality[order[0]]);
-
+        //int firstTableEndIdx = Math.min(firstTableStartIdx + (int) Math.ceil((double) cardinality[order[0]] * limitPrecent), cardinality[order[0]]);
+        int firstTableEndIdx = Math.max(firstTableStartIdx + limit, cardinality[order[0]]);
 
         //next table
         int joinIndex = startIdx;
@@ -270,17 +302,17 @@ public class BatchQueryJoin {
 
             int nextTable = order[joinIndex];
             int nextCardinality = cardinality[nextTable];
-            //System.out.println("index:"+joinIndex+", next table:"+nextTable);
+//            System.out.println("index:"+joinIndex+", next table:"+nextTable);
             // Integrate table offset
             //tupleIndices[nextTable] = Math.max(offsets[nextTable], tupleIndices[nextTable]);
 
             // Evaluate all applicable predicates on joined tuples
             KnaryBoolEval unaryPred = unarys[nextTable];
-            System.out.println("queryNum:" + queryNum);
-            System.out.println("card:" + nextCardinality);
-            System.out.println("join len:" + joinIndex);
-            System.out.println("tuples" + Arrays.toString(tupleIndices));
-            System.out.println("apps size" + applicablePreds.size());
+//            System.out.println("queryNum:" + queryNum);
+//            System.out.println("card:" + nextCardinality);
+//            System.out.println("join len:" + joinIndex);
+//            System.out.println("tuples" + Arrays.toString(tupleIndices));
+//            System.out.println("apps size" + applicablePreds.size());
             if ((PreConfig.PRE_FILTER || unaryPred == null ||
                     unaryPred.evaluate(tupleIndices) > 0) &&
                     evaluateAll(applicablePreds.get(joinIndex), tupleIndices)) {
@@ -318,6 +350,13 @@ public class BatchQueryJoin {
                     result[queryNum].add(tupleIndices);
 
                     tupleIndices[nextTable] = proposeNext(cardinality, joinIndices.get(joinIndex), nextTable, tupleIndices);
+
+//                    for(int i = 0; i < cardinality.length;i++) {
+//                        if(tupleIndices[i] > cardinality[i]) {
+//                            System.out.println("error");
+//                        }
+//                    }
+
                     // Have reached end of current table? -> we backtrack.
                     while (tupleIndices[nextTable] >= nextCardinality) {
                         tupleIndices[nextTable] = 0;

@@ -3,22 +3,26 @@ package benchmark;
 import buffer.BufferManager;
 import catalog.CatalogManager;
 import config.GeneralConfig;
+import config.NamingConfig;
 import diskio.PathUtil;
 import joining.JoinProcessor;
 import multiquery.GlobalContext;
 import net.sf.jsqlparser.statement.select.PlainSelect;
+import postprocessing.PostProcessor;
 import preprocessing.Context;
 import preprocessing.Preprocessor;
+import print.RelationPrinter;
 import query.QueryInfo;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 
 public class MultiQueryBenchmark {
 
     public static void main(String[] args) throws Exception {
-        String dbDir = "/home/jw2544/imdbl/";
+        String dbDir = "/home/gid-wangj3/skinnerDB/data/imdb/";
+                //"/home/jw2544/imdbm/";
+                //"/home/gid-wangj3/skinnerDB/data/imdb/";
+        //"/home/jw2544/imdbl/";
         //"/home/jw2544/dataset/skinnerimdb/";//"/home/jw2544/imdbl/";
         PathUtil.initSchemaPaths(dbDir);
         CatalogManager.loadDB(PathUtil.schemaPath);
@@ -28,12 +32,16 @@ public class MultiQueryBenchmark {
         BufferManager.loadDB();
         //System.out.println("Data loaded.");
         //Indexer.indexAll(StartupConfig.INDEX_CRITERIA);
-        String queryDir = "/home/jw2544/Documents/multi-query/imdb/queries/";
+        String queryDir = "/home/gid-wangj3/multi-query/imdb/queries/";
+        //"/home/jw2544/Documents/multi-query/imdb/queries/";
+                //"/home/gid-wangj3/multi-query/imdb/queries/";
+                //"/home/jw2544/Documents/multi-query/imdb/queries/";
         Map<String, PlainSelect> nameToQuery = BenchUtil.readAllQueries(queryDir);
         int nrQueries = nameToQuery.size();
         QueryInfo[] queries = new QueryInfo[nrQueries];
         Context[] preSummaries = new Context[nrQueries];
         int queryNum = 0;
+        long startMillis = System.currentTimeMillis();
         for (Map.Entry<String, PlainSelect> entry : nameToQuery.entrySet()) {
             QueryInfo query = new QueryInfo(queryNum, entry.getValue(),
                     false, -1, -1, null);
@@ -43,6 +51,13 @@ public class MultiQueryBenchmark {
         }
         GlobalContext.initCommonJoin(queries);
         JoinProcessor.process(queries, preSummaries);
+        for(int i = 0; i < queryNum; i++) {
+            PostProcessor.process(queries[i], preSummaries[i]);
+            String resultRel = NamingConfig.FINAL_RESULT_NAME;
+            RelationPrinter.print(resultRel);
+        }
+        long totalMillis = System.currentTimeMillis() - startMillis;
+        System.out.println("Total time:" + totalMillis + "ms");
         /*
         while(GlobalContext.firstUnfinishedNum > 0) {
             //we don't enable preprocessing, preprocessing is also on the UCT search
