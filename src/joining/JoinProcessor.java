@@ -123,10 +123,14 @@ public class JoinProcessor {
             }
             GlobalContext.aheadFirstUnfinish();
             System.out.println("========================");
+            int total = 0;
             for (int i = 0; i < nrQueries; i++) {
-                System.out.println("status:" + GlobalContext.queryStatus[i]);
+                if (!GlobalContext.queryStatus[i])
+                    total++;
+                //System.out.println("status:" + GlobalContext.queryStatus[i]);
             }
-            System.out.println("first:" + GlobalContext.firstUnfinishedNum);
+            //System.out.println("first:" + GlobalContext.firstUnfinishedNum);
+            System.out.println("total unfinish:" + total);
         }
 
 //        for (int i = 0; i < nrQueries; i++) {
