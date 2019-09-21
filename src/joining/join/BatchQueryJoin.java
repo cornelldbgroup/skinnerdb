@@ -278,7 +278,7 @@ public class BatchQueryJoin {
             //rewards[i] = rewardFun(nrTuples[i], i, orders[i].length);
             rewards[i] = reward(orders[i], startIndices[i], endIndices[i], cardinalities[i]);
         }
-        System.out.println(Arrays.toString(rewards));
+//        System.out.println(Arrays.toString(rewards));
         return rewards;
     }
 
@@ -375,6 +375,16 @@ public class BatchQueryJoin {
                         int totalReuseTuples = 0;
                         for (int i = 0; i < joinIndex; i++) {
                             int reusedTable = reusedQueryOrder[i];
+                            System.out.println("============");
+                            System.out.println("share idx:" + joinIndex);
+                            System.out.println("re order:" + Arrays.toString(reusedQueryOrder));
+
+                            System.out.println("current order:" + Arrays.toString(order));
+                            System.out.println("table old:" + order[i]);
+                            System.out.println("reuseTable:" + reusedTable);
+                            System.out.println("tupleIndices: " + tupleIndices[order[i]]);
+                            System.out.println("reuseTableIdx: " + reusedTupleIndices[reusedTable]);
+                            System.out.println("============");
                             reusedTupleIndices[reusedTable] = tupleIndices[order[i]];
                             nrTuples[reusedTable] += reuseNrTuples[i];
                             totalReuseTuples += reuseNrTuples[i];
@@ -408,9 +418,10 @@ public class BatchQueryJoin {
 
                     // Have reached end of current table? -> we backtrack.
                     while (tupleIndices[nextTable] >= nextCardinality) {
+                        if(!reuseFinish && joinIndex == minReuseSize)
                         tupleIndices[nextTable] = 0;
                         --joinIndex;
-                        if (joinIndex < 0) {
+                        if (joinIndex < startIdx) {
                             break;
                         }
                         nextTable = order[joinIndex];
@@ -454,7 +465,7 @@ public class BatchQueryJoin {
         }
 
         tracker[queryNum].updateProgress(new JoinOrder(order), state);
-        return this.budgets[queryNum] > 0;
+        return (this.budgets[queryNum] > 0) && reuseFinish;
 
     }
 

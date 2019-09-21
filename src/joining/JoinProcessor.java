@@ -14,7 +14,9 @@ import joining.uct.SelectionPolicy;
 import joining.uct.UctNode;
 import multiquery.GlobalContext;
 import operators.Materialize;
+import postprocessing.PostProcessor;
 import preprocessing.Context;
+import print.RelationPrinter;
 import query.ColumnRef;
 import query.CommonQueryPrefix;
 import query.QueryInfo;
@@ -94,6 +96,7 @@ public class JoinProcessor {
                         batchGroups[reusedQuery].putIfAbsent(prefixLen, new ArrayList<>());
                         batchGroups[reusedQuery].get(prefixLen).add(triedQuery);
                         System.arraycopy(commonQueryPrefix.joinOrder, 0, joinOrder, 0, commonQueryPrefix.prefixLen);
+                        //System.out.println("reuse:" + reusedQuery +", base" + triedQuery + ", order:" + Arrays.toString(commonQueryPrefix.joinOrder) + ", reusedLen:" + commonQueryPrefix.prefixLen + ", total Len" + joinOrder.length);
                     }
                 }
                 if(prefixLen > 0)
@@ -112,7 +115,7 @@ public class JoinProcessor {
 //                System.out.println("join order:" + Arrays.toString(orderList[i]) + ", status" + GlobalContext.queryStatus[i]);
 //            }
 
-            System.out.println("***************************");
+//            System.out.println("***************************");
             double[] reward = batchQueryJoin.execute(orderList, batchGroups, startQuery);
             for (int i = 0; i < nrQueries; i++) {
                 if(GlobalContext.queryStatus[i])
@@ -122,7 +125,7 @@ public class JoinProcessor {
                 roots[i].updateReward(reward[i], orderList[i], 0);
             }
             GlobalContext.aheadFirstUnfinish();
-            System.out.println("========================");
+            //System.out.println("========================");
             int total = 0;
             for (int i = 0; i < nrQueries; i++) {
                 if (!GlobalContext.queryStatus[i])
@@ -130,7 +133,7 @@ public class JoinProcessor {
                 //System.out.println("status:" + GlobalContext.queryStatus[i]);
             }
             //System.out.println("first:" + GlobalContext.firstUnfinishedNum);
-            System.out.println("total unfinish:" + total);
+//            System.out.println("total unfinish:" + total);
         }
 
 //        for (int i = 0; i < nrQueries; i++) {
@@ -249,21 +252,24 @@ public class JoinProcessor {
 //			System.out.println("Table cards.:\t" +
 //					Arrays.toString(joinOp.cardinalities));
 //		}
-//		// Materialize result table
-//		Collection<ResultTuple> tuples = joinOp.result.getTuples();
-//		int nrTuples = tuples.size();
-//		log("Materializing join result with " + nrTuples + " tuples ...");
-//		String targetRelName = NamingConfig.JOINED_NAME;
-//		Materialize.execute(tuples, query.aliasToIndex,
-//				query.colsForPostProcessing,
-//				context.columnMapping, targetRelName);
-//		// Update processing context
-//		context.columnMapping.clear();
-//		for (ColumnRef postCol : query.colsForPostProcessing) {
-//			String newColName = postCol.aliasName + "." + postCol.columnName;
-//			ColumnRef newRef = new ColumnRef(targetRelName, newColName);
-//			context.columnMapping.put(postCol, newRef);
-//		}
+		// Materialize result table
+        for(int i = 0; i < nrQueries; i++) {
+            Collection<ResultTuple> tuples = batchQueryJoin.result[i].getTuples();
+            int nrTuples = tuples.size();
+            System.out.println(i + ", size:" + nrTuples);
+            log("Materializing join result with " + nrTuples + " tuples ...");
+            String targetRelName = NamingConfig.JOINED_NAME + i;
+            Materialize.execute(tuples, queries[i].aliasToIndex,
+                    queries[i].colsForPostProcessing,
+                    preSummaries[i].columnMapping, targetRelName);
+            // Update processing context
+            preSummaries[i].columnMapping.clear();
+            for (ColumnRef postCol : queries[i].colsForPostProcessing) {
+                String newColName = postCol.aliasName + "." + postCol.columnName;
+                ColumnRef newRef = new ColumnRef(targetRelName, newColName);
+                preSummaries[i].columnMapping.put(postCol, newRef);
+            }
+        }
     }
 
     /**
