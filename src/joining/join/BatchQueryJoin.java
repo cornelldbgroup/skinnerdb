@@ -1,6 +1,7 @@
 package joining.join;
 
 import catalog.CatalogManager;
+import config.GeneralConfig;
 import config.LoggingConfig;
 import config.PreConfig;
 import expressions.ExpressionInfo;
@@ -325,6 +326,8 @@ public class BatchQueryJoin {
         KnaryBoolEval[] unarys = unaryPreds[queryNum];
         HashMap<Integer, List<Integer>> currentBatchGroup = batchGroups[queryNum];
 
+        int[] currentStartIndices = Arrays.copyOf(tupleIndices, tupleIndices.length);
+
 //        int firstTable = order[0];
 //        int firstTableStartIdx = progressCurrentQuery.containsKey(firstTable) ? progressCurrentQuery.get(firstTable) : 0;
 //        tupleIndices[firstTable] = firstTableStartIdx;
@@ -335,10 +338,12 @@ public class BatchQueryJoin {
         //next table
         int joinIndex = startIdx;
         int[] reuseNrTuples = new int[order.length];
-        boolean reuseFinish = true;
-        int minReuseSize = 0;
+        //boolean reuseFinish = true;
+        boolean[] reuseFinish = new boolean[order.length];
+        Arrays.fill(reuseFinish, true);
+        //int minReuseSize = 0;
 //        int[] budgetEachTable = new int[order.length];
-        while ((reuseFinish || joinIndex >= minReuseSize) && this.budgets[queryNum] > 0  && joinIndex >= startIdx && joinIndex < endIdx) {
+        while (joinIndex >= startIdx && joinIndex < endIdx && reuseFinish[joinIndex] && this.budgets[queryNum] > 0) {
 
             reuseNrTuples[joinIndex]++;
             nrTuples[queryNum]++;
@@ -363,32 +368,83 @@ public class BatchQueryJoin {
                     evaluateAll(applicablePreds.get(joinIndex), tupleIndices)) {
                 //++JoinStats.nrTuples;
 
-                if (currentBatchGroup != null && currentBatchGroup.containsKey(joinIndex)) {
+                if (currentBatchGroup != null && currentBatchGroup.containsKey(joinIndex + 1)) {
                     //int[] reusedQueries = currentBatchGroup.get(joinIndex).getSecond();
-                    minReuseSize = Math.min(minReuseSize, joinIndex);
-                    for (Integer reusedQuery : currentBatchGroup.get(joinIndex)) {
+                    //minReuseSize = Math.min(minReuseSize, joinIndex);
+                    for (Integer reusedQuery : currentBatchGroup.get(joinIndex + 1)) {
                         int[] reusedQueryOrder = orders[reusedQuery];
                         int nrReuseQueryTable = reusedQueryOrder.length;
                         //System.out.println(Arrays.toString(reusedQueryOrder));
-                        int[] reusedTupleIndices = tracker[reusedQuery].continueFrom(new JoinOrder(reusedQueryOrder)).tupleIndices;
-                        //new int[nrReuseQueryTable];
+                        State reuseState = tracker[reusedQuery].continueFrom(new JoinOrder(reusedQueryOrder));
+                        int[] reusedTupleIndices = new int[nrReuseQueryTable];
+                        int[] recoveryTupleIndices = reuseState.tupleIndices;
                         int totalReuseTuples = 0;
-                        for (int i = 0; i < joinIndex; i++) {
-                            int reusedTable = reusedQueryOrder[i];
-                            System.out.println("============");
-                            System.out.println("share idx:" + joinIndex);
-                            System.out.println("re order:" + Arrays.toString(reusedQueryOrder));
+                        //reuseState.tupleIndices;
 
-                            System.out.println("current order:" + Arrays.toString(order));
-                            System.out.println("table old:" + order[i]);
-                            System.out.println("reuseTable:" + reusedTable);
-                            System.out.println("tupleIndices: " + tupleIndices[order[i]]);
-                            System.out.println("reuseTableIdx: " + reusedTupleIndices[reusedTable]);
+                        if(queryNum == GeneralConfig.testQuery || reusedQuery == GeneralConfig.testQuery) {
                             System.out.println("============");
-                            reusedTupleIndices[reusedTable] = tupleIndices[order[i]];
-                            nrTuples[reusedTable] += reuseNrTuples[i];
-                            totalReuseTuples += reuseNrTuples[i];
+                            System.out.println("parent query:" + queryNum);
+                            System.out.println("reuse query:" + reusedQuery);
+                            System.out.println("parent order:" + Arrays.toString(order));
+                            System.out.println("child order:" + Arrays.toString(reusedQueryOrder));
+                            System.out.println("parent indices:" + Arrays.toString(tupleIndices));
+                            System.out.println("reused before indices:" + Arrays.toString(recoveryTupleIndices));
                         }
+
+                        boolean tryReuse = true;
+                        boolean isSameProgress = true;
+                        //test whether we can reuse index
+                        for (int i = 0; i <= joinIndex; i++) {
+                            int reusedTable = reusedQueryOrder[i];
+                            int reusedTableOffset = tupleIndices[order[i]];
+                            isSameProgress &= (reusedTableOffset == recoveryTupleIndices[reusedTable]);
+                            if(reusedTableOffset > recoveryTupleIndices[reusedTable]) {
+                                break;
+                            } else if(reusedTableOffset < recoveryTupleIndices[reusedTable]) {
+                                tryReuse = false;
+                                break;
+                            }
+                        }
+
+                        if(tryReuse) {
+
+                            if (isSameProgress) {
+                                reusedTupleIndices = recoveryTupleIndices;
+                            } else {
+                                for (int i = 0; i <= joinIndex; i++) {
+                                    int reusedTable = reusedQueryOrder[i];
+                                    reusedTupleIndices[reusedTable] = tupleIndices[order[i]];
+                                    nrTuples[reusedTable] += reuseNrTuples[i];
+                                    totalReuseTuples += reuseNrTuples[i];
+                                }
+                            }
+
+
+                            this.budgets[reusedQuery] -= (reuseBudget + totalReuseTuples);
+                            reuseFinish[joinIndex] &= reuseJoin(reusedQuery, joinIndex + 1, nrReuseQueryTable, reusedTupleIndices, isVisit, nrTuples, reuseBudget + totalReuseTuples, reuseState);
+
+                        }
+
+//                        for (int i = 0; i <= joinIndex; i++) {
+//                            int reusedTable = reusedQueryOrder[i];
+//                            int reusedTableOffset = tupleIndices[order[i]];
+////                            System.out.println("share idx:" + joinIndex);
+////                            System.out.println("re order:" + Arrays.toString(reusedQueryOrder));
+////                            System.out.println("table old:" + order[i]);
+////                            System.out.println("reuseTable:" + reusedTable);
+////                            System.out.println("tupleIndices: " + tupleIndices[order[i]]);
+////                            System.out.println("reuseTableIdx: " + reusedTupleIndices[reusedTable]);
+//                            if(reusedTableOffset < recoveryTupleIndices[reusedTable]) {
+//                                tryReuse = false;
+//                                break;
+//                            }
+//
+//                            isSameProgress &= (reusedTableOffset == recoveryTupleIndices[reusedTable]);
+//                            reusedTupleIndices[reusedTable] = reusedTableOffset;
+//                            nrTuples[reusedTable] += reuseNrTuples[i];
+//                            totalReuseTuples += reuseNrTuples[i];
+//                        }
+
                         //System.arraycopy(tupleIndices, 0, reusedTupleIndices, 0, joinIndex);
 
                         //                    LeftDeepPlan plan = planCache[reusedQuery].get(reusedQueryOrder);
@@ -397,9 +453,21 @@ public class BatchQueryJoin {
                         //                    reuseJoin(reusedQueryOrder, cardinalities[reusedQuery], offsets, reusedTupleIndices, reuseJoinIndices, reuseApplicablePreds
                         //                            , unaryPreds[reusedQuery], reuseJoinIndex, nrReuseQueryTable, batchGroups[reusedQuery]);
 
-                        this.budgets[reusedQuery] -= (reuseBudget + totalReuseTuples);
-                        State reuseState = tracker[reusedQuery].continueFrom(new JoinOrder(reusedQueryOrder));
-                        reuseFinish &= reuseJoin(reusedQuery, joinIndex, nrReuseQueryTable, reusedTupleIndices, isVisit, nrTuples, reuseBudget + totalReuseTuples, reuseState);
+                        if(queryNum == GeneralConfig.testQuery || reusedQuery == GeneralConfig.testQuery) {
+                            System.out.println("reused after indices:" + Arrays.toString(reusedTupleIndices));
+                            System.out.println("reused:" + tryReuse);
+                            System.out.println("============");
+                        }
+
+//                        if(isSameProgress) {
+//                            reusedTupleIndices = recoveryTupleIndices;
+//                        }
+
+                        //State reuseState = tracker[reusedQuery].continueFrom(new JoinOrder(reusedQueryOrder));
+//                        if(tryReuse) {
+//                            reuseFinish[joinIndex] &= reuseJoin(reusedQuery, joinIndex + 1, nrReuseQueryTable, reusedTupleIndices, isVisit, nrTuples, reuseBudget + totalReuseTuples, reuseState);
+//                            this.budgets[reusedQuery] -= (reuseBudget + totalReuseTuples);
+//                        }
                     }
                 }
 
@@ -407,21 +475,13 @@ public class BatchQueryJoin {
                 if (joinIndex == endIdx - 1) {
                     // Complete result row -> add to result
                     result[queryNum].add(tupleIndices);
-
                     tupleIndices[nextTable] = proposeNext(cardinality, joinIndices.get(joinIndex), nextTable, tupleIndices);
-
-//                    for(int i = 0; i < cardinality.length;i++) {
-//                        if(tupleIndices[i] > cardinality[i]) {
-//                            System.out.println("error");
-//                        }
-//                    }
 
                     // Have reached end of current table? -> we backtrack.
                     while (tupleIndices[nextTable] >= nextCardinality) {
-                        if(!reuseFinish && joinIndex == minReuseSize)
                         tupleIndices[nextTable] = 0;
                         --joinIndex;
-                        if (joinIndex < startIdx) {
+                        if (joinIndex < startIdx || !reuseFinish[joinIndex]) {
                             break;
                         }
                         nextTable = order[joinIndex];
@@ -447,7 +507,7 @@ public class BatchQueryJoin {
                 while (tupleIndices[nextTable] >= nextCardinality) {
                     tupleIndices[nextTable] = 0;
                     --joinIndex;
-                    if (joinIndex < 0) {
+                    if (joinIndex < startIdx || !reuseFinish[joinIndex]) {
                         break;
                     }
                     nextTable = order[joinIndex];
@@ -458,6 +518,33 @@ public class BatchQueryJoin {
         }
 
         // Save final state
+//        if(joinIndex < 0) {
+//            System.out.println("Q" + queryNum);
+//            state.lastIndex = joinIndex;
+//        }
+
+
+
+        //reuse. why not work
+        if(startIdx > 0 && joinIndex < startIdx) {
+            for (int i = startIdx; i < endIdx; i++) {
+                int curTable = order[i];
+                tupleIndices[curTable] = cardinality[curTable] - 1;
+            }
+        }
+
+        if(queryNum == GeneralConfig.testQuery) {
+            System.out.println("stat================");
+            System.out.println("Query:" + queryNum);
+            System.out.println("Join order:" + Arrays.toString(order));
+            System.out.println("join prefix:" + joinIndex);
+            System.out.println("start prefix:" + startIdx);
+            System.out.println("end prefix:" + endIdx);
+            System.out.println("start table indices:" + Arrays.toString(currentStartIndices));
+            System.out.println("end table indices:" + Arrays.toString(tupleIndices));
+            System.out.println("stat================");
+        }
+
         state.lastIndex = joinIndex;
         for (int tableCtr = 0; tableCtr < order.length; ++tableCtr) {
             state.tupleIndices[tableCtr] = tupleIndices[tableCtr];
@@ -465,7 +552,8 @@ public class BatchQueryJoin {
         }
 
         tracker[queryNum].updateProgress(new JoinOrder(order), state);
-        return (this.budgets[queryNum] > 0) && reuseFinish;
+        return (joinIndex < startIdx);
+        //return (this.budgets[queryNum] > 0) && reuseFinish;
 
     }
 

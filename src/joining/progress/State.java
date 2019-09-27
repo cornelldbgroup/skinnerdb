@@ -37,6 +37,12 @@ public class State {
 		lastIndex = 0;
 		//lastMove = JoinMove.RIGHT;
 	}
+
+	public State(int lastIndex, int[] tupleIndices) {
+		this.lastIndex = lastIndex;
+		this.tupleIndices = tupleIndices;
+	}
+
 	/**
 	 * Checks whether processing is finished.
 	 * 

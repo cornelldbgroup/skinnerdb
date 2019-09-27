@@ -46,7 +46,7 @@ public class BenchUtil {
 		for (File file : dir.listFiles()) {
 			if (file.getName().endsWith(".sql")) {
 				String sql = new String(Files.readAllBytes(file.toPath()));
-				System.out.println(sql);
+				//System.out.println(sql);
 				Statement sqlStatement = CCJSqlParserUtil.parse(sql);
 				Select select = (Select)sqlStatement;
 				PlainSelect plainSelect = (PlainSelect)select.getSelectBody();
@@ -77,8 +77,8 @@ public class BenchUtil {
 	 */
 	public static void benchQuery(String queryName, PlainSelect sql, 
 			PrintWriter benchOut) throws Exception {
-		System.out.println(queryName);
-		System.out.println(sql.toString());
+//		System.out.println(queryName);
+//		System.out.println(sql.toString());
 		long startMillis = System.currentTimeMillis();
 		QueryInfo query = new QueryInfo(sql, false, -1, -1, null);
 		Context preSummary = Preprocessor.process(query);

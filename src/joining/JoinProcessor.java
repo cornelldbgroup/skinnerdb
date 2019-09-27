@@ -3,6 +3,7 @@ package joining;
 import java.nio.file.Paths;
 import java.util.*;
 
+import config.GeneralConfig;
 import config.LoggingConfig;
 import config.NamingConfig;
 import config.JoinConfig;
@@ -22,6 +23,8 @@ import query.CommonQueryPrefix;
 import query.QueryInfo;
 import statistics.JoinStats;
 import visualization.TreePlotter;
+
+import javax.management.Query;
 
 /**
  * Controls the join phase.
@@ -102,9 +105,25 @@ public class JoinProcessor {
                 if(prefixLen > 0)
 					roots[triedQuery].ahead(roundCtr, joinOrder, 0, prefixLen, policy);
                 	//roots[triedQuery].ahead(roundCtr[triedQuery], joinOrder, 0, prefixLen, policy);
-                else
-					roots[triedQuery].sample(roundCtr, joinOrder, policy);
-	                //roots[triedQuery].sample(roundCtr[triedQuery], joinOrder, policy);
+                else {
+
+                      roots[triedQuery].sample(roundCtr, joinOrder, policy);
+
+//                    boolean canStop;
+//                    do {
+//                        canStop = true;
+//                        roots[triedQuery].sample(roundCtr, joinOrder, policy);
+//                        for (int j = 0; j < i; j++) {
+//                            QueryInfo previousQuery = queries[(startQuery + j) % nrQueries];
+//                            int size = previousQuery.findSamePrefixLen(triedQuery, joinOrder).size();
+//                            System.out.println("size:" + size);
+//                            canStop &= (size == 0);
+//                        }
+//                        System.out.println("join order:" + Arrays.toString(joinOrder) + ", can stop:" + canStop);
+//                    } while (!canStop);
+
+                    //roots[triedQuery].sample(roundCtr[triedQuery], joinOrder, policy);
+                }
                 //roundCtr[triedQuery]++;
                 roundCtr++;
 				orderList[triedQuery] = joinOrder;
@@ -125,15 +144,33 @@ public class JoinProcessor {
                 roots[i].updateReward(reward[i], orderList[i], 0);
             }
             GlobalContext.aheadFirstUnfinish();
-            //System.out.println("========================");
-            int total = 0;
-            for (int i = 0; i < nrQueries; i++) {
-                if (!GlobalContext.queryStatus[i])
-                    total++;
-                //System.out.println("status:" + GlobalContext.queryStatus[i]);
-            }
-            //System.out.println("first:" + GlobalContext.firstUnfinishedNum);
+//            System.out.println("========================");
+//            int total = 0;
+//            for (int i = 0; i < nrQueries; i++) {
+//                if (!GlobalContext.queryStatus[i])
+//                    total++;
+//                //System.out.println("status:" + GlobalContext.queryStatus[i]);
+//            }
+//            System.out.println("first:" + GlobalContext.firstUnfinishedNum);
 //            System.out.println("total unfinish:" + total);
+
+//            if(GlobalContext.queryStatus[GeneralConfig.testQuery]) {
+//                String targetRelName = "q13";
+//                int qr = GeneralConfig.testQuery;
+//                Materialize.execute(batchQueryJoin.result[qr].getTuples(), queries[qr].aliasToIndex,
+//                        queries[qr].colsForPostProcessing,
+//                        preSummaries[qr].columnMapping, targetRelName);
+//                // Update processing context
+//                preSummaries[qr].columnMapping.clear();
+//                for (ColumnRef postCol : queries[qr].colsForPostProcessing) {
+//                    String newColName = postCol.aliasName + "." + postCol.columnName;
+//                    ColumnRef newRef = new ColumnRef(targetRelName, newColName);
+//                    preSummaries[qr].columnMapping.put(postCol, newRef);
+//                }
+//                PostProcessor.process(queries[qr], preSummaries[qr]);
+//                String resultRel = NamingConfig.FINAL_RESULT_NAME;
+//                RelationPrinter.print(resultRel);
+//            }
         }
 
 //        for (int i = 0; i < nrQueries; i++) {
@@ -257,6 +294,25 @@ public class JoinProcessor {
             Collection<ResultTuple> tuples = batchQueryJoin.result[i].getTuples();
             int nrTuples = tuples.size();
             System.out.println(i + ", size:" + nrTuples);
+            if(i == GeneralConfig.testQuery) {
+                List<ResultTuple> tupleslist = new ArrayList<>(tuples);
+                tupleslist.sort(new Comparator<ResultTuple>() {
+                    @Override
+                    public int compare(ResultTuple o1, ResultTuple o2) {
+                        for (int i = 0; i < o1.baseIndices.length; i++) {
+                            if (o1.baseIndices[i] > o2.baseIndices[i])
+                                return 1;
+                            else if (o1.baseIndices[i] < o2.baseIndices[i])
+                                return -1;
+                        }
+                        return 0;
+                    }
+                });
+                for (ResultTuple tuple : tupleslist) {
+                    System.out.println(Arrays.toString(tuple.baseIndices));
+                }
+            }
+
             log("Materializing join result with " + nrTuples + " tuples ...");
             String targetRelName = NamingConfig.JOINED_NAME + i;
             Materialize.execute(tuples, queries[i].aliasToIndex,
@@ -269,6 +325,10 @@ public class JoinProcessor {
                 ColumnRef newRef = new ColumnRef(targetRelName, newColName);
                 preSummaries[i].columnMapping.put(postCol, newRef);
             }
+
+//            PostProcessor.process(queries[i], preSummaries[i]);
+//            String resultRel = NamingConfig.FINAL_RESULT_NAME;
+//            RelationPrinter.print(resultRel);
         }
     }
 

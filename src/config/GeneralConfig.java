@@ -12,4 +12,6 @@ public class GeneralConfig {
 	 * Whether to use in-memory data processing.
 	 */
 	public static boolean inMemory = true;
+
+	public static int testQuery = 108;
 }

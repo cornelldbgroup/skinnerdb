@@ -14,13 +14,19 @@ import preprocessing.Preprocessor;
 import print.RelationPrinter;
 import query.QueryInfo;
 
+import java.io.FileOutputStream;
+import java.io.PrintStream;
 import java.util.Map;
 
 public class MultiQueryBenchmark {
 
     public static void main(String[] args) throws Exception {
-        String dbDir = //"/home/gid-wangj3/skinnerDB/data/imdb/";
-                "/home/jw2544/imdbm/";
+
+//        PrintStream out = new PrintStream(new FileOutputStream("output.txt"));
+//        System.setOut(out);
+
+        String dbDir = "/home/gid-wangj3/skinnerDB/data/imdb/";
+                //"/home/jw2544/imdbm/";
                 //"/home/gid-wangj3/skinnerDB/data/imdb/";
         //"/home/jw2544/imdbl/";
         //"/home/jw2544/dataset/skinnerimdb/";//"/home/jw2544/imdbl/";
@@ -32,8 +38,8 @@ public class MultiQueryBenchmark {
         BufferManager.loadDB();
         //System.out.println("Data loaded.");
         //Indexer.indexAll(StartupConfig.INDEX_CRITERIA);
-        String queryDir = //"/home/gid-wangj3/multi-query/imdb/queries/";
-        "/home/jw2544/Documents/multi-query/imdb/queries/";
+        String queryDir = "/home/gid-wangj3/multi-query/imdb/queries/";
+        //"/home/jw2544/Documents/multi-query/imdb/queries/";
                 //"/home/gid-wangj3/multi-query/imdb/queries/";
                 //"/home/jw2544/Documents/multi-query/imdb/queries/";
         Map<String, PlainSelect> nameToQuery = BenchUtil.readAllQueries(queryDir);
@@ -53,8 +59,8 @@ public class MultiQueryBenchmark {
         JoinProcessor.process(queries, preSummaries);
         for(int i = 0; i < queryNum; i++) {
             PostProcessor.process(queries[i], preSummaries[i]);
-            //String resultRel = NamingConfig.FINAL_RESULT_NAME;
-            //RelationPrinter.print(resultRel);
+            String resultRel = NamingConfig.FINAL_RESULT_NAME;
+            RelationPrinter.print(resultRel);
         }
         long totalMillis = System.currentTimeMillis() - startMillis;
         System.out.println("Total time:" + totalMillis + "ms");
