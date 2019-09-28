@@ -15,7 +15,7 @@ import query.QueryInfo;
  *
  * @author immanueltrummer
  */
-public class ProgressTracker {
+class ProgressTrackerOld {
     /**
      * Number of tables in the query.
      */
@@ -46,7 +46,7 @@ public class ProgressTracker {
      * @param nrTables 		number of tables joined
      * @param cardinalities	cardinality of each table
      */
-    public ProgressTracker(int nrTables, int[] cardinalities) {
+    public ProgressTrackerOld(int nrTables, int[] cardinalities) {
         this.nrTables = nrTables;
         this.cardinalities = cardinalities;
         sharedProgress = new Progress(nrTables);
@@ -66,6 +66,7 @@ public class ProgressTracker {
         isFinished = state.isFinished();
         // Update state for specific join order
         orderToState.put(joinOrder, state);
+        //orderToState.put(joinOrder, new State(state.lastIndex, state.tupleIndices.clone()));
         // Update state for all join order prefixes
         Progress curPrefixProgress = sharedProgress;
         // Iterate over position in join order
@@ -79,21 +80,20 @@ public class ProgressTracker {
             if (curPrefixProgress.latestState == null) {
                 curPrefixProgress.latestState = new State(nrTables);
             }
-            curPrefixProgress.latestState.fastForward(
-                    joinOrder.order, state, joinCtr + 1);
+            curPrefixProgress.latestState.fastForward(joinOrder.order, state, joinCtr + 1);
         }
         // Update table offset considering last fully treated tuple -
         // consider first table and all following tables in join order
         // if their cardinality is one.
         for (int joinCtr=0; joinCtr<nrJoinedTables; ++joinCtr) {
-            int table = joinOrder.order[joinCtr];
-            int lastTreated = state.tupleIndices[table]-1;
-            tableOffset[table] = Math.max(lastTreated, tableOffset[table]);
-            // Stop after first table with cardinality >1
-            int cardinality = cardinalities[table];
-            if (cardinality>1) {
-                break;
-            }
+        	int table = joinOrder.order[joinCtr];
+        	int lastTreated = state.tupleIndices[table]-1;
+        	tableOffset[table] = Math.max(lastTreated, tableOffset[table]);
+        	// Stop after first table with cardinality >1
+        	int cardinality = cardinalities[table];
+        	if (cardinality>1) {
+        		break;
+        	}
         }
         /*
         int firstTable = joinOrder.order[0];
@@ -117,6 +117,13 @@ public class ProgressTracker {
             state = new State(nrTables);
         }
         // Integrate progress from join orders with same prefix
+//        if(joinOrder.nrJoinedTables > 2) {
+//            int table1 = order[0];
+//            int table2 = order[1];
+//            if(sharedProgress.childNodes[table1] == null || sharedProgress.childNodes[table1].childNodes[table2] == null)
+//                return state;
+//        }
+
         Progress curPrefixProgress = sharedProgress;
         for (int joinCtr = 0; joinCtr < nrJoinedTables; ++joinCtr) {
             int table = order[joinCtr];
@@ -126,6 +133,7 @@ public class ProgressTracker {
             }
             state.fastForward(order, curPrefixProgress.latestState, joinCtr + 1);
         }
+
         // Integrate table offset
         /*
 		int firstTable = order[0];

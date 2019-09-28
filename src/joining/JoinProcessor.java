@@ -80,8 +80,9 @@ public class JoinProcessor {
             //we don't enable preprocessing, preprocessing is also on the UCT search
             int startQuery = GlobalContext.firstUnfinishedNum;
             int[][] orderList = new int[nrQueries][];
-            //ArrayList[] batchGroup = new ArrayList[nrQueries];
             HashMap<Integer, List<Integer>>[] batchGroups = new HashMap[nrQueries];
+            HashSet<HashSet<Integer>> batchGroupSet = new HashSet<>();
+            HashMap<Integer, HashSet<Integer>> batchGroupMap = new HashMap<>();
             for (int i = 0; i < nrQueries; i++) {
                 int prefixLen = 0;
                 int triedQuery = (startQuery + i) % nrQueries;
@@ -89,18 +90,27 @@ public class JoinProcessor {
                 if(GlobalContext.queryStatus[triedQuery])
                 	continue;
                 int[] joinOrder = new int[query.nrJoined];
-                if (i > 0) {
-                    CommonQueryPrefix commonQueryPrefix = query.findShortOrders(startQuery, orderList, i);
-                    if (commonQueryPrefix != null) {
-                        int reusedQuery = commonQueryPrefix.reusedQuery;
-                        if (batchGroups[reusedQuery] == null)
-                            batchGroups[reusedQuery] = new HashMap<>();
-                        prefixLen = commonQueryPrefix.prefixLen;
-                        batchGroups[reusedQuery].putIfAbsent(prefixLen, new ArrayList<>());
-                        batchGroups[reusedQuery].get(prefixLen).add(triedQuery);
-                        System.arraycopy(commonQueryPrefix.joinOrder, 0, joinOrder, 0, commonQueryPrefix.prefixLen);
-                        //System.out.println("reuse:" + reusedQuery +", base" + triedQuery + ", order:" + Arrays.toString(commonQueryPrefix.joinOrder) + ", reusedLen:" + commonQueryPrefix.prefixLen + ", total Len" + joinOrder.length);
-                    }
+                CommonQueryPrefix commonQueryPrefix = query.findShortOrders(startQuery, orderList, i);
+                if (commonQueryPrefix != null) {
+                    int reusedQuery = commonQueryPrefix.reusedQuery;
+                    if (batchGroups[reusedQuery] == null)
+                        batchGroups[reusedQuery] = new HashMap<>();
+                    prefixLen = commonQueryPrefix.prefixLen;
+                    batchGroups[reusedQuery].putIfAbsent(prefixLen, new ArrayList<>());
+                    batchGroups[reusedQuery].get(prefixLen).add(triedQuery);
+                    System.arraycopy(commonQueryPrefix.joinOrder, 0, joinOrder, 0, commonQueryPrefix.prefixLen);
+                    //System.out.println("reuse:" + reusedQuery +", base" + triedQuery + ", order:" + Arrays.toString(commonQueryPrefix.joinOrder) + ", reusedLen:" + commonQueryPrefix.prefixLen + ", total Len" + joinOrder.length);
+
+                    //batchGroupMap.forEach((a, b) -> b.forEach(c -> System.out.println(a+"," +c)));
+                    //System.out.println("Reuse Query:"+ reusedQuery);
+                    HashSet<Integer> currentSet = batchGroupMap.get(reusedQuery);
+                    currentSet.add(triedQuery);
+                    batchGroupMap.put(triedQuery, currentSet);
+                } else {
+                    HashSet<Integer> currentSet = new HashSet<>();
+                    currentSet.add(triedQuery);
+                    batchGroupSet.add(currentSet);
+                    batchGroupMap.put(triedQuery, currentSet);
                 }
                 if(prefixLen > 0)
 					roots[triedQuery].ahead(roundCtr, joinOrder, 0, prefixLen, policy);
@@ -135,7 +145,7 @@ public class JoinProcessor {
 //            }
 
 //            System.out.println("***************************");
-            double[] reward = batchQueryJoin.execute(orderList, batchGroups, startQuery);
+            double[] reward = batchQueryJoin.execute(orderList, batchGroups, startQuery, batchGroupSet);
             for (int i = 0; i < nrQueries; i++) {
                 if(GlobalContext.queryStatus[i])
                     continue;
@@ -144,15 +154,15 @@ public class JoinProcessor {
                 roots[i].updateReward(reward[i], orderList[i], 0);
             }
             GlobalContext.aheadFirstUnfinish();
-//            System.out.println("========================");
+            //System.out.println("========================");
 //            int total = 0;
 //            for (int i = 0; i < nrQueries; i++) {
 //                if (!GlobalContext.queryStatus[i])
 //                    total++;
-//                //System.out.println("status:" + GlobalContext.queryStatus[i]);
+//                System.out.println("status:" + GlobalContext.queryStatus[i]);
 //            }
-//            System.out.println("first:" + GlobalContext.firstUnfinishedNum);
-//            System.out.println("total unfinish:" + total);
+            //System.out.println("first:" + GlobalContext.firstUnfinishedNum);
+            //System.out.println("total unfinish:" + total);
 
 //            if(GlobalContext.queryStatus[GeneralConfig.testQuery]) {
 //                String targetRelName = "q13";
