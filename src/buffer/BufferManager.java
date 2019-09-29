@@ -51,20 +51,20 @@ public class BufferManager {
 	public static void loadDictionary() throws Exception {
 		// Check whether database has associated dictionary
 		if (CatalogManager.currentDB.compressed) {
-			System.out.println("Loading dictionary ...");
+			//System.out.println("Loading dictionary ...");
 			long startMillis = System.currentTimeMillis();
 			String dictionaryPath = PathUtil.dictionaryPath;
 			Object object = DiskUtil.loadObject(dictionaryPath);
 			dictionary = (Dictionary)object;
 			long totalMillis = System.currentTimeMillis() - startMillis;
-			System.out.println("Loaded dictionary in " + totalMillis + " ms.");	
+			//System.out.println("Loaded dictionary in " + totalMillis + " ms.");
 			// Generate debugging output
 			log("*** String dictionary sample ***");
 			int sampleSize = Math.min(10, dictionary.strings.length);
 			for (int i=0; i<sampleSize; ++i) {
 				log(i + "\t" + dictionary.getString(i));
 			}
-			log("******");
+			//log("******");
 		} else {
 			System.out.println("No data dictionary found.");
 		}
@@ -91,10 +91,10 @@ public class BufferManager {
 		// Load columns
 		colsToLoad.stream().parallel().forEach((colRef) -> {
 			try {
-				System.out.println("Loading column " + colRef.toString());
+				//System.out.println("Loading column " + colRef.toString());
 				loadColumn(colRef);				
 			} catch (Exception e) {
-				System.err.println("Error loading column " + colRef.toString());
+				//System.err.println("Error loading column " + colRef.toString());
 				e.printStackTrace();
 			}
 		});

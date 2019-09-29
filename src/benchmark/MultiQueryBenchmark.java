@@ -22,8 +22,8 @@ public class MultiQueryBenchmark {
 
     public static void main(String[] args) throws Exception {
 
-//        PrintStream out = new PrintStream(new FileOutputStream("output.txt"));
-//        System.setOut(out);
+        PrintStream out = new PrintStream(new FileOutputStream("output3.txt"));
+        System.setOut(out);
 
         String dbDir = //"/home/gid-wangj3/skinnerDB/data/imdb/";
                 "/home/jw2544/imdbm/";
@@ -33,7 +33,7 @@ public class MultiQueryBenchmark {
         PathUtil.initSchemaPaths(dbDir);
         CatalogManager.loadDB(PathUtil.schemaPath);
         PathUtil.initDataPaths(CatalogManager.currentDB);
-        System.out.println("Loading data ...");
+        //System.out.println("Loading data ...");
         GeneralConfig.inMemory = true;
         BufferManager.loadDB();
         //System.out.println("Data loaded.");
@@ -59,8 +59,8 @@ public class MultiQueryBenchmark {
         JoinProcessor.process(queries, preSummaries);
         for(int i = 0; i < queryNum; i++) {
             PostProcessor.process(queries[i], preSummaries[i]);
-            String resultRel = NamingConfig.FINAL_RESULT_NAME;
-            RelationPrinter.print(resultRel);
+//            String resultRel = NamingConfig.FINAL_RESULT_NAME;
+//            RelationPrinter.print(resultRel);
         }
         long totalMillis = System.currentTimeMillis() - startMillis;
         System.out.println("Total time:" + totalMillis + "ms");

@@ -121,7 +121,7 @@ public class GlobalContext {
                 if(!unaryTables.contains(firstIdx) && !unaryTables.contains(secondIdx)) {
                     String table1 = query.aliasToTable.get(query.aliases[firstIdx]);
                     String table2 = query.aliasToTable.get(query.aliases[secondIdx]);
-                    System.out.println(table1 + " " + table2);
+                    //System.out.println(table1 + " " + table2);
                     int realIdx1 = tableOrder.get(table1);
                     int realIdx2 = tableOrder.get(table2);
                     HashSet<Integer> realIndices = new HashSet<>();
@@ -140,8 +140,8 @@ public class GlobalContext {
 
     public static void aheadFirstUnfinish() {
         for(int i = 0; i < nrQuery; i++) {
-            firstUnfinishedNum = (firstUnfinishedNum + 1) % nrQuery;
-            //firstUnfinishedNum = i;
+            //firstUnfinishedNum = (firstUnfinishedNum + 1) % nrQuery;
+            firstUnfinishedNum = i;
             if(!queryStatus[firstUnfinishedNum])
                 return;
         }
