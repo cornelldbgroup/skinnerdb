@@ -187,6 +187,8 @@ public class QueryInfo {
 	 */
 	public HashSet<Integer>[] joinsInfo;
 
+	final Set<Integer> unaryTables;
+
 	/**
 	 * Extract information from the FROM clause (e.g.,
 	 * all tables referenced with their aliases, the
@@ -716,6 +718,11 @@ public class QueryInfo {
 		// Set aggregation type
 		aggregationType = getAggregationType();
 		log("Aggregation type:\t" + aggregationType);
+		this.unaryTables = new HashSet<>();
+		//tables which are involved in unary predicates
+		for(ExpressionInfo expressionInfo: this.unaryPredicates) {
+			unaryTables.addAll(expressionInfo.aliasIdxMentioned);
+		}
 	}
 
 	public CommonQueryPrefix findShortOrders(int startQuery, int[][] orders, int orderLen) {
@@ -886,5 +893,39 @@ public class QueryInfo {
 				break;
 		}
 		return prefix;
+	}
+
+	public CommonQueryPrefix decideReusable(int totalTest, int[][] orderList, int startQuery) {
+		int maxPrefixLen = 1;
+		int finalBasedTable = -1;
+		for(int i = 0; i < totalTest ; i++) {
+			int testQuery = (startQuery + i) % GlobalContext.nrQuery;
+			int[] basedOrder = orderList[testQuery];
+			if(basedOrder == null)
+				continue;
+			int[] selfOrder = orderList[this.queryNum];
+			int reuseLen = testReusableLength(testQuery, basedOrder, selfOrder);
+			if(reuseLen > maxPrefixLen) {
+				maxPrefixLen = reuseLen;
+				finalBasedTable = testQuery;
+			}
+		}
+		if(maxPrefixLen > 1)
+			return new CommonQueryPrefix(maxPrefixLen, null, finalBasedTable);
+		else
+			return null;
+	}
+
+	private int testReusableLength(int basedQuery, int[] basedOrder, int[] selfOrder) {
+		int testLen = Math.min(basedOrder.length, selfOrder.length);
+		for (int i = 0; i < testLen; i++) {
+			int baseTable = basedOrder[i];
+			int selfTable = selfOrder[i];
+			String baseTableOriginName = GlobalContext.aliasesTable[basedQuery][baseTable];
+			String selfTableOriginName = GlobalContext.aliasesTable[this.queryNum][selfTable];
+			if(!baseTableOriginName.equals(selfTableOriginName) || unaryTables.contains(selfTable) || GlobalContext.queryInfos[queryNum].unaryTables.contains(baseTable))
+				return i;
+		}
+		return testLen;
 	}
 }

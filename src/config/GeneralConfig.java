@@ -13,5 +13,5 @@ public class GeneralConfig {
 	 */
 	public static boolean inMemory = true;
 
-	public static int testQuery = 107;
+	public static int testQuery = 180;
 }
