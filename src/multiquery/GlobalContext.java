@@ -140,8 +140,8 @@ public class GlobalContext {
 
     public static void aheadFirstUnfinish() {
         for(int i = 0; i < nrQuery; i++) {
-            //firstUnfinishedNum = (firstUnfinishedNum + 1) % nrQuery;
-            firstUnfinishedNum = i;
+            firstUnfinishedNum = (firstUnfinishedNum + 1) % nrQuery;
+            //firstUnfinishedNum = i;
             if(!queryStatus[firstUnfinishedNum])
                 return;
         }
@@ -150,5 +150,13 @@ public class GlobalContext {
 
     public static int findGlobalIdxByTableName(String tableName) {
         return tableOrder.get(tableName);
+    }
+
+    public static boolean checkStatus() {
+        for(boolean status:queryStatus) {
+            if (!status)
+                return false;
+        }
+        return true;
     }
 }

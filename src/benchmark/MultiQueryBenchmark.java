@@ -5,7 +5,7 @@ import catalog.CatalogManager;
 import config.GeneralConfig;
 import config.NamingConfig;
 import diskio.PathUtil;
-import joining.JoinProcessor;
+import joining.JoinProcessorNew;
 import multiquery.GlobalContext;
 import net.sf.jsqlparser.statement.select.PlainSelect;
 import postprocessing.PostProcessor;
@@ -22,8 +22,8 @@ public class MultiQueryBenchmark {
 
     public static void main(String[] args) throws Exception {
 
-        PrintStream out = new PrintStream(new FileOutputStream("output3.txt"));
-        System.setOut(out);
+//        PrintStream out = new PrintStream(new FileOutputStream("new.txt"));
+//        System.setOut(out);
 
         String dbDir = //"/home/gid-wangj3/skinnerDB/data/imdb/";
                 "/home/jw2544/imdbm/";
@@ -56,7 +56,7 @@ public class MultiQueryBenchmark {
             queryNum++;
         }
         GlobalContext.initCommonJoin(queries);
-        JoinProcessor.process(queries, preSummaries);
+        JoinProcessorNew.process(queries, preSummaries);
         for(int i = 0; i < queryNum; i++) {
             PostProcessor.process(queries[i], preSummaries[i]);
 //            String resultRel = NamingConfig.FINAL_RESULT_NAME;

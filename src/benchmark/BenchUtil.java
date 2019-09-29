@@ -10,7 +10,6 @@ import java.util.TreeMap;
 import buffer.BufferManager;
 import catalog.CatalogManager;
 import config.NamingConfig;
-import joining.JoinProcessor;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.select.PlainSelect;
@@ -23,7 +22,7 @@ import statistics.JoinStats;
 
 /**
  * Several auxiliary methods for benchmarking SkinnerDB.
- * 
+ *
  * @author immanueltrummer
  *
  */
@@ -32,14 +31,14 @@ public class BenchUtil {
 	 * Parses queries in all '.sql' files that are found
 	 * in given directory and returns mapping from file
 	 * names to queries.
-	 * 
+	 *
 	 * @param dirPath	path to directory to read queries from
 	 * @return			ordered mapping from file names to queries
 	 * @throws Exception
 	 */
 	public static Map<String, PlainSelect> readAllQueries(
 			String dirPath) throws Exception {
-		Map<String, PlainSelect> nameToQuery = 
+		Map<String, PlainSelect> nameToQuery =
 				new TreeMap<String, PlainSelect>(
 						Collections.reverseOrder());
 		File dir = new File(dirPath);
@@ -50,32 +49,32 @@ public class BenchUtil {
 				Statement sqlStatement = CCJSqlParserUtil.parse(sql);
 				Select select = (Select)sqlStatement;
 				PlainSelect plainSelect = (PlainSelect)select.getSelectBody();
-				nameToQuery.put(file.getName(), plainSelect);				
+				nameToQuery.put(file.getName(), plainSelect);
 			}
 		}
 		return nameToQuery;
 	}
 	/**
 	 * Writes header row of benchmark result file.
-	 * 
+	 *
 	 * @param benchOut	channel to benchmark file
 	 */
 	public static void writeBenchHeader(PrintWriter benchOut) {
 		benchOut.println("Query\tMillis\tPreMillis\tPostMillis\tTuples\t"
-				+ "Iterations\tLookups\tNrIndexEntries\tnrUniqueLookups\t" 
+				+ "Iterations\tLookups\tNrIndexEntries\tnrUniqueLookups\t"
 				+ "NrUctNodes\tNrPlans\tJoinCard\tNrSamples\tAvgReward\t"
 				+ "MaxReward\tTotalWork");
 	}
 	/**
 	 * Executes given query, measures various metrics and writes
 	 * into new row via given writer.
-	 * 
+	 *
 	 * @param queryName		name of query to process
 	 * @param sql			the query SQL
 	 * @param benchOut		channel for benchmark results
 	 * @throws Exception
 	 */
-	public static void benchQuery(String queryName, PlainSelect sql, 
+	public static void benchQuery(String queryName, PlainSelect sql,
 			PrintWriter benchOut) throws Exception {
 //		System.out.println(queryName);
 //		System.out.println(sql.toString());

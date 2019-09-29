@@ -744,6 +744,31 @@ public class QueryInfo {
 			return null;
 	}
 
+//	public CommonQueryPrefix findShortOrders(int[][] orders, int orderLen) {
+//		int maxPrefixLen = 0;
+//		ArrayList<Integer> selectOrder = null;
+//		int shift = 0;
+//		for(int i = 0; i < orderLen ; i++) {
+//			int[] order= orders[i];
+//			if(order == null)
+//				continue;
+//			ArrayList<Integer> prefix = findSamePrefixLen(i, order);
+//			if (prefix.size() > maxPrefixLen) {
+//				selectOrder = prefix;
+//				maxPrefixLen = prefix.size();
+//				shift = i;
+//			}
+//		}
+//
+//		if(selectOrder != null) {
+//			//System.out.println("reuse order:" + selectOrder.toString());
+//			//System.out.println("Based Query Order: " + Arrays.toString(orders[basedQueryNum]) + ", reuse order:" + selectOrder.toString());
+//			//System.out.println("Based Query: "+ this.queryNum +", Reused Query: " + (startQuery + basedQueryNum) % GlobalContext.nrQuery + ", reuse length: " + maxPrefixLen);
+//			return new CommonQueryPrefix(maxPrefixLen, selectOrder.stream().mapToInt(i -> i).toArray(), shift);
+//		} else
+//			return null;
+//	}
+
 	public ArrayList<Integer> findSamePrefixLen(int testQuery, int[] order) {
 		ArrayList<Integer> prefix = new ArrayList<>();
 		HashSet<Integer> previousTableSet = new HashSet<>();

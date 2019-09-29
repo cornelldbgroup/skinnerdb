@@ -85,16 +85,16 @@ public class ProgressTracker {
         // Update table offset considering last fully treated tuple -
         // consider first table and all following tables in join order
         // if their cardinality is one.
-//        for (int joinCtr=0; joinCtr<nrJoinedTables; ++joinCtr) {
-//            int table = joinOrder.order[joinCtr];
-//            int lastTreated = state.tupleIndices[table]-1;
-//            tableOffset[table] = Math.max(lastTreated, tableOffset[table]);
-//            // Stop after first table with cardinality >1
-//            int cardinality = cardinalities[table];
-//            if (cardinality>1) {
-//                break;
-//            }
-//        }
+        for (int joinCtr=0; joinCtr<nrJoinedTables; ++joinCtr) {
+            int table = joinOrder.order[joinCtr];
+            int lastTreated = state.tupleIndices[table]-1;
+            tableOffset[table] = Math.max(lastTreated, tableOffset[table]);
+            // Stop after first table with cardinality >1
+            int cardinality = cardinalities[table];
+            if (cardinality>1) {
+                break;
+            }
+        }
         /*
         int firstTable = joinOrder.order[0];
         int lastTreatedTuple = state.tupleIndices[firstTable] - 1;
@@ -117,9 +117,9 @@ public class ProgressTracker {
             state = new State(nrTables);
         }
 
-        if(order.length > 1 && sharedProgress.childNodes[order[0]] == null || sharedProgress.childNodes[order[0]].childNodes[order[1]] == null) {
-            return state;
-        }
+//        if(order.length > 1 && sharedProgress.childNodes[order[0]] == null || sharedProgress.childNodes[order[0]].childNodes[order[1]] == null) {
+//            return state;
+//        }
 
         // Integrate progress from join orders with same prefix
         Progress curPrefixProgress = sharedProgress;

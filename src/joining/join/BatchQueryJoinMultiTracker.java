@@ -264,7 +264,7 @@ public class BatchQueryJoinMultiTracker {
                 //int firstTable = order[0];
                 //int firstTableStartIdx = progress[executedQuery].getOrDefault(firstTable, 0);
                 //tupleIndices[firstTable] = firstTableStartIdx;
-
+                //this.endIndices[executedQuery] = trackers[executedQuery].tableOffset;
                 reuseJoin(executedQuery, 0, nrTable, states[executedQuery].tupleIndices, isVisit, nrTuples, 0, states[executedQuery], trackers);
             }
             //}
@@ -318,6 +318,7 @@ public class BatchQueryJoinMultiTracker {
             int remainingCard = cardinality[curTable] -
                     (endIdx[curTable]);
             //int remainingCard = cardinalities[curTable];
+            //weight = weight * weight * 1.0 / remainingCard;
             weight *= 1.0 / remainingCard;
             // Fully processed tuples from this table
             progress += (endIdx[curTable] - startIdx[curTable]) * weight;
@@ -499,7 +500,13 @@ public class BatchQueryJoinMultiTracker {
                     while (tupleIndices[nextTable] >= nextCardinality) {
                         tupleIndices[nextTable] = 0;
                         --joinIndex;
-                        if (joinIndex < startIdx || !reuseFinish[joinIndex]) {
+                        if(joinIndex > 0 && !reuseFinish[joinIndex]) {
+                            for (int i = joinIndex + 1; i < endIdx; i++) {
+                                int curTable = order[i];
+                                tupleIndices[curTable] = cardinality[curTable] - 1;
+                            }
+                            break;
+                        } else if (joinIndex < startIdx) {
                             break;
                         }
                         nextTable = order[joinIndex];
@@ -514,8 +521,6 @@ public class BatchQueryJoinMultiTracker {
                     //System.out.println("Current Join Index2:"+ joinIndex);
                 }
 
-                --this.budgets[queryNum];
-
             } else {
 
                 // At least one of applicable predicates evaluates to false -
@@ -525,7 +530,13 @@ public class BatchQueryJoinMultiTracker {
                 while (tupleIndices[nextTable] >= nextCardinality) {
                     tupleIndices[nextTable] = 0;
                     --joinIndex;
-                    if (joinIndex < startIdx || !reuseFinish[joinIndex]) {
+                    if(joinIndex > 0 && !reuseFinish[joinIndex]) {
+                        for (int i = joinIndex + 1; i < endIdx; i++) {
+                            int curTable = order[i];
+                            tupleIndices[curTable] = cardinality[curTable] - 1;
+                        }
+                        break;
+                    } else if (joinIndex < startIdx) {
                         break;
                     }
                     nextTable = order[joinIndex];
@@ -533,6 +544,8 @@ public class BatchQueryJoinMultiTracker {
                     tupleIndices[nextTable] += 1;
                 }
             }
+
+            --this.budgets[queryNum];
         }
 
         // Save final state
@@ -566,7 +579,7 @@ public class BatchQueryJoinMultiTracker {
         state.lastIndex = joinIndex;
         for (int tableCtr = 0; tableCtr < order.length; ++tableCtr) {
             state.tupleIndices[tableCtr] = tupleIndices[tableCtr];
-            endIndices[queryNum][tableCtr] = tupleIndices[tableCtr];
+            this.endIndices[queryNum][tableCtr] = tupleIndices[tableCtr];
         }
 
         trackers[queryNum].updateProgress(new JoinOrder(order), state);

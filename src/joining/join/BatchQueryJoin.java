@@ -380,13 +380,13 @@ public class BatchQueryJoin {
                         //reuseState.tupleIndices;
 
                         //if(queryNum == GeneralConfig.testQuery || reusedQuery == GeneralConfig.testQuery) {
-                            System.out.println("============");
-                            System.out.println("parent query:" + queryNum);
-                            System.out.println("reuse query:" + reusedQuery);
-                            System.out.println("parent order:" + Arrays.toString(order));
-                            System.out.println("child order:" + Arrays.toString(reusedQueryOrder));
-                            System.out.println("parent indices:" + Arrays.toString(tupleIndices));
-                            System.out.println("reused before indices:" + Arrays.toString(recoveryTupleIndices));
+//                            System.out.println("============");
+//                            System.out.println("parent query:" + queryNum);
+//                            System.out.println("reuse query:" + reusedQuery);
+//                            System.out.println("parent order:" + Arrays.toString(order));
+//                            System.out.println("child order:" + Arrays.toString(reusedQueryOrder));
+//                            System.out.println("parent indices:" + Arrays.toString(tupleIndices));
+//                            System.out.println("reused before indices:" + Arrays.toString(recoveryTupleIndices));
                         //}
 
                         boolean tryReuse = true;
@@ -452,9 +452,9 @@ public class BatchQueryJoin {
                         //                            , unaryPreds[reusedQuery], reuseJoinIndex, nrReuseQueryTable, batchGroups[reusedQuery]);
 
                         //if(queryNum == GeneralConfig.testQuery || reusedQuery == GeneralConfig.testQuery) {
-                            System.out.println("reused after indices:" + Arrays.toString(reusedTupleIndices));
-                            System.out.println("reused:" + tryReuse);
-                            System.out.println("============");
+//                            System.out.println("reused after indices:" + Arrays.toString(reusedTupleIndices));
+//                            System.out.println("reused:" + tryReuse);
+//                            System.out.println("============");
                         //}
 
 //                        if(isSameProgress) {
@@ -548,15 +548,15 @@ public class BatchQueryJoin {
         }
 
         //if(queryNum == GeneralConfig.testQuery) {
-            System.out.println("*********************");
-            System.out.println("Query:" + queryNum);
-            System.out.println("Join order:" + Arrays.toString(order));
-            System.out.println("join prefix:" + joinIndex);
-            System.out.println("start prefix:" + startIdx);
-            System.out.println("end prefix:" + endIdx);
-            System.out.println("start table indices:" + Arrays.toString(currentStartIndices));
-            System.out.println("end table indices:" + Arrays.toString(tupleIndices));
-            System.out.println("*********************");
+//            System.out.println("*********************");
+//            System.out.println("Query:" + queryNum);
+//            System.out.println("Join order:" + Arrays.toString(order));
+//            System.out.println("join prefix:" + joinIndex);
+//            System.out.println("start prefix:" + startIdx);
+//            System.out.println("end prefix:" + endIdx);
+//            System.out.println("start table indices:" + Arrays.toString(currentStartIndices));
+//            System.out.println("end table indices:" + Arrays.toString(tupleIndices));
+//            System.out.println("*********************");
         //}
 
         state.lastIndex = joinIndex;
