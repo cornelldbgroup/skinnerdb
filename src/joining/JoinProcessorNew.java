@@ -147,14 +147,14 @@ public class JoinProcessorNew {
             }
             GlobalContext.aheadFirstUnfinish();
             //System.out.println("========================");
-            int total = 0;
-            for (int i = 0; i < nrQueries; i++) {
-                if (!GlobalContext.queryStatus[i])
-                    total++;
-                System.out.println("status:" + GlobalContext.queryStatus[i]);
-            }
-            System.out.println("first:" + GlobalContext.firstUnfinishedNum);
-            System.out.println("total unfinish:" + total);
+//            int total = 0;
+//            for (int i = 0; i < nrQueries; i++) {
+//                if (!GlobalContext.queryStatus[i])
+//                    total++;
+//                System.out.println("status:" + GlobalContext.queryStatus[i]);
+//            }
+//            System.out.println("first:" + GlobalContext.firstUnfinishedNum);
+//            System.out.println("total unfinish:" + total);
 
 //            if(GlobalContext.queryStatus[GeneralConfig.testQuery]) {
 //                String targetRelName = "q13";

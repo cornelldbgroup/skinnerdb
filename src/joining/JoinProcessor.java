@@ -6,7 +6,6 @@ import config.GeneralConfig;
 import config.LoggingConfig;
 import config.NamingConfig;
 import config.JoinConfig;
-import joining.join.BatchQueryJoin;
 import joining.join.BatchQueryJoinMultiTracker;
 import joining.result.ResultTuple;
 import joining.uct.SelectionPolicy;
@@ -120,15 +119,15 @@ public class JoinProcessor {
 
 
             GlobalContext.aheadFirstUnfinish();
-            
-            int total = 0;
-            for (int i = 0; i < nrQueries; i++) {
-                if (!GlobalContext.queryStatus[i])
-                    total++;
-                System.out.println("status:" + GlobalContext.queryStatus[i]);
-            }
-            System.out.println("first:" + GlobalContext.firstUnfinishedNum);
-            System.out.println("total unfinish:" + total);
+
+//            int total = 0;
+//            for (int i = 0; i < nrQueries; i++) {
+//                if (!GlobalContext.queryStatus[i])
+//                    total++;
+//                System.out.println("status:" + GlobalContext.queryStatus[i]);
+//            }
+//            System.out.println("first:" + GlobalContext.firstUnfinishedNum);
+//            System.out.println("total unfinish:" + total);
 
 
 //            //ArrayList[] batchGroup = new ArrayList[nrQueries];

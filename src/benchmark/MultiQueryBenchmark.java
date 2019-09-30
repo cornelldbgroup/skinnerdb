@@ -60,8 +60,8 @@ public class MultiQueryBenchmark {
         JoinProcessor.process(queries, preSummaries);
         for(int i = 0; i < queryNum; i++) {
             PostProcessor.process(queries[i], preSummaries[i]);
-//            String resultRel = NamingConfig.FINAL_RESULT_NAME;
-//            RelationPrinter.print(resultRel);
+            String resultRel = NamingConfig.FINAL_RESULT_NAME;
+            RelationPrinter.print(resultRel);
         }
         long totalMillis = System.currentTimeMillis() - startMillis;
         System.out.println("Total time:" + totalMillis + "ms");
