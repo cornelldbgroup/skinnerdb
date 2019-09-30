@@ -6,6 +6,7 @@ import java.util.Map.Entry;
 import catalog.CatalogManager;
 import catalog.info.ColumnInfo;
 import catalog.info.TableInfo;
+import config.GeneralConfig;
 import config.LoggingConfig;
 import expressions.ExpressionInfo;
 import expressions.aggregates.AggInfo;
@@ -187,7 +188,7 @@ public class QueryInfo {
 	 */
 	public HashSet<Integer>[] joinsInfo;
 
-	final Set<Integer> unaryTables;
+	final List<ExpressionInfo>[] unaryPredicateForTables;
 
 	/**
 	 * Extract information from the FROM clause (e.g.,
@@ -718,10 +719,15 @@ public class QueryInfo {
 		// Set aggregation type
 		aggregationType = getAggregationType();
 		log("Aggregation type:\t" + aggregationType);
-		this.unaryTables = new HashSet<>();
+//		this.unaryTables = new HashSet<>();
+		this.unaryPredicateForTables = new List[nrJoined];
 		//tables which are involved in unary predicates
 		for(ExpressionInfo expressionInfo: this.unaryPredicates) {
-			unaryTables.addAll(expressionInfo.aliasIdxMentioned);
+			for(Integer tableIdx : expressionInfo.aliasIdxMentioned) {
+				if(this.unaryPredicateForTables[tableIdx] == null)
+					this.unaryPredicateForTables[tableIdx] = new ArrayList<ExpressionInfo>();
+				this.unaryPredicateForTables[tableIdx].add(expressionInfo);
+			}
 		}
 	}
 
@@ -918,13 +924,42 @@ public class QueryInfo {
 
 	private int testReusableLength(int basedQuery, int[] basedOrder, int[] selfOrder) {
 		int testLen = Math.min(basedOrder.length, selfOrder.length);
+		QueryInfo baseQueryInfo = GlobalContext.queryInfos[basedQuery];
 		for (int i = 0; i < testLen; i++) {
 			int baseTable = basedOrder[i];
 			int selfTable = selfOrder[i];
 			String baseTableOriginName = GlobalContext.aliasesTable[basedQuery][baseTable];
 			String selfTableOriginName = GlobalContext.aliasesTable[this.queryNum][selfTable];
-			if(!baseTableOriginName.equals(selfTableOriginName) || unaryTables.contains(selfTable) || GlobalContext.queryInfos[queryNum].unaryTables.contains(baseTable))
+			if(!baseTableOriginName.equals(selfTableOriginName))
 				return i;
+			else if((unaryPredicateForTables[selfTable] != null && baseQueryInfo.unaryPredicateForTables[baseTable] == null) ||
+					(unaryPredicateForTables[selfTable] == null && baseQueryInfo.unaryPredicateForTables[baseTable] != null))
+				return i;
+			else if(unaryPredicateForTables[selfTable] != null && baseQueryInfo.unaryPredicateForTables[baseTable] != null) {
+				if (!GeneralConfig.reuseUnary)
+					return i;
+				else {
+
+					if(unaryPredicateForTables[selfTable].size() != baseQueryInfo.unaryPredicateForTables[baseTable].size())
+						return i;
+
+					HashSet<String> unaryPredicateSelfSet = new HashSet<>();
+					HashSet<String> basePredicateSelfSet = new HashSet<>();
+					for(ExpressionInfo selfExpression : unaryPredicateForTables[selfTable]) {
+						unaryPredicateSelfSet.add(selfExpression.finalExpression.toString().replaceAll(aliases[selfTable] +"\\.", selfTableOriginName + "\\."));
+					}
+					for(ExpressionInfo baseExpression : baseQueryInfo.unaryPredicateForTables[baseTable]) {
+						basePredicateSelfSet.add(baseExpression.finalExpression.toString().replaceAll(baseQueryInfo.aliases[baseTable] + "\\.", baseTableOriginName + "\\."));
+					}
+
+					if(!unaryPredicateSelfSet.equals(basePredicateSelfSet))
+						return i;
+//					else {
+//						System.out.println(unaryPredicateSelfSet.toString());
+//						System.out.println(basePredicateSelfSet.toString());
+//					}
+				}
+			}
 		}
 		return testLen;
 	}

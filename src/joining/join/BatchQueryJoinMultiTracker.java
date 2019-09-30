@@ -29,7 +29,7 @@ public class BatchQueryJoinMultiTracker {
     /**
      * Number of steps per episode.
      */
-    public final int budget = 500;
+    public final int budget = 15;
 
     /**
      * At i-th position: cardinality of i-th joined table
@@ -72,7 +72,7 @@ public class BatchQueryJoinMultiTracker {
 
     public HashMap<Integer, Integer>[] progress;
 
-    public final long[] totalCardinality;
+    //public final long[] totalCardinality;
 
     public final int[] budgets;
 
@@ -101,7 +101,7 @@ public class BatchQueryJoinMultiTracker {
         this.predToEvals = new HashMap[nrQueries];
         this.progress = new HashMap[nrQueries];
         this.unaryPreds = new KnaryBoolEval[nrQueries][];
-        this.totalCardinality = new long[nrQueries];
+        //this.totalCardinality = new long[nrQueries];
         this.budgets = new int[nrQueries];
         this.batchTracker = new HashMap<>();
         this.startIndices = new int[nrQueries][];
@@ -112,7 +112,7 @@ public class BatchQueryJoinMultiTracker {
             cardinalities[i] = new int[query.nrJoined];
             predToEvals[i] = new HashMap<>();
             progress[i] = new HashMap<>();
-            totalCardinality[i] = 1;
+            //totalCardinality[i] = 1;
             for (Map.Entry<String, Integer> entry :
                     query.aliasToIndex.entrySet()) {
                 String alias = entry.getKey();
@@ -120,9 +120,9 @@ public class BatchQueryJoinMultiTracker {
                 int index = entry.getValue();
                 int cardinality = CatalogManager.getCardinality(table);
                 cardinalities[i][index] = cardinality;
-                totalCardinality[i] *= cardinality;
-                if(totalCardinality[i] < 0)
-                    totalCardinality[i] = 1000000000l;
+                //totalCardinality[i] *= cardinality;
+                //if(totalCardinality[i] < 0)
+                //    totalCardinality[i] = 1000000000l;
             }
 
             for (ExpressionInfo predInfo : query.wherePredicates) {
@@ -200,13 +200,6 @@ public class BatchQueryJoinMultiTracker {
             int next = nextRaw < 0 ? cardinality[curTable] : nextRaw;
             max = Math.max(max, next);
         }
-//        if(max > cardinality[curTable]) {
-//            System.out.println("error");
-//        }
-//        if (max < 0) {
-//            System.out.println(Arrays.toString(tupleIndices));
-//            System.out.println(indexWrappers.toString());
-//        }
         return max;
     }
 
@@ -230,13 +223,16 @@ public class BatchQueryJoinMultiTracker {
         this.orders = orders;
         this.batchGroups = batchGroups;
         boolean[] isVisit = new boolean[nrQueries];
-        //int[] nrTuples = new int[nrQueries];
         ProgressTracker[] trackers = new ProgressTracker[nrQueries];
+        HashSet<Integer> singleGroupSet = new HashSet<>();
 
         //System.out.println("Group Info:");
         for (HashSet<Integer> batchGroupSet : batchGroupSets) {
             //batchGroupSet.forEach(i -> System.out.println("current:" + i));
             //System.out.println("======================================");
+            if (batchGroupSet.size() < 2)
+                singleGroupSet.addAll(batchGroupSet);
+
             if (!batchTracker.containsKey(batchGroupSet)) {
                 HashMap<Integer, ProgressTracker> currentBatchTracker = new HashMap<>();
                 for(Integer currentQuery : batchGroupSet) {
@@ -257,65 +253,40 @@ public class BatchQueryJoinMultiTracker {
             int executedQuery = (startQuery + i) % nrQueries;
             if(GlobalContext.queryStatus[executedQuery])
                 continue;
-            //if(batchGroup != null) {
             if (!isVisit[executedQuery] && !GlobalContext.queryStatus[executedQuery]) {
-                //int currentBudget = budget;
                 int[] order = orders[executedQuery];
                 int nrTable = order.length;
-                //int[] tupleIndices = new int[nrTable];
-                //int firstTable = order[0];
-                //int firstTableStartIdx = progress[executedQuery].getOrDefault(firstTable, 0);
-                //tupleIndices[firstTable] = firstTableStartIdx;
-                //this.endIndices[executedQuery] = trackers[executedQuery].tableOffset;
                 int[] tupleIndices = Arrays.copyOf(states[executedQuery].tupleIndices, states[executedQuery].tupleIndices.length);
                 reuseJoin(executedQuery, 0, nrTable, tupleIndices, isVisit, 0, states[executedQuery], trackers);
             }
-            //}
         }
 
-//        for (int i = 0; i < nrQueries; i++) {
-//            if(GlobalContext.queryStatus[i])
-//                continue;
-//            int firstTable = orders[i][0];
-//            //int currentProgress = (int) Math.ceil((double) cardinalities[i][firstTable] * limitPrecent);
-//            //int currentProgress = limit;
-//            if (progress[i].containsKey(firstTable)) {
-//                int totalProgress = progress[i].get(firstTable) + currentProgress;
-//                progress[i].put(firstTable, totalProgress);
-//                if (totalProgress >= cardinalities[i][firstTable])
-//                    GlobalContext.queryStatus[i] = true;
-//            } else
-//                progress[i].put(firstTable, currentProgress);
-//        }
 
         double[] rewards = new double[nrQueries];
         for (int i = 0; i < nrQueries; i++) {
             if(GlobalContext.queryStatus[i])
                 continue;
-//            System.out.println("startIndices:"+ Arrays.toString(startIndices));
-//            System.out.println("endIndices:" + Arrays.toString(endIndices));
+
+            if(GeneralConfig.enableTracker && !singleGroupSet.contains(i)) {
+                HashSet<Integer> singleSet = new HashSet<Integer>();
+                singleSet.add(i);
+                HashMap<Integer, ProgressTracker> singleTrackerEntry = batchTracker.get(singleSet);
+                if (singleTrackerEntry == null) {
+                    singleTrackerEntry = new HashMap();
+                    ProgressTracker singleTracker = new ProgressTracker(orders[i].length, cardinalities[i]);
+                    singleTracker.updateProgress(new JoinOrder(orders[i]), states[i]);
+                    singleTrackerEntry.put(i, singleTracker);
+                } else {
+                    ProgressTracker singleTracker = singleTrackerEntry.get(i);
+                    singleTracker.updateProgress(new JoinOrder(orders[i]), states[i]);
+                }
+            }
+
             GlobalContext.queryStatus[i] = trackers[i].isFinished;
-            //rewards[i] = nrTuples[i] > 0 ? 1d / (double) nrTuples[i] : 0;
-                    //(double) totalCardinality[i];
-            //rewards[i] = rewardFun(nrTuples[i], i, orders[i].length);
-//            int[] ahead = new int[endIndices[i].length];
-//            for (int j = 0; j < endIndices[i].length; j++) {
-//                ahead[j] = endIndices[i][j] - startIndices[i][j];
-//            }
-//            System.out.println("ahead: " + Arrays.toString(ahead));
             rewards[i] = reward(orders[i], startIndices[i], endIndices[i], cardinalities[i]);
         }
-//        System.out.println(Arrays.toString(rewards));
         return rewards;
     }
-
-//    double rewardFun(int nrTuple, int queryNum, int nrTable) {
-//        long totalCard = 0;
-//        for (int i = 0; i < nrTable; i++) {
-//            totalCard += cardinalities[queryNum][i];
-//        }
-//        return totalCard / nrTuple;
-//    }
 
     double reward(int[] joinOrder, int[] startIdx, int[] endIdx, int[] cardinality) {
         double progress = 0;
@@ -518,6 +489,12 @@ public class BatchQueryJoinMultiTracker {
                                 }
                             }
                             break;
+                        } else if(!reuseFinish[joinIndex]){
+                            for (int i = joinIndex + 1; i < endIdx; i++) {
+                                int curTable = order[i];
+                                tupleIndices[curTable] = cardinality[curTable] - 1;
+                            }
+                            break;
                         }
                         nextTable = order[joinIndex];
                         nextCardinality = cardinality[nextTable];
@@ -546,6 +523,12 @@ public class BatchQueryJoinMultiTracker {
                                 int curTable = order[i];
                                 tupleIndices[curTable] = cardinality[curTable] - 1;
                             }
+                        }
+                        break;
+                    } else if(!reuseFinish[joinIndex]){
+                        for (int i = joinIndex + 1; i < endIdx; i++) {
+                            int curTable = order[i];
+                            tupleIndices[curTable] = cardinality[curTable] - 1;
                         }
                         break;
                     }

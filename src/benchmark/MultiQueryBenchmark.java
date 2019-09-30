@@ -26,8 +26,8 @@ public class MultiQueryBenchmark {
 //        PrintStream out = new PrintStream(new FileOutputStream("new.txt"));
 //        System.setOut(out);
 
-        String dbDir = "/home/gid-wangj3/skinnerDB/data/imdb/";
-                //"/home/jw2544/imdbm/";
+        String dbDir = //"/home/gid-wangj3/skinnerDB/data/imdb/";
+                "/home/jw2544/imdbm/";
                 //"/home/gid-wangj3/skinnerDB/data/imdb/";
         //"/home/jw2544/imdbl/";
         //"/home/jw2544/dataset/skinnerimdb/";//"/home/jw2544/imdbl/";
@@ -39,8 +39,8 @@ public class MultiQueryBenchmark {
         BufferManager.loadDB();
         //System.out.println("Data loaded.");
         //Indexer.indexAll(StartupConfig.INDEX_CRITERIA);
-        String queryDir = "/home/gid-wangj3/multi-query/imdb/queries/";
-                //"/home/jw2544/Documents/multi-query/imdb/queries/";
+        String queryDir = //"/home/gid-wangj3/multi-query/imdb/queries/";
+                "/home/jw2544/Documents/multi-query/imdb/queries/";
                 //"/home/gid-wangj3/multi-query/imdb/queries/";
                 //"/home/jw2544/Documents/multi-query/imdb/queries/";
         Map<String, PlainSelect> nameToQuery = BenchUtil.readAllQueries(queryDir);
