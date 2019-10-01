@@ -56,13 +56,14 @@ public class ThreadProgress {
 
     public int getSlowestProgress(int splitKey) {
         int slowestProgress = Integer.MAX_VALUE;
-        for (int i = 0 ; i < latestStates.length; i++) {
-            ThreadState eachState = latestStates[i];
-            if (eachState != null && eachState.hasProgress(splitKey)) {
-                int newIndex = eachState.tableTupleIndexEpoch.get(splitKey)[0];
+        for (ThreadState eachState : latestStates) {
+            if (eachState != null) {
+                int newIndex = eachState.getProgress(splitKey);
+                if (newIndex < 0) {
+                    return -1;
+                }
                 slowestProgress = Math.min(newIndex, slowestProgress);
-            }
-            else {
+            } else {
                 return -1;
             }
         }

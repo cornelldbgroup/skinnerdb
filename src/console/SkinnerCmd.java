@@ -14,6 +14,7 @@ import catalog.info.TableInfo;
 import compression.Compressor;
 import config.GeneralConfig;
 import config.NamingConfig;
+import config.ParallelConfig;
 import config.StartupConfig;
 import ddl.TableCreator;
 import diskio.LoadCSV;
@@ -28,6 +29,7 @@ import net.sf.jsqlparser.statement.select.PlainSelect;
 import net.sf.jsqlparser.statement.select.Select;
 import print.RelationPrinter;
 import query.SQLexception;
+import threads.ThreadPool;
 
 /**
  * Runs Skinner command line console.
@@ -85,6 +87,7 @@ public class SkinnerCmd {
 				for (Entry<String, PlainSelect> entry : nameToQuery.entrySet()) {
 					String queryName = entry.getKey();
 					PlainSelect query = entry.getValue();
+					BenchUtil.startQuery(query);
 					BenchUtil.benchQuery(queryName, query, benchOut);
 				}
 				// Close benchmark result file
@@ -336,7 +339,10 @@ public class SkinnerCmd {
 			return;
 		}
 
-		String preInput = args.length == 2 ? "exec " + args[1] : null;
+		String preInput = args.length == 3 ? "exec " + args[1] : null;
+		ParallelConfig.EXE_THREADS = args.length == 3 ? Integer.parseInt(args[2]) : ParallelConfig.EXE_THREADS;
+		// initialize a thread pool
+		ThreadPool.initThreadsPool(ParallelConfig.EXE_THREADS);
 
 		// Load database schema and initialize path mapping
 		dbDir = args[0];
@@ -368,5 +374,6 @@ public class SkinnerCmd {
 			continueProcessing = continueProcessing && args.length == 1;
 		}
 		scanner.close();
+		ThreadPool.close();
 	}
 }

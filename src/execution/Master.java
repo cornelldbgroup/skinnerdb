@@ -1,12 +1,15 @@
 package execution;
 
-import joining.JoinProcessor;
+
+import buffer.BufferManager;
+import catalog.CatalogManager;
 import joining.ParallelJoinProcessor;
 import net.sf.jsqlparser.statement.select.PlainSelect;
 import postprocessing.PostProcessor;
 import preprocessing.Context;
 import preprocessing.Preprocessor;
 import query.QueryInfo;
+import statistics.JoinStats;
 
 /**
  * Controls high-level execution process.
@@ -31,6 +34,8 @@ public class Master {
 	public static void executeSelect(PlainSelect select, 
 			boolean explain, int plotAtMost, int plotEvery,
 			String plotDir, String targetRel) throws Exception {
+        executeStart(select,
+                false, -1, -1, null);
 		// Analyze input query
 		QueryInfo query = new QueryInfo(select, explain, 
 				plotAtMost, plotEvery, plotDir);
@@ -39,6 +44,9 @@ public class Master {
 		Context context = Preprocessor.process(query);
 		System.out.println("Finish Pre");
 		long joinStart = System.currentTimeMillis();
+		query.equiJoinPreds.forEach(expressionInfo -> {
+			expressionInfo.extractIndex(context);
+		});
 		// Join filtered tables
 //		JoinProcessor.process(query, context);
 		ParallelJoinProcessor.process(query, context);
@@ -46,9 +54,29 @@ public class Master {
 		long postStart = System.currentTimeMillis();
 		// Aggregation, grouping, and sorting if required
 		PostProcessor.process(query, context);
+//		ParallelPostProcessor.process(query, context);
 		System.out.println("Finish Post");
 		long end = System.currentTimeMillis();
 		System.out.println("Pre: " + (joinStart - preStart) + "\tJoin: " +
-				(postStart - joinStart) + "\tPost: " + (end - postStart));
+				(postStart - joinStart) + "\tExe: " + JoinStats.time + "\tPost: " + (end - postStart));
 	}
+
+	public static void executeStart(PlainSelect select,
+									 boolean explain, int plotAtMost, int plotEvery,
+									 String plotDir) throws Exception {
+		// Analyze input query
+		QueryInfo query = new QueryInfo(select, explain,
+				plotAtMost, plotEvery, plotDir);
+		// Filter, projection, and indexing for join phase
+		Context context = Preprocessor.process(query);
+		query.equiJoinPreds.forEach(expressionInfo -> expressionInfo.extractIndex(context));
+		// Join filtered tables
+		ParallelJoinProcessor.process(query, context);
+		// Aggregation, grouping, and sorting if required
+		PostProcessor.process(query, context);
+		BufferManager.unloadTempData();
+		CatalogManager.removeTempTables();
+	}
+
+
 }

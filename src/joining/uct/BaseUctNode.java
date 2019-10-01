@@ -12,11 +12,11 @@ public abstract class BaseUctNode {
     /**
      * Assigns each action index to child node.
      */
-    public final List<BaseUctNode> children = new ArrayList<>();
+    public final BaseUctNode[] children;
     /**
      * Number of times this node was visited.
      */
-    public int nrVisits = 1;
+    public int nrVisits = 0;
     /**
      * Parent node in UCT search tree.
      */
@@ -24,7 +24,7 @@ public abstract class BaseUctNode {
     /**
      * Accumulated reward over all visits so far.
      */
-    public double accumulatedReward;
+    public double accumulatedReward = 0;
     /**
      * Split Table label
      */
@@ -35,9 +35,13 @@ public abstract class BaseUctNode {
      * Initialize concurrent UCT root node.
      *
      */
-    public BaseUctNode(BaseUctNode parent, int label) {
+    public BaseUctNode(BaseUctNode parent, int label, int nrTables) {
         this.parent = parent;
         this.label = label;
+        if (nrTables > 0)
+            this.children = new BaseUctNode[nrTables];
+        else
+            this.children = new BaseUctNode[0];
     }
 
 
@@ -68,9 +72,6 @@ public abstract class BaseUctNode {
         return label;
     }
 
-    public BaseUctNode getChild(int label) {
-        return children.stream().filter(child -> child.label == label).findFirst().orElse(null);
-    }
 
     public void updataStatistics(double reward) {
         this.accumulatedReward += reward;

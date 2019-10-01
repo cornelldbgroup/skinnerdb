@@ -129,7 +129,8 @@ public class OldJoin extends MultiWayJoin {
         JoinOrder joinOrder = new JoinOrder(order);
         LeftDeepPlan plan = planCache.get(joinOrder);
         if (plan == null) {
-            plan = new LeftDeepPlan(query, preSummary, predToEval, order);
+            //TODO: Fix it
+            plan = new LeftDeepPlan(query, null, joinOrder);
             planCache.put(joinOrder, plan);
         }
         log(plan.toString());

@@ -1,6 +1,8 @@
 package joining.uct;
 
 import config.JoinConfig;
+import config.LoggingConfig;
+import config.ParallelConfig;
 import config.UCTConfig;
 import joining.join.DPJoin;
 import joining.join.MultiWayJoin;
@@ -8,6 +10,7 @@ import query.QueryInfo;
 import statistics.JoinStats;
 
 import java.util.*;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -17,10 +20,6 @@ import java.util.stream.IntStream;
  * @author immanueltrummer
  */
 public class DPNode {
-    /**
-     * Used for randomized selection policy.
-     */
-    final Random random = new Random();
     /**
      * The query for which we are optimizing.
      */
@@ -56,6 +55,10 @@ public class DPNode {
      */
     private final double[][] accumulatedReward;
     /**
+     * node statistics that should be aligned to a cache line
+     */
+    public NodeStatistics[] nodeStatistics;
+    /**
      * Total number of tables to join.
      */
     final int nrTables;
@@ -64,6 +67,11 @@ public class DPNode {
      * to enable shuffling during playouts).
      */
     final List<Integer> unjoinedTables;
+    /**
+     * Set of already joined tables (each UCT node represents
+     * a state in which a subset of tables are joined).
+     */
+    public final Set<Integer> joinedTables;
     /**
      * Associates each action index with a next table to join.
      */
@@ -84,6 +92,10 @@ public class DPNode {
      */
     final Set<Integer> recommendedActions;
     /**
+     * concurrent priority set
+     */
+    private LinkedList<Integer>[] prioritySet;
+    /**
      * Numbre of threads.
      */
     final int nrThreads;
@@ -101,7 +113,6 @@ public class DPNode {
     public DPNode(long roundCtr, QueryInfo query,
                    boolean useHeuristic, int nrThreads) {
         // Count node generation
-//        ++JoinStats.nrUctNodes;
         this.query = query;
         this.nrTables = query.nrJoined;
         this.nrThreads = nrThreads;
@@ -113,6 +124,7 @@ public class DPNode {
         nrTries = new int[nrThreads][nrActions];
         accumulatedReward = new double[nrThreads][nrActions];
         unjoinedTables = new ArrayList<>();
+        joinedTables = new HashSet<>();
         nextTable = new int[nrTables];
         for (int tableCtr = 0; tableCtr < nrTables; ++tableCtr) {
             unjoinedTables.add(tableCtr);
@@ -124,6 +136,19 @@ public class DPNode {
 //            accumulatedReward[action] = 0;
             recommendedActions.add(action);
         }
+        this.nodeStatistics = new NodeStatistics[nrThreads];
+
+        for (int i = 0; i < nrThreads; i++) {
+            this.nodeStatistics[i] = new NodeStatistics(nrActions);
+        }
+
+        this.prioritySet = new LinkedList[nrThreads];
+        for (int i = 0; i < nrThreads; i++) {
+            prioritySet[i] = new LinkedList<>();
+            for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
+                prioritySet[i].add(actionCtr);
+            }
+        }
     }
     /**
      * Initializes UCT node by expanding parent node.
@@ -132,9 +157,8 @@ public class DPNode {
      * @param parent      parent node in UCT tree
      * @param joinedTable new joined table
      */
-    public DPNode(long roundCtr, DPNode parent, int joinedTable) {
+    public DPNode(long roundCtr, DPNode parent, int joinedTable, int[] joinOrder, int[] cardinalities) {
         // Count node generation
-//        ++JoinStats.nrUctNodes;
         createdIn = roundCtr;
         treeLevel = parent.treeLevel + 1;
         nrActions = parent.nrActions - 1;
@@ -146,14 +170,18 @@ public class DPNode {
         query = parent.query;
         nrTables = parent.nrTables;
         unjoinedTables = new ArrayList<>();
-        Set<Integer> joinedTables = new HashSet<>();
-        for (int table = 0; table < nrTables; table++) {
-            if (parent.unjoinedTables.contains(table) && table != joinedTable) {
+        joinedTables = new HashSet<>();
+        joinedTables.addAll(parent.joinedTables);
+        joinedTables.add(joinedTable);
+        for (Integer table : parent.unjoinedTables) {
+            if (table != joinedTable) {
                 unjoinedTables.add(table);
             }
-            else {
-                joinedTables.add(table);
-            }
+        }
+        this.nodeStatistics = new NodeStatistics[nrThreads];
+
+        for (int i = 0; i < nrThreads; i++) {
+            this.nodeStatistics[i] = new NodeStatistics(nrActions);
         }
 
         nextTable = new int[nrActions];
@@ -184,6 +212,30 @@ public class DPNode {
         else {
             recommendedActions = null;
         }
+
+        List<Integer> priorityActions = new ArrayList<>();
+        for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
+            if (!useHeuristic || recommendedActions.contains(actionCtr)) {
+                priorityActions.add(actionCtr);
+            }
+        }
+        this.prioritySet = new LinkedList[nrThreads];
+        for (int i = 0; i < nrThreads; i++) {
+            prioritySet[i] = new LinkedList<>(priorityActions);
+        }
+
+        if (nrActions == 0) {
+            // initialize tree node
+            tableRoot =  new BaseUctInner(null, -1, nrTables);
+            int end = Math.min(5, nrTables);
+            for (int i = 1; i < end; i++) {
+                int table = joinOrder[i];
+                int cardinality = cardinalities[table];
+                if (cardinality > 1000) {
+                    tableRoot.expand(table, true);
+                }
+            }
+        }
     }
 
 
@@ -194,7 +246,7 @@ public class DPNode {
      * @param policy	policy used to select action
      * @return index of action to try next
      */
-    int selectAction(SelectionPolicy policy, int tid) {
+    int selectAction(SelectionPolicy policy, int tid, DPJoin dpJoin) {
         /*
          * We apply the UCT formula as no actions are untried.
          * We iterate over all actions and calculate their
@@ -203,18 +255,25 @@ public class DPNode {
          * selected action to ensure that we pick a random
          * action among the ones with maximal UCT value.
          */
+        Integer priorAction = null;
+        if (!prioritySet[tid].isEmpty()) {
+            priorAction = prioritySet[tid].pollFirst();
+        }
+        if (priorAction != null) {
+            return priorAction;
+        }
         int nrVisits = 0;
         int[] nrTries = new int[nrActions];
         double[] accumulatedReward = new double[nrActions];
         for (int i = 0; i < nrThreads; i++) {
-            nrVisits += this.nrVisits[i];
+            NodeStatistics threadStats = nodeStatistics[i];
+            nrVisits += threadStats.nrVisits;
             for(Integer recAction : recommendedActions) {
-                int threadTries = this.nrTries[i][recAction];
+                int threadTries = threadStats.nrTries[recAction];
                 nrTries[recAction] += threadTries;
-                accumulatedReward[recAction] += this.accumulatedReward[i][recAction];
+                accumulatedReward[recAction] += threadStats.accumulatedReward[recAction];
             }
         }
-
         /* When using the default selection policy (UCB1):
          * We apply the UCT formula as no actions are untried.
          * We iterate over all actions and calculate their
@@ -225,41 +284,40 @@ public class DPNode {
          */
         int bestAction = -1;
         double bestQuality = -1;
-        int offset = random.nextInt(nrActions);
-        for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
+        for (Integer action : recommendedActions) {
             // Calculate index of current action
-            int action = (offset + actionCtr) % nrActions;
-            if (useHeuristic && !recommendedActions.contains(action))
-                continue;
-            if (this.nrTries[tid][action] == 0) {
+//            int action = (offset + actionCtr) % nrActions;
+//            if (useHeuristic && !recommendedActions.contains(action))
+//                continue;
+
+            int nrTry = nrTries[action];
+            if (nrTry == 0) {
                 return action;
             }
-            int nrTry = nrTries[action];
             double meanReward = accumulatedReward[action] / nrTry;
             double exploration = Math.sqrt(Math.log(nrVisits) / nrTry);
             // Assess the quality of the action according to policy
-            double quality = -1;
-            switch (policy) {
-                case UCB1:
-                    quality = meanReward +
-                            JoinConfig.PARA_EXPLORATION_WEIGHT * exploration;
-                    break;
-                case MAX_REWARD:
-                case EPSILON_GREEDY:
-                    quality = meanReward;
-                    break;
-                case RANDOM:
-                    quality = random.nextDouble();
-                    break;
-                case RANDOM_UCB1:
-                    if (treeLevel==0) {
-                        quality = random.nextDouble();
-                    } else {
-                        quality = meanReward +
-                                JoinConfig.PARA_EXPLORATION_WEIGHT * exploration;
-                    }
-                    break;
-            }
+            double quality = meanReward + 1E-10 * exploration;
+//            switch (policy) {
+//                case UCB1:
+//                    quality = meanReward + 1E-10 * exploration;
+//                    break;
+//                case MAX_REWARD:
+//                case EPSILON_GREEDY:
+//                    quality = meanReward;
+//                    break;
+//                case RANDOM:
+//                    quality = random.nextDouble();
+//                    break;
+//                case RANDOM_UCB1:
+//                    if (treeLevel==0) {
+//                        quality = random.nextDouble();
+//                    } else {
+//                        quality = meanReward +
+//                                JoinConfig.PARA_EXPLORATION_WEIGHT * exploration;
+//                    }
+//                    break;
+//            }
             //double UB = meanReward + 1E-6 * exploration;
             //double UB = meanReward + 1E-4 * exploration;
             //double UB = meanReward + 1E-1 * exploration;
@@ -268,21 +326,13 @@ public class DPNode {
                 bestQuality = quality;
             }
         }
-        if (bestAction < 0) {
-            System.out.println(Arrays.toString(nrTries));
-            System.out.println(Arrays.toString(accumulatedReward));
-            System.out.println(Arrays.toString(recommendedActions.toArray()));
-            System.out.println(Arrays.toString(this.nrVisits));
-            System.out.println(nrVisits);
-            throw new RuntimeException("not found a join order");
-        }
         // For epsilon greedy, return random action with
         // probability epsilon.
-        if (policy.equals(SelectionPolicy.EPSILON_GREEDY)) {
-            if (random.nextDouble()<=JoinConfig.EPSILON) {
-                return random.nextInt(nrActions);
-            }
-        }
+//        if (policy.equals(SelectionPolicy.EPSILON_GREEDY)) {
+//            if (random.nextDouble()<=JoinConfig.EPSILON) {
+//                return random.nextInt(nrActions);
+//            }
+//        }
         // Otherwise: return best action.
         return bestAction;
     }
@@ -309,13 +359,11 @@ public class DPNode {
         int lastTable = joinOrder[treeLevel];
         // Should we avoid Cartesian product joins?
         if (useHeuristic) {
-            Set<Integer> newlyJoined = new HashSet<>();
-            for (int posCtr = 0; posCtr <= treeLevel; posCtr++) {
-                newlyJoined.add(joinOrder[posCtr]);
-            }
+            Set<Integer> newlyJoined = new HashSet<>(joinedTables);
+            newlyJoined.add(lastTable);
             // Iterate over join order positions to fill
             List<Integer> unjoinedTablesShuffled = new ArrayList<>(unjoinedTables);
-            Collections.shuffle(unjoinedTablesShuffled);
+            Collections.shuffle(unjoinedTablesShuffled, ThreadLocalRandom.current());
             for (int posCtr = treeLevel + 1; posCtr < nrTables; ++posCtr) {
                 boolean foundTable = false;
                 for (int table : unjoinedTablesShuffled) {
@@ -351,8 +399,10 @@ public class DPNode {
             }
         }
         int splitTable = getSplitTableByCard(joinOrder, joinOp.cardinalities);
+        double reward = joinOp.execute(joinOrder, splitTable, (int) roundCtr);
+
         // Evaluate completed join order and return reward
-        return joinOp.execute(joinOrder, splitTable, (int) roundCtr);
+        return reward;
     }
     /**
      * Recursively sample from UCT tree and return reward.
@@ -367,19 +417,10 @@ public class DPNode {
         int tid = joinOp.tid;
         // Check if this is a (non-extendible) leaf node
         if (nrActions == 0) {
-            int end = Math.min(UCTConfig.SPLIT_LEN, joinOrder.length);
+            int end = Math.min(5, joinOrder.length);
             // Initialize table nodes
-            if (tableRoot == null) {
-                tableRoot = new BaseUctInner(null, -1);
-                for (int i = 1; i < end; i++) {
-                    int table = joinOrder[i];
-                    int cardinality = joinOp.cardinalities[table];
-                    if (cardinality > UCTConfig.SPLIT_SIZE) {
-                        tableRoot.expand(table, true);
-                    }
-                }
-            }
-            BaseUctNode splitNode = tableRoot.getMaxOrderedUCTChildOrder(joinOrder, end);
+            BaseUctInner root = tableRoot;
+            BaseUctNode splitNode = root.getMaxOrderedUCTChildOrder(joinOrder, end);
             if (splitNode != null) {
                 double reward = joinOp.execute(joinOrder, splitNode.label, (int) roundCtr);
                 splitNode.updataStatistics(reward);
@@ -387,37 +428,43 @@ public class DPNode {
                 return reward;
             }
             else {
-                int splitTable = getSplitTableByCard(joinOrder, joinOp.cardinalities);
-                return joinOp.execute(joinOrder, splitTable, (int) roundCtr);
+                System.out.println(Arrays.toString(joinOrder));
+                System.out.println(root);
+                throw new RuntimeException("not found table");
             }
         } else {
             // inner node - select next action and expand tree if necessary
-            int action = selectAction(policy, tid);
+            int action = selectAction(policy, tid, joinOp);
             int table = nextTable[action];
             joinOrder[treeLevel] = table;
             // grow tree if possible
             boolean canExpand = createdIn != roundCtr;
-            if (childNodes[action] == null && canExpand) {
-                childNodes[action] = new DPNode(roundCtr, this, table);
+            DPNode child = childNodes[action];
+            if (canExpand && child == null) {
+                if (childNodes[action] == null) {
+                    childNodes[action] = new DPNode(roundCtr, this, table, joinOrder, joinOp.cardinalities);
+                }
             }
             // evaluate via recursive invocation or via playout
-            DPNode child = childNodes[action];
-            double reward = (child != null) ?
+            boolean isSample = child != null;
+            double reward = isSample ?
                     child.sample(roundCtr, joinOrder, joinOp, policy):
                     playout(roundCtr, joinOrder, joinOp);
             // update UCT statistics and return reward
-            updateStatistics(action, reward, tid);
+            nodeStatistics[tid].updateStatistics(reward, action);
             return reward;
         }
     }
 
     int getSplitTableByCard(int[] joinOrder, int[] cardinalities) {
+        int splitLen = 5;
+        int splitSize = 1000;
         int splitTable = joinOrder[0];
-        int end = Math.min(UCTConfig.SPLIT_LEN, joinOrder.length);
+        int end = Math.min(splitLen, joinOrder.length);
         for (int i = 1; i < end; i++) {
             int table = joinOrder[i];
             int cardinality = cardinalities[table];
-            if (cardinality > UCTConfig.SPLIT_SIZE) {
+            if (cardinality > splitSize) {
                 splitTable = table;
                 break;
             }

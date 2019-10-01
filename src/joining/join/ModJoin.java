@@ -18,7 +18,6 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class ModJoin extends DPJoin {
     /**
@@ -35,7 +34,7 @@ public class ModJoin extends DPJoin {
     /**
      * Avoids redundant planning work by storing left deep plans.
      */
-    final Map<JoinOrder, LeftDeepPlan> planCache;
+    final Map<Integer, LeftDeepPlan> planCache;
     /**
      * Avoids redundant evaluation work by tracking evaluation progress.
      */
@@ -68,7 +67,7 @@ public class ModJoin extends DPJoin {
     public ModJoin(QueryInfo query, Context preSummary,
                    int budget, int nrThreads, int tid) throws Exception {
         super(query, preSummary, budget, nrThreads, tid);
-        this.planCache = new ConcurrentHashMap<>();
+        this.planCache = new HashMap<>();
 //        this.tracker = new ProgressTracker(nrJoined, cardinalities);
         // Collect unary predicates
         this.unaryPreds = new KnaryBoolEval[nrJoined];
@@ -82,7 +81,6 @@ public class ModJoin extends DPJoin {
             }
         }
         this.tupleIndexDelta = new int[nrJoined];
-        log("preSummary before join: " + preSummary.toString());
     }
     /**
      * Calculates reward for progress during one invocation.
@@ -118,8 +116,9 @@ public class ModJoin extends DPJoin {
      */
     @Override
     public double execute(int[] order, int splitTable, int roundCtr) throws Exception {
-        long start = System.currentTimeMillis();
+//        long start = System.currentTimeMillis();
         // Treat special case: at least one input relation is empty
+//        long timer0 = System.currentTimeMillis();
         for (int tableCtr=0; tableCtr<nrJoined; ++tableCtr) {
             if (cardinalities[tableCtr]==0) {
                 isFinished = true;
@@ -128,38 +127,35 @@ public class ModJoin extends DPJoin {
         }
         // Lookup or generate left-deep query plan
         JoinOrder joinOrder = new JoinOrder(order);
-        LeftDeepPlan plan = planCache.get(joinOrder);
+        int joinHash = joinOrder.splitHashCode(-1);
+        LeftDeepPlan plan = planCache.get(joinHash);
         if (plan == null) {
-            plan = new LeftDeepPlan(query, preSummary, predToEval, order);
-            planCache.putIfAbsent(joinOrder, plan);
+            plan = new LeftDeepPlan(query, this, joinOrder);
+            planCache.putIfAbsent(joinHash, plan);
         }
-        long start1 = System.currentTimeMillis();
         int splitHash = joinOrder.splitHashCode(splitTable);
-        long start2 = System.currentTimeMillis();
-        // Execute from starting state, save progress, return progress
+        // Execute from ing state, save progress, return progress
 //        State state = tracker.continueFrom(joinOrder);
+//        long timer1 = System.currentTimeMillis();
         State state = tracker.continueFrom(joinOrder, splitHash, tid, splitTable, null);
-        long start3 = System.currentTimeMillis();
-        writeLog("Round: " + roundCtr + "\t" + Arrays.toString(order) + "\t Split: " + splitTable);
-        writeLog("Start state: " + state.toString());
+//        long timer2 = System.currentTimeMillis();
+//        writeLog("Round: " + roundCtr + "\t" + Arrays.toString(order) + "\t Split: " + splitTable);
+//        writeLog("Start state: " + state.toString());
 //        int[] offsets = tracker.getTableOffset();
         int[] offsets = tracker.tableOffset;
         executeWithBudget(plan, splitTable, state, offsets, tid);
-        long start4 = System.currentTimeMillis();
-        writeLog("End state: " + state.toString());
+//        long timer3 = System.currentTimeMillis();
+//        writeLog("End state: " + state.toString());
         double reward = reward(joinOrder.order,
                 tupleIndexDelta, offsets);
         // Get the first table whose cardinality is larger than 1.
         int firstTable = getFirstLargeTable(order);
 //        tracker.updateProgress(joinOrder, state);
-        long start5 = System.currentTimeMillis();
         tracker.updateProgress(joinOrder, splitHash, state, tid, roundCtr, splitTable, firstTable);
-        long start6 = System.currentTimeMillis();
+//        long timer4 = System.currentTimeMillis();
+//        writeLog("Look up: " + (timer01 - timer0) + "\tInitialize: " + (timer1 - timer01) + "\tRestore: " + (timer2 - timer1) + "\tExecute: " + (timer3 - timer2) + "\tUpdate: " + (timer4 - timer3));
         lastState = state;
         lastTable = splitTable;
-        long end = System.currentTimeMillis();
-        writeLog("Time Details: " + (start1 - start) + " " + (start2 - start1) + " " + (start3 - start2) + " "
-                + (start4 - start3) + " " + (start5 - start4) + " " + (start6 - start5) + " " + (end - start6));
         return reward;
     }
     /**
@@ -247,7 +243,6 @@ public class ModJoin extends DPJoin {
         // Extract variables for convenient access
         int nrTables = query.nrJoined;
         int[] tupleIndices = new int[nrTables];
-        List<List<KnaryBoolEval>> applicablePreds = plan.applicablePreds;
         List<List<JoinIndexWrapper>> joinIndices = plan.joinIndices;
         // Initialize state and flags to prepare budgeted execution
 //        int joinIndex = state.lastIndex;
@@ -261,7 +256,7 @@ public class ModJoin extends DPJoin {
         // combination to look at.
         while (remainingBudget > 0 && joinIndex >= 0) {
 
-            ++statsInstance.nrIterations;
+//            ++statsInstance.nrIterations;
             //log("Offsets:\t" + Arrays.toString(offsets));
             //log("Indices:\t" + Arrays.toString(tupleIndices));
             // Get next table in join order
@@ -279,7 +274,7 @@ public class ModJoin extends DPJoin {
 //                    evaluateAll(applicablePreds.get(joinIndex), tupleIndices)
                     evaluateInScope(joinIndices.get(joinIndex), tupleIndices, splitTable, tid)
             ) {
-                ++statsInstance.nrTuples;
+//                ++statsInstance.nrTuples;
                 // Do we have a complete result row?
                 if(joinIndex == plan.joinOrder.order.length - 1) {
                     // Complete result row -> add to result
@@ -318,17 +313,5 @@ public class ModJoin extends DPJoin {
     @Override
     public boolean isFinished() {
         return lastState.isFinished();
-    }
-    /**
-     * Output log text unless the maximal number
-     * of log entries has already been reached.
-     *
-     * @param logEntry	text to output
-     */
-    void log(String logEntry) {
-        if (logCtr < LoggingConfig.MAX_JOIN_LOGS) {
-            ++logCtr;
-            System.out.println(logCtr + "\t" + logEntry);
-        }
     }
 }

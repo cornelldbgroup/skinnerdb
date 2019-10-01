@@ -59,4 +59,8 @@ public class JoinStats {
      * (calculated based on table offsets after query evaluation).
      */
     public static double totalWork = 0;
+    /**
+     * Total execution time
+     */
+    public static long time = 0;
 }

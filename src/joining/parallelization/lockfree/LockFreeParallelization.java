@@ -15,6 +15,7 @@ import joining.uct.SelectionPolicy;
 import preprocessing.Context;
 import query.QueryInfo;
 import statistics.JoinStats;
+import threads.ThreadPool;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -56,11 +57,10 @@ public class LockFreeParallelization extends Parallelization {
         // Initialize UCT join order search tree.
         DPNode root = new DPNode(0, query, true, nrThreads);
         // Initialize a thread pool.
-        ExecutorService executorService = Executors.newFixedThreadPool(nrThreads);
+        ExecutorService executorService = ThreadPool.executorService;
         // Initialize variables for broadcasting.
         int nrTables = query.nrJoined;
         EndPlan endPlan = new EndPlan(nrTables);
-        List<Future<LockFreeResult>> evaluateResults = new ArrayList<>();
         List<LockFreeTask> tasks = new ArrayList<>();
         // Mutex shared by multiple threads.
         ReentrantLock lock = new ReentrantLock();
@@ -74,7 +74,10 @@ public class LockFreeParallelization extends Parallelization {
             LockFreeTask lockFreeTask = new LockFreeTask(query, context, root, endPlan, end, lock, dpJoins.get(i));
             tasks.add(lockFreeTask);
         }
+        long executionStart = System.currentTimeMillis();
         List<Future<LockFreeResult>> futures = executorService.invokeAll(tasks);
+        long executionEnd = System.currentTimeMillis();
+        JoinStats.time = executionEnd - executionStart;
         futures.forEach(futureResult -> {
             try {
                 LockFreeResult result = futureResult.get();
@@ -88,7 +91,10 @@ public class LockFreeParallelization extends Parallelization {
             }
 
         });
-        executorService.shutdown();
+        JoinStats.nrSamples = 0;
+        for (DPJoin joinOp: dpJoins) {
+            JoinStats.nrSamples = Math.max(joinOp.roundCtr, JoinStats.nrSamples);
+        }
         // Write log to the local file.
         if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
             writeLogs(logs, "verbose/lockFree/33c");

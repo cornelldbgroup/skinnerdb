@@ -16,5 +16,9 @@ public class ParallelConfig {
 	/**
 	 * Maximal number of tuples per batch during pre-processing.
 	 */
-	public final static int EXE_THREADS = 20;
+	public static int EXE_THREADS = 20;
+	/**
+	 * Minimal size of post-processing batch.
+	 */
+	public static final int POST_SIZES = 50;
 }

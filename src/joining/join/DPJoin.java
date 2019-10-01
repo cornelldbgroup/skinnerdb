@@ -74,6 +74,10 @@ public abstract class DPJoin {
      */
     public List<String> logs;
     /**
+     * Number of episode.
+     */
+    public long roundCtr;
+    /**
      * Initializes join operator for given query
      * and initialize new join result.
      *

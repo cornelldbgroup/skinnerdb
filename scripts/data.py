@@ -9,6 +9,22 @@ def load_csv(fname):
         data = [dict(zip(header, l)) for l in reader]
     return data
 
+def analyze_log(fname):
+    max_time = 0
+    time_list = []
+    with open(fname) as f:
+        for line in f.readlines():
+            if line.startswith("Episode Time"):
+                line = line.rstrip().split(": ")[1]
+                actual_time = int(line)
+                max_time = max(max_time, int(line))
+                if actual_time > 0:
+                    time_list.append(actual_time)
+    print(max_time)
+    print(sum(time_list))
+    print(time_list)
+
+
 def load_files(dir):
     rd = {}
     for file in os.listdir(dir):
@@ -28,4 +44,5 @@ def agg_results(fileData, attrs):
             value_list.append(str(avg))
         print("\t".join(value_list))
 fileData = load_files("../data/parallelization")
-agg_results(fileData, ["Millis", "PreMillis", "JoinMillis"])
+agg_results(fileData, ["Millis", "PreMillis", "ExeMillis", "PostMillis"])
+# analyze_log("../data/logs/1.txt")

@@ -4,6 +4,7 @@ import java.util.*;
 
 import expressions.ExpressionInfo;
 import expressions.compilation.KnaryBoolEval;
+import joining.join.DPJoin;
 import joining.join.JoinIndexWrapper;
 import net.sf.jsqlparser.expression.Expression;
 import preprocessing.Context;
@@ -42,16 +43,15 @@ public class LeftDeepPlan {
 	 * @param query			query to process
 	 * @param preSummary	summarizes pre-processing
 	 * @param evalMap		maps Boolean expressions to evaluators
-	 * @param order			join order
+	 * @param joinOrder		join order
 	 * @throws Exception
 	 */
-	public LeftDeepPlan(QueryInfo query, Context preSummary, 
-			Map<Expression, KnaryBoolEval> evalMap, int[] order) 
+	public LeftDeepPlan(QueryInfo query, DPJoin dpJoin, JoinOrder joinOrder)
 					throws Exception {
 		// Count generated plan
-//		++JoinStats.nrPlansTried;
 		int nrTables = query.nrJoined;
-		this.joinOrder = new JoinOrder(order);
+		this.joinOrder = joinOrder;
+		int[] order = joinOrder.order;
 		// Initialize remaining predicates
 		List<ExpressionInfo> remainingEquiPreds = new ArrayList<>(query.equiJoinPreds);
 		List<ExpressionInfo> remainingPreds = new ArrayList<>();
@@ -68,7 +68,7 @@ public class LeftDeepPlan {
 			applicablePreds.add(new ArrayList<>());
 		}
 		// Iterate over join order positions, adding tables
-		Set<Integer> availableTables = new HashSet<Integer>();
+		Set<Integer> availableTables = new HashSet<>();
 		for (int joinCtr=0; joinCtr<nrTables; ++joinCtr) {
 			int nextTable = order[joinCtr];
 			availableTables.add(nextTable);
@@ -78,25 +78,11 @@ public class LeftDeepPlan {
 				ExpressionInfo equiPred = equiPredsIter.next();
 				if (availableTables.containsAll(
 						equiPred.aliasIdxMentioned)) {
-					Set<ColumnRef> joinCols = equiPred.columnsMentioned;
-					joinIndices.get(joinCtr).add(new JoinIndexWrapper(
-							query, preSummary, joinCols, order));
+					joinIndices.get(joinCtr).add(new JoinIndexWrapper(equiPred, order));
 					equiPredsIter.remove();
 				}
 			}
-			// Iterate over remaining other predicates
-//			Iterator<ExpressionInfo> generalPredsIter =
-//					remainingPreds.iterator();
-//			while (generalPredsIter.hasNext()) {
-//				ExpressionInfo pred = generalPredsIter.next();
-//				if (availableTables.containsAll(
-//						pred.aliasIdxMentioned)) {
-//					KnaryBoolEval evaluator = evalMap.get(
-//							pred.finalExpression);
-//					applicablePreds.get(joinCtr).add(evaluator);
-//					generalPredsIter.remove();
-//				}
-//			}
+
 		} // over join positions
 	}
 	@Override

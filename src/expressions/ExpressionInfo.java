@@ -1,12 +1,13 @@
 package expressions;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
+import buffer.BufferManager;
 import config.LoggingConfig;
+import data.ColumnData;
+import data.IntData;
+import indexing.Index;
+import preprocessing.Context;
 import query.ColumnRef;
 import query.QueryInfo;
 import expressions.normalization.CollectReferencesVisitor;
@@ -65,6 +66,14 @@ public class ExpressionInfo {
 	 */
 	public final Set<ColumnRef> columnsMentioned;
 	/**
+	 * All columns mentioned in the expression.
+	 */
+	public final Map<Integer, Index> indexMentioned;
+	/**
+	 * All columns mentioned in the expression.
+	 */
+	public final Map<Integer, IntData> dataMentioned;
+	/**
 	 * Set of SQL LIKE expressions found in the given expression.
 	 */
 	public final Set<Expression> likeExpressions;
@@ -94,6 +103,8 @@ public class ExpressionInfo {
 	 * Decomposes expression into conjuncts.
 	 */
 	public final List<Expression> conjuncts;
+
+
 	/**
 	 * Extracts all conjuncts from a nested AND expression
 	 * via recursive calls. The result will be stored in
@@ -139,6 +150,24 @@ public class ExpressionInfo {
 		// throw corresponding exceptions if so.
 		if (!visitor.sqlExceptions.isEmpty()) {
 			throw visitor.sqlExceptions.get(0);
+		}
+	}
+
+	public void extractIndex(Context preSummary) {
+		// Get table indices of join columns
+		for (ColumnRef col : this.columnsMentioned) {
+			int table = queryInfo.aliasToIndex.get(col.aliasName);
+			ColumnRef columnRef = preSummary.columnMapping.get(col);
+			IntData data = null;
+			try {
+				data = (IntData) BufferManager.getData(columnRef);
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+			Index index = BufferManager.colToIndex.get(columnRef);
+
+			indexMentioned.put(table, index);
+			dataMentioned.put(table, data);
 		}
 	}
 	/**
@@ -187,6 +216,8 @@ public class ExpressionInfo {
 			aliasIdxMentioned.add(idx);
 		}
 		this.columnsMentioned = collectorVisitor.mentionedColumns;
+		this.indexMentioned = new HashMap<>();
+		this.dataMentioned = new HashMap<>();
 		this.likeExpressions = collectorVisitor.likeExpressions;
 		this.aggregates = collectorVisitor.aggregates;
 		log("Aliases:\t" + aliasesMentioned.toString());

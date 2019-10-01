@@ -74,4 +74,9 @@ public class ThreadState {
     public boolean hasProgress(int splitKey) {
         return tableTupleIndexEpoch.get(splitKey) != null;
     }
+
+    public int getProgress(int splitKey) {
+        int[] state = tableTupleIndexEpoch.get(splitKey);
+        return state == null ? -1 : state[0];
+    }
 }

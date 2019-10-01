@@ -52,5 +52,5 @@ public class LoggingConfig {
 	/**
 	 * Whether to generate debugging output during parallel join.
 	 */
-	public final static boolean PARALLEL_JOIN_VERBOSE = true;
+	public final static boolean PARALLEL_JOIN_VERBOSE = false;
 }

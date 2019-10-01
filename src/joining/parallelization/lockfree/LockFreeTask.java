@@ -1,6 +1,5 @@
 package joining.parallelization.lockfree;
 
-import config.JoinConfig;
 import joining.join.DPJoin;
 import joining.parallelization.EndPlan;
 import joining.result.ResultTuple;
@@ -43,33 +42,9 @@ public class LockFreeTask implements Callable<LockFreeResult>{
         int tid = joinOp.tid;
         int[] joinOrder = new int[query.nrJoined];
         long roundCtr = 0;
-        // Initialize exploration weight
-        switch (JoinConfig.EXPLORATION_POLICY) {
-            case SCALE_DOWN:
-                JoinConfig.EXPLORATION_WEIGHT = Math.sqrt(2);
-                break;
-            case STATIC:
-            case REWARD_AVERAGE:
-                // Nothing to do
-                break;
-            case ADAPT_TO_SAMPLE:
-                final int nrSamples = 1000;
-                double[] rewardSample = new double[nrSamples];
-                for (int i=0; i<nrSamples; ++i) {
-                    ++roundCtr;
-                    rewardSample[i] = root.sample(
-                            roundCtr, joinOrder, joinOp,
-                            SelectionPolicy.RANDOM);
-                }
-                Arrays.sort(rewardSample);
-                double median = rewardSample[nrSamples/2];
-                JoinConfig.EXPLORATION_WEIGHT = median;
-                //System.out.println("Median:\t" + median);
-                break;
-        }
 
         // Get default action selection policy
-        SelectionPolicy policy = JoinConfig.DEFAULT_SELECTION;
+        SelectionPolicy policy = SelectionPolicy.UCB1;
         // Initialize counter until scale down
         long nextScaleDown = 1;
         // Initialize counter until memory loss
@@ -78,7 +53,6 @@ public class LockFreeTask implements Callable<LockFreeResult>{
         int plotCtr = 0;
         // Iterate until join result was generated
         double accReward = 0;
-        double maxReward = Double.NEGATIVE_INFINITY;
 
         while (true) {
             long start = System.currentTimeMillis();
@@ -92,11 +66,12 @@ public class LockFreeTask implements Callable<LockFreeResult>{
             }
             else {
                 reward = root.sample(roundCtr, joinOrder, joinOp, policy);
+//                System.arraycopy(new int[]{3, 5, 4, 2, 7, 1, 6, 0}, 0, joinOrder, 0, query.nrJoined);
+//                reward = joinOp.execute(joinOrder, 2, (int) roundCtr);
             }
             // Count reward except for final sample
             if (!joinOp.isFinished()) {
                 accReward += reward;
-                maxReward = Math.max(reward, maxReward);
             }
             // broadcasting the finished plan.
             else {
@@ -118,28 +93,28 @@ public class LockFreeTask implements Callable<LockFreeResult>{
                 }
             }
             long end = System.currentTimeMillis();
-            joinOp.writeLog("Episode Time: " + (end - start));
+            joinOp.writeLog("Episode Time: " + (end - start) + "\tReward: " + reward);
 
-            switch (JoinConfig.EXPLORATION_POLICY) {
-                case REWARD_AVERAGE:
-                    double avgReward = accReward/roundCtr;
-                    JoinConfig.EXPLORATION_WEIGHT = avgReward;
-                    log("Avg. reward: " + avgReward);
-                    break;
-                case SCALE_DOWN:
-                    if (roundCtr == nextScaleDown) {
-                        JoinConfig.EXPLORATION_WEIGHT /= 10.0;
-                        nextScaleDown *= 10;
-                    }
-                    break;
-                case STATIC:
-                case ADAPT_TO_SAMPLE:
-                    // Nothing to do
-                    break;
-            }
+//            switch (JoinConfig.EXPLORATION_POLICY) {
+//                case REWARD_AVERAGE:
+//                    double avgReward = accReward/roundCtr;
+//                    JoinConfig.EXPLORATION_WEIGHT = avgReward;
+//                    log("Avg. reward: " + avgReward);
+//                    break;
+//                case SCALE_DOWN:
+//                    if (roundCtr == nextScaleDown) {
+//                        JoinConfig.EXPLORATION_WEIGHT /= 10.0;
+//                        nextScaleDown *= 10;
+//                    }
+//                    break;
+//                case STATIC:
+//                case ADAPT_TO_SAMPLE:
+//                    // Nothing to do
+//                    break;
+//            }
             // Consider memory loss
-//            if (JoinConfig.FORGET && roundCtr==nextForget) {
-//                root = new DPNode(roundCtr, query, true, 0);
+//            if (JoinConfig.FORGET && roundCtr==nextForget && ParallelConfig.EXE_THREADS == 1) {
+//                root = new DPNode(roundCtr, query, true, 1);
 //                nextForget *= 10;
 //            }
             // Generate logging entries if activated
@@ -175,6 +150,7 @@ public class LockFreeTask implements Callable<LockFreeResult>{
 //        }
         // Materialize result table
         long timer2 = System.currentTimeMillis();
+        joinOp.roundCtr = roundCtr;
         System.out.println("Thread " + tid + " " + (timer2 - timer1) + "\t Round: " + roundCtr);
         Collection<ResultTuple> tuples = joinOp.result.getTuples();
         return new LockFreeResult(tuples, joinOp.logs, tid);

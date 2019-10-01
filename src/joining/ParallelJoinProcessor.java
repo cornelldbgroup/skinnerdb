@@ -4,31 +4,14 @@ import config.JoinConfig;
 import config.LoggingConfig;
 import config.NamingConfig;
 import config.ParallelConfig;
-import joining.join.DPJoin;
-import joining.join.ModJoin;
-import joining.join.OldJoin;
 import joining.parallelization.Parallelization;
 import joining.parallelization.lockfree.LockFreeParallelization;
 import joining.result.ResultTuple;
-import joining.uct.DPNode;
-import joining.uct.SelectionPolicy;
-import joining.uct.UctNode;
 import operators.Materialize;
 import preprocessing.Context;
 import query.ColumnRef;
 import query.QueryInfo;
-import statistics.JoinStats;
-import visualization.TreePlotter;
-
-import java.nio.file.Paths;
 import java.util.*;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * This variant of the join processor parallelize
@@ -64,6 +47,9 @@ public class ParallelJoinProcessor {
         int nrTuples = resultTuples.size();
         log("Materializing join result with " + nrTuples + " tuples ...");
         String targetRelName = NamingConfig.JOINED_NAME;
+//        Materialize.executeContext(resultTuples, query.aliasToIndex,
+//                query.colsForPostProcessing,
+//                context.columnMapping, targetRelName, context);
         Materialize.execute(resultTuples, query.aliasToIndex,
                 query.colsForPostProcessing,
                 context.columnMapping, targetRelName);

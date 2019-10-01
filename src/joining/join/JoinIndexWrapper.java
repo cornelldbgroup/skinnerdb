@@ -6,6 +6,7 @@ import java.util.Set;
 import buffer.BufferManager;
 import config.LoggingConfig;
 import data.IntData;
+import expressions.ExpressionInfo;
 import indexing.Index;
 import indexing.IntIndex;
 import preprocessing.Context;
@@ -83,6 +84,23 @@ public class JoinIndexWrapper {
 			System.out.println("nextDBcol: " + nextDbCol);
 		}
 	}
+
+	public JoinIndexWrapper(ExpressionInfo equiPred, int[] order) {
+		Iterator<Integer> tableIter = equiPred.indexMentioned.keySet().iterator();
+		int table1 = tableIter.next();
+		int table2 = tableIter.next();
+		// Determine position of tables in join order
+		int pos1 = tablePos(order, table1);
+		int pos2 = tablePos(order, table2);
+		// Assign prior and next table accordingly
+		priorTable = pos1<pos2?table1:table2;
+		nextTable = pos1<pos2?table2:table1;
+		// Get column data reference for prior table
+		priorData = equiPred.dataMentioned.get(priorTable);
+		// Get index for next table
+		nextIndex = equiPred.indexMentioned.get(nextTable);
+	}
+
 	/**
 	 * Extracts index of table in query column reference.
 	 * 

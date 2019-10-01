@@ -11,7 +11,7 @@ public class BaseUctLeaf extends BaseUctNode {
      * @param label
      */
     public BaseUctLeaf(BaseUctNode parent, int label) {
-        super(parent, label);
+        super(parent, label, 0);
     }
 
     @Override

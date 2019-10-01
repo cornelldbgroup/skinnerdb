@@ -16,6 +16,7 @@ import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.select.PlainSelect;
 import net.sf.jsqlparser.statement.select.Select;
+import postprocessing.ParallelPostProcessor;
 import postprocessing.PostProcessor;
 import preprocessing.Context;
 import preprocessing.Preprocessor;
@@ -62,10 +63,28 @@ public class BenchUtil {
 	 * @param benchOut	channel to benchmark file
 	 */
 	public static void writeBenchHeader(PrintWriter benchOut) {
-		benchOut.println("Query\tMillis\tPreMillis\tJoinMillis\tPostMillis\tTuples\t"
+		benchOut.println("Query\tMillis\tPreMillis\tJoinMillis\tExeMillis\tPostMillis\tTuples\t"
 				+ "Iterations\tLookups\tNrIndexEntries\tnrUniqueLookups\t" 
 				+ "NrUctNodes\tNrPlans\tJoinCard\tNrSamples\tAvgReward\t"
 				+ "MaxReward\tTotalWork");
+	}
+	/**
+	 * Starts given query to avoid Java JIT.
+	 *
+	 * @param sql			the query SQL
+	 * @throws Exception
+	 */
+	public static void startQuery(PlainSelect sql) throws Exception {
+		QueryInfo query = new QueryInfo(sql, false, -1, -1, null);
+		Context preSummary = Preprocessor.process(query);
+		query.equiJoinPreds.forEach(expressionInfo -> {
+			expressionInfo.extractIndex(preSummary);
+		});
+		ParallelJoinProcessor.process(query, preSummary);
+		PostProcessor.process(query, preSummary);
+		// Clean up
+		BufferManager.unloadTempData();
+		CatalogManager.removeTempTables();
 	}
 	/**
 	 * Executes given query, measures various metrics and writes
@@ -84,21 +103,25 @@ public class BenchUtil {
 		QueryInfo query = new QueryInfo(sql, false, -1, -1, null);
 		Context preSummary = Preprocessor.process(query);
 		long preMillis = System.currentTimeMillis() - startMillis;
+		query.equiJoinPreds.forEach(expressionInfo -> {
+			expressionInfo.extractIndex(preSummary);
+		});
 		long joinStart = System.currentTimeMillis();
 		ParallelJoinProcessor.process(query, preSummary);
 		long postStartMillis = System.currentTimeMillis();
 		long joinMillis = postStartMillis - joinStart;
+//		ParallelPostProcessor.process(query, preSummary);
 		PostProcessor.process(query, preSummary);
 		long postMillis = System.currentTimeMillis() - postStartMillis;
 		long totalMillis = System.currentTimeMillis() - startMillis;
 		// Get cardinality of Skinner join result
-		int skinnerJoinCard = CatalogManager.getCardinality(
-				NamingConfig.JOINED_NAME);
+		int skinnerJoinCard = CatalogManager.getCardinality(NamingConfig.JOINED_NAME);
 		// Generate output
 		benchOut.print(queryName + "\t");
 		benchOut.print(totalMillis + "\t");
 		benchOut.print(preMillis + "\t");
 		benchOut.print(joinMillis + "\t");
+		benchOut.print(JoinStats.time + "\t");
 		benchOut.print(postMillis + "\t");
 		benchOut.print(JoinStats.nrTuples + "\t");
 		benchOut.print(JoinStats.nrIterations + "\t");

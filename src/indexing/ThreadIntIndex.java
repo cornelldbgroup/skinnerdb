@@ -7,7 +7,9 @@ import config.LoggingConfig;
 import data.IntData;
 import statistics.JoinStats;
 
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -37,7 +39,7 @@ public class ThreadIntIndex extends Index {
      * of first position at which associated
      * information is stored.
      */
-    public IntIntMap keyToPositions;
+    public Map<Integer, Integer> keyToPositions;
     /**
      * Number of threads.
      */
@@ -45,7 +47,7 @@ public class ThreadIntIndex extends Index {
     /**
      * Data is distributed to different scopes of threads.
      */
-    Set<Integer>[] scopes;
+    public int[] scopes;
     /**
      * Position of current iterator.
      */
@@ -65,10 +67,7 @@ public class ThreadIntIndex extends Index {
         this.nrThreads = nrThreads;
         this.intData = intData;
         this.cardinality = intData.cardinality;
-        this.scopes = new HashSet[nrThreads];
-        for (int i = 0; i < scopes.length; i++) {
-            this.scopes[i] = new HashSet<>();
-        }
+        this.scopes = new int[this.cardinality];
         int[] data = intData.data;
         // Count number of occurrences for each value
         IntIntMap keyToNr = HashIntIntMaps.newMutableMap();
@@ -85,7 +84,7 @@ public class ThreadIntIndex extends Index {
         // Assign each key to the appropriate position offset
         int nrKeys = keyToNr.size();
         log("Number of keys:\t" + nrKeys);
-        keyToPositions = HashIntIntMaps.newMutableMap(nrKeys);
+        keyToPositions = new HashMap<>();
         int prefixSum = 0;
         IntIntCursor keyToNrCursor = keyToNr.cursor();
         while (keyToNrCursor.moveNext()) {
@@ -105,7 +104,8 @@ public class ThreadIntIndex extends Index {
                 int key = data[i];
                 int startPos = keyToPositions.get(key);
                 int startThread = keyToIndex.get(key);
-                scopes[startThread].add(i);
+
+                scopes[i] = startThread;
                 keyToIndex.put(key, (startThread + 1) % nrThreads);
                 positions[startPos] += 1;
                 int offset = positions[startPos];
@@ -129,7 +129,6 @@ public class ThreadIntIndex extends Index {
         int firstPos = keyToPositions.getOrDefault(value, -1);
         // No indexed values?
         if (firstPos < 0) {
-//            JoinStats.nrUniqueIndexLookups += 1;
             return cardinality;
         }
         // Can we return first indexed value?
@@ -139,11 +138,6 @@ public class ThreadIntIndex extends Index {
         }
         // Get number of indexed values
         int nrVals = positions[firstPos];
-        // Update index-related statistics
-//        JoinStats.nrIndexEntries += nrVals;
-//        if (nrVals==1) {
-//            JoinStats.nrUniqueIndexLookups += 1;
-//        }
         // Restrict search range via binary search
         int lowerBound = firstPos + 1;
         int upperBound = firstPos + nrVals;
@@ -176,11 +170,11 @@ public class ThreadIntIndex extends Index {
      * @return 	index of next tuple or cardinality
      */
     public int nextTupleInScope(int value, int prevTuple, int tid) {
+        tid = (value + tid) % nrThreads;
         // Get start position for indexed values
         int firstPos = keyToPositions.getOrDefault(value, -1);
         // No indexed values?
         if (firstPos < 0) {
-            JoinStats.nrUniqueIndexLookups += 1;
             return cardinality;
         }
         // Can we return first indexed value?
@@ -201,10 +195,6 @@ public class ThreadIntIndex extends Index {
         }
         int threadVals = (lastOffset - firstOffset) / nrThreads + 1;
         // Update index-related statistics
-//        JoinStats.nrIndexEntries += nrVals;
-//        if (nrVals==1) {
-//            JoinStats.nrUniqueIndexLookups += 1;
-//        }
         // Restrict search range via binary search
         int lowerBound = 0;
         int upperBound = threadVals - 1;
@@ -231,9 +221,10 @@ public class ThreadIntIndex extends Index {
 
     @Override
     public boolean evaluate(int priorVal, int curIndex, int splitTable, int nextTable, int tid) {
+        tid = (priorVal + tid) % nrThreads;
         boolean equal = priorVal == intData.data[curIndex];
         if (splitTable == nextTable) {
-            return equal && scopes[tid].contains(curIndex);
+            return equal && scopes[curIndex] == tid;
         }
         return equal;
     }

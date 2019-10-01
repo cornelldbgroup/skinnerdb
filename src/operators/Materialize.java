@@ -13,6 +13,7 @@ import catalog.info.TableInfo;
 import config.GeneralConfig;
 import data.ColumnData;
 import joining.result.ResultTuple;
+import preprocessing.Context;
 import query.ColumnRef;
 
 /**
@@ -142,5 +143,38 @@ public class Materialize {
 		});
 		// Update statistics in catalog
 		CatalogManager.updateStats(targetRelName);
+	}
+
+	/**
+	 * Materializes a join relation from given indices
+	 * for a set of base tables.
+	 *
+	 * @param tuples			base table indices representing result tuples
+	 * @param tableToIdx		maps table names to base table indices
+	 * @param sourceCols		set of columns to copy
+	 * @param columnMappings	maps source columns, as in query, to DB columns
+	 * @param targetRelName		name of materialized result relation
+	 */
+	public static void executeContext(Collection<ResultTuple> tuples,
+									  Map<String, Integer> tableToIdx,
+									  Collection<ColumnRef> sourceCols,
+									  Map<ColumnRef, ColumnRef> columnMappings,
+									  String targetRelName, Context context) {
+		// Materialize result columns
+		int index = 0;
+		context.results = new ColumnData[sourceCols.size()];
+		for (ColumnRef srcQueryRef: sourceCols) {
+			// Generate target column reference
+			String targetCol = srcQueryRef.aliasName + "." + srcQueryRef.columnName;
+			ColumnRef targetRef = new ColumnRef(targetRelName, targetCol);
+			// Generate target column
+			int tableIdx = tableToIdx.get(srcQueryRef.aliasName);
+			ColumnRef srcDBref = columnMappings.get(srcQueryRef);
+			ColumnData srcData = BufferManager.colToData.get(srcDBref);
+			ColumnData targetData = srcData.copyRows(tuples, tableIdx);
+			context.colToIndex.put(targetRef, index);
+			context.results[index] = targetData;
+			index++;
+		}
 	}
 }
