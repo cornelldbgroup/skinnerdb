@@ -940,8 +940,8 @@ public class QueryInfo {
 					return i;
 				else {
 
-					if(unaryPredicateForTables[selfTable].size() != baseQueryInfo.unaryPredicateForTables[baseTable].size())
-						return i;
+//					if(unaryPredicateForTables[selfTable].size() != baseQueryInfo.unaryPredicateForTables[baseTable].size())
+//						return i;
 
 					HashSet<String> unaryPredicateSelfSet = new HashSet<>();
 					HashSet<String> basePredicateSelfSet = new HashSet<>();
