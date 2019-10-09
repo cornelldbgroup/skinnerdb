@@ -39,10 +39,13 @@ def agg_results(fileData, attrs):
         name = fname[:-4]
         value_list = [name]
         for attr in attrs:
-            attr_list = list(map(lambda x: float(x[attr]), fileData[fname]))
-            avg = sum(attr_list) / 1000 / len(attr_list) * 113
-            value_list.append(str(avg))
+            if attr in fileData[fname][0]:
+                attr_list = list(map(lambda x: float(x[attr]), fileData[fname]))
+                avg = sum(attr_list) / 1000 / len(attr_list) * 113
+                value_list.append(str(avg))
+            else:
+                value_list.append("NA")
         print("\t".join(value_list))
 fileData = load_files("../data/parallelization")
-agg_results(fileData, ["Millis", "PreMillis", "ExeMillis", "PostMillis"])
+agg_results(fileData, ["Millis", "PreMillis", "ExeMillis", "PostMillis", "FilterMillis", "IndexMillis"])
 # analyze_log("../data/logs/1.txt")

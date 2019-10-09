@@ -22,6 +22,7 @@ import preprocessing.Context;
 import preprocessing.Preprocessor;
 import query.QueryInfo;
 import statistics.JoinStats;
+import statistics.PreStats;
 
 /**
  * Several auxiliary methods for benchmarking SkinnerDB.
@@ -66,7 +67,7 @@ public class BenchUtil {
 		benchOut.println("Query\tMillis\tPreMillis\tJoinMillis\tExeMillis\tPostMillis\tTuples\t"
 				+ "Iterations\tLookups\tNrIndexEntries\tnrUniqueLookups\t" 
 				+ "NrUctNodes\tNrPlans\tJoinCard\tNrSamples\tAvgReward\t"
-				+ "MaxReward\tTotalWork");
+				+ "MaxReward\tTotalWork\tFilterMillis\tIndexMillis");
 	}
 	/**
 	 * Starts given query to avoid Java JIT.
@@ -134,7 +135,9 @@ public class BenchUtil {
 		benchOut.print(JoinStats.nrSamples + "\t");
 		benchOut.print(JoinStats.avgReward + "\t");
 		benchOut.print(JoinStats.maxReward + "\t");
-		benchOut.println(JoinStats.totalWork);
+		benchOut.print(JoinStats.totalWork + "\t");
+		benchOut.print(PreStats.filterTime + "\t");
+		benchOut.println(PreStats.indexTime);
 		benchOut.flush();
 		// Clean up
 		BufferManager.unloadTempData();

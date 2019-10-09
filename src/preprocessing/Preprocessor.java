@@ -8,14 +8,11 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 
-import buffer.BufferManager;
 import config.LoggingConfig;
 import config.NamingConfig;
 import config.PreConfig;
 import expressions.ExpressionInfo;
-import indexing.Index;
 import indexing.Indexer;
-import indexing.IntIndex;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
 import operators.Filter;
@@ -25,6 +22,7 @@ import operators.Materialize;
 import print.RelationPrinter;
 import query.ColumnRef;
 import query.QueryInfo;
+import statistics.PreStats;
 
 /**
  * Filters query tables via unary predicates and stores
@@ -87,7 +85,9 @@ public class Preprocessor {
 		preSummary.aliasToFiltered.putAll(query.aliasToTable);
 		log("Column mapping:\t" + preSummary.columnMapping.toString());
 		// Iterate over query aliases
-		query.aliasToTable.keySet().parallelStream().forEach(alias -> {
+		long timer00 = System.currentTimeMillis();
+		for (String alias: query.aliasToTable.keySet()) {
+//			long timer0 = System.currentTimeMillis();
 			// Collect required columns (for joins and post-processing) for this table
 			List<ColumnRef> curRequiredCols = new ArrayList<>();
 			for (ColumnRef requiredCol : requiredCols) {
@@ -106,25 +106,34 @@ public class Preprocessor {
 			if (curUnaryPred != null && PreConfig.PRE_FILTER) {
 				try {
 					// Apply index to prune rows if possible
+//					long timer1 = System.currentTimeMillis();
 					ExpressionInfo remainingPred = applyIndex(
 							query, curUnaryPred, preSummary);
+//					long timer2 = System.currentTimeMillis();
 					// TODO: reinsert index usage
 					//ExpressionInfo remainingPred = curUnaryPred;
 					// Filter remaining rows by remaining predicate
 					if (remainingPred != null) {
 						filterProject(query, alias, remainingPred,
-								curRequiredCols, preSummary);						
+								curRequiredCols, preSummary);
 					}
+//					long timer3 = System.currentTimeMillis();
+//					System.out.println(alias + ": " + (timer1 - timer0) + "\t" + (timer2 - timer1) + "\t" + (timer3 - timer2));
 				} catch (Exception e) {
 					System.err.println("Error filtering " + alias);
 					e.printStackTrace();
 					hadError = true;
 				}
 			} else {
+//				long timer1 = System.currentTimeMillis();
 				String table = query.aliasToTable.get(alias);
 				preSummary.aliasToFiltered.put(alias, table);
+//				System.out.println(alias + ": " + (timer1 - timer0));
 			}
-		});			
+		}
+		long totalMillis = System.currentTimeMillis() - timer00;
+		System.out.println("Filtering: " + totalMillis + " ms.");
+		PreStats.filterTime = totalMillis;
 		// Abort pre-processing if filtering error occurred
 		if (hadError) {
 			throw new Exception("Error in pre-processor.");
@@ -243,14 +252,17 @@ public class Preprocessor {
 		// Determine rows satisfying unary predicate
 		List<Integer> satisfyingRows = Filter.executeToList(
 				unaryPred, tableName, preSummary.columnMapping);
+//		long timer0 = System.currentTimeMillis();
 		// Materialize relevant rows and columns
 		String filteredName = NamingConfig.FILTERED_PRE + alias;
-		List<String> columnNames = new ArrayList<String>();
+		List<String> columnNames = new ArrayList<>();
 		for (ColumnRef colRef : requiredCols) {
 			columnNames.add(colRef.columnName);
 		}
+//		long timer1 = System.currentTimeMillis();
 		Materialize.execute(tableName, columnNames, 
 				satisfyingRows, null, filteredName);
+//		long timer2 = System.currentTimeMillis();
 		// Update pre-processing summary
 		for (ColumnRef srcRef : requiredCols) {
 			String columnName = srcRef.columnName;
@@ -258,12 +270,14 @@ public class Preprocessor {
 			preSummary.columnMapping.put(srcRef, resRef);
 		}
 		preSummary.aliasToFiltered.put(alias, filteredName);
+//		long timer3 = System.currentTimeMillis();
 		long totalMillis = System.currentTimeMillis() - startMillis;
 		log("Filtering using " + unaryPred + " took " + totalMillis + " milliseconds");
 		// Print out intermediate result table if logging is enabled
 		if (LoggingConfig.PRINT_INTERMEDIATES) {
 			RelationPrinter.print(filteredName);
 		}
+//		System.out.println((timer0 - startMillis) + "\t" + (timer1 - timer0) + "\t" + (timer2 - timer1) + "\t" + (timer3 - timer2));
 	}
 	/**
 	 * Create indices on equality join columns if not yet available.
@@ -276,11 +290,16 @@ public class Preprocessor {
 			throws Exception {
 		// Iterate over columns in equi-joins
 		long startMillis = System.currentTimeMillis();
+//		for (ColumnRef queryRef: query.equiJoinCols) {
+//			ColumnRef dbRef = preSummary.columnMapping.get(queryRef);
+//			Indexer.index(dbRef);
+//		}
+
 		query.equiJoinCols.parallelStream().forEach(queryRef -> {
 			try {
 				// Resolve query-specific column reference
 				ColumnRef dbRef = preSummary.columnMapping.get(queryRef);
-				log("Creating index for " + queryRef + 
+				log("Creating index for " + queryRef +
 						" (query) - " + dbRef + " (DB)");
 				// Create index (unless it exists already)
 				Indexer.index(dbRef);
@@ -290,6 +309,8 @@ public class Preprocessor {
 			}
 		});
 		long totalMillis = System.currentTimeMillis() - startMillis;
+		PreStats.indexTime = totalMillis;
+		System.out.println("Created all indices in " + totalMillis + " ms.");
 		log("Created all indices in " + totalMillis + " ms.");
 	}
 	/**

@@ -116,6 +116,7 @@ public class Filter {
 				filterBatch(unaryBoolEval, batch).stream()).collect(
 						Collectors.toList());
 		}
+		long timer4 = System.currentTimeMillis();
 		// Clean up columns loaded for this operation
 		/*
 		if (!GeneralConfig.inMemory) {
@@ -133,7 +134,7 @@ public class Filter {
 	 * @param cardinality	cardinality of table to split
 	 * @return				list of row ranges (batches)
 	 */
-	static List<RowRange> split(int cardinality) {
+	public static List<RowRange> split(int cardinality) {
 		List<RowRange> batches = new ArrayList<RowRange>();
 		for (int batchCtr=0; batchCtr*ParallelConfig.PRE_BATCH_SIZE<cardinality;
 				++batchCtr) {
@@ -156,7 +157,7 @@ public class Filter {
 	 */
 	static List<Integer> filterBatch(UnaryBoolEval unaryBoolEval, 
 			RowRange rowRange) {
-		List<Integer> result = new ArrayList<Integer>();
+		List<Integer> result = new ArrayList<>();
 		// Evaluate predicate for each table row
 		for (int rowCtr=rowRange.firstTuple; 
 				rowCtr<=rowRange.lastTuple; ++rowCtr) {

@@ -12,7 +12,7 @@ public class ParallelConfig {
 	/**
 	 * Maximal number of tuples per batch during pre-processing.
 	 */
-	public final static int PRE_BATCH_SIZE = 1000;
+	public final static int PRE_BATCH_SIZE = 100000;
 	/**
 	 * Maximal number of tuples per batch during pre-processing.
 	 */

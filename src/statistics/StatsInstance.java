@@ -1,6 +1,5 @@
 package statistics;
 
-import com.sun.org.glassfish.external.statistics.Stats;
 
 public class StatsInstance {
     /**

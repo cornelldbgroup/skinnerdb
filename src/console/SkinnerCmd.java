@@ -358,6 +358,8 @@ public class SkinnerCmd {
 			// string dictionary is still loaded.
 			BufferManager.loadDictionary();
 		}
+		// create indices for all columns
+		Indexer.indexAll(StartupConfig.INDEX_CRITERIA);
 		// Command line processing
 		System.out.println("Enter 'help' for help and 'quit' to exit");
 		Scanner scanner = new Scanner(System.in);

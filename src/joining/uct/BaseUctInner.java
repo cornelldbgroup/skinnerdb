@@ -53,8 +53,8 @@ public class BaseUctInner extends BaseUctNode {
                 } else {
                     double childReward = child.accumulatedReward / childVisits;
                     int nrVisits = this.nrVisits;
-                    double uctValue = childReward + 1E-20 * Math.sqrt(Math.log(nrVisits) / childVisits);
-//                    double uctValue = childReward;
+//                    double uctValue = childReward + 1E-20 * Math.sqrt(Math.log(nrVisits) / childVisits);
+                    double uctValue = childReward;
                     if (uctValue > maxUCT) {
                         maxUCT = uctValue;
                         maxUCTchild = child;

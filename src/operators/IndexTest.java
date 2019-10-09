@@ -4,6 +4,7 @@ import buffer.BufferManager;
 import data.Dictionary;
 import indexing.Index;
 import indexing.IntIndex;
+import indexing.ThreadIntIndex;
 import net.sf.jsqlparser.expression.AllComparisonExpression;
 import net.sf.jsqlparser.expression.AnalyticExpression;
 import net.sf.jsqlparser.expression.AnyComparisonExpression;
@@ -260,6 +261,19 @@ public class IndexTest implements ExpressionVisitor {
 	@Override
 	public void visit(NotEqualsTo notEqualsTo) {
 		canUseIndex = false;
+		Expression left = notEqualsTo.getLeftExpression();
+		Expression right = notEqualsTo.getRightExpression();
+		left.accept(this);
+		right.accept(this);
+		boolean haveConstant = left instanceof LongValue ||
+				left instanceof StringValue ||
+				right instanceof LongValue ||
+				right instanceof StringValue;
+		boolean haveColumn = left instanceof Column ||
+				right instanceof Column;
+		if (!haveConstant || !haveColumn) {
+			canUseIndex = false;
+		}
 	}
 
 	@Override
@@ -272,7 +286,7 @@ public class IndexTest implements ExpressionVisitor {
 		// Check that index of right type is available
 		Index index = BufferManager.colToIndex.get(colRef);
 		if (index != null) {
-			if (!(index instanceof IntIndex)) {
+			if (!(index instanceof IntIndex) && !(index instanceof ThreadIntIndex)) {
 				// Wrong index type
 				canUseIndex = false;
 			}

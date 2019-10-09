@@ -71,6 +71,12 @@
 	    <artifactId>automaton</artifactId>
 	    <version>1.11-8</version>
 	</dependency>
+      <dependency>
+          <groupId>com.koloboke</groupId>
+          <artifactId>koloboke-compile</artifactId>
+          <version>0.5.1</version>
+          <scope>provided</scope>
+      </dependency>
     <dependency>
       <groupId>com.koloboke</groupId>
       <artifactId>koloboke-api-jdk8</artifactId>
@@ -100,5 +106,13 @@
           <version>RELEASE</version>
           <scope>compile</scope>
       </dependency>
+      <!-- https://mvnrepository.com/artifact/com.google.guava/guava -->
+      <dependency>
+          <groupId>com.google.guava</groupId>
+          <artifactId>guava</artifactId>
+          <version>19.0</version>
+          <type>bundle</type>
+      </dependency>
+
   </dependencies>
 </project>

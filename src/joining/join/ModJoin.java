@@ -103,8 +103,8 @@ public class ModJoin extends DPJoin {
             // Fully processed tuples from this table
             progress += tupleIndexDelta[curTable] * weight;
         }
-//        return 0.5*progress + 0.5*nrResultTuples/(double)budget;
-        return progress;
+        return 0.5*progress + 0.5*nrResultTuples/(double)budget;
+//        return progress;
     }
     /**
      * Executes a given join order for a given budget of steps
@@ -203,19 +203,26 @@ public class ModJoin extends DPJoin {
         if (indexWrappers.isEmpty()) {
             return tupleIndices[nextTable]+1;
         }
-        int max = -1;
+        int count = 0;
         for (JoinIndexWrapper wrapper : indexWrappers) {
+            if (count > 0) {
+                if (wrapper.evaluateInScope(tupleIndices, splitTable, tid)) {
+                    count++;
+                    continue;
+                }
+            }
             int nextRaw = splitTable == nextTable ?
                     wrapper.nextIndexInScope(tupleIndices, tid) : wrapper.nextIndex(tupleIndices);
-            int next = nextRaw < 0 ? cardinalities[nextTable] : nextRaw;
-            max = Math.max(max, next);
-        }
-        if (max<0) {
-            System.out.println(Arrays.toString(tupleIndices));
-            System.out.println(indexWrappers.toString());
+            if (nextRaw < 0 || nextRaw == nextCardinality) {
+                tupleIndices[nextTable] = nextCardinality;
+                break;
+            }
+            else {
+                tupleIndices[nextTable] = nextRaw;
+            }
+            count++;
         }
 
-        tupleIndices[nextTable] = max;
         // Have reached end of current table? -> we backtrack.
         while (tupleIndices[nextTable] >= nextCardinality) {
             tupleIndices[nextTable] = 0;

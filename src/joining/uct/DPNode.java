@@ -104,6 +104,10 @@ public class DPNode {
      */
     BaseUctInner tableRoot = null;
     /**
+     * the parent of current node
+     */
+    final DPNode parent;
+    /**
      * Initialize UCT root node.
      *
      * @param roundCtr     	current round number
@@ -126,6 +130,7 @@ public class DPNode {
         unjoinedTables = new ArrayList<>();
         joinedTables = new HashSet<>();
         nextTable = new int[nrTables];
+        parent = null;
         for (int tableCtr = 0; tableCtr < nrTables; ++tableCtr) {
             unjoinedTables.add(tableCtr);
             nextTable[tableCtr] = tableCtr;
@@ -173,6 +178,7 @@ public class DPNode {
         joinedTables = new HashSet<>();
         joinedTables.addAll(parent.joinedTables);
         joinedTables.add(joinedTable);
+        this.parent = parent;
         for (Integer table : parent.unjoinedTables) {
             if (table != joinedTable) {
                 unjoinedTables.add(table);
@@ -227,14 +233,51 @@ public class DPNode {
         if (nrActions == 0) {
             // initialize tree node
             tableRoot =  new BaseUctInner(null, -1, nrTables);
-            int end = Math.min(5, nrTables);
-            for (int i = 1; i < end; i++) {
-                int table = joinOrder[i];
-                int cardinality = cardinalities[table];
-                if (cardinality > 1000) {
-                    tableRoot.expand(table, true);
+
+            DPNode node = parent;
+            BaseUctNode child = null;
+            DPNode firstNode = null;
+            while (node.parent != null) {
+                int table = joinOrder[node.treeLevel - 1];
+                if (cardinalities[table] > 1000 && node.treeLevel <= 5 && node.treeLevel > 1) {
+                    child = tableRoot.expandFirst(table, true);
+                    firstNode = node;
                 }
+                node = node.parent;
             }
+
+            if (firstNode != null) {
+                DPNode nodeParent = firstNode.parent;
+                int firstTable = joinOrder[firstNode.treeLevel - 1];
+                int action = -1;
+                for (int i = 0; i < nodeParent.nextTable.length; i++) {
+                    if (nodeParent.nextTable[i] == firstTable) {
+                        action = i;
+                        break;
+                    }
+                }
+                double rewards = 0;
+                int visits = 0;
+                for (int t = 0; t < nrThreads; t++) {
+                    NodeStatistics threadStats = nodeParent.nodeStatistics[t];
+                    visits += threadStats.nrTries[action];
+                    rewards += threadStats.accumulatedReward[action];
+                }
+                child.accumulatedReward = rewards;
+                tableRoot.accumulatedReward = rewards;
+                child.nrVisits = visits;
+                tableRoot.nrVisits = visits;
+            }
+
+
+//            int end = Math.min(5, nrTables);
+//            for (int i = 1; i < end; i++) {
+//                int table = joinOrder[i];
+//                int cardinality = cardinalities[table];
+//                if (cardinality > 1000) {
+//                    tableRoot.expand(table, true);
+//                }
+//            }
         }
     }
 
