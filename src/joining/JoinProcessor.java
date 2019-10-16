@@ -84,7 +84,7 @@ public class JoinProcessor {
             }
 
             HashMap<Integer, List<Integer>>[] batchGroups = new HashMap[nrQueries];
-            HashSet<HashSet<Integer>> batchGroupSet = new HashSet<>();
+            HashMap<Integer, HashSet<Integer>> batchGroupSet = new HashMap<>();
             HashMap<Integer, HashSet<Integer>> batchGroupMap = new HashMap<>();
             int startQuery = GlobalContext.firstUnfinishedNum;
             for (int i = 0; i < nrQueries; i++) {
@@ -94,6 +94,7 @@ public class JoinProcessor {
                 QueryInfo query = queries[triedQuery];
                 CommonQueryPrefix commonQueryPrefix = query.decideReusable(i, orderList, startQuery);
                 if(commonQueryPrefix != null) {
+                    //System.out.println("Reuse size:" + commonQueryPrefix.prefixLen);
                     int reusedQuery = commonQueryPrefix.reusedQuery;
                     if (batchGroups[reusedQuery] == null)
                         batchGroups[reusedQuery] = new HashMap<>();
@@ -103,9 +104,10 @@ public class JoinProcessor {
                     currentSet.add(triedQuery);
                     batchGroupMap.put(triedQuery, currentSet);
                 } else {
+                    //System.out.println("Reuse size:" + 0);
                     HashSet<Integer> currentSet = new HashSet<>();
                     currentSet.add(triedQuery);
-                    batchGroupSet.add(currentSet);
+                    batchGroupSet.put(triedQuery, currentSet);
                     batchGroupMap.put(triedQuery, currentSet);
                 }
             }
@@ -120,21 +122,22 @@ public class JoinProcessor {
             }
 
 
-            int total = 0;
-            for (int i = 0; i < nrQueries; i++) {
-                if (!GlobalContext.queryStatus[i])
-                    total++;
-            }
-            System.out.println("first:" + GlobalContext.firstUnfinishedNum);
-            System.out.println("total unfinish:" + total);
+//            int total = 0;
+//            for (int i = 0; i < nrQueries; i++) {
+//                if (!GlobalContext.queryStatus[i])
+//                    total++;
+//            }
+//            System.out.println("first:" + GlobalContext.firstUnfinishedNum);
+//            System.out.println("total unfinish:" + total);
 
             GlobalContext.aheadFirstUnfinish();
 
         }
 
-//        for (int i = 0; i < nrQueries; i++) {
-//            System.out.println("status:" + GlobalContext.queryStatus[i]);
-//        }
+        for (int i = 0; i < nrQueries; i++) {
+            System.out.println(batchQueryJoin.numberOfTuples[i]);
+            //System.out.println("status:" + GlobalContext.queryStatus[i]);
+        }
 
         // Materialize result table
         for(int i = 0; i < nrQueries; i++) {
@@ -143,17 +146,14 @@ public class JoinProcessor {
             System.out.println(i + ", size:" + nrTuples);
             if(i == GeneralConfig.testQuery) {
                 List<ResultTuple> tupleslist = new ArrayList<>(tuples);
-                tupleslist.sort(new Comparator<ResultTuple>() {
-                    @Override
-                    public int compare(ResultTuple o1, ResultTuple o2) {
-                        for (int i = 0; i < o1.baseIndices.length; i++) {
-                            if (o1.baseIndices[i] > o2.baseIndices[i])
-                                return 1;
-                            else if (o1.baseIndices[i] < o2.baseIndices[i])
-                                return -1;
-                        }
-                        return 0;
+                tupleslist.sort((o1, o2) -> {
+                    for (int i1 = 0; i1 < o1.baseIndices.length; i1++) {
+                        if (o1.baseIndices[i1] > o2.baseIndices[i1])
+                            return 1;
+                        else if (o1.baseIndices[i1] < o2.baseIndices[i1])
+                            return -1;
                     }
+                    return 0;
                 });
                 for (ResultTuple tuple : tupleslist) {
                     System.out.println(Arrays.toString(tuple.baseIndices));

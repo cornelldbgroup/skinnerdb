@@ -73,7 +73,7 @@ public class JoinProcessorNew {
             int startQuery = GlobalContext.firstUnfinishedNum;
             int[][] orderList = new int[nrQueries][];
             HashMap<Integer, List<Integer>>[] batchGroups = new HashMap[nrQueries];
-            HashSet<HashSet<Integer>> batchGroupSet = new HashSet<>();
+            HashMap<Integer, HashSet<Integer>> batchGroupSet = new HashMap<>();
             HashMap<Integer, HashSet<Integer>> batchGroupMap = new HashMap<>();
             for (int i = 0; i < nrQueries; i++) {
                 int prefixLen = 0;
@@ -91,7 +91,7 @@ public class JoinProcessorNew {
                     batchGroups[reusedQuery].putIfAbsent(prefixLen, new ArrayList<>());
                     batchGroups[reusedQuery].get(prefixLen).add(triedQuery);
                     System.arraycopy(commonQueryPrefix.joinOrder, 0, joinOrder, 0, commonQueryPrefix.prefixLen);
-                    //System.out.println("reuse:" + reusedQuery +", base" + triedQuery + ", order:" + Arrays.toString(commonQueryPrefix.joinOrder) + ", reusedLen:" + commonQueryPrefix.prefixLen + ", total Len" + joinOrder.length);
+//                    System.out.println("reuse:" + reusedQuery +", base" + triedQuery + ", order:" + Arrays.toString(commonQueryPrefix.joinOrder) + ", reusedLen:" + commonQueryPrefix.prefixLen + ", total Len" + joinOrder.length);
 
                     //batchGroupMap.forEach((a, b) -> b.forEach(c -> System.out.println(a+"," +c)));
                     //System.out.println("Reuse Query:"+ reusedQuery);
@@ -101,7 +101,7 @@ public class JoinProcessorNew {
                 } else {
                     HashSet<Integer> currentSet = new HashSet<>();
                     currentSet.add(triedQuery);
-                    batchGroupSet.add(currentSet);
+                    batchGroupSet.put(triedQuery,currentSet);
                     batchGroupMap.put(triedQuery, currentSet);
                 }
                 if(prefixLen > 0)
@@ -298,17 +298,14 @@ public class JoinProcessorNew {
             System.out.println(i + ", size:" + nrTuples);
             if(i == GeneralConfig.testQuery) {
                 List<ResultTuple> tupleslist = new ArrayList<>(tuples);
-                tupleslist.sort(new Comparator<ResultTuple>() {
-                    @Override
-                    public int compare(ResultTuple o1, ResultTuple o2) {
-                        for (int i = 0; i < o1.baseIndices.length; i++) {
-                            if (o1.baseIndices[i] > o2.baseIndices[i])
-                                return 1;
-                            else if (o1.baseIndices[i] < o2.baseIndices[i])
-                                return -1;
-                        }
-                        return 0;
+                tupleslist.sort((o1, o2) -> {
+                    for (int i1 = 0; i1 < o1.baseIndices.length; i1++) {
+                        if (o1.baseIndices[i1] > o2.baseIndices[i1])
+                            return 1;
+                        else if (o1.baseIndices[i1] < o2.baseIndices[i1])
+                            return -1;
                     }
+                    return 0;
                 });
                 for (ResultTuple tuple : tupleslist) {
                     System.out.println(Arrays.toString(tuple.baseIndices));

@@ -29,7 +29,7 @@ public class BatchQueryJoinMultiTracker {
     /**
      * Number of steps per episode.
      */
-    public final int budget = 15;
+    public final int budget = 300;
 
     /**
      * At i-th position: cardinality of i-th joined table
@@ -84,6 +84,12 @@ public class BatchQueryJoinMultiTracker {
 
     State[] states;
 
+    public long[] numberOfTuples;
+
+    int[][] nrTuples;
+
+    //ProgressTracker[] singleTrackers;
+
     /**
      * Initializes join operator for given query
      * and initialize new join result.
@@ -108,12 +114,16 @@ public class BatchQueryJoinMultiTracker {
         this.batchTracker = new HashMap<>();
         this.startIndices = new int[nrQueries][];
         this.endIndices = new int[nrQueries][];
+        this.nrTuples = new int[nrQueries][];
+        this.numberOfTuples = new long[nrQueries];
+        //this.singleTrackers = new ProgressTracker[nrQueries];
         int i = 0;
         for (QueryInfo query : queries) {
             planCache[i] = new HashMap<JoinOrder, LeftDeepPlan>();
             cardinalities[i] = new int[query.nrJoined];
             predToEvals[i] = new HashMap<>();
             progress[i] = new HashMap<>();
+            this.nrTuples[i] = new int[query.nrJoined];
             //totalCardinality[i] = 1;
             for (Map.Entry<String, Integer> entry :
                     query.aliasToIndex.entrySet()) {
@@ -205,7 +215,7 @@ public class BatchQueryJoinMultiTracker {
         return max;
     }
 
-    public double[] execute(int[][] orders, HashMap<Integer, List<Integer>>[] batchGroups, int startQuery, HashSet<HashSet<Integer>> batchGroupSets) throws Exception {
+    public double[] execute(int[][] orders, HashMap<Integer, List<Integer>>[] batchGroups, int startQuery, HashMap<Integer, HashSet<Integer>> batchGroupSets) throws Exception {
         //LeftDeepPlan[] plans = new LeftDeepPlan[nrQueries];
         states = new State[nrQueries];
         for (int i = 0; i < nrQueries; i++) {
@@ -229,11 +239,9 @@ public class BatchQueryJoinMultiTracker {
         HashSet<Integer> singleGroupSet = new HashSet<>();
 
         //System.out.println("Group Info:");
-        for (HashSet<Integer> batchGroupSet : batchGroupSets) {
+        for (HashSet<Integer> batchGroupSet : batchGroupSets.values()) {
             //batchGroupSet.forEach(i -> System.out.println("current:" + i));
             //System.out.println("======================================");
-            if (batchGroupSet.size() < 2)
-                singleGroupSet.addAll(batchGroupSet);
 
             if (!batchTracker.containsKey(batchGroupSet)) {
                 HashMap<Integer, ProgressTracker> currentBatchTracker = new HashMap<>();
@@ -255,45 +263,65 @@ public class BatchQueryJoinMultiTracker {
             int executedQuery = (startQuery + i) % nrQueries;
             if (GlobalContext.queryStatus[executedQuery])
                 continue;
-            if (!isVisit[executedQuery] && !GlobalContext.queryStatus[executedQuery]) {
+            if (!isVisit[executedQuery] && !GlobalContext.queryStatus[executedQuery] && batchGroupSets.containsKey(executedQuery)) {
+//                System.out.println("exec query:" + executedQuery);
+//                if(batchGroupSets.get(executedQuery)!= null && batchGroupSets.get(executedQuery).size() > 1)
+//                    System.out.println("hhh");
                 int[] order = orders[executedQuery];
                 int nrTable = order.length;
                 int[] tupleIndices = Arrays.copyOf(states[executedQuery].tupleIndices, states[executedQuery].tupleIndices.length);
-                reuseJoin(executedQuery, 0, nrTable, tupleIndices, isVisit, 0, trackers);
+                reuseJoin(executedQuery, 0, nrTable, tupleIndices, isVisit, 0);
+//                HashSet<Integer> sameGroupInfo = batchGroupSets.get(executedQuery);
+//                for (Integer queryInfo : sameGroupInfo) {
+//                    int[] indices1 = states[queryInfo].tupleIndices;
+//                    int[] indices2 = states[executedQuery].tupleIndices;
+//
+//                }
             }
         }
 
 
-//        for(HashSet<Integer> multiGroup : batchGroupSets) {
-//            for (Integer executeQuery : multiGroup) {
-//                int[] basedIndices = states[executeQuery].tupleIndices;
-//                HashMap<Integer, List<Integer>> currentGroup = batchGroups[executeQuery];
-//                if(currentGroup != null) {
-//                    currentGroup.forEach((prefix, reuseQueryBatch) -> {
-//                        if (reuseQueryBatch != null) {
-//                            reuseQueryBatch.forEach(reuseQuery -> {
-//                                for (int i = 0; i < prefix; i++) {
-//                                    if(states[reuseQuery].tupleIndices[orders[reuseQuery][i]] < basedIndices[orders[executeQuery][i]]) {
-//                                        states[reuseQuery].tupleIndices[orders[reuseQuery][i]] = basedIndices[orders[executeQuery][i]];
-//                                    } else if(states[reuseQuery].tupleIndices[orders[reuseQuery][i]] > basedIndices[orders[executeQuery][i]]) {
-//                                        break;
-//                                    }
-////
-////                                        states[reuseQuery].tupleIndices[orders[reuseQuery][i]] = currentIndices[orders[executeQuery][i]];
-////                                    else if (states[reuseQuery].tupleIndices[orders[reuseQuery][i]] != currentIndices[orders[executeQuery][i]])
-////                                        System.out.println("error");
-//                                }
-//                            });
-//                        }
-//                    });
-//                }
-//            }
-//        }
+        //for (HashSet<Integer> batchGroup : batchGroupSets.values()) {
+        //    for (Integer executeQuery : batchGroup) {
+        for (int k = 0; k < batchGroups.length; k++) {
+            int executeQuery = (startQuery + k) % nrQueries;
+            HashMap<Integer, List<Integer>> currentGroup = batchGroups[executeQuery];
+            if (currentGroup != null) {
+                if (GlobalContext.queryStatus[executeQuery]) {
+                    currentGroup.forEach((p, q) -> q.forEach(o -> GlobalContext.queryStatus[o] = true));
+                    continue;
+                }
+                int[] basedIndices = states[executeQuery].tupleIndices;
+                for (Map.Entry<Integer, List<Integer>> entry : currentGroup.entrySet()) {
+                    int prefix = entry.getKey();
+                    List<Integer> reuseQueryBatch = entry.getValue();
+                    if (reuseQueryBatch != null) {
+                        for (Integer reuseQuery : reuseQueryBatch) {
+                            for (int i = 0; i < prefix; i++) {
+                                if (states[reuseQuery].tupleIndices[orders[reuseQuery][i]] < basedIndices[orders[executeQuery][i]]) {
+                                    //states[reuseQuery].tupleIndices[orders[reuseQuery][i]] = basedIndices[orders[executeQuery][i]];
+                                    for (int j = i; j < orders[reuseQuery].length; j++) {
+                                        if (j < prefix)
+                                            states[reuseQuery].tupleIndices[orders[reuseQuery][j]] = basedIndices[orders[executeQuery][j]];
+                                        else
+                                            states[reuseQuery].tupleIndices[orders[reuseQuery][j]] = 0;
+                                    }
+                                    break;
+                                } else if (!GlobalContext.queryStatus[executeQuery] && states[reuseQuery].tupleIndices[orders[reuseQuery][i]] > basedIndices[orders[executeQuery][i]]) {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         double[] rewards = new double[nrQueries];
         for (int i = 0; i < nrQueries; i++) {
             if (GlobalContext.queryStatus[i])
                 continue;
+            trackers[i].updateProgress(new JoinOrder(orders[i]), states[i]);
             if (GeneralConfig.enableTracker && !singleGroupSet.contains(i)) {
                 HashSet<Integer> singleSet = new HashSet<Integer>();
                 singleSet.add(i);
@@ -310,12 +338,13 @@ public class BatchQueryJoinMultiTracker {
             }
 
             GlobalContext.queryStatus[i] = trackers[i].isFinished;
-            rewards[i] = reward(orders[i], startIndices[i], endIndices[i], cardinalities[i]);
+            rewards[i] = reward(orders[i], startIndices[i], endIndices[i], cardinalities[i], budgets[i]);
+            //System.out.println("reward: " + rewards[i]);
         }
         return rewards;
     }
 
-    double reward(int[] joinOrder, int[] startIdx, int[] endIdx, int[] cardinality) {
+    double reward(int[] joinOrder, int[] startIdx, int[] endIdx, int[] cardinality, int remainBudget) {
         double progress = 0;
         double weight = 1;
         for (int curTable : joinOrder) {
@@ -328,10 +357,15 @@ public class BatchQueryJoinMultiTracker {
             // Fully processed tuples from this table
             progress += (endIdx[curTable] - startIdx[curTable]) * weight;
         }
-        return progress;
+        if(remainBudget > 0) {
+            //System.out.println("remain budget:" + remainBudget + ", progress:" + progress);
+            return Math.max(progress * remainBudget, 0);
+        } else {
+            return Math.max(progress, 0);
+        }
     }
 
-    private boolean reuseJoin(int queryNum, int startIdx, int endIdx, int[] tupleIndices, boolean[] isVisit, int reuseBudget, ProgressTracker[] trackers) {
+    private boolean reuseJoin(int queryNum, int startIdx, int endIdx, int[] tupleIndices, boolean[] isVisit, int reuseBudget) {
 //        System.out.println("queryNum:" + queryNum + ", join order:" + Arrays.toString(orders[queryNum]));
         //join table
         isVisit[queryNum] = true;
@@ -350,7 +384,7 @@ public class BatchQueryJoinMultiTracker {
         KnaryBoolEval[] unarys = unaryPreds[queryNum];
         HashMap<Integer, List<Integer>> currentBatchGroup = batchGroups[queryNum];
 
-        int[] currentStartIndices = Arrays.copyOf(tupleIndices, tupleIndices.length);
+//        int[] currentStartIndices = Arrays.copyOf(tupleIndices, tupleIndices.length);
 
 //        int firstTable = order[0];
 //        int firstTableStartIdx = progressCurrentQuery.containsKey(firstTable) ? progressCurrentQuery.get(firstTable) : 0;
@@ -361,7 +395,9 @@ public class BatchQueryJoinMultiTracker {
 
         //next table
         int joinIndex = startIdx;
-        //int[] reuseNrTuples = new int[order.length];
+//        if (startIdx == 0)
+//            joinIndex = states[queryNum].lastIndex;
+        int[] useNrTuples = new int[order.length];
         //boolean reuseFinish = true;
         boolean[] reuseFinish = new boolean[order.length];
         Arrays.fill(reuseFinish, true);
@@ -369,7 +405,7 @@ public class BatchQueryJoinMultiTracker {
 //        int[] budgetEachTable = new int[order.length];
         while (joinIndex >= startIdx && joinIndex < endIdx && reuseFinish[joinIndex] && this.budgets[queryNum] > 0) {
 
-            //reuseNrTuples[joinIndex]++;
+            useNrTuples[joinIndex]++;
             //nrTuples[queryNum]++;
 
             int nextTable = order[joinIndex];
@@ -386,13 +422,15 @@ public class BatchQueryJoinMultiTracker {
 //            System.out.println("card:" + nextCardinality);
 //            System.out.println("join len:" + joinIndex);
 
-            if (queryNum == GeneralConfig.testQuery) {
-                if (order[0] == 1 && order[1] == 3 && order[3] == 5 && tupleIndices[1] == 12 && tupleIndices[3] == 26009) {
-                    System.out.println("ll");
-                }
-                System.out.println("tuples" + Arrays.toString(tupleIndices));
-                System.out.println("apps size" + applicablePreds.size());
-            }
+//            if (queryNum == GeneralConfig.testQuery) {
+//                if (order[0] == 1 && order[1] == 3 && order[3] == 5 && tupleIndices[1] == 12 && tupleIndices[3] == 26009) {
+//                    System.out.println("ll");
+//                }
+//                System.out.println("tuples" + Arrays.toString(tupleIndices));
+//                System.out.println("apps size" + applicablePreds.size());
+//            }
+
+            numberOfTuples[queryNum]++;
 
             if ((PreConfig.PRE_FILTER || unaryPred == null ||
                     unaryPred.evaluate(tupleIndices) > 0) &&
@@ -448,14 +486,14 @@ public class BatchQueryJoinMultiTracker {
                                 for (int i = 0; i <= joinIndex; i++) {
                                     int reusedTable = reusedQueryOrder[i];
                                     reusedTupleIndices[reusedTable] = tupleIndices[order[i]];
-                                    //nrTuples[reusedTable] += reuseNrTuples[i];
-                                    //totalReuseTuples += reuseNrTuples[i];
+                                    nrTuples[reusedQuery][reusedTable] += useNrTuples[order[i]];
+                                    totalReuseTuples += useNrTuples[order[i]];
                                 }
                             }
 
 
-                            //this.budgets[reusedQuery] -= (reuseBudget + totalReuseTuples);
-                            reuseFinish[joinIndex] &= reuseJoin(reusedQuery, joinIndex + 1, nrReuseQueryTable, reusedTupleIndices, isVisit, reuseBudget + totalReuseTuples, trackers);
+                            this.budgets[reusedQuery] -= (reuseBudget + totalReuseTuples);
+                            reuseFinish[joinIndex] &= reuseJoin(reusedQuery, joinIndex + 1, nrReuseQueryTable, reusedTupleIndices, isVisit, reuseBudget + totalReuseTuples);
 
                         }
 
@@ -535,10 +573,10 @@ public class BatchQueryJoinMultiTracker {
                         tupleIndices[nextTable] += 1;
                     }
 
-                    for (int i = joinIndex + 1; i < endIdx ; i++) {
-                        int curTable = order[i];
-                        tupleIndices[curTable] = 0;
-                    }
+//                    for (int i = joinIndex + 1; i < endIdx; i++) {
+//                        int curTable = order[i];
+//                        tupleIndices[curTable] = 0;
+//                    }
 
                 } else {
                     // No complete result row -> complete further
@@ -575,7 +613,7 @@ public class BatchQueryJoinMultiTracker {
                     tupleIndices[nextTable] += 1;
                 }
 
-                for (int i = joinIndex + 1; i < endIdx ; i++) {
+                for (int i = joinIndex + 1; i < endIdx; i++) {
                     int curTable = order[i];
                     tupleIndices[curTable] = 0;
                 }
@@ -607,7 +645,7 @@ public class BatchQueryJoinMultiTracker {
             System.out.println("join prefix:" + joinIndex);
             System.out.println("start prefix:" + startIdx);
             System.out.println("end prefix:" + endIdx);
-            System.out.println("start table indices:" + Arrays.toString(currentStartIndices));
+//            System.out.println("start table indices:" + Arrays.toString(currentStartIndices));
             System.out.println("end table indices:" + Arrays.toString(tupleIndices));
             System.out.println("stat================");
         }
@@ -616,7 +654,7 @@ public class BatchQueryJoinMultiTracker {
             GlobalContext.queryStatus[queryNum] = true;
 
         State state = states[queryNum];
-        state.lastIndex = joinIndex;
+//        state.lastIndex = joinIndex;
         for (int tableCtr = 0; tableCtr < order.length; ++tableCtr) {
             state.tupleIndices[tableCtr] = tupleIndices[tableCtr];
             this.endIndices[queryNum][tableCtr] = tupleIndices[tableCtr];
@@ -633,7 +671,7 @@ public class BatchQueryJoinMultiTracker {
 //            }
 //        }
 
-        trackers[queryNum].updateProgress(new JoinOrder(order), state);
+//        trackers[queryNum].updateProgress(new JoinOrder(order), state);
         return (joinIndex < startIdx);
         //return (this.budgets[queryNum] > 0) && reuseFinish;
 

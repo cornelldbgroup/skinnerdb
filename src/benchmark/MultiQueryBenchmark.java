@@ -23,7 +23,7 @@ public class MultiQueryBenchmark {
 
     public static void main(String[] args) throws Exception {
 
-        PrintStream out = new PrintStream(new FileOutputStream("new4.txt"));
+        PrintStream out = new PrintStream(new FileOutputStream("new5.txt"));
         System.setOut(out);
 
         String dbDir = //"/home/gid-wangj3/skinnerDB/data/imdb/";
@@ -57,7 +57,7 @@ public class MultiQueryBenchmark {
             queryNum++;
         }
         GlobalContext.initCommonJoin(queries);
-        JoinProcessor.process(queries, preSummaries);
+        JoinProcessorNew.process(queries, preSummaries);
         for(int i = 0; i < queryNum; i++) {
             PostProcessor.process(queries[i], preSummaries[i]);
             String resultRel = NamingConfig.FINAL_RESULT_NAME;
