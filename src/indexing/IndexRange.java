@@ -30,7 +30,7 @@ public class IndexRange {
      *
      */
     public IntIntMap valuesMap;
-    public int[] offsets;
+    public IntIntMap prefixMap;
     /**
      * Initialize range for first and
      * last tuple index.
@@ -42,7 +42,7 @@ public class IndexRange {
         this.firstTuple = firstTuple;
         this.lastTuple = lastTuple;
         this.bid = bid;
-        valuesMap = HashIntIntMaps.newMutableMap();
+        valuesMap = HashIntIntMaps.newMutableMap(lastTuple - firstTuple);
     }
 
     public void add(int datum) {

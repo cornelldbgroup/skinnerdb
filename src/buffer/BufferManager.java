@@ -18,6 +18,7 @@ import data.StringData;
 import diskio.DiskUtil;
 import diskio.PathUtil;
 import indexing.Index;
+import indexing.ThreadIntIndex;
 import query.ColumnRef;
 import types.JavaType;
 import types.TypeUtil;
@@ -39,12 +40,15 @@ public class BufferManager {
 	 * columns by parallel processing threads.
 	 */
 	public final static Map<ColumnRef, ColumnData> colToData =
-			new ConcurrentHashMap<ColumnRef, ColumnData>();
+			new ConcurrentHashMap<>();
 	/**
 	 * Maps column references to associated indices.
 	 */
 	public final static Map<ColumnRef, Index> colToIndex =
-			new ConcurrentHashMap<ColumnRef, Index>();
+			new ConcurrentHashMap<>();
+
+	public final static Map<String, List<ThreadIntIndex>> indexCache =
+			new ConcurrentHashMap<>();
 	/**
 	 * Loads dictionary from hard disk.
 	 */
@@ -194,12 +198,14 @@ public class BufferManager {
 			if (table.tempTable) {
 				String tableName = table.name;
 				for (ColumnInfo colInfo : table.nameToCol.values()) {					
-					ColumnRef colRef = new ColumnRef(
-							tableName, colInfo.name);
+					ColumnRef colRef = new ColumnRef(tableName, colInfo.name);
 					unloadColumn(colRef);
 				}
 			}
 		}
+	}
+	public static void unloadCache() {
+		indexCache.clear();
 	}
 	/**
 	 * Log given text if buffer logging activated.

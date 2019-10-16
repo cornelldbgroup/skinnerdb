@@ -116,7 +116,7 @@ public class Filter {
 				filterBatch(unaryBoolEval, batch).stream()).collect(
 						Collectors.toList());
 		}
-		long timer4 = System.currentTimeMillis();
+//		long timer4 = System.currentTimeMillis();
 		// Clean up columns loaded for this operation
 		/*
 		if (!GeneralConfig.inMemory) {

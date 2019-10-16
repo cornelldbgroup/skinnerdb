@@ -1,6 +1,5 @@
 package preprocessing;
 
-import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -8,11 +7,15 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 
+import buffer.BufferManager;
+import catalog.info.ColumnInfo;
 import config.LoggingConfig;
 import config.NamingConfig;
 import config.PreConfig;
 import expressions.ExpressionInfo;
+import indexing.Index;
 import indexing.Indexer;
+import indexing.ThreadIntIndex;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
 import operators.Filter;
@@ -105,6 +108,11 @@ public class Preprocessor {
 			// Filter and project if enabled
 			if (curUnaryPred != null && PreConfig.PRE_FILTER) {
 				try {
+					//check if the predicate is in the cache
+//					boolean inCache = applyCache(curUnaryPred, preSummary);
+//					if (inCache) {
+//						continue;
+//					}
 					// Apply index to prune rows if possible
 //					long timer1 = System.currentTimeMillis();
 					ExpressionInfo remainingPred = applyIndex(
@@ -143,6 +151,7 @@ public class Preprocessor {
 		createJoinIndices(query, preSummary);
 		return preSummary;
 	}
+
 	/**
 	 * Forms a conjunction between given conjuncts.
 	 * 
@@ -162,6 +171,29 @@ public class Preprocessor {
 		}
 		return result;
 	}
+
+	static boolean applyCache(ExpressionInfo curUnaryPred, Context preSummary) {
+		List<ThreadIntIndex> cachedIndices = BufferManager.indexCache.getOrDefault(curUnaryPred.toString(), null);
+		if (cachedIndices != null) {
+			String alias = curUnaryPred.aliasesMentioned.iterator().next();
+			String cachedName = NamingConfig.CACHED_FILTERED_PRE + alias;
+			// Update pre-processing summary
+
+			for (ThreadIntIndex index: cachedIndices) {
+				ColumnRef srcRef = index.queryRef;
+				String columnName = srcRef.columnName;
+				ColumnRef resRef = new ColumnRef(cachedName, columnName);
+
+				preSummary.columnMapping.put(srcRef, resRef);
+
+				BufferManager.colToIndex.put(resRef, index);
+			}
+			preSummary.aliasToFiltered.put(alias, cachedName);
+			return true;
+		}
+		return false;
+	}
+
 	/**
 	 * Search for applicable index and use it to prune rows. Redirect
 	 * column mappings to index-filtered table if possible.
@@ -291,18 +323,28 @@ public class Preprocessor {
 		// Iterate over columns in equi-joins
 		long startMillis = System.currentTimeMillis();
 //		for (ColumnRef queryRef: query.equiJoinCols) {
+//			long t0 = System.currentTimeMillis();
 //			ColumnRef dbRef = preSummary.columnMapping.get(queryRef);
 //			Indexer.index(dbRef);
+//			long t1 = System.currentTimeMillis();
+//			System.out.println("Creating index for " + queryRef +
+//					" (query) - " + dbRef + " (DB)" + " in " + (t1 - t0) + " ms");
 //		}
-
 		query.equiJoinCols.parallelStream().forEach(queryRef -> {
 			try {
 				// Resolve query-specific column reference
 				ColumnRef dbRef = preSummary.columnMapping.get(queryRef);
+				ColumnInfo columnInfo = query.colRefToInfo.get(queryRef);
+				String tableName = query.aliasToTable.get(queryRef.aliasName);
+				String columnName = queryRef.columnName;
+				ColumnRef columnRef = new ColumnRef(tableName, columnName);
+				Index index = BufferManager.colToIndex.getOrDefault(columnRef, null);
+
+
 				log("Creating index for " + queryRef +
 						" (query) - " + dbRef + " (DB)");
 				// Create index (unless it exists already)
-				Indexer.index(dbRef);
+				Indexer.index(dbRef, queryRef, index, columnInfo.isPrimary);
 			} catch (Exception e) {
 				System.err.println("Error creating index for " + queryRef);
 				e.printStackTrace();

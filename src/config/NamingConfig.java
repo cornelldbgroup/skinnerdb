@@ -17,6 +17,10 @@ public class NamingConfig {
 	 */
 	public static final String FILTERED_PRE = "filtered.";
 	/**
+	 * Prefix to add to table names after initial, cached-based filtering.
+	 */
+	public static final String CACHED_FILTERED_PRE = "cachedfiltered.";
+	/**
 	 * Name of table containing result after join phase.
 	 */
 	public static final String JOINED_NAME = "joined.";

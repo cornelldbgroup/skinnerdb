@@ -47,7 +47,7 @@ public class CatalogManager {
 	 */
 	public static int getCardinality(String tableName) {
 		TableStats tableStats = currentStats.tableToStats.get(tableName);
-		return tableStats.cardinality;
+		return tableStats == null ? 0 : tableStats.cardinality;
 	}
 	/**
 	 * Loads schema information from disk as current database

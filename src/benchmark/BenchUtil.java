@@ -81,7 +81,7 @@ public class BenchUtil {
 		query.equiJoinPreds.forEach(expressionInfo -> {
 			expressionInfo.extractIndex(preSummary);
 		});
-		ParallelJoinProcessor.process(query, preSummary);
+//		ParallelJoinProcessor.process(query, preSummary);
 		PostProcessor.process(query, preSummary);
 		// Clean up
 		BufferManager.unloadTempData();
@@ -100,15 +100,16 @@ public class BenchUtil {
 			PrintWriter benchOut) throws Exception {
 		System.out.println(queryName);
 		System.out.println(sql.toString());
-		long startMillis = System.currentTimeMillis();
+		startQuery(sql);
 		QueryInfo query = new QueryInfo(sql, false, -1, -1, null);
+		long startMillis = System.currentTimeMillis();
 		Context preSummary = Preprocessor.process(query);
 		long preMillis = System.currentTimeMillis() - startMillis;
 		query.equiJoinPreds.forEach(expressionInfo -> {
 			expressionInfo.extractIndex(preSummary);
 		});
 		long joinStart = System.currentTimeMillis();
-		ParallelJoinProcessor.process(query, preSummary);
+//		ParallelJoinProcessor.process(query, preSummary);
 		long postStartMillis = System.currentTimeMillis();
 		long joinMillis = postStartMillis - joinStart;
 //		ParallelPostProcessor.process(query, preSummary);

@@ -20,14 +20,35 @@ public class Indexer {
 	 * 
 	 * @param colRef	create index on this column
 	 */
-	public static void index(ColumnRef colRef) throws Exception {
+	public static void index(ColumnRef colRef, ColumnRef queryRef, Index oldIndex, boolean isPrimeKey) throws Exception {
 		// Check if index already exists
 		if (!BufferManager.colToIndex.containsKey(colRef)) {
 			ColumnData data = BufferManager.getData(colRef);
+			ThreadIntIndex intIndex = oldIndex == null ? null : (ThreadIntIndex) oldIndex;
 			if (data instanceof IntData) {
 				IntData intData = (IntData)data;
-//				IntIndex index = new IntIndex(intData);
-				ThreadIntIndex index = new ThreadIntIndex(intData, ParallelConfig.EXE_THREADS);
+//				IntIndex old_index = new IntIndex(intData);
+				long timer0 = System.currentTimeMillis();
+
+				IndexPolicy policy;
+				if (isPrimeKey) {
+					policy = IndexPolicy.Key;
+				}
+				else if (!ParallelConfig.PARALLEL_PRE) {
+					policy = IndexPolicy.Sequential;
+				}
+				else if (intIndex != null && intIndex.keyToPositions.size() >= 10000) {
+					policy = IndexPolicy.Sparse;
+				}
+				else {
+					policy = IndexPolicy.Dense;
+				}
+				ThreadIntIndex index = new ThreadIntIndex(intData, ParallelConfig.EXE_THREADS, colRef, queryRef, intIndex, policy);
+
+				long timer1 = System.currentTimeMillis();
+				long totalMills = timer1 - timer0;
+				String results = totalMills + "-" + index.cardinality + "-" + index.keyToPositions.size() + "-" + index.intData.isNull.cardinality();
+				System.out.println(colRef + ": " + results + "\tpolicy: " + policy);
 				BufferManager.colToIndex.put(colRef, index);
 			}					
 		}
@@ -53,7 +74,7 @@ public class Indexer {
 								String column = columnInfo.name;
 								ColumnRef colRef = new ColumnRef(table, column);
 								System.out.println("Indexing " + colRef + " ...");
-								index(colRef);								
+								index(colRef, colRef, null, columnInfo.isPrimary);
 							}
 						} catch (Exception e) {
 							System.err.println("Error indexing " + columnInfo);

@@ -71,7 +71,7 @@ public class Master {
 		Context context = Preprocessor.process(query);
 		query.equiJoinPreds.forEach(expressionInfo -> expressionInfo.extractIndex(context));
 		// Join filtered tables
-		ParallelJoinProcessor.process(query, context);
+//		ParallelJoinProcessor.process(query, context);
 		// Aggregation, grouping, and sorting if required
 		PostProcessor.process(query, context);
 		BufferManager.unloadTempData();

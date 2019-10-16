@@ -87,7 +87,6 @@ public class SkinnerCmd {
 				for (Entry<String, PlainSelect> entry : nameToQuery.entrySet()) {
 					String queryName = entry.getKey();
 					PlainSelect query = entry.getValue();
-					BenchUtil.startQuery(query);
 					BenchUtil.benchQuery(queryName, query, benchOut);
 				}
 				// Close benchmark result file
@@ -360,22 +359,25 @@ public class SkinnerCmd {
 		}
 		// create indices for all columns
 		Indexer.indexAll(StartupConfig.INDEX_CRITERIA);
+		ParallelConfig.PARALLEL_PRE = true;
 		// Command line processing
 		System.out.println("Enter 'help' for help and 'quit' to exit");
-		Scanner scanner = new Scanner(System.in);
 		boolean continueProcessing = true;
-		while (continueProcessing) {
-			System.out.print("> ");
-			String input = preInput == null ? scanner.nextLine() : preInput;
-			try {
-				continueProcessing = processInput(input);								
-			} catch (Exception e) {
-				System.err.println("Error processing command: ");
-				e.printStackTrace();
-			}
-			continueProcessing = continueProcessing && args.length == 1;
-		}
-		scanner.close();
+
+		processInput("bench ../imdb/queries lockFree_pp.txt");
+//		Scanner scanner = new Scanner(System.in);
+//		while (continueProcessing) {
+//			System.out.print("> ");
+//			String input = preInput == null ? scanner.nextLine() : preInput;
+//			try {
+//				continueProcessing = processInput(input);
+//			} catch (Exception e) {
+//				System.err.println("Error processing command: ");
+//				e.printStackTrace();
+//			}
+//			continueProcessing = continueProcessing && args.length == 1;
+//		}
+//		scanner.close();
 		ThreadPool.close();
 	}
 }

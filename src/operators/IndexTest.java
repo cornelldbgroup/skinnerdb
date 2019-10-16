@@ -261,19 +261,19 @@ public class IndexTest implements ExpressionVisitor {
 	@Override
 	public void visit(NotEqualsTo notEqualsTo) {
 		canUseIndex = false;
-		Expression left = notEqualsTo.getLeftExpression();
-		Expression right = notEqualsTo.getRightExpression();
-		left.accept(this);
-		right.accept(this);
-		boolean haveConstant = left instanceof LongValue ||
-				left instanceof StringValue ||
-				right instanceof LongValue ||
-				right instanceof StringValue;
-		boolean haveColumn = left instanceof Column ||
-				right instanceof Column;
-		if (!haveConstant || !haveColumn) {
-			canUseIndex = false;
-		}
+//		Expression left = notEqualsTo.getLeftExpression();
+//		Expression right = notEqualsTo.getRightExpression();
+//		left.accept(this);
+//		right.accept(this);
+//		boolean haveConstant = left instanceof LongValue ||
+//				left instanceof StringValue ||
+//				right instanceof LongValue ||
+//				right instanceof StringValue;
+//		boolean haveColumn = left instanceof Column ||
+//				right instanceof Column;
+//		if (!haveConstant || !haveColumn) {
+//			canUseIndex = false;
+//		}
 	}
 
 	@Override

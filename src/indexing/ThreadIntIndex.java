@@ -1,17 +1,15 @@
 package indexing;
 
-import com.google.common.collect.ConcurrentHashMultiset;
-import com.google.common.collect.Multiset;
 import com.koloboke.collect.map.IntIntCursor;
 import com.koloboke.collect.map.IntIntMap;
 import com.koloboke.collect.map.hash.HashIntIntMaps;
 import config.LoggingConfig;
 import config.ParallelConfig;
 import data.IntData;
+import query.ColumnRef;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.IntStream;
 
 /**
  * Indexes integer values (not necessarily unique).
@@ -35,10 +33,6 @@ public class ThreadIntIndex extends Index {
      */
     public int[] positions;
     /**
-     * new positions for parallel index creation.
-     */
-    public int[][] newPositions;
-    /**
      * After indexing: maps search key to index
      * of first position at which associated
      * information is stored.
@@ -52,10 +46,8 @@ public class ThreadIntIndex extends Index {
      * Data is distributed to different scopes of threads.
      */
     public int[] scopes;
-    /**
-     * The row index of unique values;
-     */
-    public Set<Integer> distinctValues;
+
+    public final ColumnRef queryRef;
 
     /**
      * Create index on the given integer column.
@@ -134,274 +126,64 @@ public class ThreadIntIndex extends Index {
 //        // Check index if enabled
 //        IndexChecker.checkIndex(intData, this);
 //    }
-
-    public ThreadIntIndex(IntData intData, int nrThreads) {
+    public ThreadIntIndex(IntData intData, int nrThreads, ColumnRef colRef, ColumnRef queryRef, ThreadIntIndex index, IndexPolicy policy) {
         long startMillis = System.currentTimeMillis();
         // Extract info
         this.nrThreads = nrThreads;
         this.intData = intData;
         this.cardinality = intData.cardinality;
         this.scopes = new int[this.cardinality];
-        this.distinctValues = new HashSet<>();
+        this.queryRef = queryRef;
 
-        int[] data = intData.data;
         // Count number of occurrences for each value
-        keyToPositions = HashIntIntMaps.newMutableMap();
+        int MAX = 10000;
 //        int MAX = ParallelConfig.PRE_BATCH_SIZE;
-        int MAX = Integer.MAX_VALUE;
-        if (cardinality <= MAX) {
-//            long timer0 = System.currentTimeMillis();
-            List<Integer> nrList = new ArrayList<>();
-            for (int i = 0; i < cardinality; ++i) {
-                // Don't index null values
-                if (!intData.isNull.get(i)) {
-                    int value = data[i];
-                    int pos = keyToPositions.getOrDefault(value, -1);
-                    if (pos < 0) {
-//                        distinctValues.add(value);
-                        pos = nrList.size();
-                        keyToPositions.put(value, pos);
-                        nrList.add(1);
-                    }
-                    else
-                        nrList.set(pos, nrList.get(pos) + 1);
-                }
-            }
-//        long timer1 = System.currentTimeMillis();
-            // Assign each key to the appropriate position offset
-            int nrKeys = nrList.size();
-            newPositions = new int[nrKeys][];
-            log("Number of keys:\t" + nrKeys);
-            IntIntCursor keyToIndexCursor = keyToPositions.cursor();
-            while (keyToIndexCursor.moveNext()) {
-                int pos = keyToIndexCursor.value();
-                int count = nrList.get(pos);
-                newPositions[pos] = new int[count];
-            }
-
-            for (int i = 0; i < cardinality; ++i) {
-                if (!intData.isNull.get(i)) {
-                    int key = data[i];
-                    int pos = keyToPositions.get(key);
-                    int[] subPos = newPositions[pos];
-                    int last = subPos.length - 1;
-                    int offset = subPos[last];
-                    subPos[offset] = i;
-                    if (offset < last) {
-                        subPos[last]++;
-                    }
-                    int startThread = offset % nrThreads;
-                    scopes[i] = startThread;
-                }
-            }
-//            long timer1 = System.currentTimeMillis();
-//            System.out.println("Sequential: " + (timer1 - timer0) + " ms");
-        } else {
-            // Divide tuples into batches
-//            long timer0 = System.currentTimeMillis();
-            List<IndexRange> batches = this.split();
-
-            IntIntMap nrValues = HashIntIntMaps.newMutableMap();
-            batches.parallelStream().forEach(batch -> {
-                // Evaluate predicate for each table row
-                for (int rowCtr = batch.firstTuple; rowCtr <= batch.lastTuple; ++rowCtr) {
-                    if (!intData.isNull.get(rowCtr)) {
-                        int value = data[rowCtr];
-                        batch.add(value);
-                    }
-                }
-            });
-
-//            long timer1 = System.currentTimeMillis();
-            int countIndex = 0;
-            for (IndexRange batch : batches) {
-                IntIntCursor keyToIndexCursor = batch.valuesMap.cursor();
-                while (keyToIndexCursor.moveNext()) {
-                    int value = keyToIndexCursor.key();
-                    int nrs = keyToIndexCursor.value();
-                    if (nrValues.containsKey(value)) {
-                        nrValues.compute(value, (k, v) -> v + nrs);
-                    } else {
-                        nrValues.put(value, nrs);
-                        keyToPositions.put(value, countIndex);
-                        countIndex++;
-                    }
-                }
-            }
-
-            int elementSize = keyToPositions.size();
-            newPositions = new int[elementSize][];
-//            long timer10 = System.currentTimeMillis();
-            keyToPositions.entrySet().parallelStream().forEach(entry -> {
-                int value = entry.getKey();
-                int index = entry.getValue();
-                int count = nrValues.getOrDefault(value, 0);
-                newPositions[index] = new int[count];
-//                keyToPositions.put(finalValue, index);
-                int prefixSum = 0;
-                for (IndexRange batch : batches) {
-                    AtomicInteger integer = new AtomicInteger(0);
-                    int finalPrefixSum = prefixSum;
-                    batch.valuesMap.computeIfPresent(value, (k, v) -> {
-                        integer.set(v);
-                        return finalPrefixSum;
-                    });
-                    int priorValue = integer.intValue();
-                    prefixSum += priorValue;
-                }
-            });
-//            long timer2 = System.currentTimeMillis();
-            batches.parallelStream().forEach(batch -> {
-                // Evaluate predicate for each table row
-                IntIntMap offsets = HashIntIntMaps.newMutableMap();
-                for (int rowCtr = batch.firstTuple; rowCtr <= batch.lastTuple; ++rowCtr) {
-                    if (!intData.isNull.get(rowCtr)) {
-                        int value = data[rowCtr];
-                        int prefixSum = batch.valuesMap.getOrDefault(value, 0);
-                        int offset = offsets.getOrDefault(value, 0);
-                        int pos = prefixSum + offset;
-                        int index = keyToPositions.getOrDefault(value, -1);
-                        newPositions[index][pos] = rowCtr;
-                        int startThread = pos % nrThreads;
-                        scopes[rowCtr] = startThread;
-                        offsets.put(value, offset + 1);
-                    }
-                }
-            });
-//            long timer3 = System.currentTimeMillis();
-//            System.out.println("Parallel: " + (timer1 - timer0) + "\t" + (timer10 - timer1) + "\t" + (timer2 - timer10) + "\t" + (timer3 - timer2));
+//        int MAX = Integer.MAX_VALUE;
+        if (policy == IndexPolicy.Key) {
+            keyIndex(index);
+        }
+        else if (cardinality <= MAX || policy == IndexPolicy.Sequential) {
+            sequentialIndex(colRef);
+        }
+        else if (policy == IndexPolicy.Sparse) {
+            parallelSparseIndex(colRef, index);
+        }
+        else {
+            parallelDenseIndex(colRef);
         }
 
         // Output statistics for performance tuning
         if (LoggingConfig.INDEXING_VERBOSE) {
             long totalMillis = System.currentTimeMillis() - startMillis;
-            log("Created index for integer column with cardinality " +
+            log(colRef + ": Created index for integer column with cardinality " +
                     cardinality + " in " + totalMillis + " ms.");
         }
         // Check index if enabled
-        IndexChecker.checkIndex(intData, this);
+        IndexChecker.checkIndex(intData, this, nrThreads);
     }
 
-//    @Override
-//    public int nextTuple(int value, int prevTuple) {
-//        // Get start position for indexed values
-//        int firstPos = keyToPositions.getOrDefault(value, -1);
-//        // No indexed values?
-//        if (firstPos < 0) {
-//            return cardinality;
-//        }
-//        firstPos = posList.get(firstPos);
-//        // Can we return first indexed value?
-//        int firstTuple = positions[firstPos+1];
-//        if (firstTuple>prevTuple) {
-//            return firstTuple;
-//        }
-//        // Get number of indexed values
-//        int nrVals = positions[firstPos];
-//        // Restrict search range via binary search
-//        int lowerBound = firstPos + 1;
-//        int upperBound = firstPos + nrVals;
-//        while (upperBound-lowerBound>1) {
-//            int middle = lowerBound + (upperBound-lowerBound)/2;
-//            if (positions[middle] > prevTuple) {
-//                upperBound = middle;
-//            } else {
-//                lowerBound = middle;
-//            }
-//        }
-//        // Get next tuple
-//        for (int pos=lowerBound; pos<=upperBound; ++pos) {
-//            if (positions[pos] > prevTuple) {
-//                return positions[pos];
-//            }
-//        }
-//        // No suitable tuple found
-//        return cardinality;
-//    }
-//
-//    /**
-//     * Returns index of next tuple with given value
-//     * or cardinality of indexed table if no such
-//     * tuple exists.
-//     *
-//     * @param value			indexed value
-//     * @param prevTuple		index of last tuple
-//     * @param tid			thread id
-//     * @return 	index of next tuple or cardinality
-//     */
-//    public int nextTupleInScope(int value, int prevTuple, int tid) {
-//        tid = (value + tid) % nrThreads;
-//        // Get start position for indexed values
-//        int firstPos = keyToPositions.getOrDefault(value, -1);
-//        // No indexed values?
-//        if (firstPos < 0) {
-//            return cardinality;
-//        }
-//        firstPos = posList.get(firstPos);
-//        // Can we return first indexed value?
-//        int nrVals = positions[firstPos];
-//        int firstOffset = tid + 1;
-//        if (firstOffset > nrVals) {
-//            return cardinality;
-//        }
-//        int firstTuple = positions[firstPos + firstOffset];
-//        if (firstTuple > prevTuple) {
-//            return firstTuple;
-//        }
-//        // Get number of indexed values
-//        int lastOffset = (nrVals - 1) / nrThreads * nrThreads + tid + 1;
-//        // if the offset is beyond the array?
-//        if (lastOffset > nrVals) {
-//            lastOffset -= nrThreads;
-//        }
-//        int threadVals = (lastOffset - firstOffset) / nrThreads + 1;
-//        // Update index-related statistics
-//        // Restrict search range via binary search
-//        int lowerBound = 0;
-//        int upperBound = threadVals - 1;
-//        while (upperBound - lowerBound > 1) {
-//            int middle = lowerBound + (upperBound - lowerBound) / 2;
-//            int middleOffset = firstPos + middle * nrThreads + tid + 1;
-//            if (positions[middleOffset] > prevTuple) {
-//                upperBound = middle;
-//            } else {
-//                lowerBound = middle;
-//            }
-//        }
-//        // Get next tuple
-//        for (int pos = lowerBound; pos <= upperBound; ++pos) {
-//            int offset = firstPos + pos * nrThreads + tid + 1;
-//            int nextTuple = positions[offset];
-//            if (nextTuple > prevTuple) {
-//                return nextTuple;
-//            }
-//        }
-//        // No suitable tuple found
-//        return cardinality;
-//    }
 
     @Override
     public int nextTuple(int value, int prevTuple) {
         // Get start position for indexed values
-        int index = keyToPositions.getOrDefault(value, -1);
+        int firstPos = keyToPositions.getOrDefault(value, -1);
         // No indexed values?
-        if (index < 0) {
+        if (firstPos < 0) {
             return cardinality;
         }
-        int[] rowList = newPositions[index];
         // Can we return first indexed value?
-        int firstTuple = rowList[0];
+        int firstTuple = positions[firstPos + 1];
         if (firstTuple > prevTuple) {
             return firstTuple;
         }
         // Get number of indexed values
-        int nrVals = rowList.length;
+        int nrVals = positions[firstPos];
         // Restrict search range via binary search
-        int lowerBound = 0;
-        int upperBound = nrVals - 1;
+        int lowerBound = firstPos + 1;
+        int upperBound = firstPos + nrVals;
         while (upperBound - lowerBound > 1) {
             int middle = lowerBound + (upperBound - lowerBound) / 2;
-            if (rowList[middle] > prevTuple) {
+            if (positions[middle] > prevTuple) {
                 upperBound = middle;
             } else {
                 lowerBound = middle;
@@ -409,9 +191,8 @@ public class ThreadIntIndex extends Index {
         }
         // Get next tuple
         for (int pos = lowerBound; pos <= upperBound; ++pos) {
-            int val = rowList[pos];
-            if (val > prevTuple) {
-                return val;
+            if (positions[pos] > prevTuple) {
+                return positions[pos];
             }
         }
         // No suitable tuple found
@@ -431,26 +212,25 @@ public class ThreadIntIndex extends Index {
     public int nextTupleInScope(int value, int prevTuple, int tid) {
         tid = (value + tid) % nrThreads;
         // Get start position for indexed values
-        int index = keyToPositions.getOrDefault(value, -1);
+        int firstPos = keyToPositions.getOrDefault(value, -1);
         // No indexed values?
-        if (index < 0) {
+        if (firstPos < 0) {
             return cardinality;
         }
-        int[] rowList = newPositions[index];
         // Can we return first indexed value?
-        int nrVals = rowList.length;
-        int firstOffset = tid;
-        if (firstOffset >= nrVals) {
+        int nrVals = positions[firstPos];
+        int firstOffset = tid + 1;
+        if (firstOffset > nrVals) {
             return cardinality;
         }
-        int firstTuple = rowList[firstOffset];
+        int firstTuple = positions[firstPos + firstOffset];
         if (firstTuple > prevTuple) {
             return firstTuple;
         }
         // Get number of indexed values
-        int lastOffset = (nrVals - 1) / nrThreads * nrThreads + tid;
+        int lastOffset = (nrVals - 1) / nrThreads * nrThreads + tid + 1;
         // if the offset is beyond the array?
-        if (lastOffset >= nrVals) {
+        if (lastOffset > nrVals) {
             lastOffset -= nrThreads;
         }
         int threadVals = (lastOffset - firstOffset) / nrThreads + 1;
@@ -460,8 +240,8 @@ public class ThreadIntIndex extends Index {
         int upperBound = threadVals - 1;
         while (upperBound - lowerBound > 1) {
             int middle = lowerBound + (upperBound - lowerBound) / 2;
-            int middleOffset = middle * nrThreads + tid;
-            if (rowList[middleOffset] > prevTuple) {
+            int middleOffset = firstPos + middle * nrThreads + tid + 1;
+            if (positions[middleOffset] > prevTuple) {
                 upperBound = middle;
             } else {
                 lowerBound = middle;
@@ -469,8 +249,8 @@ public class ThreadIntIndex extends Index {
         }
         // Get next tuple
         for (int pos = lowerBound; pos <= upperBound; ++pos) {
-            int offset = pos * nrThreads + tid;
-            int nextTuple = rowList[offset];
+            int offset = firstPos + pos * nrThreads + tid + 1;
+            int nextTuple = positions[offset];
             if (nextTuple > prevTuple) {
                 return nextTuple;
             }
@@ -478,6 +258,105 @@ public class ThreadIntIndex extends Index {
         // No suitable tuple found
         return cardinality;
     }
+
+//    @Override
+//    public int nextTuple(int value, int prevTuple) {
+//        // Get start position for indexed values
+//        int index = keyToPositions.getOrDefault(value, -1);
+//        // No indexed values?
+//        if (index < 0) {
+//            return cardinality;
+//        }
+//        int[] rowList = newPositions[index];
+//        // Can we return first indexed value?
+//        int firstTuple = rowList[0];
+//        if (firstTuple > prevTuple) {
+//            return firstTuple;
+//        }
+//        // Get number of indexed values
+//        int nrVals = rowList.length;
+//        // Restrict search range via binary search
+//        int lowerBound = 0;
+//        int upperBound = nrVals - 1;
+//        while (upperBound - lowerBound > 1) {
+//            int middle = lowerBound + (upperBound - lowerBound) / 2;
+//            if (rowList[middle] > prevTuple) {
+//                upperBound = middle;
+//            } else {
+//                lowerBound = middle;
+//            }
+//        }
+//        // Get next tuple
+//        for (int pos = lowerBound; pos <= upperBound; ++pos) {
+//            int val = rowList[pos];
+//            if (val > prevTuple) {
+//                return val;
+//            }
+//        }
+//        // No suitable tuple found
+//        return cardinality;
+//    }
+//
+//    /**
+//     * Returns index of next tuple with given value
+//     * or cardinality of indexed table if no such
+//     * tuple exists.
+//     *
+//     * @param value     indexed value
+//     * @param prevTuple index of last tuple
+//     * @param tid       thread id
+//     * @return index of next tuple or cardinality
+//     */
+//    public int nextTupleInScope(int value, int prevTuple, int tid) {
+//        tid = (value + tid) % nrThreads;
+//        // Get start position for indexed values
+//        int index = keyToPositions.getOrDefault(value, -1);
+//        // No indexed values?
+//        if (index < 0) {
+//            return cardinality;
+//        }
+//        int[] rowList = newPositions[index];
+//        // Can we return first indexed value?
+//        int nrVals = rowList.length;
+//        int firstOffset = tid;
+//        if (firstOffset >= nrVals) {
+//            return cardinality;
+//        }
+//        int firstTuple = rowList[firstOffset];
+//        if (firstTuple > prevTuple) {
+//            return firstTuple;
+//        }
+//        // Get number of indexed values
+//        int lastOffset = (nrVals - 1) / nrThreads * nrThreads + tid;
+//        // if the offset is beyond the array?
+//        if (lastOffset >= nrVals) {
+//            lastOffset -= nrThreads;
+//        }
+//        int threadVals = (lastOffset - firstOffset) / nrThreads + 1;
+//        // Update index-related statistics
+//        // Restrict search range via binary search
+//        int lowerBound = 0;
+//        int upperBound = threadVals - 1;
+//        while (upperBound - lowerBound > 1) {
+//            int middle = lowerBound + (upperBound - lowerBound) / 2;
+//            int middleOffset = middle * nrThreads + tid;
+//            if (rowList[middleOffset] > prevTuple) {
+//                upperBound = middle;
+//            } else {
+//                lowerBound = middle;
+//            }
+//        }
+//        // Get next tuple
+//        for (int pos = lowerBound; pos <= upperBound; ++pos) {
+//            int offset = pos * nrThreads + tid;
+//            int nextTuple = rowList[offset];
+//            if (nextTuple > prevTuple) {
+//                return nextTuple;
+//            }
+//        }
+//        // No suitable tuple found
+//        return cardinality;
+//    }
 
     @Override
     public boolean evaluate(int priorVal, int curIndex, int splitTable, int nextTable, int tid) {
@@ -529,7 +408,7 @@ public class ThreadIntIndex extends Index {
      */
     public List<IndexRange> split() {
         List<IndexRange> batches = new ArrayList<>();
-        int batchSize = Math.max(ParallelConfig.PRE_BATCH_SIZE, cardinality / 100);
+        int batchSize = Math.max(ParallelConfig.PRE_INDEX_SIZE, cardinality / 100);
         for (int batchCtr = 0; batchCtr * batchSize < cardinality;
              ++batchCtr) {
             int startIdx = batchCtr * batchSize;
@@ -540,4 +419,225 @@ public class ThreadIntIndex extends Index {
         }
         return batches;
     }
+
+    public void sequentialIndex(ColumnRef colRef) {
+        int[] data = intData.data;
+        // Count number of occurrences for each value
+        IntIntMap keyToNr = HashIntIntMaps.newMutableMap(this.cardinality);
+        for (int i = 0; i < cardinality; ++i) {
+            // Don't index null values
+            if (!intData.isNull.get(i)) {
+                int value = data[i];
+                int nr = keyToNr.getOrDefault(value, 0);
+                keyToNr.put(value, nr + 1);
+            }
+        }
+        // Assign each key to the appropriate position offset
+        int nrKeys = keyToNr.size();
+        keyToPositions = HashIntIntMaps.newMutableMap(nrKeys);
+        log(colRef + ": Number of keys:\t" + nrKeys);
+        int prefixSum = 0;
+        IntIntCursor keyToNrCursor = keyToNr.cursor();
+        while (keyToNrCursor.moveNext()) {
+            int key = keyToNrCursor.key();
+            keyToPositions.put(key, prefixSum);
+            // Advance offset taking into account
+            // space for row indices and one field
+            // storing the number of following indices.
+            int nrFields = keyToNrCursor.value() + 1;
+            prefixSum += nrFields;
+        }
+        log(colRef + "Prefix sum:\t" + prefixSum);
+        // Generate position information
+        positions = new int[prefixSum];
+        for (int i = 0; i < cardinality; ++i) {
+            if (!intData.isNull.get(i)) {
+                int key = data[i];
+                int startPos = keyToPositions.get(key);
+                positions[startPos] += 1;
+                int offset = positions[startPos];
+                int pos = startPos + offset;
+                positions[pos] = i;
+                scopes[i] = (offset - 1) % nrThreads;
+            }
+        }
+    }
+    private void parallelDenseIndex(ColumnRef colRef) {
+        int[] data = intData.data;
+        // Divide tuples into batches
+        List<IndexRange> batches = this.split();
+        IntIntMap keyToNr = HashIntIntMaps.newMutableMap(this.cardinality);
+        batches.parallelStream().forEach(batch -> {
+            // Evaluate predicate for each table row
+            for (int rowCtr = batch.firstTuple; rowCtr <= batch.lastTuple; ++rowCtr) {
+                if (!intData.isNull.get(rowCtr)) {
+                    int value = data[rowCtr];
+                    batch.add(value);
+                }
+            }
+        });
+        for (IndexRange batch : batches) {
+            IntIntCursor keyToNrCursor = batch.valuesMap.cursor();
+            while (keyToNrCursor.moveNext()) {
+                int key = keyToNrCursor.key();
+                int value = keyToNrCursor.value();
+                keyToNr.computeIfPresent(key, (k, v) -> v + value);
+                keyToNr.putIfAbsent(key, value);
+            }
+        }
+
+        int nrKeys = keyToNr.size();
+        keyToPositions = HashIntIntMaps.newMutableMap(nrKeys);
+        IntIntCursor keyToNrCursor = keyToNr.cursor();
+        int prefixSum = 0;
+        int len = cardinality + nrKeys;
+        positions = new int[len];
+        while (keyToNrCursor.moveNext()) {
+            int key = keyToNrCursor.key();
+            int nr = keyToNrCursor.value();
+            keyToPositions.put(key, prefixSum);
+            positions[prefixSum] = nr;
+            // Advance offset taking into account
+            // space for row indices and one field
+            // storing the number of following indices.
+            int nrFields = nr + 1;
+            prefixSum += nrFields;
+        }
+        int nrBatches = batches.size();
+        IntStream.range(0, nrBatches).parallel().forEach(bid -> {
+            IndexRange batch = batches.get(bid);
+            IntIntCursor batchCursor = batch.valuesMap.cursor();
+            batch.prefixMap = HashIntIntMaps.newMutableMap(batch.valuesMap.size());
+            while (batchCursor.moveNext()) {
+                int key = batchCursor.key();
+                int prefix = 1;
+                int startPos = keyToPositions.getOrDefault(key, 0);
+                for (int i = 0; i < bid; i++) {
+                    prefix += batches.get(i).valuesMap.getOrDefault(key, 0);
+                }
+                batch.prefixMap.put(key, prefix + startPos);
+            }
+            // Evaluate predicate for each table row
+            for (int rowCtr = batch.firstTuple; rowCtr <= batch.lastTuple; ++rowCtr) {
+                if (!intData.isNull.get(rowCtr)) {
+                    int value = data[rowCtr];
+                    int firstPos = keyToPositions.getOrDefault(value, 0);
+                    int pos = batch.prefixMap.computeIfPresent(value, (k, v) -> v + 1) - 1;
+                    positions[pos] = rowCtr;
+                    int startThread = (pos - firstPos - 1) % nrThreads;
+                    scopes[rowCtr] = startThread;
+                }
+            }
+        });
+    }
+
+    private void keyIndex(ThreadIntIndex intIndex) {
+        int[] data = intData.data;
+//        keyToPositions = HashIntIntMaps.newMutableMap(this.cardinality);
+        // Count number of occurrences for each value
+        int MAX = ParallelConfig.PRE_BATCH_SIZE;
+        if (!ParallelConfig.PARALLEL_PRE || cardinality <= MAX) {
+            keyToPositions = HashIntIntMaps.newMutableMap(this.cardinality);
+            positions = new int[2 * cardinality];
+            for (int i = 0; i < cardinality; ++i) {
+                if (!intData.isNull.get(i)) {
+                    int key = data[i];
+                    int newPos = i * 2;
+                    keyToPositions.put(key, newPos);
+                    positions[newPos] = 1;
+                    int pos = newPos + 1;
+                    positions[pos] = i;
+                    scopes[i] = 0;
+                }
+            }
+        } else {
+            keyToPositions = intIndex.keyToPositions;
+            positions = new int[intIndex.positions.length];
+            List<IndexRange> batches = this.split();
+            batches.parallelStream().forEach(batch -> {
+                // Evaluate predicate for each table row
+                for (int rowCtr = batch.firstTuple; rowCtr <= batch.lastTuple; ++rowCtr) {
+                    if (!intData.isNull.get(rowCtr)) {
+                        int key = data[rowCtr];
+                        int newPos = keyToPositions.getOrDefault(key, 0);
+                        positions[newPos] = 1;
+                        int pos = newPos + 1;
+                        positions[pos] = rowCtr;
+                        scopes[rowCtr] = 0;
+                    }
+                }
+            });
+        }
+    }
+
+    private void parallelSparseIndex(ColumnRef colRef, ThreadIntIndex index) {
+        long timer0 = System.currentTimeMillis();
+        int[] data = intData.data;
+        keyToPositions = index.keyToPositions;
+        // Count number of occurrences for each value
+        positions = new int[index.positions.length];
+        List<IndexRange> batches = this.split();
+        batches.parallelStream().forEach(batch -> {
+            // Evaluate predicate for each table row
+            for (int rowCtr = batch.firstTuple; rowCtr <= batch.lastTuple; ++rowCtr) {
+                if (!intData.isNull.get(rowCtr)) {
+                    int value = data[rowCtr];
+                    batch.add(value);
+                }
+            }
+        });
+
+        int nrBatches = batches.size();
+        long timer1 = System.currentTimeMillis();
+        IntStream.range(0, nrBatches).parallel().forEach(bid -> {
+            IndexRange batch = batches.get(bid);
+            IntIntCursor batchCursor = batch.valuesMap.cursor();
+            batch.prefixMap = HashIntIntMaps.newMutableMap(batch.valuesMap.size());
+            while (batchCursor.moveNext()) {
+                int key = batchCursor.key();
+                int prefix = 1;
+                int localNr = batchCursor.value();
+                int startPos = keyToPositions.getOrDefault(key, -1);
+
+                for (int i = 0; i < bid; i++) {
+                    prefix += batches.get(i).valuesMap.getOrDefault(key, 0);
+                }
+                int nrValue = positions[startPos];
+                if (nrValue == 0) {
+                    int nr = prefix - 1 + localNr;
+                    for (int i = bid + 1; i < nrBatches; i++) {
+                        nr += batches.get(i).valuesMap.getOrDefault(key, 0);
+                    }
+                    positions[startPos] = nr;
+                    nrValue = nr;
+                }
+                if (nrValue > 1) {
+                    batch.prefixMap.put(key, prefix + startPos);
+                }
+            }
+            // Evaluate predicate for each table row
+            for (int rowCtr = batch.firstTuple; rowCtr <= batch.lastTuple; ++rowCtr) {
+                if (!intData.isNull.get(rowCtr)) {
+                    int value = data[rowCtr];
+                    int firstPos = keyToPositions.getOrDefault(value, -1);
+                    int nr = positions[firstPos];
+                    if (nr == 1) {
+                        positions[firstPos + 1] = rowCtr;
+                        scopes[rowCtr] = 0;
+                    }
+                    else {
+                        int pos = batch.prefixMap.computeIfPresent(value, (k, v) -> v + 1) - 1;
+                        positions[pos] = rowCtr;
+                        int startThread = (pos - firstPos - 1) % nrThreads;
+                        scopes[rowCtr] = startThread;
+                    }
+                }
+            }
+        });
+        long timer2 = System.currentTimeMillis();
+        //            long timer3 = System.currentTimeMillis();
+        System.out.println(colRef + " Sparse Parallel: " + (timer1 - timer0) + "\t"
+                + (timer2 - timer1));
+    }
+
 }

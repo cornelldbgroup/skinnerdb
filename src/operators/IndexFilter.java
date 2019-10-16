@@ -65,7 +65,7 @@ public class IndexFilter extends PlainVisitor {
 		// Intersect sorted row index lists
 		List<Integer> rows1 = qualifyingRows.pop();
 		List<Integer> rows2 = qualifyingRows.pop();
-		List<Integer> intersectedRows = new ArrayList<Integer>();
+		List<Integer> intersectedRows = new ArrayList<>();
 		qualifyingRows.push(intersectedRows);
 		if (!rows1.isEmpty() && !rows2.isEmpty()) {
 			Iterator<Integer> row1iter = rows1.iterator();
@@ -101,7 +101,7 @@ public class IndexFilter extends PlainVisitor {
 			qualifyingRows.push(rows1);
 		} else {
 			// Both input lists are non-empty
-			List<Integer> mergedRows = new ArrayList<Integer>();
+			List<Integer> mergedRows = new ArrayList<>();
 			qualifyingRows.push(mergedRows);
 			Iterator<Integer> row1iter = rows1.iterator();
 			Iterator<Integer> row2iter = rows2.iterator();
@@ -138,157 +138,157 @@ public class IndexFilter extends PlainVisitor {
 		int constant = extractedConstants.pop();
 		Index index = applicableIndices.pop();
 		// Collect indices of satisfying rows via index
-		List<Integer> rows = new ArrayList<Integer>();
-		qualifyingRows.push(rows);
-		ThreadIntIndex intIndex = (ThreadIntIndex)index;
-		int startPos = intIndex.keyToPositions.getOrDefault(constant, -1);
-		if (startPos >= 0) {
-			int[] array = intIndex.newPositions[startPos];
-			for (int element: array) {
-				rows.add(element);
-			}
-//			rows.addAll(intIndex.newPositions.get(startPos));
-//			startPos = intIndex.posList.get(startPos);
-//			int nrEntries = intIndex.positions[startPos];
-//			for (int i=0; i<nrEntries; ++i) {
-//				int pos = startPos + 1 + i;
-//				int rowIdx = intIndex.positions[pos];
-//				rows.add(rowIdx);
-//			}
-		}
-	}
-	@Override
-	public void visit(NotEqualsTo notEqualsTo) {
-		notEqualsTo.getLeftExpression().accept(this);
-		notEqualsTo.getRightExpression().accept(this);
-		// We assume predicate passed the index test so
-		// there must be one index and one constant.
-		int constant = extractedConstants.pop();
-		Index index = applicableIndices.pop();
-		// Collect indices of satisfying rows via index
 		List<Integer> rows = new ArrayList<>();
 		qualifyingRows.push(rows);
 		ThreadIntIndex intIndex = (ThreadIntIndex)index;
 		int startPos = intIndex.keyToPositions.getOrDefault(constant, -1);
-		int start = 0;
 		if (startPos >= 0) {
+//			int[] array = intIndex.newPositions[startPos];
+//			for (int element: array) {
+//				rows.add(element);
+//			}
+//			rows.addAll(intIndex.newPositions.get(startPos));
 //			startPos = intIndex.posList.get(startPos);
 			int nrEntries = intIndex.positions[startPos];
-			for (int i = 0; i < nrEntries; ++i) {
+			for (int i=0; i<nrEntries; ++i) {
 				int pos = startPos + 1 + i;
 				int rowIdx = intIndex.positions[pos];
-				rows.addAll(IntStream.range(start, rowIdx).boxed()
-						.collect(Collectors.toList()));
-				start = rowIdx + 1;
+				rows.add(rowIdx);
 			}
 		}
 	}
+//	@Override
+//	public void visit(NotEqualsTo notEqualsTo) {
+//		notEqualsTo.getLeftExpression().accept(this);
+//		notEqualsTo.getRightExpression().accept(this);
+//		// We assume predicate passed the index test so
+//		// there must be one index and one constant.
+//		int constant = extractedConstants.pop();
+//		Index index = applicableIndices.pop();
+//		// Collect indices of satisfying rows via index
+//		List<Integer> rows = new ArrayList<>();
+//		qualifyingRows.push(rows);
+//		ThreadIntIndex intIndex = (ThreadIntIndex)index;
+//		int startPos = intIndex.keyToPositions.getOrDefault(constant, -1);
+//		int start = 0;
+//		if (startPos >= 0) {
+////			startPos = intIndex.posList.get(startPos);
+//			int nrEntries = intIndex.positions[startPos];
+//			for (int i = 0; i < nrEntries; ++i) {
+//				int pos = startPos + 1 + i;
+//				int rowIdx = intIndex.positions[pos];
+//				rows.addAll(IntStream.range(start, rowIdx).boxed()
+//						.collect(Collectors.toList()));
+//				start = rowIdx + 1;
+//			}
+//		}
+//	}
 
-	@Override
-	public void visit(GreaterThanEquals greaterThanEquals) {
-		greaterThanEquals.getLeftExpression().accept(this);
-		greaterThanEquals.getRightExpression().accept(this);
-		// We assume predicate passed the index test so
-		// there must be one index and one constant.
-		int constant = extractedConstants.pop();
-		ThreadIntIndex intIndex = (ThreadIntIndex)applicableIndices.pop();
-		// Collect indices of satisfying rows via index
-		Set<Integer> values = intIndex.distinctValues.parallelStream().filter(value -> value >= constant).collect(Collectors.toSet());
-		int cardinality = intIndex.cardinality;
-		// Initialize filter result
-		List<Integer> rows;
-		if (cardinality <= ParallelConfig.PRE_BATCH_SIZE) {
-			RowRange allTuples = new RowRange(0, cardinality - 1);
-			rows = filterBatch(intIndex, allTuples, values);
-		} else {
-			// Divide tuples into batches
-			List<RowRange> batches = split(cardinality);
-			// Process batches in parallel
-			rows = batches.parallelStream().flatMap(batch ->
-					filterBatch(intIndex, batch, values).stream()).collect(
-					Collectors.toList());
-		}
-		qualifyingRows.push(rows);
-	}
-
-	@Override
-	public void visit(GreaterThan greaterThan) {
-		greaterThan.getLeftExpression().accept(this);
-		greaterThan.getRightExpression().accept(this);
-		// We assume predicate passed the index test so
-		// there must be one index and one constant.
-		int constant = extractedConstants.pop();
-		ThreadIntIndex intIndex = (ThreadIntIndex)applicableIndices.pop();
-		// Collect indices of satisfying rows via index
-		Set<Integer> values = intIndex.distinctValues.parallelStream().filter(value -> value > constant).collect(Collectors.toSet());
-		int cardinality = intIndex.cardinality;
-		// Initialize filter result
-		List<Integer> rows;
-		if (cardinality <= ParallelConfig.PRE_BATCH_SIZE) {
-			RowRange allTuples = new RowRange(0, cardinality - 1);
-			rows = filterBatch(intIndex, allTuples, values);
-		} else {
-			// Divide tuples into batches
-			List<RowRange> batches = split(cardinality);
-			// Process batches in parallel
-			rows = batches.parallelStream().flatMap(batch ->
-					filterBatch(intIndex, batch, values).stream()).collect(
-					Collectors.toList());
-		}
-		qualifyingRows.push(rows);
-	}
-	@Override
-	public void visit(MinorThanEquals minorThanEquals) {
-		minorThanEquals.getLeftExpression().accept(this);
-		minorThanEquals.getRightExpression().accept(this);
-		// We assume predicate passed the index test so
-		// there must be one index and one constant.
-		int constant = extractedConstants.pop();
-		ThreadIntIndex intIndex = (ThreadIntIndex)applicableIndices.pop();
-		// Collect indices of satisfying rows via index
-		Set<Integer> values = intIndex.distinctValues.parallelStream().filter(value -> value <= constant).collect(Collectors.toSet());
-		int cardinality = intIndex.cardinality;
-		// Initialize filter result
-		List<Integer> rows;
-		if (cardinality <= ParallelConfig.PRE_BATCH_SIZE) {
-			RowRange allTuples = new RowRange(0, cardinality - 1);
-			rows = filterBatch(intIndex, allTuples, values);
-		} else {
-			// Divide tuples into batches
-			List<RowRange> batches = split(cardinality);
-			// Process batches in parallel
-			rows = batches.parallelStream().flatMap(batch ->
-					filterBatch(intIndex, batch, values).stream()).collect(
-					Collectors.toList());
-		}
-		qualifyingRows.push(rows);
-	}
-	@Override
-	public void visit(MinorThan minorThan) {
-		minorThan.getLeftExpression().accept(this);
-		minorThan.getRightExpression().accept(this);
-		// We assume predicate passed the index test so
-		// there must be one index and one constant.
-		int constant = extractedConstants.pop();
-		ThreadIntIndex intIndex = (ThreadIntIndex)applicableIndices.pop();
-		// Collect indices of satisfying rows via index
-		Set<Integer> values = intIndex.distinctValues.parallelStream().filter(value -> value < constant).collect(Collectors.toSet());
-		int cardinality = intIndex.cardinality;
-		// Initialize filter result
-		List<Integer> rows;
-		if (cardinality <= ParallelConfig.PRE_BATCH_SIZE) {
-			RowRange allTuples = new RowRange(0, cardinality - 1);
-			rows = filterBatch(intIndex, allTuples, values);
-		} else {
-			// Divide tuples into batches
-			List<RowRange> batches = split(cardinality);
-			// Process batches in parallel
-			rows = batches.parallelStream().flatMap(batch ->
-					filterBatch(intIndex, batch, values).stream()).collect(
-					Collectors.toList());
-		}
-		qualifyingRows.push(rows);
-	}
+//	@Override
+//	public void visit(GreaterThanEquals greaterThanEquals) {
+//		greaterThanEquals.getLeftExpression().accept(this);
+//		greaterThanEquals.getRightExpression().accept(this);
+//		// We assume predicate passed the index test so
+//		// there must be one index and one constant.
+//		int constant = extractedConstants.pop();
+//		ThreadIntIndex intIndex = (ThreadIntIndex)applicableIndices.pop();
+//		// Collect indices of satisfying rows via index
+//		Set<Integer> values = intIndex.distinctValues.parallelStream().filter(value -> value >= constant).collect(Collectors.toSet());
+//		int cardinality = intIndex.cardinality;
+//		// Initialize filter result
+//		List<Integer> rows;
+//		if (cardinality <= ParallelConfig.PRE_BATCH_SIZE) {
+//			RowRange allTuples = new RowRange(0, cardinality - 1);
+//			rows = filterBatch(intIndex, allTuples, values);
+//		} else {
+//			// Divide tuples into batches
+//			List<RowRange> batches = split(cardinality);
+//			// Process batches in parallel
+//			rows = batches.parallelStream().flatMap(batch ->
+//					filterBatch(intIndex, batch, values).stream()).collect(
+//					Collectors.toList());
+//		}
+//		qualifyingRows.push(rows);
+//	}
+//
+//	@Override
+//	public void visit(GreaterThan greaterThan) {
+//		greaterThan.getLeftExpression().accept(this);
+//		greaterThan.getRightExpression().accept(this);
+//		// We assume predicate passed the index test so
+//		// there must be one index and one constant.
+//		int constant = extractedConstants.pop();
+//		ThreadIntIndex intIndex = (ThreadIntIndex)applicableIndices.pop();
+//		// Collect indices of satisfying rows via index
+//		Set<Integer> values = intIndex.distinctValues.parallelStream().filter(value -> value > constant).collect(Collectors.toSet());
+//		int cardinality = intIndex.cardinality;
+//		// Initialize filter result
+//		List<Integer> rows;
+//		if (cardinality <= ParallelConfig.PRE_BATCH_SIZE) {
+//			RowRange allTuples = new RowRange(0, cardinality - 1);
+//			rows = filterBatch(intIndex, allTuples, values);
+//		} else {
+//			// Divide tuples into batches
+//			List<RowRange> batches = split(cardinality);
+//			// Process batches in parallel
+//			rows = batches.parallelStream().flatMap(batch ->
+//					filterBatch(intIndex, batch, values).stream()).collect(
+//					Collectors.toList());
+//		}
+//		qualifyingRows.push(rows);
+//	}
+//	@Override
+//	public void visit(MinorThanEquals minorThanEquals) {
+//		minorThanEquals.getLeftExpression().accept(this);
+//		minorThanEquals.getRightExpression().accept(this);
+//		// We assume predicate passed the index test so
+//		// there must be one index and one constant.
+//		int constant = extractedConstants.pop();
+//		ThreadIntIndex intIndex = (ThreadIntIndex)applicableIndices.pop();
+//		// Collect indices of satisfying rows via index
+//		Set<Integer> values = intIndex.distinctValues.parallelStream().filter(value -> value <= constant).collect(Collectors.toSet());
+//		int cardinality = intIndex.cardinality;
+//		// Initialize filter result
+//		List<Integer> rows;
+//		if (cardinality <= ParallelConfig.PRE_BATCH_SIZE) {
+//			RowRange allTuples = new RowRange(0, cardinality - 1);
+//			rows = filterBatch(intIndex, allTuples, values);
+//		} else {
+//			// Divide tuples into batches
+//			List<RowRange> batches = split(cardinality);
+//			// Process batches in parallel
+//			rows = batches.parallelStream().flatMap(batch ->
+//					filterBatch(intIndex, batch, values).stream()).collect(
+//					Collectors.toList());
+//		}
+//		qualifyingRows.push(rows);
+//	}
+//	@Override
+//	public void visit(MinorThan minorThan) {
+//		minorThan.getLeftExpression().accept(this);
+//		minorThan.getRightExpression().accept(this);
+//		// We assume predicate passed the index test so
+//		// there must be one index and one constant.
+//		int constant = extractedConstants.pop();
+//		ThreadIntIndex intIndex = (ThreadIntIndex)applicableIndices.pop();
+//		// Collect indices of satisfying rows via index
+//		Set<Integer> values = intIndex.distinctValues.parallelStream().filter(value -> value < constant).collect(Collectors.toSet());
+//		int cardinality = intIndex.cardinality;
+//		// Initialize filter result
+//		List<Integer> rows;
+//		if (cardinality <= ParallelConfig.PRE_BATCH_SIZE) {
+//			RowRange allTuples = new RowRange(0, cardinality - 1);
+//			rows = filterBatch(intIndex, allTuples, values);
+//		} else {
+//			// Divide tuples into batches
+//			List<RowRange> batches = split(cardinality);
+//			// Process batches in parallel
+//			rows = batches.parallelStream().flatMap(batch ->
+//					filterBatch(intIndex, batch, values).stream()).collect(
+//					Collectors.toList());
+//		}
+//		qualifyingRows.push(rows);
+//	}
 
 	/**
 	 * Splits table with given cardinality into tuple batches
