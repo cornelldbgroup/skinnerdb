@@ -4,6 +4,7 @@ import java.util.*;
 import java.util.Map.Entry;
 import java.util.stream.Collectors;
 
+import buffer.BufferManager;
 import catalog.CatalogManager;
 import catalog.info.ColumnInfo;
 import catalog.info.TableInfo;
@@ -659,6 +660,15 @@ public class QueryInfo {
 		log("Alias to expression: " + aliasToExpression);
 		// Extract predicates in WHERE clause
 		extractPredicates();
+		unaryPredicates.forEach(predicate -> {
+			String pstr = predicate.toString();
+			int pid = BufferManager.predicateToID.getOrDefault(pstr, -1);
+			if (pid < 0) {
+				pid = BufferManager.predicateToID.size();
+				BufferManager.predicateToID.put(pstr, pid);
+			}
+			predicate.pid = pid;
+		});
 		log("Unary predicates: " + unaryPredicates);
 		log("Equi join cols: " + equiJoinCols);
 		log("Equi join preds: " + equiJoinPreds);

@@ -14,6 +14,8 @@ import com.koloboke.collect.set.hash.HashIntSet;
 import com.koloboke.collect.set.hash.HashIntSets;
 import config.ParallelConfig;
 import joining.result.ResultTuple;
+import operators.Filter;
+import operators.RowRange;
 
 /**
  * Represents content of integer column.
@@ -72,9 +74,22 @@ public class IntData extends ColumnData implements Serializable {
 
     @Override
     public ColumnData copyRows(List<Integer> rowsToCopy) {
-        IntData copyColumn = new IntData(rowsToCopy.size());
-//		int copiedRowCtr = 0;
-//		if (rowsToCopy.size() <= ParallelConfig.PRE_BATCH_SIZE) {
+        int cardinality = rowsToCopy.size();
+        IntData copyColumn = new IntData(cardinality);
+        int copiedRowCtr = 0;
+        for (int row : rowsToCopy) {
+            // Treat special case: insertion of null values
+            if (row==-1) {
+                copyColumn.data[copiedRowCtr] = 0;
+                copyColumn.isNull.set(copiedRowCtr);
+            } else {
+                copyColumn.data[copiedRowCtr] = data[row];
+                copyColumn.isNull.set(copiedRowCtr, isNull.get(row));
+            }
+            ++copiedRowCtr;
+        }
+//		if (cardinality <= ParallelConfig.PRE_BATCH_SIZE) {
+//            int copiedRowCtr = 0;
 //			for (int row : rowsToCopy) {
 //				// Treat special case: insertion of null values
 //				if (row==-1) {
@@ -88,40 +103,23 @@ public class IntData extends ColumnData implements Serializable {
 //			}
 //		}
 //		else {
-//			Arrays.parallelSetAll(copyColumn.data, e-> {
-//				int row = rowsToCopy.get(e);
-//				if (row==-1) {
-//					copyColumn.isNull.set(e);
-//					return 0;
-//				} else {
-//					copyColumn.isNull.set(e, isNull.get(row));
-//					return data[row];
-//				}
-//			});
+//            List<RowRange> batches = Filter.split(cardinality);
+//            batches.parallelStream().map(batch -> {
+//                BitSet isNull = new BitSet(cardinality);
+//                // Evaluate predicate for each table row
+//                for (int rowCtr = batch.firstTuple; rowCtr <= batch.lastTuple; ++rowCtr) {
+//                    int row = rowsToCopy.get(rowCtr);
+//                    if (row==-1) {
+//                        isNull.set(rowCtr);
+//                        copyColumn.data[rowCtr] = 0;
+//                    } else {
+//                        isNull.set(rowCtr, isNull.get(row));
+//                        copyColumn.data[rowCtr] = data[row];
+//                    }
+//                }
+//                return isNull;
+//            }).forEach(copyColumn.isNull::or);
 //		}
-        int copiedRowCtr = 0;
-        for (int row : rowsToCopy) {
-            // Treat special case: insertion of null values
-            if (row == -1) {
-                copyColumn.data[copiedRowCtr] = 0;
-                copyColumn.isNull.set(copiedRowCtr);
-            } else {
-                copyColumn.data[copiedRowCtr] = data[row];
-                copyColumn.isNull.set(copiedRowCtr, isNull.get(row));
-            }
-            ++copiedRowCtr;
-        }
-
-//		Arrays.parallelSetAll(copyColumn.data, e-> {
-//			int row = rowsToCopy.get(e);
-//			if (row==-1) {
-//				copyColumn.isNull.set(e);
-//				return 0;
-//			} else {
-//				copyColumn.isNull.set(e, isNull.get(row));
-//				return data[row];
-//			}
-//		});
         return copyColumn;
     }
 

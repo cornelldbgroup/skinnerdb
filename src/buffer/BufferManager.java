@@ -1,6 +1,7 @@
 package buffer;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -18,7 +19,6 @@ import data.StringData;
 import diskio.DiskUtil;
 import diskio.PathUtil;
 import indexing.Index;
-import indexing.ThreadIntIndex;
 import query.ColumnRef;
 import types.JavaType;
 import types.TypeUtil;
@@ -46,9 +46,20 @@ public class BufferManager {
 	 */
 	public final static Map<ColumnRef, Index> colToIndex =
 			new ConcurrentHashMap<>();
-
-	public final static Map<String, List<ThreadIntIndex>> indexCache =
+	/**
+	 * Maps predicate string to associated id.
+	 */
+	public final static Map<String, Integer> predicateToID =
+			new HashMap<>();
+	/**
+	 * Filtering cache used in pre-processing.
+	 */
+	public final static Map<Integer, List<Integer>> indexCache =
 			new ConcurrentHashMap<>();
+	/**
+	 * Previous query.
+	 */
+	public static String prevQuery;
 	/**
 	 * Loads dictionary from hard disk.
 	 */
@@ -204,8 +215,23 @@ public class BufferManager {
 			}
 		}
 	}
-	public static void unloadCache() {
-		indexCache.clear();
+
+	/**
+	 * Unload all cache rows of temporary tables (typically after
+	 * a group of query processing is finished).
+	 *
+	 * @param queryName		the name of query group.
+	 */
+	public static void unloadCache(String queryName) {
+		if (prevQuery == null) {
+			prevQuery = queryName;
+		}
+		if (!queryName.equals(prevQuery)) {
+			prevQuery = queryName;
+			indexCache.clear();
+			predicateToID.clear();
+			System.out.println("Clear the cache!");
+		}
 	}
 	/**
 	 * Log given text if buffer logging activated.

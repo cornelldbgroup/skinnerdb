@@ -13,4 +13,8 @@ public class PreConfig {
 	 * during pre-processing step.
 	 */
 	public static final boolean PRE_FILTER = true;
+	/**
+	 * Whether to write filtered rows in the cache.
+	 */
+	public static boolean IN_CACHE = true;
 }

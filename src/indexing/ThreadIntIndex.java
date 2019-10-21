@@ -46,86 +46,21 @@ public class ThreadIntIndex extends Index {
      * Data is distributed to different scopes of threads.
      */
     public int[] scopes;
-
+    /**
+     * The associated column reference mentioned in the query.
+     */
     public final ColumnRef queryRef;
 
     /**
      * Create index on the given integer column.
      *
-     * @param intData integer data to index
+     * @param intData       integer data to index.
+     * @param nrThreads     the number of threads.
+     * @param colRef        column reference.
+     * @param queryRef      column reference mentioned in the query.
+     * @param index         original index associated with the column.
+     * @param policy        parallel policy.
      */
-//    public ThreadIntIndex(IntData intData, int nrThreads) {
-//        long startMillis = System.currentTimeMillis();
-//        // Extract info
-//        this.nrThreads = nrThreads;
-//        this.intData = intData;
-//        this.cardinality = intData.cardinality;
-//        this.scopes = new int[this.cardinality];
-//        this.posList = new ArrayList<>();
-//        this.distinctValues = new HashSet<>();
-//        int[] data = intData.data;
-//        // Count number of occurrences for each value
-//        keyToPositions = HashIntIntMaps.newMutableMap();
-//        List<Integer> threadList = new ArrayList<>();
-////        long timer0 = System.currentTimeMillis();
-//        for (int i=0; i<cardinality; ++i) {
-//            // Don't index null values
-//            if (!intData.isNull.get(i)) {
-//                int value = data[i];
-//                int pos = keyToPositions.getOrDefault(value, -1);
-//                if (pos < 0) {
-//                    distinctValues.add(value);
-//                    pos = posList.size();
-//                    keyToPositions.put(value, pos);
-//                    posList.add(1);
-//                    threadList.add(0);
-//                }
-//                else
-//                    posList.set(pos, posList.get(pos) + 1);
-//            }
-//        }
-////        long timer1 = System.currentTimeMillis();
-//        // Assign each key to the appropriate position offset
-//        int nrKeys = posList.size();
-//        log("Number of keys:\t" + nrKeys);
-//        int prefixSum = 0;
-//        for (int i = 0; i < posList.size(); i++) {
-//            int val = posList.get(i);
-//            posList.set(i, prefixSum);
-//            int nrFields = val + 1;
-//            prefixSum += nrFields;
-//        }
-//
-////        long timer2 = System.currentTimeMillis();
-//        log("Prefix sum:\t" + prefixSum);
-//        // Generate position information
-//        positions = new int[prefixSum];
-//        for (int i=0; i<cardinality; ++i) {
-//            if (!intData.isNull.get(i)) {
-//                int key = data[i];
-//                int pos = keyToPositions.get(key);
-//                int startPos = posList.get(pos);
-//                int startThread = threadList.get(pos);
-//                scopes[i] = startThread;
-//                threadList.set(pos, (startThread + 1) % nrThreads);
-//
-//                positions[startPos] += 1;
-//                int offset = positions[startPos];
-//                int newPos = startPos + offset;
-//                positions[newPos] = i;
-//            }
-//        }
-////        long timer3 = System.currentTimeMillis();
-////        System.out.println("Index: " + (timer1 - timer0) + " " + (timer2 - timer1) + " " + (timer3 - timer2));
-//        // Output statistics for performance tuning
-//        if (LoggingConfig.INDEXING_VERBOSE) {
-//            long totalMillis = System.currentTimeMillis() - startMillis;
-//            log("Created index for integer column with cardinality " +
-//                    cardinality + " in " + totalMillis + " ms.");
-//        }
-//        // Check index if enabled
-//        IndexChecker.checkIndex(intData, this);
-//    }
     public ThreadIntIndex(IntData intData, int nrThreads, ColumnRef colRef, ColumnRef queryRef, ThreadIntIndex index, IndexPolicy policy) {
         long startMillis = System.currentTimeMillis();
         // Extract info
@@ -137,8 +72,6 @@ public class ThreadIntIndex extends Index {
 
         // Count number of occurrences for each value
         int MAX = 10000;
-//        int MAX = ParallelConfig.PRE_BATCH_SIZE;
-//        int MAX = Integer.MAX_VALUE;
         if (policy == IndexPolicy.Key) {
             keyIndex(index);
         }
@@ -259,105 +192,6 @@ public class ThreadIntIndex extends Index {
         return cardinality;
     }
 
-//    @Override
-//    public int nextTuple(int value, int prevTuple) {
-//        // Get start position for indexed values
-//        int index = keyToPositions.getOrDefault(value, -1);
-//        // No indexed values?
-//        if (index < 0) {
-//            return cardinality;
-//        }
-//        int[] rowList = newPositions[index];
-//        // Can we return first indexed value?
-//        int firstTuple = rowList[0];
-//        if (firstTuple > prevTuple) {
-//            return firstTuple;
-//        }
-//        // Get number of indexed values
-//        int nrVals = rowList.length;
-//        // Restrict search range via binary search
-//        int lowerBound = 0;
-//        int upperBound = nrVals - 1;
-//        while (upperBound - lowerBound > 1) {
-//            int middle = lowerBound + (upperBound - lowerBound) / 2;
-//            if (rowList[middle] > prevTuple) {
-//                upperBound = middle;
-//            } else {
-//                lowerBound = middle;
-//            }
-//        }
-//        // Get next tuple
-//        for (int pos = lowerBound; pos <= upperBound; ++pos) {
-//            int val = rowList[pos];
-//            if (val > prevTuple) {
-//                return val;
-//            }
-//        }
-//        // No suitable tuple found
-//        return cardinality;
-//    }
-//
-//    /**
-//     * Returns index of next tuple with given value
-//     * or cardinality of indexed table if no such
-//     * tuple exists.
-//     *
-//     * @param value     indexed value
-//     * @param prevTuple index of last tuple
-//     * @param tid       thread id
-//     * @return index of next tuple or cardinality
-//     */
-//    public int nextTupleInScope(int value, int prevTuple, int tid) {
-//        tid = (value + tid) % nrThreads;
-//        // Get start position for indexed values
-//        int index = keyToPositions.getOrDefault(value, -1);
-//        // No indexed values?
-//        if (index < 0) {
-//            return cardinality;
-//        }
-//        int[] rowList = newPositions[index];
-//        // Can we return first indexed value?
-//        int nrVals = rowList.length;
-//        int firstOffset = tid;
-//        if (firstOffset >= nrVals) {
-//            return cardinality;
-//        }
-//        int firstTuple = rowList[firstOffset];
-//        if (firstTuple > prevTuple) {
-//            return firstTuple;
-//        }
-//        // Get number of indexed values
-//        int lastOffset = (nrVals - 1) / nrThreads * nrThreads + tid;
-//        // if the offset is beyond the array?
-//        if (lastOffset >= nrVals) {
-//            lastOffset -= nrThreads;
-//        }
-//        int threadVals = (lastOffset - firstOffset) / nrThreads + 1;
-//        // Update index-related statistics
-//        // Restrict search range via binary search
-//        int lowerBound = 0;
-//        int upperBound = threadVals - 1;
-//        while (upperBound - lowerBound > 1) {
-//            int middle = lowerBound + (upperBound - lowerBound) / 2;
-//            int middleOffset = middle * nrThreads + tid;
-//            if (rowList[middleOffset] > prevTuple) {
-//                upperBound = middle;
-//            } else {
-//                lowerBound = middle;
-//            }
-//        }
-//        // Get next tuple
-//        for (int pos = lowerBound; pos <= upperBound; ++pos) {
-//            int offset = pos * nrThreads + tid;
-//            int nextTuple = rowList[offset];
-//            if (nextTuple > prevTuple) {
-//                return nextTuple;
-//            }
-//        }
-//        // No suitable tuple found
-//        return cardinality;
-//    }
-
     @Override
     public boolean evaluate(int priorVal, int curIndex, int splitTable, int nextTable, int tid) {
         tid = (priorVal + tid) % nrThreads;
@@ -420,6 +254,12 @@ public class ThreadIntIndex extends Index {
         return batches;
     }
 
+    /**
+     * Sequentially generate index for each column.
+     * This function is called when the data is loading and the size is small.
+     *
+     * @param colRef
+     */
     public void sequentialIndex(ColumnRef colRef) {
         int[] data = intData.data;
         // Count number of occurrences for each value
@@ -462,6 +302,14 @@ public class ThreadIntIndex extends Index {
             }
         }
     }
+
+    /**
+     * Parallel method optimized for dense column.
+     * A dense column is defined as large cardinality
+     * but small number of distinct values.
+     *
+     * @param colRef
+     */
     private void parallelDenseIndex(ColumnRef colRef) {
         int[] data = intData.data;
         // Divide tuples into batches
@@ -530,7 +378,12 @@ public class ThreadIntIndex extends Index {
             }
         });
     }
-
+    /**
+     * Parallel method optimized for key column.
+     * A key column is defined as unique value of each row.
+     *
+     * @param intIndex     original index associated with the column.
+     */
     private void keyIndex(ThreadIntIndex intIndex) {
         int[] data = intData.data;
 //        keyToPositions = HashIntIntMaps.newMutableMap(this.cardinality);
@@ -569,7 +422,13 @@ public class ThreadIntIndex extends Index {
             });
         }
     }
-
+    /**
+     * Parallel method optimized for sparse column.
+     * A sparse column is defined as large cardinality
+     * but less number of occurrence for each value.
+     *
+     * @param index     original index associated with the column.
+     */
     private void parallelSparseIndex(ColumnRef colRef, ThreadIntIndex index) {
         long timer0 = System.currentTimeMillis();
         int[] data = intData.data;

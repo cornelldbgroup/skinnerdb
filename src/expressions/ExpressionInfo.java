@@ -103,6 +103,10 @@ public class ExpressionInfo {
 	 * Decomposes expression into conjuncts.
 	 */
 	public final List<Expression> conjuncts;
+	/**
+	 * Unique id of predicate.
+	 */
+	public int pid;
 
 
 	/**

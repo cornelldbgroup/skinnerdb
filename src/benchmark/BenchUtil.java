@@ -10,6 +10,7 @@ import java.util.TreeMap;
 import buffer.BufferManager;
 import catalog.CatalogManager;
 import config.NamingConfig;
+import config.PreConfig;
 import joining.JoinProcessor;
 import joining.ParallelJoinProcessor;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
@@ -76,6 +77,7 @@ public class BenchUtil {
 	 * @throws Exception
 	 */
 	public static void startQuery(PlainSelect sql) throws Exception {
+		PreConfig.IN_CACHE = false;
 		QueryInfo query = new QueryInfo(sql, false, -1, -1, null);
 		Context preSummary = Preprocessor.process(query);
 		query.equiJoinPreds.forEach(expressionInfo -> {
@@ -100,7 +102,9 @@ public class BenchUtil {
 			PrintWriter benchOut) throws Exception {
 		System.out.println(queryName);
 		System.out.println(sql.toString());
+		BufferManager.unloadCache(queryName.charAt(0) + "" + queryName.charAt(1));
 		startQuery(sql);
+		PreConfig.IN_CACHE = true;
 		QueryInfo query = new QueryInfo(sql, false, -1, -1, null);
 		long startMillis = System.currentTimeMillis();
 		Context preSummary = Preprocessor.process(query);
@@ -109,7 +113,7 @@ public class BenchUtil {
 			expressionInfo.extractIndex(preSummary);
 		});
 		long joinStart = System.currentTimeMillis();
-//		ParallelJoinProcessor.process(query, preSummary);
+		ParallelJoinProcessor.process(query, preSummary);
 		long postStartMillis = System.currentTimeMillis();
 		long joinMillis = postStartMillis - joinStart;
 //		ParallelPostProcessor.process(query, preSummary);
@@ -143,5 +147,6 @@ public class BenchUtil {
 		// Clean up
 		BufferManager.unloadTempData();
 		CatalogManager.removeTempTables();
+
 	}
 }
