@@ -8,6 +8,7 @@
     <build>
         <sourceDirectory>src</sourceDirectory>
         <testSourceDirectory>test</testSourceDirectory>
+        <directory>build</directory>
         <plugins>
             <plugin>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -81,7 +82,8 @@
                             <appendAssemblyId>false</appendAssemblyId>
                             <archive>
                                 <manifest>
-                                    <mainClass>benchmark.BenchAndVerify</mainClass>
+                                    <mainClass>benchmark.BenchAndVerify
+                                    </mainClass>
                                 </manifest>
                             </archive>
                             <descriptorRefs>
