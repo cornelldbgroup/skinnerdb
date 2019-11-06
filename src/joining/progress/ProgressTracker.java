@@ -1,11 +1,10 @@
 package joining.progress;
 
+import joining.plan.JoinOrder;
+
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
-
-import joining.plan.JoinOrder;
-import query.QueryInfo;
 
 /**
  * Keeps track of progress made in evaluating different
@@ -36,15 +35,19 @@ public class ProgressTracker {
      * Maps join orders to the last state achieved during evaluation.
      */
     Map<JoinOrder, State> orderToState = new HashMap<JoinOrder, State>();
+
+    public State lastState = null;
+
     /**
      * Indicates whether processing is finished.
      */
     public boolean isFinished = false;
+
     /**
      * Initializes progress tracking for given tables.
      *
-     * @param nrTables 		number of tables joined
-     * @param cardinalities	cardinality of each table
+     * @param nrTables      number of tables joined
+     * @param cardinalities cardinality of each table
      */
     public ProgressTracker(int nrTables, int[] cardinalities) {
         this.nrTables = nrTables;
@@ -54,6 +57,7 @@ public class ProgressTracker {
         //Arrays.fill(tableOffset, -1);
         Arrays.fill(tableOffset, 0);
     }
+
     /**
      * Integrates final state achieved when evaluating one specific
      * join order.
@@ -64,6 +68,14 @@ public class ProgressTracker {
     public void updateProgress(JoinOrder joinOrder, State state) {
         // Update termination flag
         isFinished = state.isFinished();
+        if (state.isFinished()) {
+            state.tupleIndices = Arrays.copyOf(cardinalities,
+                    cardinalities.length);
+        }
+
+
+        lastState = state;
+
         // Update state for specific join order
         orderToState.put(joinOrder, state);
         // Update state for all join order prefixes
@@ -85,23 +97,24 @@ public class ProgressTracker {
         // Update table offset considering last fully treated tuple -
         // consider first table and all following tables in join order
         // if their cardinality is one.
-        for (int joinCtr=0; joinCtr<nrJoinedTables; ++joinCtr) {
-        	int table = joinOrder.order[joinCtr];
-        	int lastTreated = state.tupleIndices[table]-1;
-        	tableOffset[table] = Math.max(lastTreated, tableOffset[table]);
-        	// Stop after first table with cardinality >1
-        	int cardinality = cardinalities[table];
-        	if (cardinality>1) {
-        		break;
-        	}
+        for (int joinCtr = 0; joinCtr < nrJoinedTables; ++joinCtr) {
+            int table = joinOrder.order[joinCtr];
+            int lastTreated = state.tupleIndices[table] - 1;
+            tableOffset[table] = Math.max(lastTreated, tableOffset[table]);
+            // Stop after first table with cardinality >1
+            int cardinality = cardinalities[table];
+            if (cardinality > 1) {
+                break;
+            }
         }
         /*
         int firstTable = joinOrder.order[0];
         int lastTreatedTuple = state.tupleIndices[firstTable] - 1;
-        tableOffset[firstTable] = Math.max(lastTreatedTuple, 
+        tableOffset[firstTable] = Math.max(lastTreatedTuple,
         		tableOffset[firstTable]);
         */
     }
+
     /**
      * Returns state from which evaluation of the given join order
      * must start in order to guarantee that all results are generated.
@@ -124,19 +137,22 @@ public class ProgressTracker {
             if (curPrefixProgress == null) {
                 break;
             }
-            state.fastForward(order, curPrefixProgress.latestState, joinCtr + 1);
+            state.fastForward(order, curPrefixProgress.latestState,
+                    joinCtr + 1);
         }
         // Integrate table offset
         /*
 		int firstTable = order[0];
-		int offset = Math.max(state.tupleIndices[firstTable], tableOffset[firstTable]);
+		int offset = Math.max(state.tupleIndices[firstTable],
+		tableOffset[firstTable]);
 		state.tupleIndices[firstTable] = offset;
 		*/
 		/*
 		int firstChange = nrTables + 1;
 		for (int joinCtr=0; joinCtr<nrTables; ++joinCtr) {
 			int table = order[joinCtr];
-			int offset = Math.max(state.tupleIndices[table], tableOffset[table]);
+			int offset = Math.max(state.tupleIndices[table],
+			tableOffset[table]);
 			if (offset > state.tupleIndices[table]) {
 				firstChange = Math.min(firstChange, joinCtr);
 			}
