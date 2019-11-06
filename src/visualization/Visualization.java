@@ -9,14 +9,16 @@ import org.graphstream.ui.view.Viewer;
 import org.graphstream.ui.view.ViewerListener;
 import org.graphstream.ui.view.ViewerPipe;
 
+import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 
-public class Visualization implements ViewerListener {
-    public static void main(String[] args) {
-        (new Visualization()).run();
-    }
-
+public class Visualization implements ViewerListener, MouseListener {
     private boolean loop = true;
+
+    public void update(int[] joinOrder, double reward, int[] tupleIndices,
+                       int[] tableCardinality) {
+
+    }
 
     private void run() {
         System.setProperty("org.graphstream.ui.renderer",
@@ -31,6 +33,7 @@ public class Visualization implements ViewerListener {
         for (MouseListener listener : ((ViewPanel) view).getMouseListeners()) {
             view.removeMouseListener(listener);
         }
+        view.addMouseListener(this);
 
 
         ViewerPipe pipeIn = viewer.newViewerPipe();
@@ -48,7 +51,6 @@ public class Visualization implements ViewerListener {
         graph.addNode("C");
         graph.addEdge("AB", "A", "B");
         graph.addEdge("BC", "B", "C");
-        graph.addEdge("CA", "C", "A");
         graph.getNode("A").setAttribute("xyz", new double[]{-1, 0, 0});
         graph.getNode("B").setAttribute("xyz", new double[]{1, 0, 0});
         graph.getNode("C").setAttribute("xyz", new double[]{0, 1, 0});
@@ -56,14 +58,11 @@ public class Visualization implements ViewerListener {
         SpriteManager sm = new SpriteManager(graph);
         Sprite s1 = sm.addSprite("S1");
         Sprite s2 = sm.addSprite("S2");
-        Sprite s3 = sm.addSprite("S3");
 
         s1.attachToEdge("AB");
         s2.attachToEdge("BC");
-        s3.attachToEdge("CA");
         s1.setPosition(0);
         s2.setPosition(0);
-        s3.setPosition(0);
 
         double s1pos = 0, s2pos = 0, s3pos = 0;
 
@@ -79,7 +78,6 @@ public class Visualization implements ViewerListener {
                 s3pos += 0.1;
                 s1.setPosition(s1pos);
                 s2.setPosition(s2pos);
-                s3.setPosition(s3pos);
             }
         }
 
@@ -93,8 +91,6 @@ public class Visualization implements ViewerListener {
         } catch (InterruptedException e) { e.printStackTrace(); }
     }
 
-// Viewer Listener Interface
-
     public void viewClosed(String id) { loop = false;}
 
     public void buttonPushed(String id) {
@@ -107,59 +103,24 @@ public class Visualization implements ViewerListener {
 
     public void buttonReleased(String id) {}
 
-    // Data
-    private String styleSheet = ""
-            + "graph {"
-            + "	canvas-color: white; "
-            + "	fill-mode: gradient-radial; "
-            + "	fill-color: white, #EEEEEE; "
-            + "	padding: 60px; "
-            + "}"
-            + ""
-            + "node {"
-            + "	shape: freeplane;"
-            + "	size: 10px;"
-            + "	size-mode: fit;"
-            + "	fill-mode: none;"
-            + "	stroke-mode: plain;"
-            + "	stroke-color: grey;"
-            + "	stroke-width: 3px;"
-            + "	padding: 5px, 1px;"
-            + "	shadow-mode: none;"
-            + "	icon-mode: at-left;"
-            + "	text-style: normal;"
-            + "	text-font: 'Droid Sans';"
-            + "}"
-            + ""
-            + "node:clicked {"
-            + "	stroke-mode: plain;"
-            + "	stroke-color: red;"
-            + "}"
-            + ""
-            + "node:selected {"
-            + "	stroke-mode: plain;"
-            + "	stroke-color: blue;"
-            + "}"
-            + ""
-            + "edge {"
-            + "	shape: freeplane;"
-            + "	size: 3px;"
-            + "	fill-color: grey;"
-            + "	fill-mode: plain;"
-            + "	shadow-mode: none;"
-            + "	shadow-color: rgba(0,0,0,100);"
-            + "	shadow-offset: 3px, -3px;"
-            + "	shadow-width: 0px;"
-            + "	arrow-shape: arrow;"
-            + "	arrow-size: 20px, 6px;"
-            + "}"
-            + ""
-            + "sprite {"
-            + " shape: flow;"
-            + " fill-color: green;"
-            + "}";
+    @Override
+    public void mouseClicked(MouseEvent e) {}
 
-    public void mouseOver(String id) {}
+    @Override
+    public void mousePressed(MouseEvent e) {}
 
-    public void mouseLeft(String id) {}
+    @Override
+    public void mouseReleased(MouseEvent e) {}
+
+    @Override
+    public void mouseEntered(MouseEvent e) {}
+
+    @Override
+    public void mouseExited(MouseEvent e) {}
+
+    private static Visualization INSTANCE = new Visualization();
+
+    public static Visualization get() {
+        return INSTANCE;
+    }
 }
