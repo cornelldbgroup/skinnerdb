@@ -41,6 +41,13 @@ public class JoinProcessor {
      */
     public static void process(QueryInfo query,
                                Context context) throws Exception {
+        Visualization visualization = null;
+
+        if (query.explain) {
+            visualization = new Visualization();
+            visualization.init(query);
+        }
+
         // Initialize statistics
         long startMillis = System.currentTimeMillis();
         JoinStats.nrTuples = 0;
@@ -138,7 +145,7 @@ public class JoinProcessor {
 
             if (query.explain) {
                 State state = joinOp.tracker.lastState;
-                Visualization.get().update(joinOrder, reward,
+                visualization.update(joinOrder, reward,
                         state.tupleIndices, joinOp.cardinalities);
             }
         }
