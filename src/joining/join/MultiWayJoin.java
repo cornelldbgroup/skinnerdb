@@ -1,8 +1,6 @@
 package joining.join;
 
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.Map.Entry;
 
 import catalog.CatalogManager;
@@ -53,6 +51,10 @@ public abstract class MultiWayJoin {
      */
     public final JoinResult result;
     /**
+     * A list of logs.
+     */
+    public List<String> logs;
+    /**
      * This constructor only serves for testing purposes.
      * It initializes most field to null pointers.
      * 
@@ -66,6 +68,7 @@ public abstract class MultiWayJoin {
     	this.cardinalities = null;
     	this.result = null;
     	predToEval = null;
+        this.logs = new ArrayList<>();
     }
     /**
      * Initializes join operator for given query
@@ -80,6 +83,7 @@ public abstract class MultiWayJoin {
         this.preSummary = preSummary;
         // Retrieve table cardinalities
         this.cardinalities = new int[nrJoined];
+        this.logs = new ArrayList<>();
         for (Entry<String,Integer> entry : 
         	query.aliasToIndex.entrySet()) {
         	String alias = entry.getKey();
@@ -120,4 +124,14 @@ public abstract class MultiWayJoin {
      * @return	true iff query processing is finished
      */
     public abstract boolean isFinished();
+    /**
+     * Put a log sentence into a list of logs.
+     *
+     * @param line      log candidate
+     */
+    public void writeLog(String line) {
+        if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
+            logs.add(line);
+        }
+    }
 }

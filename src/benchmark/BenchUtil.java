@@ -3,6 +3,7 @@ package benchmark;
 import java.io.File;
 import java.io.PrintWriter;
 import java.nio.file.Files;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
 import java.util.TreeMap;
@@ -57,10 +58,10 @@ public class BenchUtil {
 	 * @param benchOut	channel to benchmark file
 	 */
 	public static void writeBenchHeader(PrintWriter benchOut) {
-		benchOut.println("Query\tMillis\tPreMillis\tPostMillis\tTuples\t"
-				+ "Iterations\tLookups\tNrIndexEntries\tnrUniqueLookups\t" 
+		benchOut.println("Query\tMillis\tPreMillis\tJoinMillis\tExeMillis\tPostMillis\tTuples\t"
+				+ "Iterations\tLookups\tNrIndexEntries\tnrUniqueLookups\t"
 				+ "NrUctNodes\tNrPlans\tJoinCard\tNrSamples\tAvgReward\t"
-				+ "MaxReward\tTotalWork");
+				+ "MaxReward\tTotalWork\tFilterMillis\tIndexMillis\tSubPre\tSubJoin\tSubPost");
 	}
 	/**
 	 * Writes out statistics concerning last query execution
@@ -80,6 +81,8 @@ public class BenchUtil {
 		benchOut.print(queryName + "\t");
 		benchOut.print(totalMillis + "\t");
 		benchOut.print(PreStats.preMillis + "\t");
+		benchOut.print(JoinStats.joinMillis + "\t");
+		benchOut.print(JoinStats.exeTime + "\t");
 		benchOut.print(PostStats.postMillis + "\t");
 		benchOut.print(JoinStats.nrTuples + "\t");
 		benchOut.print(JoinStats.nrIterations + "\t");
@@ -92,7 +95,12 @@ public class BenchUtil {
 		benchOut.print(JoinStats.nrSamples + "\t");
 		benchOut.print(JoinStats.avgReward + "\t");
 		benchOut.print(JoinStats.maxReward + "\t");
-		benchOut.println(JoinStats.totalWork);
+		benchOut.print(JoinStats.totalWork + "\t");
+		benchOut.print(PreStats.filterTime + "\t");
+		benchOut.print(PreStats.indexTime + "\t");
+		benchOut.print(Arrays.toString(PreStats.subPreMillis.toArray()) + "\t");
+		benchOut.print(Arrays.toString(JoinStats.subExeTime.toArray()) + "\t");
+		benchOut.println(Arrays.toString(PostStats.subPostMillis.toArray()));
 		benchOut.flush();
 	}
 }

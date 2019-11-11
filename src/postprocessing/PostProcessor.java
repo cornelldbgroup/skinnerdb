@@ -264,7 +264,7 @@ public class PostProcessor {
 	 * @param query			query to process
 	 * @param context		query processing context
 	 * @param resultRelName	name of result relation
-	 * @param tempResul		whether result relation is temporary
+	 * @param tempResult	whether result relation is temporary
 	 * @throws Exception
 	 */
 	static void treatAllRowsAggQuery(QueryInfo query, 
@@ -411,7 +411,6 @@ public class PostProcessor {
 	 * 
 	 * @param query			query whose HAVING clause to process
 	 * @param context		execution context containing column mappings
-	 * @param havingExpr	condition specified in HAVING clause
 	 * @return				indices of rows satisfying HAVING clause
 	 * @throws Exception
 	 */
@@ -566,5 +565,6 @@ public class PostProcessor {
 		CatalogManager.updateStats(resultRel);
 		// Measure time and store as statistics
 		PostStats.postMillis = System.currentTimeMillis() - startMillis;
+		PostStats.subPostMillis.add(PostStats.postMillis);
 	}
 }

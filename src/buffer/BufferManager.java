@@ -1,10 +1,6 @@
 package buffer;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 import catalog.CatalogManager;
@@ -38,7 +34,7 @@ public class BufferManager {
 	/**
 	 * Maps table and column names to corresponding data.
 	 * Using a thread-safe data structure allows inserting
-	 * columns by parallel processing threads.
+	 * columns by joining.parallel processing threads.
 	 */
 	public final static Map<ColumnRef, ColumnData> colToData =
 			new ConcurrentHashMap<ColumnRef, ColumnData>();
@@ -47,6 +43,17 @@ public class BufferManager {
 	 */
 	public final static Map<ColumnRef, Index> colToIndex =
 			new ConcurrentHashMap<ColumnRef, Index>();
+	/**
+	 * Filtering cache used in pre-processing.
+	 */
+	public final static Map<Integer, List<Integer>> indexCache =
+			new ConcurrentHashMap<>();
+	/**
+	 * Maps predicate string to associated id.
+	 */
+	public final static Map<String, Integer> predicateToID =
+			new HashMap<>();
+
 	/**
 	 * Loads dictionary from hard disk.
 	 */
@@ -81,7 +88,7 @@ public class BufferManager {
 		colToData.clear();
 		// Load dictionary from disk
 		loadDictionary();
-		// Collect columns to load in parallel
+		// Collect columns to load in joining.parallel
 		List<ColumnRef> colsToLoad = new ArrayList<ColumnRef>();
 		for (TableInfo table : CatalogManager.currentDB.nameToTable.values()) {
 			String tableName = table.name;
@@ -203,6 +210,25 @@ public class BufferManager {
 				}
 			}
 		}
+	}
+	/**
+	 * Unload all cache rows of temporary tables (typically after
+	 * a group of query processing is finished).
+	 *
+	 * @param queryName		the name of query group.
+	 */
+	public static void unloadCache(String queryName) {
+		indexCache.clear();
+		predicateToID.clear();
+//		if (prevQuery == null) {
+//			prevQuery = queryName;
+//		}
+//		if (!queryName.equals(prevQuery)) {
+//			prevQuery = queryName;
+//			indexCache.clear();
+//			predicateToID.clear();
+//			System.out.println("Clear the cache!");
+//		}
 	}
 	/**
 	/**

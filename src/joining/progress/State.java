@@ -26,6 +26,10 @@ public class State {
 	 */
 	public int[] tupleIndices;
 	/**
+	 * Time version of the state.
+	 */
+	public int roundCtr;
+	/**
 	 * Initializes tuple indices to appropriate size.
 	 * 
 	 * @param nrTables	number of joined tables

@@ -1,5 +1,7 @@
 package statistics;
 
+import java.util.List;
+
 /**
  * Statistics about the join phase - most statistics
  * refer to counts achieved during the last query
@@ -67,4 +69,12 @@ public class JoinStats {
      * Number of tuples in join result (before post-processing).
      */
     public static int skinnerJoinCard = 0;
+    /**
+     * Total execution time
+     */
+    public static long exeTime = 0;
+    /**
+     * A list of total execution time for sub queries.
+     */
+    public static List<Long> subExeTime;
 }

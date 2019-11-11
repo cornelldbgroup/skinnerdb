@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.Map.Entry;
 
+import buffer.BufferManager;
 import catalog.CatalogManager;
 import catalog.info.ColumnInfo;
 import catalog.info.TableInfo;
@@ -625,6 +626,27 @@ public class QueryInfo {
 			return (int)(((LongValue)limitExpr).getValue());
 		}
 	}
+
+	/**
+	 * Generate unique id for each predicate.
+	 */
+	void maintainPredicatesID() {
+		unaryPredicates.forEach(predicate -> {
+			String pstr = predicate.toString();
+			int pid = BufferManager.predicateToID.getOrDefault(pstr, -1);
+			if (pid < 0) {
+				pid = BufferManager.predicateToID.size();
+				BufferManager.predicateToID.put(pstr, pid);
+			}
+			predicate.pid = pid;
+		});
+		int id = 0;
+		for (ExpressionInfo predicate: equiJoinPreds) {
+			predicate.pid = id;
+			id++;
+		}
+	}
+
 	/**
 	 * Analyzes a select query to prepare processing.
 	 * 
@@ -660,6 +682,8 @@ public class QueryInfo {
 		log("Equi join cols: " + equiJoinCols);
 		log("Equi join preds: " + equiJoinPreds);
 		log("Other join preds: " + nonEquiJoinPreds);
+		// Assign integers to predicates
+		maintainPredicatesID();
 		// Add expressions in GROUP BY clause
 		treatGroupBy();
 		log("GROUP BY expressions: " + groupByExpressions);

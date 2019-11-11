@@ -18,4 +18,8 @@ public class PreConfig {
 	 * unary equality predicates.
 	 */
 	public static final boolean CONSIDER_INDICES = true;
+	/**
+	 * Whether to write filtered rows in the cache.
+	 */
+	public static boolean IN_CACHE = false;
 }

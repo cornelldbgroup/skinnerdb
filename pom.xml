@@ -94,5 +94,11 @@
 	    <artifactId>postgresql</artifactId>
 	    <version>9.1-901.jdbc4</version>
 	</dependency>
+      <dependency>
+          <groupId>org.junit.jupiter</groupId>
+          <artifactId>junit-jupiter</artifactId>
+          <version>RELEASE</version>
+          <scope>compile</scope>
+      </dependency>
   </dependencies>
 </project>

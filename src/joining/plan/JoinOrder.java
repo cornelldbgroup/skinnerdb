@@ -63,4 +63,41 @@ public class JoinOrder {
 	public int hashCode() {
 		return Arrays.hashCode(order);
 	}
+
+	/**
+	 * Mapping a prefix of tables to a integer.
+	 *
+	 * @param prefixLen		the length of prefix.
+	 * @return				according integer that can represent a prefix.
+	 */
+	public int getPrefixKey(int prefixLen) {
+		int len = order.length;
+		int hash = 0;
+		int card = 1;
+		for (int i = 0; i < prefixLen; i++) {
+			int table = order[i];
+			hash += table * card;
+			card *= len;
+		}
+		return hash;
+	}
+	/**
+	 * Hash codes considering join order and split table.
+	 *
+	 * @param splitTable	the table to split.
+	 * @return				hash code corresponding to a join order and split table.
+	 */
+	public int splitHashCode(int splitTable) {
+		int len = order.length;
+		int hash = 0;
+		int card = 1;
+		for (int table : order) {
+			hash += table * card;
+			card *= len;
+			if (table == splitTable) {
+				break;
+			}
+		}
+		return hash;
+	}
 }

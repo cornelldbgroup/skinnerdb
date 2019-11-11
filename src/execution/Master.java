@@ -7,10 +7,12 @@ import java.util.Set;
 
 import buffer.BufferManager;
 import catalog.CatalogManager;
+import config.GeneralConfig;
 import config.LoggingConfig;
 import config.NamingConfig;
 import expressions.VisitorUtil;
 import joining.JoinProcessor;
+import joining.ParallelJoinProcessor;
 import net.sf.jsqlparser.schema.Table;
 import net.sf.jsqlparser.statement.select.PlainSelect;
 import postprocessing.PostProcessor;
@@ -19,6 +21,9 @@ import preprocessing.Preprocessor;
 import query.ColumnRef;
 import query.QueryInfo;
 import query.SQLexception;
+import statistics.JoinStats;
+import statistics.PostStats;
+import statistics.PreStats;
 import unnesting.UnnestingVisitor;
 
 /**
@@ -43,6 +48,8 @@ public class Master {
 	public static void executeSelect(PlainSelect select, 
 			boolean explain, int plotAtMost, int plotEvery,
 			String plotDir) throws Exception {
+		// initialize statistics variables
+		initializeStats();
 		// Determine type of result relation
 		List<Table> intoTbls = select.getIntoTables();
 		boolean finalTempResult = intoTbls == null;
@@ -77,7 +84,12 @@ public class Master {
 			// Filter, projection, and indexing for join phase
 			Context context = Preprocessor.process(subQueryInfo);
 			// Join filtered tables
-			JoinProcessor.process(subQueryInfo, context);
+			if (GeneralConfig.isParallel) {
+				ParallelJoinProcessor.process(subQueryInfo, context);
+			}
+			else {
+				JoinProcessor.process(subQueryInfo, context);
+			}
 			// Determine result table name and properties
 			boolean lastSubQuery = subQueryCtr==nrSubQueries-1;
 			boolean tempResult = lastSubQuery?finalTempResult:true;
@@ -90,5 +102,11 @@ public class Master {
 			BufferManager.unloadTempData(subQueryResults);
 			CatalogManager.removeTempTables(subQueryResults);
 		}
+	}
+
+	private static void initializeStats() {
+		PreStats.subPreMillis = new ArrayList<>();
+		JoinStats.subExeTime = new ArrayList<>();
+		PostStats.subPostMillis = new ArrayList<>();
 	}
 }

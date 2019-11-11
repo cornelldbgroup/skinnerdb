@@ -103,7 +103,7 @@ public class Materialize {
 		int nrTuples = tuples.size();
 		// Collect row indices for each table
 		Map<Integer, List<Integer>> idxToRows = new ConcurrentHashMap<>();
-		IntStream.range(0, nrTables).parallel().forEach(i-> {
+		IntStream.range(0, nrTables).joining.parallel().forEach(i-> {
 			List<Integer> rows = new ArrayList<>(nrTuples);
 			for (ResultTuple tuple : tuples) {
 				rows.add(tuple.baseIndices[i]);
@@ -143,5 +143,43 @@ public class Materialize {
 		});
 		// Update statistics in catalog
 		CatalogManager.updateStats(targetRelName);
+	}
+
+	public static void executeFromExistingTable(Collection<ColumnRef> sourceCols,
+							   Map<ColumnRef, ColumnRef> columnMappings,
+							   String targetRelName) throws Exception {
+		// Update catalog, insert result table
+		TableInfo resultInfo = new TableInfo(targetRelName, true);
+		CatalogManager.currentDB.addTable(resultInfo);
+		// Add result columns to catalog
+		for (ColumnRef srcQueryRef : sourceCols) {
+			// Map query column to DB column
+			ColumnRef srcDBref = columnMappings.get(srcQueryRef);
+			// Extract information on source column
+			String srcAlias = srcQueryRef.aliasName;
+			String srcColName = srcQueryRef.columnName;
+			ColumnInfo srcInfo = CatalogManager.getColumn(srcDBref);
+			// Generate target column
+			String targetColName = srcAlias + "." + srcColName;
+			ColumnInfo targetInfo = new ColumnInfo(targetColName,
+					srcInfo.type, false, false, false, false);
+			resultInfo.addColumn(targetInfo);
+		}
+
+		// Materialize result columns
+		sourceCols.parallelStream().forEach(srcQueryRef -> {
+			// Generate target column reference
+			String targetCol = srcQueryRef.aliasName + "." + srcQueryRef.columnName;
+			ColumnRef targetRef = new ColumnRef(targetRelName, targetCol);
+			// Generate target column
+			ColumnRef srcDBref = columnMappings.get(srcQueryRef);
+			ColumnData srcData = BufferManager.colToData.get(srcDBref);
+			// Insert into buffer pool
+			BufferManager.colToData.put(targetRef, srcData);
+		});
+
+		// Update statistics in catalog
+		CatalogManager.updateStats(targetRelName);
+
 	}
 }

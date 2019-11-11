@@ -36,8 +36,8 @@ public class DbInfo implements Serializable {
 	public DbInfo(String name) {
 		this.name = name;
 		// Using concurrent data structure allows threads
-		// to update catalog in parallel (e.g., if generating
-		// multiple intermediate results in parallel).
+		// to update catalog in joining.parallel (e.g., if generating
+		// multiple intermediate results in joining.parallel).
 		this.nameToTable = new ConcurrentHashMap<>();
 	}
 	/**

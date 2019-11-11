@@ -1,12 +1,15 @@
 package expressions;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
+import buffer.BufferManager;
 import config.LoggingConfig;
+import data.ColumnData;
+import data.IntData;
+import indexing.Index;
+import joining.parallel.indexing.PartitionIndex;
+import net.sf.jsqlparser.schema.Column;
+import preprocessing.Context;
 import query.ColumnRef;
 import query.QueryInfo;
 import query.where.WhereUtil;
@@ -18,7 +21,9 @@ import expressions.typing.ExpressionScope;
 import expressions.typing.TypeVisitor;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.Function;
+import types.JavaType;
 import types.SQLtype;
+import types.TypeUtil;
 
 /**
  * Stores information on one expression (e.g., a predicate).
@@ -65,6 +70,14 @@ public class ExpressionInfo {
 	 */
 	public final Set<ColumnRef> columnsMentioned;
 	/**
+	 * All columns mentioned in the expression.
+	 */
+	public final Map<Integer, Index> indexMentioned;
+	/**
+	 * All columns mentioned in the expression.
+	 */
+	public final Map<Integer, ColumnData> dataMentioned;
+	/**
 	 * Set of SQL LIKE expressions found in the given expression.
 	 */
 	public final Set<Expression> likeExpressions;
@@ -94,6 +107,14 @@ public class ExpressionInfo {
 	 * Decomposes expression into conjuncts.
 	 */
 	public final List<Expression> conjuncts;
+	/**
+	 * Unique id of predicate.
+	 */
+	public int pid;
+	/**
+	 * Type of columns that gets involved with predicate.
+	 */
+	public JavaType type;
 	/**
 	 * Initializes the expression info.
 	 * 
@@ -140,6 +161,8 @@ public class ExpressionInfo {
 			aliasIdxMentioned.add(idx);
 		}
 		this.columnsMentioned = collectorVisitor.mentionedColumns;
+		this.indexMentioned = new HashMap<>();
+		this.dataMentioned = new HashMap<>();
 		this.likeExpressions = collectorVisitor.likeExpressions;
 		this.aggregates = collectorVisitor.aggregates;
 		log("Aliases:\t" + aliasesMentioned.toString());
@@ -163,6 +186,39 @@ public class ExpressionInfo {
 		WhereUtil.extractConjuncts(finalExpression, conjuncts);
 		log("Conjuncts:\t" + conjuncts.toString());
 	}
+
+	/**
+	 * Construct a map from tables to index and data.
+	 *
+	 * @param preSummary	query processing context.
+	 */
+	public void extractIndex(Context preSummary) {
+		// Get table indices of join columns
+		for (ColumnRef col : this.columnsMentioned) {
+			int table = queryInfo.aliasToIndex.get(col.aliasName);
+			ColumnRef columnRef = preSummary.columnMapping.get(col);
+			ColumnData data = null;
+			try {
+				data = BufferManager.getData(columnRef);
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+			Index index = BufferManager.colToIndex.get(columnRef);
+
+			indexMentioned.put(table, index);
+			dataMentioned.put(table, data);
+		}
+	}
+
+	public void setColumnType() {
+		for (Map.Entry<Expression, SQLtype> entry: expressionToType.entrySet()) {
+			if (entry.getKey() instanceof Column) {
+				type = TypeUtil.toJavaType(entry.getValue());
+				break;
+			}
+		}
+	}
+
 	/**
 	 * Outputs given string if expression logging
 	 * is activated.

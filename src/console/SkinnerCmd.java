@@ -14,12 +14,14 @@ import catalog.info.TableInfo;
 import compression.Compressor;
 import config.GeneralConfig;
 import config.NamingConfig;
+import config.ParallelConfig;
 import config.StartupConfig;
 import ddl.TableCreator;
 import diskio.LoadCSV;
 import diskio.PathUtil;
 import execution.Master;
 import indexing.Indexer;
+import joining.parallel.threads.ThreadPool;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.create.table.CreateTable;
@@ -360,6 +362,8 @@ public class SkinnerCmd {
 		PathUtil.initSchemaPaths(dbDir);
 		CatalogManager.loadDB(PathUtil.schemaPath);
 		PathUtil.initDataPaths(CatalogManager.currentDB);
+		// initialize a thread pool
+		ThreadPool.initThreadsPool(ParallelConfig.EXE_THREADS);
 		// Load data and/or dictionary
 		if (GeneralConfig.inMemory) {
 			// In-memory data processing
@@ -369,20 +373,30 @@ public class SkinnerCmd {
 			// string dictionary is still loaded.
 			BufferManager.loadDictionary();
 		}
-		// Command line processing
-		System.out.println("Enter 'help' for help and 'quit' to exit");
-		Scanner scanner = new Scanner(System.in);
-		boolean continueProcessing = true;
-		while (continueProcessing) {
-			System.out.print("> ");
-			String input = scanner.nextLine();
-			try {
-				continueProcessing = processInput(input);								
-			} catch (Exception e) {
-				System.err.println("Error processing command: ");
-				e.printStackTrace();
-			}
+
+//		processInput("exec ./tpch/skinnerqueries/q09.sql");
+		if (GeneralConfig.isParallel) {
+			processInput("bench ../tpch/skinnerqueries/ lockFree_tpch_" + ParallelConfig.EXE_THREADS + ".txt");
 		}
-		scanner.close();
+		else {
+			processInput("bench ../tpch/skinnerqueries/ seq_tpch.txt");
+		}
+
+//		// Command line processingZ
+//		System.out.println("Enter 'help' for help and 'quit' to exit");
+//		Scanner scanner = new Scanner(System.in);
+//		boolean continueProcessing = true;
+//		while (continueProcessing) {
+//			System.out.print("> ");
+//			String input = scanner.nextLine();
+//			try {
+//				continueProcessing = processInput(input);
+//			} catch (Exception e) {
+//				System.err.println("Error processing command: ");
+//				e.printStackTrace();
+//			}
+//		}
+//		scanner.close();
+		ThreadPool.close();
 	}
 }

@@ -3,6 +3,7 @@ package joining;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.List;
 
 import catalog.CatalogManager;
 import config.LoggingConfig;
@@ -13,12 +14,14 @@ import joining.result.ResultTuple;
 import joining.uct.ExplorationWeightPolicy;
 import joining.uct.SelectionPolicy;
 import joining.uct.UctNode;
+import logs.LogUtils;
 import operators.Materialize;
 import preprocessing.Context;
 import print.RelationPrinter;
 import query.ColumnRef;
 import query.QueryInfo;
 import statistics.JoinStats;
+import statistics.QueryStats;
 import visualization.TreePlotter;
 
 /**
@@ -146,6 +149,12 @@ public class JoinProcessor {
 				++plotCtr;
 			}
 		}
+		// Write log to the local file.
+		if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
+			List<String>[] logs = new List[1];
+			logs[0] = joinOp.logs;
+			LogUtils.writeLogs(logs, "verbose/seq/" + QueryStats.queryName);
+		}
 		// Draw final plot if activated
 		if (query.explain) {
 			String plotName = "ucttreefinal.pdf";
@@ -176,6 +185,9 @@ public class JoinProcessor {
 			System.out.println("Table cards.:\t" +
 					Arrays.toString(joinOp.cardinalities));
 		}
+		// Measure execution time for join phase
+		JoinStats.exeTime = System.currentTimeMillis() - startMillis;
+		JoinStats.subExeTime.add(JoinStats.exeTime);
 		// Materialize result table
 		Collection<ResultTuple> tuples = joinOp.result.getTuples();
 		int nrTuples = tuples.size();
@@ -196,6 +208,8 @@ public class JoinProcessor {
 				getCardinality(NamingConfig.JOINED_NAME);
 		// Measure execution time for join phase
 		JoinStats.joinMillis = System.currentTimeMillis() - startMillis;
+		System.out.println("Round count: " + roundCtr);
+		System.out.println("Join card: " + JoinStats.skinnerJoinCard + "\tJoin time:" + JoinStats.joinMillis);
 	}
 	/**
 	 * Print out log entry if the maximal number of log

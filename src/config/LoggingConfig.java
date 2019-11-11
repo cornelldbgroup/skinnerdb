@@ -60,4 +60,8 @@ public class LoggingConfig {
 	 * Whether to generate debugging output during post-processing.
 	 */
 	public final static boolean POST_PROCESSING_VERBOSE = false;
+	/**
+	 * Whether to generate debugging output during joining.parallel join.
+	 */
+	public final static boolean PARALLEL_JOIN_VERBOSE = false;
 }

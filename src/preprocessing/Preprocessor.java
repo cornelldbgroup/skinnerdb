@@ -9,6 +9,9 @@ import java.util.stream.Collectors;
 
 
 import buffer.BufferManager;
+import catalog.CatalogManager;
+import catalog.info.ColumnInfo;
+import config.GeneralConfig;
 import config.LoggingConfig;
 import config.NamingConfig;
 import config.PreConfig;
@@ -16,6 +19,9 @@ import expressions.ExpressionInfo;
 import indexing.Index;
 import indexing.Indexer;
 import indexing.IntIndex;
+import joining.parallel.indexing.IndexPolicy;
+import joining.parallel.indexing.IntPartitionIndex;
+import joining.parallel.indexing.PartitionIndex;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.LongValue;
 import net.sf.jsqlparser.expression.StringValue;
@@ -112,15 +118,41 @@ public class Preprocessor {
 			// Filter and project if enabled
 			if (curUnaryPred != null && PreConfig.PRE_FILTER) {
 				try {
-					// Apply index to prune rows if possible
-					ExpressionInfo remainingPred = applyIndex(
-							query, curUnaryPred, preSummary);
-					// TODO: reinsert index usage
-					//ExpressionInfo remainingPred = curUnaryPred;
-					// Filter remaining rows by remaining predicate
-					if (remainingPred != null) {
-						filterProject(query, alias, remainingPred,
-								curRequiredCols, preSummary);						
+					//check if the predicate is in the cache
+					List<Integer> inCacheRows = applyCache(curUnaryPred);
+					if (!PreConfig.IN_CACHE || inCacheRows == null) {
+						// Apply index to prune rows if possible
+						ExpressionInfo remainingPred = applyIndex(
+								query, curUnaryPred, preSummary);
+						// TODO: reinsert index usage
+						//ExpressionInfo remainingPred = curUnaryPred;
+						// Filter remaining rows by remaining predicate
+						if (remainingPred != null) {
+							List<Integer> rows = filterProject(query, alias, remainingPred,
+									curRequiredCols, preSummary);
+							if (rows.size() > 0 && PreConfig.IN_CACHE) {
+								BufferManager.indexCache.putIfAbsent(curUnaryPred.pid, rows);
+							}
+						}
+					}
+					else {
+						// Materialize relevant rows and columns
+						String tableName = preSummary.aliasToFiltered.get(alias);
+						String filteredName = NamingConfig.FILTERED_PRE + alias;
+						List<String> columnNames = new ArrayList<>();
+						for (ColumnRef colRef : curRequiredCols) {
+							columnNames.add(colRef.columnName);
+						}
+						Materialize.execute(tableName, columnNames,
+								inCacheRows, null, filteredName, true);
+						// Update pre-processing summary
+						for (ColumnRef srcRef : curRequiredCols) {
+							String columnName = srcRef.columnName;
+							ColumnRef resRef = new ColumnRef(filteredName, columnName);
+							preSummary.columnMapping.put(srcRef, resRef);
+						}
+						preSummary.aliasToFiltered.put(alias, filteredName);
+						log("Cache hit using " + curUnaryPred);
 					}
 				} catch (Exception e) {
 					System.err.println("Error filtering " + alias);
@@ -141,6 +173,13 @@ public class Preprocessor {
 		createJoinIndices(query, preSummary);
 		// Measure processing time
 		PreStats.preMillis = System.currentTimeMillis() - startMillis;
+		PreStats.subPreMillis.add(PreStats.preMillis);
+
+		// construct mapping from join tables to index for each join predicate
+		query.equiJoinPreds.forEach(expressionInfo -> {
+			expressionInfo.extractIndex(preSummary);
+			expressionInfo.setColumnType();
+		});
 		return preSummary;
 	}
 	/**
@@ -162,6 +201,18 @@ public class Preprocessor {
 		}
 		return result;
 	}
+
+	/**
+	 * Check whether thee given predicate has some satisfied rows saved in the cache.
+	 *
+	 * @param curUnaryPred		current evaluating unary predicate.
+	 * @return					satisfied rows corresponding to given predicate.
+	 */
+	static List<Integer> applyCache(ExpressionInfo curUnaryPred) {
+		List<Integer> rows = BufferManager.indexCache.getOrDefault(curUnaryPred.pid, null);
+		return rows;
+	}
+
 	/**
 	 * Search for applicable index and use it to prune rows. Redirect
 	 * column mappings to index-filtered table if possible.
@@ -244,7 +295,7 @@ public class Preprocessor {
 	 * @param requiredCols	project on those columns
 	 * @param preSummary	summary of pre-processing steps
 	 */
-	static void filterProject(QueryInfo query, String alias, ExpressionInfo unaryPred, 
+	static List<Integer> filterProject(QueryInfo query, String alias, ExpressionInfo unaryPred,
 			List<ColumnRef> requiredCols, Context preSummary) throws Exception {
 		long startMillis = System.currentTimeMillis();
 		log("Filtering and projection for " + alias + " ...");
@@ -255,7 +306,7 @@ public class Preprocessor {
 				unaryPred, tableName, preSummary.columnMapping);
 		// Materialize relevant rows and columns
 		String filteredName = NamingConfig.FILTERED_PRE + alias;
-		List<String> columnNames = new ArrayList<String>();
+		List<String> columnNames = new ArrayList<>();
 		for (ColumnRef colRef : requiredCols) {
 			columnNames.add(colRef.columnName);
 		}
@@ -274,6 +325,7 @@ public class Preprocessor {
 		if (LoggingConfig.PRINT_INTERMEDIATES) {
 			RelationPrinter.print(filteredName);
 		}
+		return satisfyingRows;
 	}
 	/**
 	 * Create indices on equality join columns if not yet available.
@@ -293,7 +345,22 @@ public class Preprocessor {
 				log("Creating index for " + queryRef + 
 						" (query) - " + dbRef + " (DB)");
 				// Create index (unless it exists already)
-				Indexer.index(dbRef);
+				if (GeneralConfig.isParallel) {
+					ColumnInfo columnInfo = query.colRefToInfo.get(queryRef);
+					String tableName = query.aliasToTable.get(queryRef.aliasName);
+					String columnName = queryRef.columnName;
+					ColumnRef columnRef = new ColumnRef(tableName, columnName);
+					Index index = BufferManager.colToIndex.getOrDefault(columnRef, null);
+					PartitionIndex partitionIndex = index == null ? null : (PartitionIndex) index;
+					// Get index generation policy according to statistics.
+					log("Creating index for " + queryRef +
+							" (query) - " + dbRef + " (DB)");
+					// Create index (unless it exists already)
+					Indexer.partitionIndex(dbRef, queryRef, partitionIndex, columnInfo.isPrimary);
+				}
+				else {
+					Indexer.index(dbRef);
+				}
 			} catch (Exception e) {
 				System.err.println("Error creating index for " + queryRef);
 				e.printStackTrace();

@@ -104,14 +104,14 @@ public class Filter {
 		int cardinality = CatalogManager.getCardinality(tableName);
 		// Initialize filter result
 		List<Integer> result = null;
-		// Choose between sequential and parallel processing
+		// Choose between sequential and joining.parallel processing
 		if (cardinality <= ParallelConfig.PRE_BATCH_SIZE) {
 			RowRange allTuples = new RowRange(0, cardinality - 1);
 			result = filterBatch(unaryBoolEval, allTuples);
 		} else {
 			// Divide tuples into batches
 			List<RowRange> batches = split(cardinality);
-			// Process batches in parallel
+			// Process batches in joining.parallel
 			result = batches.parallelStream().flatMap(batch -> 
 				filterBatch(unaryBoolEval, batch).stream()).collect(
 						Collectors.toList());
@@ -128,7 +128,7 @@ public class Filter {
 	}
 	/**
 	 * Splits table with given cardinality into tuple batches
-	 * according to the configuration for parallel processing.
+	 * according to the configuration for joining.parallel processing.
 	 * 
 	 * @param cardinality	cardinality of table to split
 	 * @return				list of row ranges (batches)
