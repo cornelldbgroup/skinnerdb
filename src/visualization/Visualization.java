@@ -3,7 +3,7 @@ package visualization;
 import org.graphstream.graph.Edge;
 import org.graphstream.graph.Node;
 import org.graphstream.graph.implementations.SingleGraph;
-import org.graphstream.ui.layout.HierarchicalLayout;
+import org.graphstream.ui.layout.LayoutRunner;
 import org.graphstream.ui.spriteManager.Sprite;
 import org.graphstream.ui.spriteManager.SpriteManager;
 import org.graphstream.ui.swingViewer.ViewPanel;
@@ -13,12 +13,13 @@ import query.QueryInfo;
 
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
+import java.util.logging.Logger;
 
 public class Visualization implements MouseListener {
     SingleGraph graph;
     Viewer viewer;
     SpriteManager spriteManager;
-
+    TreeLayout layout;
     QueryInfo info;
 
     private final String stylesheet = "" +
@@ -44,17 +45,19 @@ public class Visualization implements MouseListener {
 
     public void init(QueryInfo info) {
         this.info = info;
+        Logger.getLogger(LayoutRunner.class.getSimpleName()).setUseParentHandlers(false);
 
         System.setProperty("org.graphstream.ui.renderer",
                 "org.graphstream.ui.j2dviewer.J2DGraphRenderer");
         graph = new SingleGraph("Join Order");
         viewer = graph.display();
-        HierarchicalLayout hl = new HierarchicalLayout();
-        viewer.enableAutoLayout(hl);
-
         viewer.setCloseFramePolicy(Viewer.CloseFramePolicy.CLOSE_VIEWER);
+        viewer.disableAutoLayout();
 
-        spriteManager = new SpriteManager(graph);
+
+        layout = new TreeLayout();
+        layout.addSink(graph);
+        graph.addSink(layout);
 
         View view = viewer.getDefaultView();
         for (MouseListener listener : ((ViewPanel) view).getMouseListeners()) {
@@ -62,15 +65,11 @@ public class Visualization implements MouseListener {
         }
         view.addMouseListener(this);
 
+        spriteManager = new SpriteManager(graph);
         graph.setAttribute("ui.stylesheet", stylesheet);
         graph.setAttribute("ui.antialias");
         graph.setAttribute("ui.quality");
-
-        Node root = graph.addNode("root");
-        root.addAttribute("ui.label", "Join");
-        hl.setRoots("root");
-
-
+        graph.addNode("root").addAttribute("ui.label", "Join");
     }
 
     public void createNodesSpriteIfNotPresent(int[] joinOrder) {
@@ -84,7 +83,7 @@ public class Visualization implements MouseListener {
                 Node newNode = graph.addNode(currentJoinNode);
                 newNode.addAttribute("ui.label", tableName);
                 Edge edge = graph.addEdge(previous + "--" + currentJoinNode,
-                        previous, currentJoinNode);
+                        previous, currentJoinNode, true);
                 Sprite sprite = spriteManager.addSprite("S#" + previous +
                         "--" + currentJoinNode);
                 sprite.attachToEdge(edge.getId());
@@ -110,12 +109,8 @@ public class Visualization implements MouseListener {
             previous = currentJoinNode;
         }
 
-        for (Edge edge : graph.getNode("root").getEachLeavingEdge()) {
-            System.out.println((String) edge.getTargetNode().getAttribute(
-                    "ui.label"));
-        }
-
-        sleep(16);
+        layout.compute();
+        sleep(2000);
     }
 
     @Override
