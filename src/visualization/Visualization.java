@@ -66,7 +66,11 @@ public class Visualization implements MouseListener {
         graph.setAttribute("ui.antialias");
         graph.setAttribute("ui.quality");
 
-        graph.addNode("root").addAttribute("ui.label", "Join");
+        Node root = graph.addNode("root");
+        root.addAttribute("ui.label", "Join");
+        hl.setRoots("root");
+
+
     }
 
     public void createNodesSpriteIfNotPresent(int[] joinOrder) {
@@ -104,6 +108,11 @@ public class Visualization implements MouseListener {
             sprite.setPosition(tupleIndices[currentTable] /
                     (double) tableCardinality[currentTable]);
             previous = currentJoinNode;
+        }
+
+        for (Edge edge : graph.getNode("root").getEachLeavingEdge()) {
+            System.out.println((String) edge.getTargetNode().getAttribute(
+                    "ui.label"));
         }
 
         sleep(16);
