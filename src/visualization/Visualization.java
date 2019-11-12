@@ -40,6 +40,10 @@ public class Visualization implements MouseListener {
             " text-size: 12px;" +
             " text-background-mode: rounded-box;" +
             " text-background-color: rgb(35, 47, 62);" +
+            "}" +
+            "" +
+            "edge {" +
+            "  arrow-shape: none;" +
             "}";
 
 
