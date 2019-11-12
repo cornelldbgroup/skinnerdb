@@ -52,7 +52,8 @@ public class TreeLayout extends PipeBase {
         private void computeGraphMetadata(int n) {
             Node node = internalGraph.getNode(n);
             List<Edge> leavingEdges = new ArrayList<>(node.getLeavingEdgeSet());
-            leavingEdges.sort(Comparator.comparing(e -> e.getTargetNode().getId()));
+            leavingEdges.sort(Comparator.comparing(e ->
+                    e.getTargetNode().getId()));
 
             int previous = -1;
             int farLeftSibling = -1;
