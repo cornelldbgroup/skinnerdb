@@ -241,14 +241,13 @@ public class SkinnerCmd {
     }
 
     /**
-     * Processes an explain statement.
+     * Processes an visualize statement.
      *
-     * @param inputFrags fragments of user input - should be explain
-     *                   keyword, plot directory, plot bound, and plot
-     *                   frequency, followed by query fragments.
+     * @param inputFrags fragments of user input - should be visualize
+     *                   keyword followed by query fragments.
      * @throws Exception
      */
-    static void processExplain(String[] inputFrags) throws Exception {
+    static void processVisualize(String[] inputFrags) throws Exception {
         // Try parsing as SQL query
         StringBuilder sqlBuilder = new StringBuilder();
         int nrFragments = inputFrags.length;
@@ -263,7 +262,7 @@ public class SkinnerCmd {
             System.out.println("Error in parsing SQL command");
             return;
         }
-        // Execute explain command
+        // Execute visualize command
         if (sqlStatement instanceof Select) {
             Select select = (Select) sqlStatement;
             PlainSelect plainSelect = (PlainSelect) select.getSelectBody();
@@ -282,7 +281,7 @@ public class SkinnerCmd {
                 CatalogManager.removeTempTables();
             }
         } else {
-            System.out.println("Error - explain command supports "
+            System.out.println("Error - visualize command supports "
                     + "only simple select queries");
         }
     }
@@ -308,16 +307,16 @@ public class SkinnerCmd {
             Compressor.compress();
         } else if (input.startsWith("exec")) {
             processFile(input);
-        } else if (input.startsWith("explain")) {
+        } else if (input.startsWith("visualize")) {
             String[] inputFrags = input.split("\\s");
-            processExplain(inputFrags);
+            processVisualize(inputFrags);
         } else if (input.equals("help")) {
             System.out.println("'bench <query Dir> <output file>' to " +
                     "benchmark queries in *.sql files");
             System.out.println("'compress' to compress database");
             System.out.println("'exec <SQL file>' to execute file");
-            System.out.println("'explain <Plot Dir> <Plot Bound> "
-                    + "<Plot Frequency> <Query>' to visualize query execution");
+            System.out.println("'visualize <Query>' to visualize query " +
+                    "execution");
             System.out.println("'help' for help");
             System.out.println("'index all' to index each column");
             System.out.println("'list' to list database tables");
