@@ -13,8 +13,8 @@ import query.QueryInfo;
 import javax.swing.*;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.logging.Logger;
 
 public class Visualization implements MouseListener {
@@ -25,6 +25,7 @@ public class Visualization implements MouseListener {
     QueryInfo info;
     JLabel counterLabel;
     int iterationCounter;
+    Map<String, Integer> numVisits;
 
     private final String stylesheet = "" +
             "sprite { " +
@@ -36,8 +37,8 @@ public class Visualization implements MouseListener {
             "} " +
             "" +
             "node {" +
-            " size: 25px;" +
-            " fill-color: #d3d3d3;" +
+            " size: 50px;" +
+            " fill-color: white;" +
             " text-color: white;" +
             " text-style: bold;" +
             " text-padding: 2px;" +
@@ -57,7 +58,7 @@ public class Visualization implements MouseListener {
         System.setProperty("org.graphstream.ui.renderer",
                 "org.graphstream.ui.j2dviewer.J2DGraphRenderer");
         graph = new SingleGraph("Join Order");
-        viewer = graph.display();
+        viewer = graph.display(false);
         viewer.setCloseFramePolicy(Viewer.CloseFramePolicy.CLOSE_VIEWER);
         viewer.disableAutoLayout();
 
@@ -80,6 +81,8 @@ public class Visualization implements MouseListener {
         graph.setAttribute("ui.antialias");
         graph.setAttribute("ui.quality");
         addNode("root").addAttribute("ui.label", "Join");
+
+        numVisits = new HashMap<>();
     }
 
     private Node addNode(String id) {
@@ -115,6 +118,7 @@ public class Visualization implements MouseListener {
                         previous, currentJoinNode, true);
                 Sprite sprite = spriteManager.addSprite("S#" + previous +
                         "--" + currentJoinNode);
+                sprite.addAttribute("progress");
                 sprite.attachToEdge(edge.getId());
                 sprite.setPosition(0);
                 modified = true;
@@ -126,47 +130,56 @@ public class Visualization implements MouseListener {
 
     private void frameTimeDelay() {
         if (iterationCounter < 5) {
-            sleep(1000);
+            sleep(2000);
         } else if (iterationCounter < 10) {
-            sleep(500);
+            sleep(1000);
         } else if (iterationCounter < 15) {
-            sleep(250);
+            sleep(500);
         } else if (iterationCounter < 50) {
             sleep(125);
         } else if (iterationCounter < 150) {
-            sleep(75);
+            sleep(35);
         } else if (iterationCounter < 500) {
-            sleep(50);
-        } else {
-            sleep(8);
+            sleep(10);
         }
+    }
+
+    private void colorNode(String node) {
+        int num = Math.min(numVisits.get(node), 10000);
+        long gb = 235 -
+                Math.round((Math.log10(num) / 4.0) * (235 - 77));
+        String color = "rgb(255, " + gb + ", " + gb + ")";
+        graph.getNode(node)
+                .addAttribute("ui.style", "fill-color: " + color + ";");
     }
 
     public void update(int[] joinOrder, double reward, int[] tupleIndices,
                        int[] tableCardinality) {
         updateCounterLabel();
+        for (Sprite sprite : spriteManager.sprites()) {
+            if (sprite.hasAttribute("progress")) {
+                sprite.setAttribute("ui.hide");
+            }
+        }
+
         if (createNodesSpriteIfNotPresent(joinOrder)) {
             layout.compute();
         }
 
-        Set<String> sprites = new HashSet<>();
         String currentJoinNode = "";
         String previous = "root";
         for (int currentTable : joinOrder) {
             currentJoinNode += (char) (65 + currentTable);
             String spriteId = "S#" + previous + "--" + currentJoinNode;
-            sprites.add(spriteId);
             Sprite sprite = spriteManager.getSprite(spriteId);
+            sprite.removeAttribute("ui.hide");
             sprite.setPosition(tupleIndices[currentTable] /
                     (double) tableCardinality[currentTable]);
+            numVisits.put(currentJoinNode,
+                    1 + (numVisits.containsKey(currentJoinNode) ?
+                            numVisits.get(currentJoinNode) : 0));
+            colorNode(currentJoinNode);
             previous = currentJoinNode;
-        }
-
-        // Set all sprites not in the current join order to 0 progress
-        for (Sprite sprite : spriteManager.sprites()) {
-            if (!sprites.contains(sprite.getId())) {
-                sprite.setPosition(0);
-            }
         }
 
         frameTimeDelay();
