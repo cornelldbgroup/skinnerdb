@@ -84,7 +84,7 @@ public class Visualization implements MouseListener {
 
     private void updateCounterLabel() {
         iterationCounter++;
-        counterLabel.setText("Number of Iterations: " + iterationCounter);
+        counterLabel.setText("Number of Samples: " + iterationCounter);
     }
 
     public boolean createNodesSpriteIfNotPresent(int[] joinOrder) {
