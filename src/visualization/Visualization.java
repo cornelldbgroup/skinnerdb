@@ -13,6 +13,8 @@ import query.QueryInfo;
 import javax.swing.*;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.logging.Logger;
 
 public class Visualization implements MouseListener {
@@ -120,16 +122,26 @@ public class Visualization implements MouseListener {
             layout.compute();
         }
 
+        Set<String> sprites = new HashSet<>();
         String currentJoinNode = "";
         String previous = "root";
         for (int currentTable : joinOrder) {
             currentJoinNode += (char) (65 + currentTable);
-            Sprite sprite = spriteManager.getSprite("S#" + previous +
-                    "--" + currentJoinNode);
+            String spriteId = "S#" + previous + "--" + currentJoinNode;
+            sprites.add(spriteId);
+            Sprite sprite = spriteManager.getSprite(spriteId);
             sprite.setPosition(tupleIndices[currentTable] /
                     (double) tableCardinality[currentTable]);
             previous = currentJoinNode;
         }
+
+        // Set all sprites not in the current join order to 0 progress
+        for (Sprite sprite : spriteManager.sprites()) {
+            if (!sprites.contains(sprite.getId())) {
+                sprite.setPosition(0);
+            }
+        }
+
         sleep(50);
     }
 

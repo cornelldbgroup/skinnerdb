@@ -42,10 +42,11 @@ public class JoinProcessor {
     public static void process(QueryInfo query,
                                Context context) throws Exception {
         Visualization visualization = null;
-
+        boolean forget = JoinConfig.FORGET;
         if (query.explain) {
             visualization = new Visualization();
             visualization.init(query);
+            forget = false;
         }
 
         // Initialize statistics
@@ -133,7 +134,7 @@ public class JoinProcessor {
                     break;
             }
             // Consider memory loss
-            if (JoinConfig.FORGET && roundCtr == nextForget) {
+            if (forget && roundCtr == nextForget) {
                 root = new UctNode(roundCtr, query, true, joinOp);
                 nextForget *= 10;
             }
