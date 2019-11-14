@@ -7,10 +7,10 @@ import org.graphstream.ui.layout.LayoutRunner;
 import org.graphstream.ui.spriteManager.Sprite;
 import org.graphstream.ui.spriteManager.SpriteManager;
 import org.graphstream.ui.swingViewer.ViewPanel;
-import org.graphstream.ui.view.View;
 import org.graphstream.ui.view.Viewer;
 import query.QueryInfo;
 
+import javax.swing.*;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 import java.util.logging.Logger;
@@ -21,6 +21,8 @@ public class Visualization implements MouseListener {
     SpriteManager spriteManager;
     TreeLayout layout;
     QueryInfo info;
+    JLabel counterLabel;
+    int iterationCounter;
 
     private final String stylesheet = "" +
             "sprite { " +
@@ -32,12 +34,12 @@ public class Visualization implements MouseListener {
             "} " +
             "" +
             "node {" +
-            " size: 16px;" +
+            " size: 25px;" +
             " fill-color: #d3d3d3;" +
             " text-color: white;" +
             " text-style: bold;" +
             " text-padding: 2px;" +
-            " text-size: 12px;" +
+            " text-size: 15px;" +
             " text-background-mode: rounded-box;" +
             " text-background-color: rgb(35, 47, 62);" +
             "}" +
@@ -45,7 +47,6 @@ public class Visualization implements MouseListener {
             "edge {" +
             "  arrow-shape: none;" +
             "}";
-
 
     public void init(QueryInfo info) {
         this.info = info;
@@ -58,16 +59,21 @@ public class Visualization implements MouseListener {
         viewer.setCloseFramePolicy(Viewer.CloseFramePolicy.CLOSE_VIEWER);
         viewer.disableAutoLayout();
 
-
         layout = new TreeLayout();
         layout.addSink(graph);
         graph.addSink(layout);
 
-        View view = viewer.getDefaultView();
-        for (MouseListener listener : ((ViewPanel) view).getMouseListeners()) {
+        ViewPanel view = viewer.getDefaultView();
+        for (MouseListener listener : view.getMouseListeners()) {
             view.removeMouseListener(listener);
         }
         view.addMouseListener(this);
+
+        iterationCounter = 0;
+        counterLabel = new JLabel("Number of Iterations: " + iterationCounter);
+        counterLabel.setBounds(25, 0, 200, 50);
+        view.add(counterLabel);
+        view.setLayout(null);
 
         spriteManager = new SpriteManager(graph);
         graph.setAttribute("ui.stylesheet", stylesheet);
@@ -76,9 +82,15 @@ public class Visualization implements MouseListener {
         graph.addNode("root").addAttribute("ui.label", "Join");
     }
 
-    public void createNodesSpriteIfNotPresent(int[] joinOrder) {
+    private void updateCounterLabel() {
+        iterationCounter++;
+        counterLabel.setText("Number of Iterations: " + iterationCounter);
+    }
+
+    public boolean createNodesSpriteIfNotPresent(int[] joinOrder) {
         String currentJoinNode = "";
         String previous = "root";
+        boolean modified = false;
         for (int x : joinOrder) {
             String tableName = info.aliasToTable.get(info.aliases[x]);
 
@@ -92,15 +104,21 @@ public class Visualization implements MouseListener {
                         "--" + currentJoinNode);
                 sprite.attachToEdge(edge.getId());
                 sprite.setPosition(0);
+
+                modified = true;
                 sleep(8);
             }
             previous = currentJoinNode;
         }
+        return modified;
     }
 
     public void update(int[] joinOrder, double reward, int[] tupleIndices,
                        int[] tableCardinality) {
-        createNodesSpriteIfNotPresent(joinOrder);
+        updateCounterLabel();
+        if (createNodesSpriteIfNotPresent(joinOrder)) {
+            layout.compute();
+        }
 
         String currentJoinNode = "";
         String previous = "root";
@@ -112,9 +130,7 @@ public class Visualization implements MouseListener {
                     (double) tableCardinality[currentTable]);
             previous = currentJoinNode;
         }
-
-        layout.compute();
-        sleep(2000);
+        sleep(50);
     }
 
     @Override
