@@ -61,9 +61,7 @@ public class Visualization implements MouseListener {
         viewer.setCloseFramePolicy(Viewer.CloseFramePolicy.CLOSE_VIEWER);
         viewer.disableAutoLayout();
 
-        layout = new TreeLayout();
-        layout.addSink(graph);
-        graph.addSink(layout);
+        layout = new TreeLayout(graph);
 
         ViewPanel view = viewer.getDefaultView();
         for (MouseListener listener : view.getMouseListeners()) {
@@ -81,7 +79,20 @@ public class Visualization implements MouseListener {
         graph.setAttribute("ui.stylesheet", stylesheet);
         graph.setAttribute("ui.antialias");
         graph.setAttribute("ui.quality");
-        graph.addNode("root").addAttribute("ui.label", "Join");
+        addNode("root").addAttribute("ui.label", "Join");
+    }
+
+    private Node addNode(String id) {
+        Node node = graph.addNode(id);
+        layout.nodeAdded(id);
+        return node;
+    }
+
+    public Edge addEdge(String edgeId, String fromId, String toId,
+                        boolean directed) {
+        Edge edge = graph.addEdge(edgeId, fromId, toId, directed);
+        layout.edgeAdded(edgeId, fromId, toId, directed);
+        return edge;
     }
 
     private void updateCounterLabel() {
@@ -98,21 +109,37 @@ public class Visualization implements MouseListener {
 
             currentJoinNode += (char) (65 + x);
             if (graph.getNode(currentJoinNode) == null) {
-                Node newNode = graph.addNode(currentJoinNode);
+                Node newNode = addNode(currentJoinNode);
                 newNode.addAttribute("ui.label", tableName);
-                Edge edge = graph.addEdge(previous + "--" + currentJoinNode,
+                Edge edge = addEdge(previous + "--" + currentJoinNode,
                         previous, currentJoinNode, true);
                 Sprite sprite = spriteManager.addSprite("S#" + previous +
                         "--" + currentJoinNode);
                 sprite.attachToEdge(edge.getId());
                 sprite.setPosition(0);
-
                 modified = true;
-                sleep(8);
             }
             previous = currentJoinNode;
         }
         return modified;
+    }
+
+    private void frameTimeDelay() {
+        if (iterationCounter < 5) {
+            sleep(1000);
+        } else if (iterationCounter < 10) {
+            sleep(500);
+        } else if (iterationCounter < 15) {
+            sleep(250);
+        } else if (iterationCounter < 50) {
+            sleep(125);
+        } else if (iterationCounter < 150) {
+            sleep(75);
+        } else if (iterationCounter < 500) {
+            sleep(50);
+        } else {
+            sleep(8);
+        }
     }
 
     public void update(int[] joinOrder, double reward, int[] tupleIndices,
@@ -142,7 +169,7 @@ public class Visualization implements MouseListener {
             }
         }
 
-        sleep(50);
+        frameTimeDelay();
     }
 
     @Override

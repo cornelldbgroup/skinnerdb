@@ -4,13 +4,12 @@ import org.graphstream.graph.Edge;
 import org.graphstream.graph.Graph;
 import org.graphstream.graph.Node;
 import org.graphstream.graph.implementations.SingleGraph;
-import org.graphstream.stream.PipeBase;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
-public class TreeLayout extends PipeBase {
+public class TreeLayout {
     private class BuccheimState {
         // Graph Metadata
         List<List<Integer>> children;
@@ -81,17 +80,18 @@ public class TreeLayout extends PipeBase {
     }
 
 
-    final Graph internalGraph;
+    final Graph internalGraph, outputGraph;
     private boolean structureChanged;
     private final int DISTANCE = 1;
     private final double LEVEL_SPACE = 1;
     private BuccheimState state;
 
 
-    public TreeLayout() {
+    public TreeLayout(Graph outputGraph) {
         internalGraph = new SingleGraph("treelayout-internal");
         state = null;
         structureChanged = false;
+        this.outputGraph = outputGraph;
     }
 
     public void compute() {
@@ -281,35 +281,20 @@ public class TreeLayout extends PipeBase {
             if (n.hasAttribute("changed")) {
                 n.removeAttribute("changed");
 
-                sendNodeAttributeChanged(sourceId, n.getId(), "xyz", null,
-                        new double[]{n.getNumber("x"), n.getNumber("y"), 0});
+                outputGraph.getNode(n.getId()).setAttribute("xyz",
+                        n.getNumber("x"), n.getNumber("y"));
             }
         }
     }
 
-    public void nodeAdded(String sourceId, long timeId, String nodeId) {
+    public void nodeAdded(String nodeId) {
         internalGraph.addNode(nodeId);
         structureChanged = true;
     }
 
-    public void nodeRemoved(String sourceId, long timeId, String nodeId) {
-        internalGraph.removeNode(nodeId);
-        structureChanged = true;
-    }
-
-    public void edgeAdded(String sourceId, long timeId, String edgeId,
-                          String fromId, String toId, boolean directed) {
+    public void edgeAdded(String edgeId, String fromId, String toId,
+                          boolean directed) {
         internalGraph.addEdge(edgeId, fromId, toId, directed);
-        structureChanged = true;
-    }
-
-    public void edgeRemoved(String sourceId, long timeId, String edgeId) {
-        internalGraph.removeEdge(edgeId);
-        structureChanged = true;
-    }
-
-    public void graphCleared(String sourceId, long timeId) {
-        internalGraph.clear();
         structureChanged = true;
     }
 }
