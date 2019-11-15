@@ -82,7 +82,7 @@ public class TreeLayout {
 
     final Graph internalGraph, outputGraph;
     private boolean structureChanged;
-    private final int DISTANCE = 1;
+    private final double DISTANCE = 1.25;
     private final double LEVEL_SPACE = 1;
     private BuccheimState state;
 

@@ -3,6 +3,7 @@ package visualization;
 import org.graphstream.graph.Edge;
 import org.graphstream.graph.Node;
 import org.graphstream.graph.implementations.SingleGraph;
+import org.graphstream.ui.graphicGraph.stylesheet.StyleConstants;
 import org.graphstream.ui.layout.LayoutRunner;
 import org.graphstream.ui.spriteManager.Sprite;
 import org.graphstream.ui.spriteManager.SpriteManager;
@@ -11,6 +12,7 @@ import org.graphstream.ui.view.Viewer;
 import query.QueryInfo;
 
 import javax.swing.*;
+import java.awt.*;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 import java.util.HashMap;
@@ -26,9 +28,21 @@ public class Visualization implements MouseListener {
     JLabel counterLabel;
     int iterationCounter;
     Map<String, Integer> numVisits;
+    Map<String, Double> maxReward;
+    double overallMaximumReward = -1;
+    Map<String, Double> rewardSum;
 
     private final String stylesheet = "" +
-            "sprite { " +
+            "graph {" +
+            " padding: 60px;" +
+            "}" +
+            "" +
+            "sprite.counter {" +
+            " fill-mode: none;" +
+            " text-size: 12px;" +
+            "} " +
+            "" +
+            "sprite.join { " +
             " shape: flow; " +
             " size: 5px;" +
             " z-index: 0; " +
@@ -37,12 +51,12 @@ public class Visualization implements MouseListener {
             "} " +
             "" +
             "node {" +
-            " size: 50px;" +
+            " size: 35px;" +
             " fill-color: white;" +
             " text-color: white;" +
             " text-style: bold;" +
             " text-padding: 2px;" +
-            " text-size: 15px;" +
+            " text-size: 13px;" +
             " text-background-mode: rounded-box;" +
             " text-background-color: rgb(35, 47, 62);" +
             "}" +
@@ -69,6 +83,7 @@ public class Visualization implements MouseListener {
             view.removeMouseListener(listener);
         }
         view.addMouseListener(this);
+        view.setPreferredSize(new Dimension(1280, 720));
 
         iterationCounter = 0;
         counterLabel = new JLabel("Number of Iterations: " + iterationCounter);
@@ -83,6 +98,8 @@ public class Visualization implements MouseListener {
         addNode("root").addAttribute("ui.label", "Join");
 
         numVisits = new HashMap<>();
+        maxReward = new HashMap<>();
+        rewardSum = new HashMap<>();
     }
 
     private Node addNode(String id) {
@@ -118,6 +135,7 @@ public class Visualization implements MouseListener {
                         previous, currentJoinNode, true);
                 Sprite sprite = spriteManager.addSprite("S#" + previous +
                         "--" + currentJoinNode);
+                sprite.addAttribute("ui.class", "join");
                 sprite.addAttribute("progress");
                 sprite.attachToEdge(edge.getId());
                 sprite.setPosition(0);
@@ -125,14 +143,27 @@ public class Visualization implements MouseListener {
             }
             previous = currentJoinNode;
         }
+
+        if (modified) {
+            Sprite maxSprite = spriteManager.addSprite("SM#" + currentJoinNode);
+            maxSprite.addAttribute("ui.class", "counter");
+            maxSprite.attachToNode(currentJoinNode);
+            maxSprite.setPosition(StyleConstants.Units.PX, 22, 138, -90);
+
+            Sprite avgSprite = spriteManager.addSprite("SA#" + currentJoinNode);
+            avgSprite.addAttribute("ui.class", "counter");
+            avgSprite.attachToNode(currentJoinNode);
+            avgSprite.setPosition(StyleConstants.Units.PX, 40, 250, -90);
+        }
+
         return modified;
     }
 
     private void frameTimeDelay() {
         if (iterationCounter < 5) {
-            sleep(2000);
+            sleep(3000);
         } else if (iterationCounter < 10) {
-            sleep(1000);
+            sleep(2000);
         } else if (iterationCounter < 15) {
             sleep(500);
         } else if (iterationCounter < 50) {
@@ -151,6 +182,33 @@ public class Visualization implements MouseListener {
         String color = "rgb(255, " + gb + ", " + gb + ")";
         graph.getNode(node)
                 .addAttribute("ui.style", "fill-color: " + color + ";");
+    }
+
+    private void updateRewardLabels(String currentJoinNode, double reward) {
+        if (!maxReward.containsKey(currentJoinNode)) {
+            maxReward.put(currentJoinNode, reward);
+        } else {
+            maxReward.put(currentJoinNode, Math.max(reward,
+                    maxReward.get(currentJoinNode)));
+        }
+
+        if (!rewardSum.containsKey(currentJoinNode)) {
+            rewardSum.put(currentJoinNode, reward);
+        } else {
+            rewardSum.put(currentJoinNode, reward +
+                    maxReward.get(currentJoinNode));
+        }
+
+        Sprite rewardSprite = spriteManager.getSprite("SM#" + currentJoinNode);
+        rewardSprite.setAttribute("ui.label", "Max: " + String.format(
+                "%6.2e", maxReward.get(currentJoinNode)));
+
+        Sprite averageRewardSprite =
+                spriteManager.getSprite("SA#" + currentJoinNode);
+        double average =
+                rewardSum.get(currentJoinNode) / numVisits.get(currentJoinNode);
+        averageRewardSprite.setAttribute("ui.label",
+                "Average: " + String.format("%6.2e", average));
     }
 
     public void update(int[] joinOrder, double reward, int[] tupleIndices,
@@ -181,6 +239,8 @@ public class Visualization implements MouseListener {
             colorNode(currentJoinNode);
             previous = currentJoinNode;
         }
+
+        updateRewardLabels(currentJoinNode, reward);
 
         frameTimeDelay();
     }
