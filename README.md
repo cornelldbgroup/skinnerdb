@@ -18,7 +18,7 @@ The <a href="http://www.vldb.org/pvldb/vol9/p204-leis.pdf">join order benchmark<
 4. Start SkinnerDB using the executable .jar file in the target sub-folder. For Linux, use the following command in the jars directory (while replacing /path/to/skinner/data by the path to the decompressed IMDB database):
 The settings for garbage collector (<code>-XX:+UseConcMarkSweepGC</code>) and heap space (<code>-Xmx16G</code>) work best for our benchmarking platform but may need to be revised for different machines.
 ```
-java -jar -Xmx16G -XX:+UseConcMarkSweepGC Skinner.jar /path/to/skinner/data
+java -jar -Xmx16G -XX:+UseConcMarkSweepGC build/Skinner.jar /path/to/skinner/data
 ```
 
 
@@ -36,7 +36,7 @@ Typical times for running all queries of the join order benchmark are 83 seconds
 
 1. Create a new database using target/CreateDB.jar or by executing tools/CreateDB.java. You need to specify two command line parameters: the database name and an (existing) directory in which the corresponding data is stored.
 
-2. Start the Skinner console. The Skinner console can be accessed via target/Skinner.jar or by executing console/SkinnerCmd.java. You need to specify the database directory as command line parameter (the same directory that was specified in the call to CreateDB.jar).
+2. Start the Skinner console. The Skinner console can be accessed via build/Skinner.jar or by executing console/SkinnerCmd.java. You need to specify the database directory as command line parameter (the same directory that was specified in the call to CreateDB.jar).
 
 SkinnerDB is specialized for in-memory processing. The default settings for java JVM heap space etc. are in general insufficient. When starting the Skinner console, make sure to specify a sufficient amount of main memory using the -Xmx (and -Xms) parameters. Specifying more memory than necessary can improve performance further as it reduces the need for garbage collection. Also, to obtain more stable per-query performance, consider replacing the default garbage collector by specifying -XX:+UseConcMarkSweepGC as JVM parameter. Our recommendations are based on our experiences with our current test hardware and may not generalize to all platforms.
 
