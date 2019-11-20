@@ -9,7 +9,14 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
+/**
+ * Implementation of Buccheim's Tree Layout Algorithm
+ * Paper: http://dirk.jivas.de/papers/buchheim02improving.pdf
+ */
 public class TreeLayout {
+    /**
+     * State variables for the algorithm
+     */
     private class BuccheimState {
         // Graph Metadata
         List<List<Integer>> children;
@@ -48,6 +55,11 @@ public class TreeLayout {
             }
         }
 
+        /**
+         * Populates parent/children/sibling maps for the subtree with root n
+         *
+         * @param n root of the subtree
+         */
         private void computeGraphMetadata(int n) {
             Node node = internalGraph.getNode(n);
             List<Edge> leavingEdges = new ArrayList<>(node.getLeavingEdgeSet());
@@ -79,14 +91,15 @@ public class TreeLayout {
         }
     }
 
-
     final Graph internalGraph, outputGraph;
     private boolean structureChanged;
     private final double DISTANCE = 1.25;
     private final double LEVEL_SPACE = 1;
     private BuccheimState state;
 
-
+    /**
+     * @param outputGraph display graph
+     */
     public TreeLayout(Graph outputGraph) {
         internalGraph = new SingleGraph("treelayout-internal");
         state = null;
@@ -94,6 +107,9 @@ public class TreeLayout {
         this.outputGraph = outputGraph;
     }
 
+    /**
+     * Compute layouts and publish changes to the display graph if needed
+     */
     public void compute() {
         if (structureChanged) {
             structureChanged = false;
@@ -104,6 +120,10 @@ public class TreeLayout {
         publishPositions();
     }
 
+    /**
+     * Compute whether or not nodes have changed since the last position
+     * calculation.
+     */
     private void computePositionMetadata() {
         for (int idx = 0; idx < internalGraph.getNodeCount(); idx++) {
             Node n = internalGraph.getNode(idx);
@@ -119,8 +139,9 @@ public class TreeLayout {
         }
     }
 
-    // Implementation of Buccheim's Tree Layout Algorithm
-    // http://dirk.jivas.de/papers/buchheim02improving.pdf
+    /**
+     * The main method of the Buccheim algorithm.
+     */
     private void computePositions() {
         Node rootNode = internalGraph.getNode("root");
         int r = rootNode.getIndex();
@@ -129,6 +150,14 @@ public class TreeLayout {
         secondWalk(r, -state.prelim[r], 0);
     }
 
+    /**
+     * DFS through the tree and set the x position to be the prelim with any
+     * modifiers
+     *
+     * @param v     current node
+     * @param m     modifier value
+     * @param depth depth in tree
+     */
     private void secondWalk(int v, double m, int depth) {
         Node node = internalGraph.getNode(v);
         node.setAttribute("x", state.prelim[v] + m);
@@ -139,6 +168,11 @@ public class TreeLayout {
         }
     }
 
+    /**
+     * Computes a preliminary x coordinate for a node
+     *
+     * @param v the node
+     */
     private void firstWalk(int v) {
         if (state.children.get(v).size() == 0) {
             int w = state.leftSibling[v];
@@ -173,6 +207,13 @@ public class TreeLayout {
         }
     }
 
+    /**
+     * Compute any modifiers needed to prevent subtrees from overallping.
+     *
+     * @param v               the node
+     * @param defaultAncestor the left most child of v's parent
+     * @return
+     */
     private int apportion(int v, int defaultAncestor) {
         int w = state.leftSibling[v];
         if (w >= 0) {
@@ -229,6 +270,12 @@ public class TreeLayout {
         return defaultAncestor;
     }
 
+    /**
+     * Get the next node on the left most contour of the subtree.
+     *
+     * @param v the current node.
+     * @return the successor on the countour
+     */
     private int nextLeft(int v) {
         if (state.children.get(v).size() > 0) {
             return state.children.get(v).get(0);
@@ -237,6 +284,12 @@ public class TreeLayout {
         return state.thread[v];
     }
 
+    /**
+     * Get the next node on the right most contour of this subtree.
+     *
+     * @param v the current node.
+     * @return the successor on the countour
+     */
     private int nextRight(int v) {
         if (state.children.get(v).size() > 0) {
             return state.children.get(v).get(state.children.get(v).size() - 1);
@@ -245,6 +298,14 @@ public class TreeLayout {
         return state.thread[v];
     }
 
+    /**
+     * Leftmost greatest uncommon ancestor of vim and its right neighbor
+     *
+     * @param vim
+     * @param v
+     * @param defaultAncestor
+     * @return the ancestor
+     */
     private int ancestor(int vim, int v, int defaultAncestor) {
         if (state.parent[state.ancestor[vim]] == state.parent[v]) {
             return state.ancestor[vim];
@@ -252,6 +313,14 @@ public class TreeLayout {
         return defaultAncestor;
     }
 
+    /**
+     * Shift wp's subtree by shift. Prepare for the shifts for the subtrees
+     * between wp and wm.
+     *
+     * @param wm
+     * @param wp
+     * @param shift
+     */
     private void moveSubtree(int wm, int wp, double shift) {
         double subtrees = state.number[wp] - state.number[wm];
         state.change[wp] -= shift / subtrees;
@@ -261,6 +330,11 @@ public class TreeLayout {
         state.mod[wp] += shift;
     }
 
+    /**
+     * Use the result of moveSubtree to shift the subtrees.
+     *
+     * @param v the subtree rooted at v
+     */
     private void executeShifts(int v) {
         double shift = 0;
         double change = 0;
@@ -276,6 +350,10 @@ public class TreeLayout {
         }
     }
 
+    /**
+     * Send back positions to the display graph from the internal
+     * representation.
+     */
     private void publishPositions() {
         for (Node n : internalGraph) {
             if (n.hasAttribute("changed")) {
@@ -287,11 +365,24 @@ public class TreeLayout {
         }
     }
 
+    /**
+     * Add a new node to the internal representation.
+     *
+     * @param nodeId the ID of the node
+     */
     public void nodeAdded(String nodeId) {
         internalGraph.addNode(nodeId);
         structureChanged = true;
     }
 
+    /**
+     * Add a new edge to the internal representation.
+     *
+     * @param edgeId   the ID of the edge
+     * @param fromId   ID fo the source node
+     * @param toId     ID of the target node
+     * @param directed whether it is directed
+     */
     public void edgeAdded(String edgeId, String fromId, String toId,
                           boolean directed) {
         internalGraph.addEdge(edgeId, fromId, toId, directed);
