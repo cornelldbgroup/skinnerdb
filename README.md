@@ -34,9 +34,9 @@ Typical times for running all queries of the join order benchmark are 83 seconds
 
 0. Compile the code (run `mvn package`).
 
-1. Create a new database using target/CreateDB.jar or by executing tools/CreateDB.java. You need to specify two command line parameters: the database name and an (existing) directory in which the corresponding data is stored.
+1. Create a new database using build/CreateDB.jar. You need to specify two command line parameters: the database name and an (existing) directory in which the corresponding data is to be stored.
 
-2. Start the Skinner console. The Skinner console can be accessed via target/Skinner.jar or by executing console/SkinnerCmd.java. You need to specify the database directory as command line parameter (the same directory that was specified in the call to CreateDB.jar).
+2. Start the Skinner console. The Skinner console can be accessed via build/Skinner.jar. You need to specify the database directory as command line parameter (the same directory that was specified in the call to CreateDB.jar).
 
 SkinnerDB is specialized for in-memory processing. The default settings for java JVM heap space etc. are in general insufficient. When starting the Skinner console, make sure to specify a sufficient amount of main memory using the -Xmx (and -Xms) parameters. Specifying more memory than necessary can improve performance further as it reduces the need for garbage collection. Also, to obtain more stable per-query performance, consider replacing the default garbage collector by specifying -XX:+UseConcMarkSweepGC as JVM parameter. Our recommendations are based on our experiences with our current test hardware and may not generalize to all platforms.
 
