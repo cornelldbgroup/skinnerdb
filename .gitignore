@@ -51,7 +51,8 @@ local.properties
 *.launch
 
 # Default DB Directory
-db/
+db-*
 
 # Data
 imdb/data/
+tpch/data/
