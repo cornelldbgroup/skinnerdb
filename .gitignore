@@ -56,3 +56,10 @@ db-*
 # Data
 imdb/data/
 tpch/data/
+
+# MonetDB Files
+.monetdb
+
+
+# Logs
+*.log
