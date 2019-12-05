@@ -1,0 +1,10 @@
+#!/bin/sh
+
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+
+if [ ! -f ${DIR}/build/Skinner.jar ]; then
+   >&2 echo "Missing JAR file.";
+   exit 1 
+fi
+
+java -jar -Xmx16G -XX:+UseConcMarkSweepGC build/Skinner.jar $*
