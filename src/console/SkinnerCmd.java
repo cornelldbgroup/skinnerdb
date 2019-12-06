@@ -19,6 +19,11 @@ import net.sf.jsqlparser.statement.create.table.CreateTable;
 import net.sf.jsqlparser.statement.drop.Drop;
 import net.sf.jsqlparser.statement.select.PlainSelect;
 import net.sf.jsqlparser.statement.select.Select;
+import org.jline.reader.EndOfFileException;
+import org.jline.reader.LineReader;
+import org.jline.reader.LineReaderBuilder;
+import org.jline.reader.UserInterruptException;
+import org.jline.reader.impl.history.DefaultHistory;
 import print.RelationPrinter;
 import query.SQLexception;
 
@@ -371,20 +376,25 @@ public class SkinnerCmd {
             // string dictionary is still loaded.
             BufferManager.loadDictionary();
         }
-        // Command line processing
+
         System.out.println("Enter 'help' for help and 'quit' to exit");
-        Scanner scanner = new Scanner(System.in);
+
+        LineReader reader = LineReaderBuilder.builder()
+                .history(new DefaultHistory())
+                .build();
         boolean continueProcessing = true;
         while (continueProcessing) {
-            System.out.print("> ");
-            String input = scanner.nextLine();
             try {
+                String input = reader.readLine("> ");
                 continueProcessing = processInput(input);
+            } catch (UserInterruptException e) {
+                // Ignore
+            } catch (EndOfFileException e) {
+                continueProcessing = false;
             } catch (Exception e) {
                 System.err.println("Error processing command: ");
                 e.printStackTrace();
             }
         }
-        scanner.close();
     }
 }
