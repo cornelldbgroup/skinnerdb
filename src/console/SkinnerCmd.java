@@ -87,12 +87,12 @@ public class SkinnerCmd {
                         nameToQuery.entrySet()) {
                     String queryName = entry.getKey();
                     PlainSelect query = entry.getValue();
-                    System.out.println(queryName);
-                    System.out.println(query.toString());
+                    System.out.println(dirPath + queryName);
                     long startMillis = System.currentTimeMillis();
                     processSQL(query.toString(), true);
                     long totalMillis = System.currentTimeMillis() - startMillis;
-                    BenchUtil.writeStats(queryName, totalMillis, benchOut);
+                    BenchUtil.writeStats(dirPath + queryName, totalMillis,
+                            benchOut);
                 }
                 // Close benchmark result file
                 benchOut.close();
