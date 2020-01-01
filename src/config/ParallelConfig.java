@@ -10,6 +10,10 @@ package config;
  */
 public class ParallelConfig {
 	/**
+	 * Whether to parallelize.
+	 */
+	public static final boolean PARALLEL = false;
+	/**
 	 * Maximal number of tuples per batch during pre-processing.
 	 */
 	public final static int PRE_BATCH_SIZE = 1000;

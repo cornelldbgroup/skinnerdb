@@ -1,16 +1,15 @@
 package preprocessing;
 
-import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
-
-import buffer.BufferManager;
 import config.LoggingConfig;
 import config.NamingConfig;
+import config.ParallelConfig;
 import config.PreConfig;
 import expressions.ExpressionInfo;
 import indexing.Index;
@@ -94,7 +93,10 @@ public class Preprocessor {
 		preSummary.aliasToFiltered.putAll(query.aliasToTable);
 		log("Column mapping:\t" + preSummary.columnMapping.toString());
 		// Iterate over query aliases
-		query.aliasToTable.keySet().parallelStream().forEach(alias -> {
+		Stream<String> aliasStream = ParallelConfig.PARALLEL?
+				query.aliasToTable.keySet().parallelStream():
+				query.aliasToTable.keySet().stream();
+		aliasStream.forEach(alias -> {
 			// Collect required columns (for joins and post-processing) for this table
 			List<ColumnRef> curRequiredCols = new ArrayList<ColumnRef>();
 			for (ColumnRef requiredCol : requiredCols) {
@@ -286,7 +288,10 @@ public class Preprocessor {
 			throws Exception {
 		// Iterate over columns in equi-joins
 		long startMillis = System.currentTimeMillis();
-		query.equiJoinCols.parallelStream().forEach(queryRef -> {
+		Stream<ColumnRef> joinColStream = ParallelConfig.PARALLEL?
+				query.equiJoinCols.parallelStream():
+					query.equiJoinCols.stream();
+		joinColStream.forEach(queryRef -> {
 			try {
 				// Resolve query-specific column reference
 				ColumnRef dbRef = preSummary.columnMapping.get(queryRef);

@@ -5,12 +5,14 @@ import java.util.BitSet;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import buffer.BufferManager;
 import catalog.CatalogManager;
 import catalog.info.ColumnInfo;
 import catalog.info.TableInfo;
 import config.GeneralConfig;
+import config.ParallelConfig;
 import data.ColumnData;
 import joining.result.ResultTuple;
 import query.ColumnRef;
@@ -63,7 +65,9 @@ public class Materialize {
 			}
 		}
 		// Generate column data
-		sourceColRefs.parallelStream().forEach(sourceColRef -> {
+		Stream<ColumnRef> sourceColStream = ParallelConfig.PARALLEL?
+				sourceColRefs.parallelStream():sourceColRefs.stream();
+		sourceColStream.forEach(sourceColRef -> {
 			// Copy relevant rows into result column
 			ColumnData srcData = BufferManager.colToData.get(sourceColRef);
 			ColumnData resultData = rowList==null?
@@ -129,7 +133,9 @@ public class Materialize {
 			resultInfo.addColumn(targetInfo);
 		}
 		// Materialize result columns
-		sourceCols.parallelStream().forEach(srcQueryRef -> {
+		Stream<ColumnRef> sourceColStream = ParallelConfig.PARALLEL?
+				sourceCols.parallelStream():sourceCols.stream();
+		sourceColStream.forEach(srcQueryRef -> {
 			// Generate target column reference
 			String targetCol = srcQueryRef.aliasName + "." + srcQueryRef.columnName;
 			ColumnRef targetRef = new ColumnRef(targetRelName, targetCol);
