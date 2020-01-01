@@ -1,5 +1,6 @@
 package indexing;
 
+import com.koloboke.collect.IntCollection;
 import config.LoggingConfig;
 
 /**
@@ -20,6 +21,11 @@ public abstract class Index {
 	 */
 	public int[] positions;
 	/**
+	 * After indexing: contains row id where the element
+	 * is sorted in an increasing way.
+	 */
+	public int[] sortedRow;
+	/**
 	 * Initialize for given cardinality of indexed table.
 	 * 
 	 * @param cardinality	number of rows to index
@@ -27,6 +33,14 @@ public abstract class Index {
 	public Index(int cardinality) {
 		this.cardinality = cardinality;
 	}
+
+	/**
+	 * Return a Set of first position for each distinct key.
+	 *
+	 * @return		Set of first position for each distinct key.
+	 */
+	public abstract IntCollection posSet();
+
 	/**
 	 * Output given log text if activated.
 	 * 

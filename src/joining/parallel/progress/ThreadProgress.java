@@ -25,16 +25,17 @@ public class ThreadProgress {
     }
 
     public int isSlowest(int splitKey, int threadID, int stateIndex) {
+        int flag = 1;
         for (int i = 0; i < latestStates.length; i++) {
             if (i != threadID) {
                 if (latestStates[i] != null) {
-                    int[] newIndex = latestStates[i].tableTupleIndexEpoch.get(splitKey);
-                    if (newIndex != null) {
-                        if (stateIndex < newIndex[0]) {
-                            return 1;
-                        }
-                        else if (stateIndex > newIndex[0]) {
+                    int[] newIndex = latestStates[i].tableTupleIndexEpoch[splitKey];
+                    if (newIndex[1] > 0) {
+                        if (stateIndex > newIndex[0]) {
                             return -1;
+                        }
+                        else if (stateIndex == newIndex[0]) {
+                            flag = 0;
                         }
                     }
                     else {
@@ -46,7 +47,7 @@ public class ThreadProgress {
                 }
             }
         }
-        return 0;
+        return flag;
     }
 
     public int getSlowestProgress(int splitKey) {
@@ -69,7 +70,7 @@ public class ThreadProgress {
         int slowestProgress = Integer.MAX_VALUE;
         ThreadState eachState = latestStates[threadID];
         if (eachState != null && eachState.hasProgress(splitKey)) {
-            int newIndex = eachState.tableTupleIndexEpoch.get(splitKey)[0];
+            int newIndex = eachState.tableTupleIndexEpoch[splitKey][0];
             slowestProgress = Math.min(newIndex, slowestProgress);
         }
         else {

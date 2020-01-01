@@ -1,5 +1,7 @@
 package joining.parallel.uct;
 
+import config.JoinConfig;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -55,8 +57,8 @@ public class BaseUctInner extends BaseUctNode {
                 } else {
                     double childReward = child.accumulatedReward / childVisits;
                     int nrVisits = this.nrVisits;
-//                    double uctValue = childReward + 1E-20 * Math.sqrt(Math.log(nrVisits) / childVisits);
-                    double uctValue = childReward;
+                    double uctValue = childReward + JoinConfig.EXPLORATION_WEIGHT * Math.sqrt(Math.log(nrVisits) / childVisits);
+//                    double uctValue = childReward;
                     if (uctValue > maxUCT) {
                         maxUCT = uctValue;
                         maxUCTchild = child;

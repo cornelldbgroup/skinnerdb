@@ -33,6 +33,10 @@ import net.sf.jsqlparser.statement.select.PlainSelect;
 import net.sf.jsqlparser.statement.select.SelectExpressionItem;
 import net.sf.jsqlparser.statement.select.SelectItem;
 import net.sf.jsqlparser.util.cnfexpression.CNFConverter;
+import predicate.NonEquiCols;
+import predicate.NonEquiNode;
+import predicate.NonEquiNodesTest;
+import preprocessing.Context;
 import query.from.FromUtil;
 import query.select.SelectUtil;
 
@@ -136,6 +140,10 @@ public class QueryInfo {
 	 */
 	public Set<ColumnRef> equiJoinCols = new HashSet<>();
 	/**
+	 * Columns that are needed to create an index.
+	 */
+	public Set<ColumnRef> indexCols = new HashSet<>();
+	/**
 	 * List of expressions that correspond to
 	 * equality join predicates.
 	 */
@@ -147,6 +155,12 @@ public class QueryInfo {
 	 */	
 	public List<ExpressionInfo> nonEquiJoinPreds =
 			new ArrayList<ExpressionInfo>();
+	/**
+	 * List of trees that correspond to
+	 * non-equi join predicates.
+	 */
+	public List<NonEquiNode> nonEquiJoinNodes =
+			new ArrayList<>();
 	/**
 	 * Expressions that appear in GROUP-BY clause with
 	 * associated meta-data.
@@ -351,6 +365,14 @@ public class QueryInfo {
 		}
 		return null;
 	}
+
+	Set<ColumnRef> extractNonEquiJoinCols(ExpressionInfo exprInfo) {
+		NonEquiCols nonEquiCols = new NonEquiCols(this);
+		exprInfo.conjuncts.get(0).accept(nonEquiCols);
+		return nonEquiCols.extractedCols;
+	}
+
+
 	/**
 	 * Extracts predicates from normalized WHERE clause, separating
 	 * predicates by the tables they refer to.
@@ -401,6 +423,7 @@ public class QueryInfo {
 						Set<ColumnRef> curEquiJoinCols = extractEquiJoinCols(curInfo);
 						if (curEquiJoinCols != null) {							
 							equiJoinCols.addAll(curEquiJoinCols);
+							indexCols.addAll(curEquiJoinCols);
 							equiJoinPreds.add(curInfo);
 						} else {
 							nonEquiPred = nonEquiPred==null?conjunct:
@@ -409,11 +432,29 @@ public class QueryInfo {
 					} // over conjuncts of join predicates
 					// Add non-equi join predicates if any
 					if (nonEquiPred != null) {
-						nonEquiJoinPreds.add(new ExpressionInfo(this, nonEquiPred));
+						ExpressionInfo curInfo = new ExpressionInfo(this, nonEquiPred);
+						nonEquiJoinPreds.add(curInfo);
+						indexCols.addAll(extractNonEquiJoinCols(curInfo));
 					}
 				} // if join predicate
 			} // over where conjuncts
 		} // if where clause
+	}
+
+	/**
+	/**
+	 * Convert each nonequi-predicates into a tree.
+	 *
+	 * @param context	context after preprocessing
+	 */
+	public void convertNonEquiPredicates(Context context) {
+		// Build non-equi nodes
+		NonEquiNodesTest nonEquiNodesTest = new NonEquiNodesTest(this, context.columnMapping);
+		nonEquiJoinPreds.forEach(pred -> {
+			pred.conjuncts.get(0).accept(nonEquiNodesTest);
+			if (nonEquiNodesTest.nonEquiNodes.size() > 0)
+				nonEquiJoinNodes.add(nonEquiNodesTest.nonEquiNodes.pop());
+		});
 	}
 	/**
 	 * Adds expressions in the GROUP-By clause (if any).

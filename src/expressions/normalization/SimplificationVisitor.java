@@ -161,27 +161,32 @@ public class SimplificationVisitor extends SkinnerVisitor {
 			caseResultNull.setElseExpression(newFunction);
 			opStack.push(caseResultNull);
 		} else if (fctName.equals("avg")) {
-			// Sum over average input expression and cast to double
-			newFunction.setName("sum");
-			newFunction.setAllColumns(false);
+//			// Sum over average input expression and cast to double
+//			newFunction.setName("sum");
+//			newFunction.setAllColumns(false);
+//			newFunction.setParameters(new ExpressionList(newParams));
+//			CastExpression newCast = new CastExpression();
+//			newCast.setLeftExpression(newFunction);
+//			ColDataType doubleType = new ColDataType();
+//			doubleType.setDataType("double");
+//			newCast.setType(doubleType);
+//			// Divide by the count of average input
+//			Function divisorFct = new Function();
+//			divisorFct.setAllColumns(false);
+//			divisorFct.setDistinct(false);
+//			divisorFct.setEscaped(false);
+//			divisorFct.setName("count");
+//			divisorFct.setParameters(new ExpressionList(newParams));
+//			Division division = new Division();
+//			division.setLeftExpression(newCast);
+//			division.setRightExpression(divisorFct);
+//			// Still need to rewrite the count statement
+//			division.accept(this);
+			newFunction.setName(arg0.getName());
+			newFunction.setAllColumns(arg0.isAllColumns());
 			newFunction.setParameters(new ExpressionList(newParams));
-			CastExpression newCast = new CastExpression();
-			newCast.setLeftExpression(newFunction);
-			ColDataType doubleType = new ColDataType();
-			doubleType.setDataType("double");
-			newCast.setType(doubleType);
-			// Divide by the count of average input
-			Function divisorFct = new Function();
-			divisorFct.setAllColumns(false);
-			divisorFct.setDistinct(false);
-			divisorFct.setEscaped(false);
-			divisorFct.setName("count");
-			divisorFct.setParameters(new ExpressionList(newParams));
-			Division division = new Division();
-			division.setLeftExpression(newCast);
-			division.setRightExpression(divisorFct);
-			// Still need to rewrite the count statement
-			division.accept(this);
+			opStack.push(newFunction);
+
 		} else {
 			newFunction.setName(arg0.getName());
 			newFunction.setAllColumns(arg0.isAllColumns());	

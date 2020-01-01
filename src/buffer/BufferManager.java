@@ -53,6 +53,10 @@ public class BufferManager {
 	 */
 	public final static Map<String, Integer> predicateToID =
 			new HashMap<>();
+	/**
+	 * Previous query name.
+	 */
+	public static String prevQuery;
 
 	/**
 	 * Loads dictionary from hard disk.
@@ -218,17 +222,15 @@ public class BufferManager {
 	 * @param queryName		the name of query group.
 	 */
 	public static void unloadCache(String queryName) {
-		indexCache.clear();
-		predicateToID.clear();
-//		if (prevQuery == null) {
-//			prevQuery = queryName;
-//		}
-//		if (!queryName.equals(prevQuery)) {
-//			prevQuery = queryName;
-//			indexCache.clear();
-//			predicateToID.clear();
-//			System.out.println("Clear the cache!");
-//		}
+		if (prevQuery == null) {
+			prevQuery = queryName;
+		}
+		else if (!queryName.equals(prevQuery)) {
+			prevQuery = queryName;
+			indexCache.clear();
+			predicateToID.clear();
+			System.out.println("Clear the cache!");
+		}
 	}
 	/**
 	/**

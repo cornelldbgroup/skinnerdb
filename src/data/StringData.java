@@ -10,6 +10,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
+import indexing.Index;
 import joining.result.ResultTuple;
 
 /**
@@ -42,7 +43,12 @@ public class StringData extends ColumnData implements Serializable {
 			return cmp>0?1:(cmp<0?-1:0);
 		}
 	}
-	
+
+	@Override
+	public long longForRow(int row) {
+		return 0;
+	}
+
 	@Override
 	public int hashForRow(int row) {
 		return data[row].hashCode();
@@ -81,6 +87,21 @@ public class StringData extends ColumnData implements Serializable {
 				copyColumn.data[copiedRowCtr] = data[row];
 				copyColumn.isNull.set(copiedRowCtr, isNull.get(row));
 			}
+			++copiedRowCtr;
+		}
+		return copyColumn;
+	}
+
+	@Override
+	public ColumnData copyRangeRows(int first, int last, Index index) {
+		int cardinality = last - first;
+		StringData copyColumn = new StringData(cardinality);
+		int copiedRowCtr = 0;
+		for (int rid = first; rid < last; rid++) {
+			int row = index.sortedRow[rid];
+			// Treat special case: insertion of null values
+			copyColumn.data[copiedRowCtr] = data[row];
+			copyColumn.isNull.set(copiedRowCtr, isNull.get(row));
 			++copiedRowCtr;
 		}
 		return copyColumn;

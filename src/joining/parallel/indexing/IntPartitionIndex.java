@@ -1,13 +1,16 @@
 package joining.parallel.indexing;
 
+import com.koloboke.collect.IntCollection;
 import com.koloboke.collect.map.IntIntCursor;
 import com.koloboke.collect.map.IntIntMap;
 import com.koloboke.collect.map.hash.HashIntIntMaps;
 import config.ParallelConfig;
 import data.IntData;
+import predicate.Operator;
 import query.ColumnRef;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.stream.IntStream;
 
@@ -51,6 +54,7 @@ public class IntPartitionIndex extends PartitionIndex {
         this.nrThreads = nrThreads;
         this.intData = intData;
         this.scopes = new byte[this.cardinality];
+        this.sortedRow = new int[this.cardinality];
         this.queryRef = queryRef;
 
         if (policy == IndexPolicy.Key) {
@@ -94,7 +98,7 @@ public class IntPartitionIndex extends PartitionIndex {
         } else {
             keyToPositions = intIndex.keyToPositions;
             positions = new int[intIndex.positions.length];
-            List<IndexRange> batches = this.split();
+            List<IntIndexRange> batches = this.split();
             batches.parallelStream().forEach(batch -> {
                 // Evaluate predicate for each table row
                 for (int rowCtr = batch.firstTuple; rowCtr <= batch.lastTuple; ++rowCtr) {
@@ -122,7 +126,7 @@ public class IntPartitionIndex extends PartitionIndex {
         int[] data = intData.data;
         keyToPositions = index.keyToPositions;
         positions = new int[index.positions.length];
-        List<IndexRange> batches = this.split();
+        List<IntIndexRange> batches = this.split();
         // Count number of occurrences for each batch.
         batches.parallelStream().forEach(batch -> {
             // Evaluate predicate for each table row
@@ -136,7 +140,7 @@ public class IntPartitionIndex extends PartitionIndex {
         int nrBatches = batches.size();
         // joining.parallel fill prefix and indices value into positions array.
         IntStream.range(0, nrBatches).parallel().forEach(bid -> {
-            IndexRange batch = batches.get(bid);
+            IntIndexRange batch = batches.get(bid);
             IntIntCursor batchCursor = batch.valuesMap.cursor();
             batch.prefixMap = HashIntIntMaps.newMutableMap(batch.valuesMap.size());
             while (batchCursor.moveNext()) {
@@ -241,7 +245,7 @@ public class IntPartitionIndex extends PartitionIndex {
     private void parallelDenseIndex(ColumnRef colRef) {
         int[] data = intData.data;
         // Divide tuples into batches
-        List<IndexRange> batches = this.split();
+        List<IntIndexRange> batches = this.split();
         IntIntMap keyToNr = HashIntIntMaps.newMutableMap(this.cardinality);
         batches.parallelStream().forEach(batch -> {
             // Evaluate predicate for each table row
@@ -252,7 +256,7 @@ public class IntPartitionIndex extends PartitionIndex {
                 }
             }
         });
-        for (IndexRange batch : batches) {
+        for (IntIndexRange batch : batches) {
             IntIntCursor keyToNrCursor = batch.valuesMap.cursor();
             while (keyToNrCursor.moveNext()) {
                 int key = keyToNrCursor.key();
@@ -282,7 +286,7 @@ public class IntPartitionIndex extends PartitionIndex {
         int nrBatches = batches.size();
         // calculate prefix sum for each bath in joining.parallel
         IntStream.range(0, nrBatches).parallel().forEach(bid -> {
-            IndexRange batch = batches.get(bid);
+            IntIndexRange batch = batches.get(bid);
             IntIntCursor batchCursor = batch.valuesMap.cursor();
             batch.prefixMap = HashIntIntMaps.newMutableMap(batch.valuesMap.size());
             while (batchCursor.moveNext()) {
@@ -314,16 +318,16 @@ public class IntPartitionIndex extends PartitionIndex {
      *
      * @return list of row ranges (batches)
      */
-    private List<IndexRange> split() {
-        List<IndexRange> batches = new ArrayList<>();
+    private List<IntIndexRange> split() {
+        List<IntIndexRange> batches = new ArrayList<>();
         int batchSize = Math.max(ParallelConfig.PRE_INDEX_SIZE, cardinality / 100);
         for (int batchCtr = 0; batchCtr * batchSize < cardinality;
              ++batchCtr) {
             int startIdx = batchCtr * batchSize;
             int tentativeEndIdx = startIdx + batchSize - 1;
             int endIdx = Math.min(cardinality - 1, tentativeEndIdx);
-            IndexRange indexRange = new IndexRange(startIdx, endIdx, batchCtr);
-            batches.add(indexRange);
+            IntIndexRange IntIndexRange = new IntIndexRange(startIdx, endIdx, batchCtr);
+            batches.add(IntIndexRange);
         }
         return batches;
     }
@@ -337,7 +341,7 @@ public class IntPartitionIndex extends PartitionIndex {
      * @param prevTuple		index of last tuple
      * @return 	index of next tuple or cardinality
      */
-    public int nextTuple(int value, int prevTuple) {
+    public int nextTuple(int value, int prevTuple, int[] nextSize) {
         // Get start position for indexed values
         int firstPos = keyToPositions.getOrDefault(value, -1);
         // No indexed values?
@@ -351,6 +355,7 @@ public class IntPartitionIndex extends PartitionIndex {
         }
         // Get number of indexed values
         int nrVals = positions[firstPos];
+        nextSize[0] = nrVals;
         // Restrict search range via binary search
         int lowerBound = firstPos + 1;
         int upperBound = firstPos + nrVals;
@@ -382,7 +387,7 @@ public class IntPartitionIndex extends PartitionIndex {
      * @param tid       thread id
      * @return index of next tuple or cardinality
      */
-    public int nextTupleInScope(int value, int priorIndex, int prevTuple, int tid) {
+    public int nextTupleInScope(int value, int priorIndex, int prevTuple, int tid, int[] nextSize) {
         tid = (priorIndex + tid) % nrThreads;
         // Get start position for indexed values
         int firstPos = keyToPositions.getOrDefault(value, -1);
@@ -392,6 +397,7 @@ public class IntPartitionIndex extends PartitionIndex {
         }
         // Can we return first indexed value?
         int nrVals = positions[firstPos];
+        nextSize[0] = nrVals;
         int firstOffset = tid + 1;
         if (firstOffset > nrVals) {
             return cardinality;
@@ -475,5 +481,53 @@ public class IntPartitionIndex extends PartitionIndex {
         } else {
             return positions[firstPos];
         }
+    }
+
+    @Override
+    public boolean evaluate(int curTuple, Number constant, Operator operator) {
+        int target = constant.intValue();
+        int value = intData.data[curTuple];
+        if (operator == Operator.EqualsTo) {
+            return value == target;
+        }
+        else if (operator == Operator.GreaterThan) {
+            return value > target;
+        }
+        else if (operator == Operator.GreaterThanEquals) {
+            return value >= target;
+        }
+        else if (operator == Operator.MinorThan) {
+            return value < target;
+        }
+        else if (operator == Operator.MinorThanEquals) {
+            return value <= target;
+        }
+        System.out.println("Wrong");
+        return false;
+    }
+
+    @Override
+    public Number getNumber(int curTuple) {
+        return intData.data[curTuple];
+    }
+
+    @Override
+    public void sortRows() {
+        sortedRow = IntStream.range(0, cardinality)
+                .boxed().sorted((o1, o2) -> {
+                    int d1 = intData.data[o1];
+                    int d2 = intData.data[o2];
+                    int diff = d1 - d2;
+                    if (diff == 0) {
+                        return o1 - o2;
+                    }
+                    return diff;
+                })
+                .mapToInt(ele -> ele).toArray();
+    }
+
+    @Override
+    public IntCollection posSet() {
+        return keyToPositions.values();
     }
 }

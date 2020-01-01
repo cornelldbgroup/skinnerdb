@@ -1,13 +1,16 @@
 package joining.parallel.indexing;
 
+import com.koloboke.collect.IntCollection;
 import com.koloboke.collect.map.DoubleIntCursor;
 import com.koloboke.collect.map.DoubleIntMap;
 import com.koloboke.collect.map.hash.HashDoubleIntMaps;
 import config.ParallelConfig;
 import data.DoubleData;
+import predicate.Operator;
 import query.ColumnRef;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.stream.IntStream;
 
@@ -338,7 +341,7 @@ public class DoublePartitionIndex extends PartitionIndex {
      * @param prevTuple		index of last tuple
      * @return 	index of next tuple or cardinality
      */
-    public int nextTuple(double value, int prevTuple) {
+    public int nextTuple(double value, int prevTuple, int[] nextSize) {
         // Get start position for indexed values
         int firstPos = keyToPositions.getOrDefault(value, -1);
         // No indexed values?
@@ -352,6 +355,7 @@ public class DoublePartitionIndex extends PartitionIndex {
         }
         // Get number of indexed values
         int nrVals = positions[firstPos];
+        nextSize[0] = nrVals;
         // Restrict search range via binary search
         int lowerBound = firstPos + 1;
         int upperBound = firstPos + nrVals;
@@ -383,7 +387,7 @@ public class DoublePartitionIndex extends PartitionIndex {
      * @param tid       thread id
      * @return index of next tuple or cardinality
      */
-    public int nextTupleInScope(double value, int priorIndex, int prevTuple, int tid) {
+    public int nextTupleInScope(double value, int priorIndex, int prevTuple, int tid, int[] nextSize) {
         tid = (priorIndex + tid) % nrThreads;
         // Get start position for indexed values
         int firstPos = keyToPositions.getOrDefault(value, -1);
@@ -393,6 +397,7 @@ public class DoublePartitionIndex extends PartitionIndex {
         }
         // Can we return first indexed value?
         int nrVals = positions[firstPos];
+        nextSize[0] = nrVals;
         int firstOffset = tid + 1;
         if (firstOffset > nrVals) {
             return cardinality;
@@ -476,5 +481,45 @@ public class DoublePartitionIndex extends PartitionIndex {
         } else {
             return positions[firstPos];
         }
+    }
+
+    @Override
+    public boolean evaluate(int curTuple, Number constant, Operator operator) {
+        double target = constant.doubleValue();
+        double value = doubleData.data[curTuple];
+        if (operator == Operator.EqualsTo) {
+            return value == target;
+        }
+        else if (operator == Operator.GreaterThan) {
+            return value > target;
+        }
+        else if (operator == Operator.GreaterThanEquals) {
+            return value >= target;
+        }
+        else if (operator == Operator.MinorThan) {
+            return value < target;
+        }
+        else if (operator == Operator.MinorThanEquals) {
+            return value <= target;
+        }
+        System.out.println("Wrong");
+        return false;
+    }
+
+    @Override
+    public Number getNumber(int curTuple) {
+        return doubleData.data[curTuple];
+    }
+
+    @Override
+    public void sortRows() {
+        sortedRow = IntStream.range(0, cardinality)
+                .boxed().sorted(Comparator.comparingDouble(i -> doubleData.data[i]))
+                .mapToInt(ele -> ele).toArray();
+    }
+
+    @Override
+    public IntCollection posSet() {
+        return keyToPositions.values();
     }
 }

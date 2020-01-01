@@ -135,15 +135,14 @@ public class OldJoin extends MultiWayJoin {
         log(plan.toString());
         // Execute from starting state, save progress, return progress
         State state = tracker.continueFrom(joinOrder);
-        writeLog("Join: " + Arrays.toString(order));
-        writeLog("Start: " + state.toString());
+//        writeLog("Start: " + state.toString());
         //logger.println("Start state " + state);
         int[] offsets = tracker.tableOffset;
-        writeLog("Offset: " + Arrays.toString(offsets));
         executeWithBudget(plan, state, offsets);
-        writeLog("End: " + state.toString());
-        double reward = reward(joinOrder.order, 
+        double reward = reward(joinOrder.order,
         		tupleIndexDelta, offsets);
+//        writeLog("End: " + state.toString());
+//        writeLog("Reward: " + reward);
         tracker.updateProgress(joinOrder, state);
         return reward;
 	}
@@ -238,7 +237,7 @@ public class OldJoin extends MultiWayJoin {
                     // Complete result row -> add to result
                 	++nrResultTuples;
                     result.add(tupleIndices);
-                    writeLog("INFO:Bingo: " + Arrays.toString(tupleIndices));
+//                    writeLog("INFO:Bingo: " + Arrays.toString(tupleIndices));
                     tupleIndices[nextTable] = proposeNext(
                     		joinIndices.get(joinIndex), nextTable, tupleIndices);
                     // Have reached end of current table? -> we backtrack.

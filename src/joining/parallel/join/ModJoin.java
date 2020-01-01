@@ -1,5 +1,6 @@
 package joining.parallel.join;
 
+import config.ParallelConfig;
 import config.PreConfig;
 import expressions.ExpressionInfo;
 import expressions.compilation.KnaryBoolEval;
@@ -7,6 +8,8 @@ import joining.plan.JoinOrder;
 import joining.progress.State;
 import joining.parallel.plan.LeftDeepPartitionPlan;
 import joining.parallel.progress.ParallelProgressTracker;
+import net.sf.jsqlparser.expression.Expression;
+import predicate.NonEquiNode;
 import preprocessing.Context;
 import query.QueryInfo;
 
@@ -16,12 +19,6 @@ import java.util.List;
 import java.util.Map;
 
 public class ModJoin extends DPJoin {
-    /**
-     * Re-initialized in each invocation:
-     * stores the remaining budget for
-     * the current iteration.
-     */
-    public int remainingBudget;
     /**
      * Number of completed tuples produced
      * during last invocation.
@@ -45,6 +42,10 @@ public class ModJoin extends DPJoin {
      */
     public final int[] tupleIndexDelta;
     /**
+     * The number of visits for each table during one sample.
+     */
+    public final int[] nrVisits;
+    /**
      * Counts number of log entries made.
      */
     int logCtr = 0;
@@ -60,21 +61,25 @@ public class ModJoin extends DPJoin {
      * @param budget		budget per episode
      */
     public ModJoin(QueryInfo query, Context preSummary,
-                   int budget, int nrThreads, int tid) throws Exception {
-        super(query, preSummary, budget, nrThreads, tid);
+                   int budget, int nrThreads, int tid,
+                   Map<Expression, NonEquiNode> predToEval, Map<Expression, KnaryBoolEval> predToComp) throws Exception {
+        super(query, preSummary, budget, nrThreads, tid, predToEval, predToComp);
         this.planCache = new HashMap<>();
         // Collect unary predicates
         this.unaryPreds = new KnaryBoolEval[nrJoined];
-        for (ExpressionInfo unaryExpr : query.wherePredicates) {
-            // Is it a unary predicate?
-            if (unaryExpr.aliasIdxMentioned.size()==1) {
-                // (Exactly one table mentioned for unary predicates)
-                int aliasIdx = unaryExpr.aliasIdxMentioned.iterator().next();
-                KnaryBoolEval eval = predToEval.get(unaryExpr.finalExpression);
-                unaryPreds[aliasIdx] = eval;
+        if (!PreConfig.FILTER) {
+            for (ExpressionInfo unaryExpr : query.wherePredicates) {
+                // Is it a unary predicate?
+                if (unaryExpr.aliasIdxMentioned.size()==1) {
+                    // (Exactly one table mentioned for unary predicates)
+                    int aliasIdx = unaryExpr.aliasIdxMentioned.iterator().next();
+                    KnaryBoolEval eval = predToComp.get(unaryExpr.finalExpression);
+                    unaryPreds[aliasIdx] = eval;
+                }
             }
         }
         this.tupleIndexDelta = new int[nrJoined];
+        this.nrVisits = new int[nrJoined];
     }
     /**
      * Calculates reward for progress during one invocation.
@@ -87,6 +92,8 @@ public class ModJoin extends DPJoin {
     double reward(int[] joinOrder, int[] tupleIndexDelta, int[] tableOffsets) {
         double progress = 0;
         double weight = 1;
+        double w1 = 0.1;
+        double w2 = 0.9;
         for (int pos=0; pos<nrJoined; ++pos) {
             // Scale down weight by cardinality of current table
             int curTable = joinOrder[pos];
@@ -97,11 +104,12 @@ public class ModJoin extends DPJoin {
             // Fully processed tuples from this table
             progress += tupleIndexDelta[curTable] * weight;
         }
-        return 0.5*progress + 0.5*nrResultTuples/(double)budget;
+        return w1 * progress + w2 * nrResultTuples/(double)budget;
 //        return progress;
     }
     /**
      * Executes a given join order for a given budget of steps
+     0 shared: [0] splitting 0
      * (i.e., predicate evaluations). Result tuples are added
      * to result set. Budget and result set are created during
      * the class initialization.
@@ -110,6 +118,7 @@ public class ModJoin extends DPJoin {
      */
     @Override
     public double execute(int[] order, int splitTable, int roundCtr) throws Exception {
+//        long timer0 = System.currentTimeMillis();
         // Treat special case: at least one input relation is empty
         for (int tableCtr=0; tableCtr<nrJoined; ++tableCtr) {
             if (cardinalities[tableCtr]==0) {
@@ -117,6 +126,8 @@ public class ModJoin extends DPJoin {
                 return 1;
             }
         }
+        this.roundCtr = roundCtr;
+        slowest = false;
         // Lookup or generate left-deep query plan
         JoinOrder joinOrder = new JoinOrder(order);
         int joinHash = joinOrder.splitHashCode(-1);
@@ -125,22 +136,51 @@ public class ModJoin extends DPJoin {
             plan = new LeftDeepPartitionPlan(query, predToEval, joinOrder);
             planCache.putIfAbsent(joinHash, plan);
         }
-        int splitHash = joinOrder.splitHashCode(splitTable);
+//        long timer1 = System.currentTimeMillis();
+        int splitHash = plan.splitStrategies[splitTable];
         // Execute from ing state, save progress, return progress
-        State state = tracker.continueFrom(joinOrder, splitHash, tid, splitTable, null);
+        State state = tracker.continueFrom(joinOrder, splitHash, tid, isShared);
 //        writeLog("Round: " + roundCtr);
-//        writeLog("Join: " + Arrays.toString(order) + "\tSplit: " + splitTable + "\tHash: " + splitHash);
+//        writeLog("Join: " + Arrays.toString(order) + "\tSplit: " + splitTable);
         int[] offsets = tracker.tableOffset;
 //        writeLog("Start: " + state.toString());
 //        writeLog("Offset: " + Arrays.toString(offsets));
+//        long timer2 = System.currentTimeMillis();
+        boolean forward = false;
+        for (int i = 0; i < nrJoined; i++) {
+            int table = order[i];
+            if (!forward) {
+                if (state.tupleIndices[table] < offsets[table]) {
+                    state.tupleIndices[table] = offsets[table];
+                    forward = true;
+                }
+            }
+            else {
+                state.tupleIndices[table] = Math.max(0, offsets[table]);
+            }
+        }
         executeWithBudget(plan, splitTable, state, offsets, tid);
-//        writeLog("End: " + state.toString());
+//        long timer3 = System.currentTimeMillis();
+        int large = 0;
+        for (int i = 0; i < nrVisits.length; i++) {
+            if (nrVisits[i] > large) {
+                large = nrVisits[i];
+                largeTable = i;
+            }
+        }
         double reward = reward(joinOrder.order, tupleIndexDelta, offsets);
         // Get the first table whose cardinality is larger than 1.
         int firstTable = getFirstLargeTable(order);
-        tracker.updateProgress(joinOrder, splitHash, state, tid, roundCtr, splitTable, firstTable);
+        if (!state.isFinished()) {
+            slowest = tracker.updateProgress(joinOrder, splitHash, state, tid, roundCtr, splitTable, firstTable);
+        }
+//        writeLog("Visit: " + Arrays.toString(nrVisits) + "\tLarge: " + largeTable + "\tSlow: " + slowest);
+//        writeLog("End: " + state.toString() + "\tReward: " + reward);
+//        long timer4 = System.currentTimeMillis();
+//        writeLog("time: " + (timer1 - timer0) + " " + (timer2 - timer1) + " " + (timer3 - timer2) + " " + + (timer4 - timer3));
         lastState = state;
         lastTable = splitTable;
+        noProgressOnSplit = nrVisits[splitTable] == 0;
         return reward;
     }
     /**
@@ -174,12 +214,18 @@ public class ModJoin extends DPJoin {
      * @param nextTable
      * @return
      */
-    boolean evaluateInScope(List<JoinPartitionIndexWrapper> indexWrappers, List<KnaryBoolEval> preds, int[] tupleIndices,
+    boolean evaluateInScope(List<JoinPartitionIndexWrapper> indexWrappers, List<NonEquiNode> preds, int[] tupleIndices,
                             int splitTable, int nextTable, int tid) {
         boolean first = true;
+        int slowestID = slowThreads[nextTable];
         if (indexWrappers.isEmpty()) {
             if (nextTable == splitTable) {
                 if (tupleIndices[nextTable] % nrThreads != tid) {
+                    return false;
+                }
+            }
+            else if (slowestID >= 0) {
+                if (tupleIndices[nextTable] % nrThreads != slowestID) {
                     return false;
                 }
             }
@@ -187,6 +233,11 @@ public class ModJoin extends DPJoin {
         for (JoinPartitionIndexWrapper wrapper : indexWrappers) {
             if (first && splitTable == nextTable) {
                 if (!wrapper.evaluateInScope(tupleIndices, tid)) {
+                    return false;
+                }
+            }
+            else if (first && slowestID >= 0) {
+                if (!wrapper.evaluateInScope(tupleIndices, slowestID)) {
                     return false;
                 }
             }
@@ -198,13 +249,25 @@ public class ModJoin extends DPJoin {
             first = false;
         }
         // evaluate non-equi join predicates
-        for (KnaryBoolEval pred : preds) {
-            if (pred.evaluate(tupleIndices) <= 0) {
-                return false;
+        boolean nonEquiResults = true;
+        for (NonEquiNode pred : preds) {
+            if (!pred.evaluate(tupleIndices)) {
+                nonEquiResults = false;
+                break;
             }
         }
-
-        return true;
+//        if (!preds.isEmpty()) {
+//            boolean another = boolEval.evaluate(tupleIndices) > 0;
+//            if (another != nonEquiResults) {
+//                try {
+//                    Materialize.materializeTupleIndices(preSummary.columnMapping, tupleIndices, query);
+//                } catch (Exception e) {
+//                    e.printStackTrace();
+//                }
+//                System.out.println("Wrong");
+//            }
+//        }
+        return nonEquiResults;
     }
 
     /**
@@ -220,10 +283,18 @@ public class ModJoin extends DPJoin {
                     int curIndex, int[] tupleIndices, int tid) {
         int nextTable = joinOrder[curIndex];
         int nextCardinality = cardinalities[nextTable];
+        int slowestID = slowThreads[nextTable];
         // If there is no equi-predicates.
+
         if (indexWrappers.isEmpty()) {
             if (splitTable == nextTable) {
                 int jump = (nrThreads + tid - tupleIndices[nextTable] % nrThreads) % nrThreads;
+                jump = jump == 0 ? nrThreads : jump;
+                tupleIndices[nextTable] += jump;
+            }
+            else if (slowestID >= 0) {
+                int jump = (nrThreads + slowestID - tupleIndices[nextTable] % nrThreads) % nrThreads;
+                jump = jump == 0 ? nrThreads : jump;
                 tupleIndices[nextTable] += jump;
             }
             else {
@@ -232,15 +303,17 @@ public class ModJoin extends DPJoin {
         }
         else {
             boolean first = true;
+            int[] nextSize = new int[1];
             for (JoinPartitionIndexWrapper wrapper : indexWrappers) {
-                if (splitTable == nextTable) {
+                if (splitTable == nextTable || slowestID >= 0) {
+                    int id = splitTable == nextTable ? tid : slowestID;
                     if (!first) {
                         if (wrapper.evaluate(tupleIndices)) {
                             continue;
                         }
                     }
-                    int nextRaw = first ? wrapper.nextIndexInScope(tupleIndices, tid):
-                            wrapper.nextIndex(tupleIndices);
+                    int nextRaw = first ? wrapper.nextIndexInScope(tupleIndices, id, nextSize):
+                            wrapper.nextIndex(tupleIndices, nextSize);
                     if (nextRaw < 0 || nextRaw == nextCardinality) {
                         tupleIndices[nextTable] = nextCardinality;
                         break;
@@ -251,12 +324,12 @@ public class ModJoin extends DPJoin {
                     first = false;
                 }
                 else {
-                    int nextRaw = wrapper.nextIndex(tupleIndices);
                     if (!first) {
                         if (wrapper.evaluate(tupleIndices)) {
                             continue;
                         }
                     }
+                    int nextRaw = wrapper.nextIndex(tupleIndices, nextSize);
                     if (nextRaw < 0 || nextRaw == nextCardinality) {
                         tupleIndices[nextTable] = nextCardinality;
                         break;
@@ -266,6 +339,9 @@ public class ModJoin extends DPJoin {
                     }
                     first = false;
                 }
+            }
+            if (cardinalities[nextTable] >= ParallelConfig.PARTITION_SIZE) {
+                this.nrVisits[nextTable] = nextSize[0];
             }
         }
 
@@ -297,14 +373,16 @@ public class ModJoin extends DPJoin {
         int nrTables = query.nrJoined;
         int[] tupleIndices = new int[nrTables];
         List<List<JoinPartitionIndexWrapper>> joinIndices = plan.joinIndices;
-        List<List<KnaryBoolEval>> applicablePreds = plan.applicablePreds;
+//        List<List<KnaryBoolEval>> applicablePreds = plan.applicablePreds;
+        List<List<NonEquiNode>> applicablePreds = plan.nonEquiNodes;
         // Initialize state and flags to prepare budgeted execution
 //        int joinIndex = state.lastIndex;
-        int joinIndex = 1;
+        int joinIndex = 0;
         System.arraycopy(state.tupleIndices, 0, tupleIndices, 0, nrTables);
         int remainingBudget = budget;
         // Number of completed tuples added
         nrResultTuples = 0;
+        Arrays.fill(this.nrVisits, 0);
         // Execute join order until budget depleted or all input finished -
         // at each iteration start, tuple indices contain next tuple
         // combination to look at.
@@ -321,11 +399,11 @@ public class ModJoin extends DPJoin {
                     offsets[nextTable], tupleIndices[nextTable]);
             // Evaluate all applicable predicates on joined tuples
             KnaryBoolEval unaryPred = unaryPreds[nextTable];
-
-            if ((PreConfig.PRE_FILTER || unaryPred == null ||
+            if ((PreConfig.FILTER || unaryPred == null ||
                     unaryPred.evaluate(tupleIndices)>0) &&
 //                    evaluateAll(applicablePreds.get(joinIndex), tupleIndices)
-                    evaluateInScope(joinIndices.get(joinIndex), applicablePreds.get(joinIndex), tupleIndices, splitTable, nextTable, tid)
+                    evaluateInScope(joinIndices.get(joinIndex), applicablePreds.get(joinIndex),
+                            tupleIndices, splitTable, nextTable, tid)
             ) {
 //                ++statsInstance.nrTuples;
                 // Do we have a complete result row?
@@ -346,6 +424,7 @@ public class ModJoin extends DPJoin {
                 // try next tuple in same table.
                 joinIndex = proposeNextInScope(
                         plan.joinOrder.order, splitTable, joinIndices.get(joinIndex), joinIndex, tupleIndices, tid);
+
             }
             --remainingBudget;
         }
@@ -365,6 +444,6 @@ public class ModJoin extends DPJoin {
     }
     @Override
     public boolean isFinished() {
-        return lastState.isFinished();
+        return isFinished || lastState.isFinished();
     }
 }

@@ -25,6 +25,11 @@ public class Group {
 	 */
 	public final Collection<ColumnData> groupCols;
 	/**
+	 * Long array where each element represents a
+	 * representative data of group.
+	 */
+	public final long[] rowValues;
+	/**
 	 * Initializes this group for a given row as
 	 * representative, using given set of columns
 	 * for calculating groups.
@@ -35,13 +40,18 @@ public class Group {
 	public Group(int rowID, Collection<ColumnData> groupCols) {
 		this.representativeRow = rowID;
 		this.groupCols = groupCols;
+		this.rowValues = new long[groupCols.size()];
+		int cid = 0;
+		for (ColumnData col : groupCols) {
+			rowValues[cid] = col.longForRow(rowID);
+			cid++;
+		}
 	}
 	@Override
 	public boolean equals(Object other) {
 		Group otherGroup = (Group)other;
-		int otherRow = otherGroup.representativeRow;
-		for (ColumnData col : groupCols) {
-			if (col.compareRows(representativeRow, otherRow)!=0) {
+		for (int i = 0; i < groupCols.size(); i++) {
+			if (otherGroup.rowValues[i] != rowValues[i]) {
 				return false;
 			}
 		}
@@ -50,8 +60,8 @@ public class Group {
 	@Override
 	public int hashCode() {
 		int hash = 0;
-		for (ColumnData col : groupCols) {
-			hash += col.hashForRow(representativeRow);
+		for (long value: rowValues) {
+			hash += Long.hashCode(value);
 		}
 		return hash;
 	}

@@ -48,6 +48,26 @@ public class JoinProcessor {
 			Context context) throws Exception {
         // Initialize statistics
 		long startMillis = System.currentTimeMillis();
+		// there is no predicate to evaluate in join phase.
+		if (query.equiJoinPreds.size() == 0 && query.nonEquiJoinPreds.size() == 0) {
+			String targetRelName = NamingConfig.JOINED_NAME;
+			Materialize.executeFromExistingTable(query.colsForPostProcessing,
+					context.columnMapping, targetRelName);
+			// Measure execution time for join phase
+			JoinStats.exeTime = 0;
+			JoinStats.subExeTime.add(JoinStats.exeTime);
+			// Update processing context
+			context.columnMapping.clear();
+			for (ColumnRef postCol : query.colsForPostProcessing) {
+				String newColName = postCol.aliasName + "." + postCol.columnName;
+				ColumnRef newRef = new ColumnRef(targetRelName, newColName);
+				context.columnMapping.put(postCol, newRef);
+			}
+			// Store number of join result tuples
+			int skinnerJoinCard = CatalogManager.getCardinality(targetRelName);
+			JoinStats.skinnerJoinCards.add(skinnerJoinCard);
+			return;
+		}
         JoinStats.nrTuples = 0;
         JoinStats.nrIndexLookups = 0;
         JoinStats.nrIndexEntries = 0;
@@ -108,6 +128,9 @@ public class JoinProcessor {
 		while (!joinOp.isFinished()) {
 			++roundCtr;
 			double reward = root.sample(roundCtr, joinOrder, policy);
+			if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
+				joinOp.logs.add("Round: " + roundCtr + "\tJoin order: " + Arrays.toString(joinOrder));
+			}
 			// Count reward except for final sample
 			if (!joinOp.isFinished()) {
 				accReward += reward;
@@ -204,12 +227,17 @@ public class JoinProcessor {
 			context.columnMapping.put(postCol, newRef);
 		}
 		// Store number of join result tuples
-		JoinStats.skinnerJoinCard = CatalogManager.
+		int skinnerJoinCard = CatalogManager.
 				getCardinality(NamingConfig.JOINED_NAME);
+		JoinStats.skinnerJoinCards.add(skinnerJoinCard);
+
 		// Measure execution time for join phase
 		JoinStats.joinMillis = System.currentTimeMillis() - startMillis;
+		JoinStats.subMateriazed.add(JoinStats.joinMillis - JoinStats.exeTime);
+		JoinStats.subJoinTime.add(JoinStats.exeTime);
 		System.out.println("Round count: " + roundCtr);
-		System.out.println("Join card: " + JoinStats.skinnerJoinCard + "\tJoin time:" + JoinStats.joinMillis);
+		System.out.println("Join Order: " + Arrays.toString(joinOrder));
+		System.out.println("Join card: " + skinnerJoinCard + "\tJoin time:" + JoinStats.joinMillis);
 	}
 	/**
 	 * Print out log entry if the maximal number of log
@@ -223,4 +251,5 @@ public class JoinProcessor {
 			System.out.println(logEntry);
 		}
 	}
+
 }

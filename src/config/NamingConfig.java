@@ -91,4 +91,8 @@ public class NamingConfig {
 	 * Name of the table containing final query result.
 	 */
 	public static final String FINAL_RESULT_NAME = "result.";
+	/**
+	 * Name of the table containing test query result.
+	 */
+	public static final String TEST_RESULT_NAME = "test.";
 }

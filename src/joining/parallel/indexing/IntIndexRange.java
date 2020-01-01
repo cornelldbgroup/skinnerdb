@@ -9,7 +9,7 @@ import com.koloboke.collect.map.hash.HashIntIntMaps;
  * @author Ziyun Wei
  *
  */
-public class IndexRange {
+public class IntIndexRange {
     /**
      * First tuple index in range.
      */
@@ -37,7 +37,7 @@ public class IndexRange {
      * @param firstTuple	index of first tuple in range
      * @param lastTuple		index of last tuple in range
      */
-    public IndexRange(int firstTuple, int lastTuple, int bid) {
+    public IntIndexRange(int firstTuple, int lastTuple, int bid) {
         this.firstTuple = firstTuple;
         this.lastTuple = lastTuple;
         this.bid = bid;

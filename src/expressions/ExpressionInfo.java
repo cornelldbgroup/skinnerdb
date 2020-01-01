@@ -204,12 +204,14 @@ public class ExpressionInfo {
 				e.printStackTrace();
 			}
 			Index index = BufferManager.colToIndex.get(columnRef);
-
 			indexMentioned.put(table, index);
 			dataMentioned.put(table, data);
 		}
 	}
 
+	/**
+	 * Get the column type.
+	 */
 	public void setColumnType() {
 		for (Map.Entry<Expression, SQLtype> entry: expressionToType.entrySet()) {
 			if (entry.getKey() instanceof Column) {

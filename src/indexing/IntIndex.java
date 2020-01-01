@@ -1,5 +1,6 @@
 package indexing;
 
+import com.koloboke.collect.IntCollection;
 import com.koloboke.collect.map.IntIntCursor;
 import com.koloboke.collect.map.IntIntMap;
 import com.koloboke.collect.map.hash.HashIntIntMaps;
@@ -146,5 +147,10 @@ public class IntIndex extends Index {
 		} else {
 			return positions[firstPos];
 		}
+	}
+
+	@Override
+	public IntCollection posSet() {
+		return keyToPositions.values();
 	}
 }

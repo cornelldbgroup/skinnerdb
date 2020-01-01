@@ -2,6 +2,7 @@ package joining.parallel.join;
 
 import catalog.CatalogManager;
 import config.LoggingConfig;
+import config.PreConfig;
 import expressions.ExpressionInfo;
 import expressions.compilation.EvaluatorType;
 import expressions.compilation.ExpressionCompiler;
@@ -10,8 +11,10 @@ import joining.progress.State;
 import joining.result.JoinResult;
 import net.sf.jsqlparser.expression.Expression;
 import joining.parallel.statistics.StatsInstance;
+import predicate.NonEquiNode;
 import preprocessing.Context;
 import query.QueryInfo;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -24,7 +27,6 @@ import java.util.Map;
  * and contains finally a complete join result.
  *
  * @author Ziyun Wei
- *
  */
 public abstract class DPJoin {
     /**
@@ -51,7 +53,7 @@ public abstract class DPJoin {
     /**
      * Maps non-equi join predicates to compiled evaluators.
      */
-    protected final Map<Expression, KnaryBoolEval> predToEval;
+    protected final Map<Expression, NonEquiNode> predToEval;
     /**
      * Collects result tuples and contains
      * finally a complete result.
@@ -78,6 +80,22 @@ public abstract class DPJoin {
      */
     public int lastTable;
     /**
+     * Last large table.
+     */
+    public int largeTable;
+    /**
+     * Whether we have progress on the split table.
+     */
+    public boolean noProgressOnSplit;
+    /**
+     * Whether the thread is slowest one.
+     */
+    public boolean slowest;
+    /**
+     * Whether the thread is sharing plans.
+     */
+    public boolean isShared;
+    /**
      * A list of logs.
      */
     public List<String> logs;
@@ -86,13 +104,23 @@ public abstract class DPJoin {
      */
     public long roundCtr;
     /**
+     * Slowest threads for each split table.
+     */
+    public int[] slowThreads;
+
+    ExpressionCompiler compiler;
+    KnaryBoolEval boolEval;
+
+
+    /**
      * Initializes join operator for given query
      * and initialize new join result.
      *
-     * @param query			query to process
-     * @param preSummary	summarizes pre-processing steps
+     * @param query      query to process
+     * @param preSummary summarizes pre-processing steps
      */
-    public DPJoin(QueryInfo query, Context preSummary, int budget, int nrThreads, int tid) throws Exception {
+    public DPJoin(QueryInfo query, Context preSummary, int budget, int nrThreads, int tid,
+                  Map<Expression, NonEquiNode> predToEval, Map<Expression, KnaryBoolEval> predToComp) throws Exception {
         this.query = query;
         this.nrJoined = query.nrJoined;
         this.preSummary = preSummary;
@@ -103,7 +131,7 @@ public abstract class DPJoin {
         this.tid = tid;
         this.statsInstance = new StatsInstance();
         this.logs = new ArrayList<>();
-        for (Map.Entry<String,Integer> entry :
+        for (Map.Entry<String, Integer> entry :
                 query.aliasToIndex.entrySet()) {
             String alias = entry.getKey();
             String table = preSummary.aliasToFiltered.get(alias);
@@ -112,41 +140,51 @@ public abstract class DPJoin {
             cardinalities[index] = cardinality;
         }
         this.result = new JoinResult(nrJoined);
-        // Compile predicates
-        predToEval = new HashMap<>();
-        for (ExpressionInfo predInfo : query.nonEquiJoinPreds) {
-            // Log predicate compilation if enabled
-            if (LoggingConfig.MAX_JOIN_LOGS>0) {
-                System.out.println("Compiling predicate " + predInfo + " ...");
+        this.predToEval = predToEval;
+
+//        ExpressionInfo predInfo = query.nonEquiJoinPreds.get(0);
+//        compiler = new ExpressionCompiler(predInfo,
+//                preSummary.columnMapping, query.aliasToIndex, null,
+//                EvaluatorType.KARY_BOOLEAN);
+//        predInfo.finalExpression.accept(compiler);
+//        boolEval = (KnaryBoolEval)compiler.getBoolEval();
+
+        if (!PreConfig.FILTER) {
+            for (ExpressionInfo predInfo : query.wherePredicates) {
+                // Compile predicate and store in lookup table
+                if (predInfo.aliasIdxMentioned.size()==1) {
+                    Expression pred = predInfo.finalExpression;
+                    ExpressionCompiler compiler = new ExpressionCompiler(predInfo,
+                            preSummary.columnMapping, query.aliasToIndex, null,
+                            EvaluatorType.KARY_BOOLEAN);
+                    predInfo.finalExpression.accept(compiler);
+                    KnaryBoolEval boolEval = (KnaryBoolEval) compiler.getBoolEval();
+                    predToComp.put(pred, boolEval);
+                }
             }
-            // Compile predicate and store in lookup table
-            Expression pred = predInfo.finalExpression;
-            ExpressionCompiler compiler = new ExpressionCompiler(predInfo,
-                    preSummary.columnMapping, query.aliasToIndex, null,
-                    EvaluatorType.KARY_BOOLEAN);
-            predInfo.finalExpression.accept(compiler);
-            KnaryBoolEval boolEval = (KnaryBoolEval)compiler.getBoolEval();
-            predToEval.put(pred, boolEval);
         }
     }
+
     /**
      * Executes given join order for a given number of steps.
      *
-     * @param order		execute this join order
-     * @return			reward (higher reward means faster progress)
+     * @param order execute this join order
      * @throws Exception
+     * @return reward (higher reward means faster progress)
      */
     public abstract double execute(int[] order, int splitTable, int roundCtr) throws Exception;
+
     /**
      * Returns true iff a complete join result was generated.
      *
-     * @return	true iff query processing is finished
+     * @return true iff query processing is finished
      */
     public abstract boolean isFinished();
 
     /**
      * Get the first table that has more than 1 row.
-     * @param order     Join order.
+     *
+     * @param order Join order.
      * @return
      */
     public int getFirstLargeTable(int[] order) {
@@ -161,7 +199,7 @@ public abstract class DPJoin {
     /**
      * Put a log sentence into a list of logs.
      *
-     * @param line      log candidate
+     * @param line log candidate
      */
     public void writeLog(String line) {
         if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {

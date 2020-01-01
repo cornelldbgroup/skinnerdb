@@ -61,7 +61,7 @@ public class BenchUtil {
 		benchOut.println("Query\tMillis\tPreMillis\tJoinMillis\tExeMillis\tPostMillis\tTuples\t"
 				+ "Iterations\tLookups\tNrIndexEntries\tnrUniqueLookups\t"
 				+ "NrUctNodes\tNrPlans\tJoinCard\tNrSamples\tAvgReward\t"
-				+ "MaxReward\tTotalWork\tFilterMillis\tIndexMillis\tSubPre\tSubJoin\tSubPost");
+				+ "MaxReward\tTotalWork\tFilterMillis\tIndexMillis\tSubPre\tSubJoin\tSubMaterial\tSubPost");
 	}
 	/**
 	 * Writes out statistics concerning last query execution
@@ -74,9 +74,6 @@ public class BenchUtil {
 	 */
 	public static void writeStats(String queryName, long totalMillis, 
 			PrintWriter benchOut) throws Exception {
-		// Get cardinality of Skinner join result
-		int skinnerJoinCard = CatalogManager.getCardinality(
-				NamingConfig.JOINED_NAME);
 		// Generate output
 		benchOut.print(queryName + "\t");
 		benchOut.print(totalMillis + "\t");
@@ -91,7 +88,7 @@ public class BenchUtil {
 		benchOut.print(JoinStats.nrUniqueIndexLookups + "\t");
 		benchOut.print(JoinStats.nrUctNodes + "\t");
 		benchOut.print(JoinStats.nrPlansTried + "\t");
-		benchOut.print(skinnerJoinCard + "\t");
+		benchOut.print(JoinStats.skinnerJoinCards + "\t");
 		benchOut.print(JoinStats.nrSamples + "\t");
 		benchOut.print(JoinStats.avgReward + "\t");
 		benchOut.print(JoinStats.maxReward + "\t");
@@ -100,6 +97,7 @@ public class BenchUtil {
 		benchOut.print(PreStats.indexTime + "\t");
 		benchOut.print(Arrays.toString(PreStats.subPreMillis.toArray()) + "\t");
 		benchOut.print(Arrays.toString(JoinStats.subExeTime.toArray()) + "\t");
+		benchOut.print(Arrays.toString(JoinStats.subMateriazed.toArray()) + "\t");
 		benchOut.println(Arrays.toString(PostStats.subPostMillis.toArray()));
 		benchOut.flush();
 	}

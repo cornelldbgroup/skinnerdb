@@ -1,37 +1,65 @@
 package joining.parallel.parallelization.lockfree;
 
+import config.ParallelConfig;
+import joining.parallel.uct.SimpleUctNode;
 import joining.result.ResultTuple;
 import joining.uct.SelectionPolicy;
 import joining.parallel.join.DPJoin;
 import joining.parallel.parallelization.EndPlan;
 import joining.parallel.uct.DPNode;
+import logs.LogUtils;
 import preprocessing.Context;
 import query.QueryInfo;
+import statistics.QueryStats;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class LockFreeTask implements Callable<LockFreeResult>{
-
+    /**
+     * Query to process.
+     */
     private final QueryInfo query;
     private final Context context;
+    /**
+     * The root of parallel UCT tree.
+     */
     private DPNode root;
+    /**
+     * The finished plan.
+     */
     private final EndPlan endPlan;
+    /**
+     * Finish flag
+     */
     private final AtomicBoolean finish;
+    /**
+     * Finish flag
+     */
+    private final AtomicBoolean terminated;
+    /**
+     * Mutex lock.
+     */
     private final ReentrantLock lock;
+    /**
+     * Join executor.
+     */
     private final DPJoin joinOp;
 
 
     public LockFreeTask(QueryInfo query, Context context, DPNode root, EndPlan endPlan,
-                        AtomicBoolean finish, ReentrantLock lock, DPJoin dpJoin) {
+                        AtomicBoolean finish, AtomicBoolean terminated, ReentrantLock lock, DPJoin dpJoin) {
         this.query = query;
         this.context = context;
         this.root = root;
         this.endPlan = endPlan;
         this.finish = finish;
+        this.terminated = terminated;
         this.lock = lock;
         this.joinOp = dpJoin;
     }
@@ -43,7 +71,6 @@ public class LockFreeTask implements Callable<LockFreeResult>{
         int tid = joinOp.tid;
         int[] joinOrder = new int[query.nrJoined];
         long roundCtr = 0;
-
         // Get default action selection policy
         SelectionPolicy policy = SelectionPolicy.UCB1;
         // Initialize counter until scale down
@@ -54,21 +81,67 @@ public class LockFreeTask implements Callable<LockFreeResult>{
         int plotCtr = 0;
         // Iterate until join result was generated
         double accReward = 0;
-
-        while (true) {
-            long start = System.currentTimeMillis();
+        joinOp.slowThreads = new int[query.nrJoined];
+        Arrays.fill(joinOp.slowThreads, -1);
+        while (!terminated.get()) {
             ++roundCtr;
             double reward;
             int finalTable = endPlan.getSplitTable();
             if (finalTable != -1) {
                 joinOrder = endPlan.getJoinOrder();
-//                joinOp.budget = Integer.MAX_VALUE;
-                reward = joinOp.execute(joinOrder, finalTable, (int) roundCtr);
+                joinOp.isShared = true;
+
+                if (ParallelConfig.HEURISTIC_SHARING) {
+                    int largeTable = joinOp.largeTable;
+                    if (joinOp.slowest && largeTable != finalTable && joinOp.noProgressOnSplit) {
+                        endPlan.setSplitTable(largeTable);
+                    }
+                    boolean isFinished  = false;
+                    if (joinOp.isFinished()) {
+                        isFinished = endPlan.setFinished(tid, joinOp.lastTable);
+                    }
+                    if (isFinished) {
+                        terminated.set(true);
+                        break;
+                    }
+                    else {
+                        continue;
+                    }
+                }
+                else {
+                    System.arraycopy(endPlan.slowThreads, 0, joinOp.slowThreads, 0, query.nrJoined);
+                    if (query.nrJoined < 5 || ParallelConfig.EXE_THREADS <= 10) {
+                        reward = joinOp.execute(joinOrder, finalTable, (int) roundCtr);
+                        if (joinOp.isFinished()) {
+                            break;
+                        }
+                        else {
+                            continue;
+                        }
+                    }
+                    else {
+                        int uctTable = endPlan.tableRoot.getMaxOrderedUCTTable();
+                        reward = joinOp.execute(joinOrder, uctTable, (int) roundCtr);
+                        boolean isFinished  = false;
+
+                        if (joinOp.isFinished()) {
+                            isFinished = endPlan.setFinished(tid, joinOp.lastTable);
+                        }
+                        else {
+                            endPlan.tableRoot.updateStatistics(uctTable, reward);
+                        }
+                        if (isFinished) {
+                            terminated.set(true);
+                            break;
+                        }
+                        else {
+                            continue;
+                        }
+                    }
+                }
             }
             else {
                 reward = root.sample(roundCtr, joinOrder, joinOp, policy);
-//                System.arraycopy(new int[]{3, 5, 4, 2, 7, 1, 6, 0}, 0, joinOrder, 0, query.nrJoined);
-//                reward = joinOp.execute(joinOrder, 2, (int) roundCtr);
             }
             // Count reward except for final sample
             if (!joinOp.isFinished()) {
@@ -81,48 +154,29 @@ public class LockFreeTask implements Callable<LockFreeResult>{
                     lock.lock();
                     if (!finish.get()) {
                         System.out.println(tid + " shared: " + Arrays.toString(joinOrder) + " splitting " + splitTable);
+                        endPlan.tableRoot = new SimpleUctNode(joinOrder, joinOp.cardinalities);
                         endPlan.setJoinOrder(joinOrder);
                         endPlan.setSplitTable(splitTable);
                         finish.set(true);
                     }
                     lock.unlock();
                 }
-                if (splitTable == endPlan.getSplitTable()) {
+                if (query.nrJoined < 5 || ParallelConfig.EXE_THREADS <= 10) {
                     break;
-                } else {
-                    System.out.println(tid + ": bad restart");
                 }
+                boolean isFinished = endPlan.setFinished(tid, joinOp.lastTable);
+                if (isFinished) {
+                    terminated.set(true);
+                    break;
+                }
+//                if (splitTable == endPlan.getSplitTable()) {
+//                    break;
+//                } else {
+//                    System.out.println(tid + ": bad restart");
+//                }
             }
-            long end = System.currentTimeMillis();
 //            joinOp.writeLog("Episode Time: " + (end - start) + "\tReward: " + reward);
 
-//            switch (JoinConfig.EXPLORATION_POLICY) {
-//                case REWARD_AVERAGE:
-//                    double avgReward = accReward/roundCtr;
-//                    JoinConfig.EXPLORATION_WEIGHT = avgReward;
-//                    log("Avg. reward: " + avgReward);
-//                    break;
-//                case SCALE_DOWN:
-//                    if (roundCtr == nextScaleDown) {
-//                        JoinConfig.EXPLORATION_WEIGHT /= 10.0;
-//                        nextScaleDown *= 10;
-//                    }
-//                    break;
-//                case STATIC:
-//                case ADAPT_TO_SAMPLE:
-//                    // Nothing to do
-//                    break;
-//            }
-            // Consider memory loss
-//            if (JoinConfig.FORGET && roundCtr==nextForget && ParallelConfig.EXE_THREADS == 1) {
-//                root = new DPNode(roundCtr, query, true, 1);
-//                nextForget *= 10;
-//            }
-            // Generate logging entries if activated
-//            log("Selected join order " + Arrays.toString(joinOrder));
-//            log("Obtained reward:\t" + reward);
-//            log("Table offsets:\t" + Arrays.toString(joinOp.tracker.tableOffset));
-//            log("Table cardinalities:\t" + Arrays.toString(joinOp.cardinalities));
         }
 
         // Update statistics
@@ -152,7 +206,7 @@ public class LockFreeTask implements Callable<LockFreeResult>{
         // Materialize result table
         long timer2 = System.currentTimeMillis();
         joinOp.roundCtr = roundCtr;
-        System.out.println("Thread " + tid + " " + (timer2 - timer1) + "\t Round: " + roundCtr);
+        System.out.println("Thread " + tid + ": " + (timer2 - timer1) + "\t Round: " + roundCtr);
         Collection<ResultTuple> tuples = joinOp.result.getTuples();
         return new LockFreeResult(tuples, joinOp.logs, tid);
     }

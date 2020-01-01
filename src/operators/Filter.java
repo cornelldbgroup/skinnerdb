@@ -8,13 +8,21 @@ import java.util.stream.Collectors;
 
 import buffer.BufferManager;
 import catalog.CatalogManager;
+import com.koloboke.collect.IntCollection;
 import config.GeneralConfig;
 import config.ParallelConfig;
+import config.PreConfig;
 import expressions.ExpressionInfo;
 import expressions.compilation.EvaluatorType;
 import expressions.compilation.ExpressionCompiler;
 import expressions.compilation.UnaryBoolEval;
+import indexing.Index;
+import joining.parallel.indexing.DoublePartitionIndex;
+import joining.parallel.indexing.IntPartitionIndex;
+import joining.parallel.indexing.PartitionIndex;
 import query.ColumnRef;
+import sun.java2d.xr.XRRenderer;
+import types.JavaType;
 
 /**
  * Filters a table by applying a unary predicate.
@@ -96,26 +104,59 @@ public class Filter {
 	public static List<Integer> executeToList(ExpressionInfo unaryPred,
 			String tableName, Map<ColumnRef, ColumnRef> columnMapping) 
 					throws Exception {
+//		long s1 = System.currentTimeMillis();
 		// Load required columns for predicate evaluation
 		loadPredCols(unaryPred, columnMapping);
+//		long s2 = System.currentTimeMillis();
 		// Compile unary predicate for fast evaluation
 		UnaryBoolEval unaryBoolEval = compilePred(unaryPred, columnMapping);
 		// Get cardinality of table referenced in predicate
 		int cardinality = CatalogManager.getCardinality(tableName);
 		// Initialize filter result
 		List<Integer> result = null;
+//		long s3 = System.currentTimeMillis();
 		// Choose between sequential and joining.parallel processing
 		if (cardinality <= ParallelConfig.PRE_BATCH_SIZE) {
 			RowRange allTuples = new RowRange(0, cardinality - 1);
 			result = filterBatch(unaryBoolEval, allTuples);
 		} else {
-			// Divide tuples into batches
-			List<RowRange> batches = split(cardinality);
-			// Process batches in joining.parallel
-			result = batches.parallelStream().flatMap(batch -> 
-				filterBatch(unaryBoolEval, batch).stream()).collect(
+			if (unaryPred.columnsMentioned.size() == 1 && PreConfig.PROCESS_KEYS) {
+				// Divide tuples into batches
+				ColumnRef col = unaryPred.columnsMentioned.iterator().next();
+				ColumnRef columnRef = columnMapping.get(col);
+				Index index = BufferManager.colToIndex.get(columnRef);
+				result = filterValues(index, unaryBoolEval);
+				// Process batches in joining.parallel
+				if (result == null) {
+					// Divide tuples into batches
+					List<RowRange> batches = split(cardinality);
+					// Process batches in joining.parallel
+					result = batches.parallelStream().flatMap(batch ->
+							filterBatch(unaryBoolEval, batch).stream()).collect(
+							Collectors.toList());
+				}
+			}
+			else {
+				// Divide tuples into batches
+				List<RowRange> batches = split(cardinality);
+//				result = new ArrayList<>();
+//				// Process batches in joining.parallel
+//				for (RowRange rowRange: batches) {
+//					// Evaluate predicate for each table row
+//					for (int rowCtr=rowRange.firstTuple;
+//						 rowCtr<=rowRange.lastTuple; ++rowCtr) {
+//						if (unaryBoolEval.evaluate(rowCtr) > 0) {
+//							result.add(rowCtr);
+//						}
+//					}
+//				}
+				result = batches.parallelStream().flatMap(batch ->
+						filterBatch(unaryBoolEval, batch).stream()).collect(
 						Collectors.toList());
+			}
 		}
+//		long s4 = System.currentTimeMillis();
+//		System.out.println("Filtering details: " + (s2 - s1) + " " + (s3 - s2) + " " + (s4 - s3));
 		// Clean up columns loaded for this operation
 		/*
 		if (!GeneralConfig.inMemory) {
@@ -146,6 +187,37 @@ public class Filter {
 		return batches;
 	}
 	/**
+	 * Splits table with given cardinality into tuple batches
+	 * according to the configuration for joining.parallel processing.
+	 *
+	 * @param index			column index
+	 * @return				list of row ranges (batches)
+	 */
+	static List<Integer> filterValues(Index index, UnaryBoolEval unaryBoolEval) {
+		if (index == null) {
+			return null;
+		}
+		IntCollection posSet = index.posSet();
+		int cardinality = posSet.size();
+		if (cardinality < ParallelConfig.SPARSE_KEY_SIZE) {
+			return posSet.parallelStream().flatMap(pos -> {
+				int[] positions = index.positions;
+				int nrValues = positions[pos];
+				int rowCtr = positions[pos + 1];
+				List<Integer> result = new ArrayList<>();
+				if (unaryBoolEval.evaluate(rowCtr) > 0) {
+					for (int i = pos + 1; i <= pos + nrValues; i++) {
+						result.add(positions[i]);
+					}
+				}
+				return result.stream();
+			}).collect(Collectors.toList());
+		}
+		else {
+			return null;
+		}
+	}
+	/**
 	 * Filters given tuple batch using specified predicate evaluator,
 	 * return indices of rows within the batch that satisfy the 
 	 * predicate.
@@ -158,12 +230,25 @@ public class Filter {
 			RowRange rowRange) {
 		List<Integer> result = new ArrayList<Integer>();
 		// Evaluate predicate for each table row
+//		long s1 = System.currentTimeMillis();
 		for (int rowCtr=rowRange.firstTuple; 
 				rowCtr<=rowRange.lastTuple; ++rowCtr) {
 			if (unaryBoolEval.evaluate(rowCtr) > 0) {
 				result.add(rowCtr);
 			}
 		}
+//		long s2 = System.currentTimeMillis();
+//		System.out.println("Start: " + rowRange.firstTuple + "\tTime: " + (s2 - s1));
 		return result;
 	}
+
+	static List<Integer> filterBatch(UnaryBoolEval unaryBoolEval, int rowCtr) {
+		List<Integer> result = new ArrayList<Integer>();
+		// Evaluate predicate for each table row
+		if (unaryBoolEval.evaluate(rowCtr) > 0) {
+			result.add(rowCtr);
+		}
+		return result;
+	}
+
 }

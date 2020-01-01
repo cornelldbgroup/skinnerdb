@@ -22,11 +22,33 @@ public class ParallelConfig {
 	 */
 	public final static int PARALLEL_SIZE = 10000;
 	/**
+	 * Maximal number of tuples per batch during execution.
+	 */
+	public static int EXE_THREADS = 2;
+	/**
 	 * Maximal number of tuples per batch during pre-processing.
 	 */
-	public static int EXE_THREADS = 20;
+	public static int PRE_THREADS = 24;
 	/**
 	 * The minimal size of sparse columns.
 	 */
 	public static int SPARSE_KEY_SIZE = 10000;
+	/**
+	 * The minimum size of partitioned table
+	 */
+	public static int PARTITION_SIZE = 10000;
+	/**
+	 * Parallel specification:
+	 * 0: DPDasync
+	 * 1: DPDsync
+	 * 2: PSS
+	 * 3: PSA
+	 * 4: Root parallelization
+	 * 5: Leaf parallelization
+	 * 6: Tree parallelization
+	 *
+	 */
+	public static int PARALLEL_SPEC = 3;
+
+	public static final boolean HEURISTIC_SHARING = false;
 }

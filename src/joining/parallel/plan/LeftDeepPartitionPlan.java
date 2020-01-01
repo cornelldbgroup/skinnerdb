@@ -12,6 +12,7 @@ import joining.plan.JoinOrder;
 import joining.parallel.join.DPJoin;
 import joining.parallel.join.JoinPartitionIndexWrapper;
 import net.sf.jsqlparser.expression.Expression;
+import predicate.NonEquiNode;
 import query.ColumnRef;
 import query.QueryInfo;
 import query.SQLexception;
@@ -44,6 +45,14 @@ public class LeftDeepPartitionPlan {
 	 * predicates (null if no new predicate is applicable).
 	 */
 	public final List<List<KnaryBoolEval>> applicablePreds;
+	/**
+	 * None-equi join predicates represented by a tree.
+	 */
+	public final List<List<NonEquiNode>> nonEquiNodes;
+	/**
+	 * Split strategy for each split table.
+	 */
+	public final int[] splitStrategies;
 
 	/**
 	 * Determines the join order positions at which to
@@ -54,12 +63,13 @@ public class LeftDeepPartitionPlan {
 	 * @param joinOrder		join order
 	 * @throws Exception
 	 */
-	public LeftDeepPartitionPlan(QueryInfo query, Map<Expression, KnaryBoolEval> evalMap, JoinOrder joinOrder)
+	public LeftDeepPartitionPlan(QueryInfo query, Map<Expression, NonEquiNode> evalMap, JoinOrder joinOrder)
 					throws Exception {
 		// Count generated plan
 		int nrTables = query.nrJoined;
 		this.joinOrder = joinOrder;
 		int[] order = joinOrder.order;
+		splitStrategies = new int[order.length];
 		// Initialize remaining predicates
 		List<ExpressionInfo> remainingEquiPreds = new ArrayList<>(query.equiJoinPreds);
 		List<ExpressionInfo> remainingPreds = new ArrayList<>();
@@ -72,21 +82,30 @@ public class LeftDeepPartitionPlan {
 		// Initialize applicable predicates
 		joinIndices = new ArrayList<>();
 		applicablePreds = new ArrayList<>();
+		nonEquiNodes = new ArrayList<>();
 		for (int tableCtr=0; tableCtr<nrTables; ++tableCtr) {
 			joinIndices.add(new ArrayList<>());
 			applicablePreds.add(new ArrayList<>());
+			nonEquiNodes.add(new ArrayList<>());
 		}
 		// Iterate over join order positions, adding tables
 		Set<Integer> availableTables = new HashSet<>();
+		int noEquiPredsId = query.equiJoinPreds.size();
 		for (int joinCtr=0; joinCtr<nrTables; ++joinCtr) {
 			int nextTable = order[joinCtr];
 			availableTables.add(nextTable);
 			// Iterate over remaining equi-join predicates
 			Iterator<ExpressionInfo> equiPredsIter = remainingEquiPreds.iterator();
+			boolean first = true;
 			while (equiPredsIter.hasNext()) {
 				ExpressionInfo equiPred = equiPredsIter.next();
 				if (availableTables.containsAll(
 						equiPred.aliasIdxMentioned)) {
+					// initialize split strategy
+					if (first) {
+						splitStrategies[nextTable] = equiPred.pid;
+						first = false;
+					}
 					switch (equiPred.type) {
 						case INT:
 							joinIndices.get(joinCtr).add(new JoinIntPartitionWrapper(equiPred, order));
@@ -101,6 +120,10 @@ public class LeftDeepPartitionPlan {
 					equiPredsIter.remove();
 				}
 			}
+			if (first) {
+				splitStrategies[nextTable] = noEquiPredsId;
+				noEquiPredsId++;
+			}
 			// Iterate over remaining other predicates
 			Iterator<ExpressionInfo> generalPredsIter =
 					remainingPreds.iterator();
@@ -108,9 +131,9 @@ public class LeftDeepPartitionPlan {
 				ExpressionInfo pred = generalPredsIter.next();
 				if (availableTables.containsAll(
 						pred.aliasIdxMentioned)) {
-					KnaryBoolEval evaluator = evalMap.get(
+					NonEquiNode nonEquiNode = evalMap.get(
 							pred.finalExpression);
-					applicablePreds.get(joinCtr).add(evaluator);
+					nonEquiNodes.get(joinCtr).add(nonEquiNode);
 					generalPredsIter.remove();
 				}
 			}

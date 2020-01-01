@@ -14,6 +14,7 @@ import joining.parallel.indexing.IndexPolicy;
 import joining.parallel.indexing.IntPartitionIndex;
 import joining.parallel.indexing.PartitionIndex;
 import query.ColumnRef;
+import types.SQLtype;
 
 /**
  * Features utility functions for creating indexes.
@@ -49,7 +50,7 @@ public class Indexer {
 	 * @param colRef	create index on this column
 	 */
 	public static void partitionIndex(ColumnRef colRef, ColumnRef queryRef, PartitionIndex oldIndex,
-									  boolean isPrimary) throws Exception {
+									  boolean isPrimary, boolean isSeq, boolean sorted) throws Exception {
 		// Check if index already exists
 		if (!BufferManager.colToIndex.containsKey(colRef)) {
 			ColumnData data = BufferManager.getData(colRef);
@@ -57,17 +58,23 @@ public class Indexer {
 				IntData intData = (IntData)data;
 				IntPartitionIndex intIndex = oldIndex == null ? null : (IntPartitionIndex) oldIndex;
 				int keySize = intIndex == null ? 0 : intIndex.keyToPositions.size();
-				IndexPolicy policy = Indexer.indexPolicy(isPrimary, keySize, intData.cardinality);
+				IndexPolicy policy = Indexer.indexPolicy(isPrimary, isSeq, keySize, intData.cardinality);
 				IntPartitionIndex index = new IntPartitionIndex(intData, ParallelConfig.EXE_THREADS, colRef, queryRef,
 						intIndex, policy);
+				if (sorted) {
+					index.sortRows();
+				}
 				BufferManager.colToIndex.put(colRef, index);
 			} else if (data instanceof DoubleData) {
 				DoubleData doubleData = (DoubleData)data;
 				DoublePartitionIndex doubleIndex = oldIndex == null ? null : (DoublePartitionIndex) oldIndex;
 				int keySize = doubleIndex == null ? 0 : doubleIndex.keyToPositions.size();
-				IndexPolicy policy = Indexer.indexPolicy(isPrimary, keySize, doubleData.cardinality);
+				IndexPolicy policy = Indexer.indexPolicy(isPrimary, isSeq, keySize, doubleData.cardinality);
 				DoublePartitionIndex index = new DoublePartitionIndex(doubleData, ParallelConfig.EXE_THREADS,
 						colRef, queryRef, doubleIndex, policy);
+				if (sorted) {
+					index.sortRows();
+				}
 				BufferManager.colToIndex.put(colRef, index);
 			}
 		}
@@ -95,7 +102,9 @@ public class Indexer {
 								ColumnRef colRef = new ColumnRef(table, column);
 								System.out.println("Indexing " + colRef + " ...");
 								if (GeneralConfig.isParallel) {
-									partitionIndex(colRef, colRef, null, columnInfo.isPrimary);
+									boolean sorted = columnInfo.type == SQLtype.DATE;
+									partitionIndex(colRef, colRef, null,
+											columnInfo.isPrimary, true, sorted);
 								}
 								else {
 									index(colRef);
@@ -113,13 +122,13 @@ public class Indexer {
 		System.out.println("Indexing took " + totalMillis + " ms.");
 	}
 
-	public static IndexPolicy indexPolicy(boolean isPrimary, int keySize, int cardinality) {
+	public static IndexPolicy indexPolicy(boolean isPrimary, boolean isSeq, int keySize, int cardinality) {
 		IndexPolicy policy;
-		if (isPrimary) {
-			policy = IndexPolicy.Key;
-		}
-		else if (cardinality <= ParallelConfig.PARALLEL_SIZE) {
+		if (cardinality <= ParallelConfig.PARALLEL_SIZE || isSeq) {
 			policy = IndexPolicy.Sequential;
+		}
+		else if (isPrimary) {
+			policy = IndexPolicy.Key;
 		}
 		else if (keySize >= ParallelConfig.SPARSE_KEY_SIZE) {
 			policy = IndexPolicy.Sparse;

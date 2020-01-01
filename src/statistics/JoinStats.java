@@ -68,11 +68,19 @@ public class JoinStats {
     /**
      * Number of tuples in join result (before post-processing).
      */
-    public static int skinnerJoinCard = 0;
+    public static List<Integer> skinnerJoinCards;
+    /**
+     * A list of total materialization time for sub queries.
+     */
+    public static List<Long> subMateriazed;
     /**
      * Total execution time
      */
     public static long exeTime = 0;
+    /**
+     * A list of total join time for sub queries.
+     */
+    public static List<Long> subJoinTime;
     /**
      * A list of total execution time for sub queries.
      */

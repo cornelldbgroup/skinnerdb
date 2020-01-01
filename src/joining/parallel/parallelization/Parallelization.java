@@ -39,5 +39,11 @@ public abstract class Parallelization {
         this.context = context;
     }
 
+    /**
+     * Execute Join phase using parallelization method.
+     *
+     * @param resultList        a list of result tuples
+     * @throws Exception
+     */
     public abstract void execute(Set<ResultTuple> resultList) throws Exception;
 }

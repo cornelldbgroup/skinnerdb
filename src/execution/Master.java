@@ -1,21 +1,18 @@
 package execution;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 import buffer.BufferManager;
 import catalog.CatalogManager;
-import config.GeneralConfig;
-import config.LoggingConfig;
-import config.NamingConfig;
+import config.*;
 import expressions.VisitorUtil;
 import joining.JoinProcessor;
 import joining.ParallelJoinProcessor;
+import joining.result.ResultTuple;
 import net.sf.jsqlparser.schema.Table;
 import net.sf.jsqlparser.statement.select.PlainSelect;
-import postprocessing.PostProcessor;
+import operators.Materialize;
+import postprocessing.ParallelPostProcessor;
 import preprocessing.Context;
 import preprocessing.Preprocessor;
 import query.ColumnRef;
@@ -60,7 +57,7 @@ public class Master {
 		}
 		// Add default result relation if required
 		if (intoTbls == null) {
-			intoTbls = new ArrayList<Table>();
+			intoTbls = new ArrayList<>();
 			Table intoTable = new Table(NamingConfig.FINAL_RESULT_NAME);
 			intoTbls.add(intoTable);
 			select.setIntoTables(intoTbls);
@@ -81,10 +78,35 @@ public class Master {
 			// Analyze sub-query
 			QueryInfo subQueryInfo = new QueryInfo(subQuery, explain, 
 					plotAtMost, plotEvery, plotDir);
+			PreConfig.FILTER = PreConfig.PRE_FILTER;
 			// Filter, projection, and indexing for join phase
+			Preprocessor.performance = true;
 			Context context = Preprocessor.process(subQueryInfo);
+			if (Preprocessor.terminated) {
+				JoinStats.exeTime = 0;
+				JoinStats.subExeTime.add(JoinStats.exeTime);
+				PostStats.postMillis = 0;
+				PostStats.subPostMillis.add(PostStats.postMillis);
+				String targetRelName = NamingConfig.JOINED_NAME;
+				Materialize.execute(new HashSet<>(), subQueryInfo.aliasToIndex,
+						subQueryInfo.colsForPostProcessing,
+						context.columnMapping, targetRelName);
+//            // Update processing context
+				context.columnMapping.clear();
+				for (ColumnRef postCol : subQueryInfo.colsForPostProcessing) {
+					String newColName = postCol.aliasName + "." + postCol.columnName;
+					ColumnRef newRef = new ColumnRef(targetRelName, newColName);
+					context.columnMapping.put(postCol, newRef);
+				}
+				JoinStats.subMateriazed.add(0L);
+				// Store number of join result tuples
+				JoinStats.skinnerJoinCards.add(0);
+				break;
+			}
 			// Join filtered tables
 			if (GeneralConfig.isParallel) {
+				// Convert nonEqui-predicates into nodes
+				subQueryInfo.convertNonEquiPredicates(context);
 				ParallelJoinProcessor.process(subQueryInfo, context);
 			}
 			else {
@@ -95,8 +117,12 @@ public class Master {
 			boolean tempResult = lastSubQuery?finalTempResult:true;
 			String resultRel = subQuery.getIntoTables().get(0).getName();
 			// Aggregation, grouping, and sorting if required
-			PostProcessor.process(subQueryInfo, context, 
+//			PostProcessor.process(subQueryInfo, context,
+//					resultRel, tempResult);
+			ParallelPostProcessor.process(subQueryInfo, context,
 					resultRel, tempResult);
+			System.out.println(Arrays.toString(PostStats.subPostMillis.toArray()));
+//			RelationPrinter.print(resultRel);
 			// Clean up intermediate results except result table
 			subQueryResults.add(resultRel);
 			BufferManager.unloadTempData(subQueryResults);
@@ -106,6 +132,9 @@ public class Master {
 
 	private static void initializeStats() {
 		PreStats.subPreMillis = new ArrayList<>();
+		JoinStats.skinnerJoinCards = new ArrayList<>();
+		JoinStats.subJoinTime = new ArrayList<>();
+		JoinStats.subMateriazed = new ArrayList<>();
 		JoinStats.subExeTime = new ArrayList<>();
 		PostStats.subPostMillis = new ArrayList<>();
 	}

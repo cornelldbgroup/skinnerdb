@@ -27,19 +27,19 @@ public class JoinIntPartitionWrapper extends JoinPartitionIndexWrapper {
     }
 
     @Override
-    public int nextIndex(int[] tupleIndices) {
+    public int nextIndex(int[] tupleIndices, int[] nextSize) {
         int priorTuple = tupleIndices[priorTable];
         int priorVal = priorIntData.data[priorTuple];
         int curTuple = tupleIndices[nextTable];
-        return nextIntIndex.nextTuple(priorVal, curTuple);
+        return nextIntIndex.nextTuple(priorVal, curTuple, nextSize);
     }
 
     @Override
-    public int nextIndexInScope(int[] tupleIndices, int tid) {
+    public int nextIndexInScope(int[] tupleIndices, int tid, int[] nextSize) {
         int priorTuple = tupleIndices[priorTable];
         int priorVal = priorIntData.data[priorTuple];
         int curTuple = tupleIndices[nextTable];
-        return nextIntIndex.nextTupleInScope(priorVal, priorTuple, curTuple, tid);
+        return nextIntIndex.nextTupleInScope(priorVal, priorTuple, curTuple, tid, nextSize);
     }
 
     @Override

@@ -9,6 +9,7 @@ import java.util.BitSet;
 import java.util.Collection;
 import java.util.List;
 
+import indexing.Index;
 import joining.result.ResultTuple;
 
 /**
@@ -39,6 +40,11 @@ public class IntData extends ColumnData implements Serializable {
 		} else {
 			return Integer.compare(data[row1], data[row2]);			
 		}
+	}
+
+	@Override
+	public long longForRow(int row) {
+		return data[row];
 	}
 
 	@Override
@@ -79,6 +85,21 @@ public class IntData extends ColumnData implements Serializable {
 				copyColumn.data[copiedRowCtr] = data[row];
 				copyColumn.isNull.set(copiedRowCtr, isNull.get(row));				
 			}
+			++copiedRowCtr;
+		}
+		return copyColumn;
+	}
+
+	@Override
+	public ColumnData copyRangeRows(int first, int last, Index index) {
+		int cardinality = last - first;
+		IntData copyColumn = new IntData(cardinality);
+		int copiedRowCtr = 0;
+		for (int rid = first; rid < last; rid++) {
+			int row = index.sortedRow[rid];
+			// Treat special case: insertion of null values
+			copyColumn.data[copiedRowCtr] = data[row];
+			copyColumn.isNull.set(copiedRowCtr, isNull.get(row));
 			++copiedRowCtr;
 		}
 		return copyColumn;

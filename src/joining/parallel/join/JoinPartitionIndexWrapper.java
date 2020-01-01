@@ -94,7 +94,7 @@ public abstract class JoinPartitionIndexWrapper {
      * @param tupleIndices	current tuple indices
      * @return	next interesting tuple index or cardinality
      */
-    public abstract int nextIndex(int[] tupleIndices);
+    public abstract int nextIndex(int[] tupleIndices, int[] nextSize);
 
     /**
      * Propose next index in next table that
@@ -106,7 +106,7 @@ public abstract class JoinPartitionIndexWrapper {
      * @param tid           thread id
      * @return              next interesting tuple index or cardinality
      */
-    public abstract int nextIndexInScope(int[] tupleIndices, int tid);
+    public abstract int nextIndexInScope(int[] tupleIndices, int tid, int[] nextSize);
     /**
      * Propose next index in next table that
      * satisfies equi-join condition with

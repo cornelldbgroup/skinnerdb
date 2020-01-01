@@ -1,11 +1,15 @@
 package joining.parallel.uct;
 
+import config.ParallelConfig;
 import joining.uct.SelectionPolicy;
 import joining.parallel.join.DPJoin;
 import query.QueryInfo;
 
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * Represents node in data joining.parallel UCT search tree.
@@ -38,15 +42,23 @@ public class DPNode {
     /**
      * Number of times this node was visited.
      */
-    private int[] nrVisits;
+    private int nrVisits;
     /**
      * Number of times each action was tried out.
      */
-    private final int[][] nrTries;
+    private int[] nrTries;
     /**
      * Reward accumulated for specific actions.
      */
-    private final double[][] accumulatedReward;
+    private double[] accumulatedReward;
+    /**
+     * Read write lock for reward load/update
+     */
+    private ReadWriteLock rewardLock;
+    /**
+     * Lock to protect node creation.
+     */
+    private ReentrantLock nodeLock;
     /**
      * node statistics that should be aligned to a cache line
      */
@@ -118,9 +130,6 @@ public class DPNode {
         treeLevel = 0;
         nrActions = nrTables;
         childNodes = new DPNode[nrActions];
-        nrVisits = new int[nrThreads];
-        nrTries = new int[nrThreads][nrActions];
-        accumulatedReward = new double[nrThreads][nrActions];
         unjoinedTables = new ArrayList<>();
         joinedTables = new HashSet<>();
         nextTable = new int[nrTables];
@@ -148,6 +157,13 @@ public class DPNode {
                 prioritySet[i].add(actionCtr);
             }
         }
+        // initialize read-write lock for DPDsync
+        if (ParallelConfig.PARALLEL_SPEC == 1) {
+            nrTries = new int[nrActions];
+            accumulatedReward = new double[nrActions];
+            rewardLock = new ReentrantReadWriteLock();
+            nodeLock = new ReentrantLock();
+        }
     }
     /**
      * Initializes UCT node by expanding parent node.
@@ -163,9 +179,6 @@ public class DPNode {
         nrActions = parent.nrActions - 1;
         nrThreads = parent.nrThreads;
         childNodes = new DPNode[nrActions];
-        nrVisits = new int[nrThreads];
-        nrTries = new int[nrThreads][nrActions];
-        accumulatedReward = new double[nrThreads][nrActions];
         query = parent.query;
         nrTables = parent.nrTables;
         unjoinedTables = new ArrayList<>();
@@ -227,51 +240,55 @@ public class DPNode {
         if (nrActions == 0) {
             // initialize tree node
             tableRoot =  new BaseUctInner(null, -1, nrTables);
-
-            DPNode node = parent;
-            BaseUctNode child = null;
-            DPNode firstNode = null;
-            while (node.parent != null) {
-                int table = joinOrder[node.treeLevel - 1];
-                if (cardinalities[table] > 1000 && node.treeLevel <= 5 && node.treeLevel > 1) {
-                    child = tableRoot.expandFirst(table, true);
-                    firstNode = node;
+            int end = Math.min(5, joinOrder.length);
+            for (int i = 0; i < end; i++) {
+                int table = joinOrder[i];
+                if (cardinalities[table] >= ParallelConfig.PARTITION_SIZE) {
+                    tableRoot.expand(table, true);
                 }
-                node = node.parent;
             }
-
-            if (firstNode != null) {
-                DPNode nodeParent = firstNode.parent;
-                int firstTable = joinOrder[firstNode.treeLevel - 1];
-                int action = -1;
-                for (int i = 0; i < nodeParent.nextTable.length; i++) {
-                    if (nodeParent.nextTable[i] == firstTable) {
-                        action = i;
-                        break;
-                    }
-                }
-                double rewards = 0;
-                int visits = 0;
-                for (int t = 0; t < nrThreads; t++) {
-                    NodeStatistics threadStats = nodeParent.nodeStatistics[t];
-                    visits += threadStats.nrTries[action];
-                    rewards += threadStats.accumulatedReward[action];
-                }
-                child.accumulatedReward = rewards;
-                tableRoot.accumulatedReward = rewards;
-                child.nrVisits = visits;
-                tableRoot.nrVisits = visits;
-            }
-
-
-//            int end = Math.min(5, nrTables);
-//            for (int i = 1; i < end; i++) {
-//                int table = joinOrder[i];
-//                int cardinality = cardinalities[table];
-//                if (cardinality > 1000) {
-//                    tableRoot.expand(table, true);
+//            DPNode node = parent;
+//            BaseUctNode child = null;
+//            DPNode firstNode = null;
+//            while (node.parent != null) {
+//                int table = joinOrder[node.treeLevel - 1];
+//                if (cardinalities[table] >= ParallelConfig.PARTITION_SIZE && node.treeLevel <= 5 && node.treeLevel > 1) {
+//                    child = tableRoot.expandFirst(table, true);
+//                    firstNode = node;
 //                }
+//                node = node.parent;
 //            }
+            // retrieve rewards
+//            if (firstNode != null) {
+//                DPNode nodeParent = firstNode.parent;
+//                int firstTable = joinOrder[firstNode.treeLevel - 1];
+//                int action = -1;
+//                for (int i = 0; i < nodeParent.nextTable.length; i++) {
+//                    if (nodeParent.nextTable[i] == firstTable) {
+//                        action = i;
+//                        break;
+//                    }
+//                }
+//                double rewards = 0;
+//                int visits = 0;
+//                for (int t = 0; t < nrThreads; t++) {
+//                    NodeStatistics threadStats = nodeParent.nodeStatistics[t];
+//                    visits += threadStats.nrTries[action];
+//                    rewards += threadStats.accumulatedReward[action];
+//                }
+//                child.accumulatedReward = rewards;
+//                tableRoot.accumulatedReward = rewards;
+//                child.nrVisits = visits;
+//                tableRoot.nrVisits = visits;
+//            }
+        }
+
+        // initialize read-write lock for DPDsync
+        if (ParallelConfig.PARALLEL_SPEC == 1) {
+            nrTries = new int[nrActions];
+            accumulatedReward = new double[nrActions];
+            rewardLock = new ReentrantReadWriteLock();
+            nodeLock = new ReentrantLock();
         }
     }
 
@@ -302,14 +319,25 @@ public class DPNode {
         int nrVisits = 0;
         int[] nrTries = new int[nrActions];
         double[] accumulatedReward = new double[nrActions];
-        for (int i = 0; i < nrThreads; i++) {
-            NodeStatistics threadStats = nodeStatistics[i];
-            nrVisits += threadStats.nrVisits;
-            for(Integer recAction : recommendedActions) {
-                int threadTries = threadStats.nrTries[recAction];
-                nrTries[recAction] += threadTries;
-                accumulatedReward[recAction] += threadStats.accumulatedReward[recAction];
+        if (ParallelConfig.PARALLEL_SPEC == 0) {
+            for (int i = 0; i < nrThreads; i++) {
+                NodeStatistics threadStats = nodeStatistics[i];
+                nrVisits += threadStats.nrVisits;
+                for (Integer recAction : recommendedActions) {
+                    int threadTries = threadStats.nrTries[recAction];
+                    nrTries[recAction] += threadTries;
+                    accumulatedReward[recAction] += threadStats.accumulatedReward[recAction];
+                }
             }
+        }
+        else {
+            rewardLock.readLock().lock();
+            nrVisits = this.nrVisits;
+            for (Integer recAction : recommendedActions) {
+                nrTries[recAction] = this.nrTries[recAction];
+                accumulatedReward[recAction] = this.accumulatedReward[recAction];
+            }
+            rewardLock.readLock().unlock();
         }
         /* When using the default selection policy (UCB1):
          * We apply the UCT formula as no actions are untried.
@@ -335,29 +363,6 @@ public class DPNode {
             double exploration = Math.sqrt(Math.log(nrVisits) / nrTry);
             // Assess the quality of the action according to policy
             double quality = meanReward + 1E-10 * exploration;
-//            switch (policy) {
-//                case UCB1:
-//                    quality = meanReward + 1E-10 * exploration;
-//                    break;
-//                case MAX_REWARD:
-//                case EPSILON_GREEDY:
-//                    quality = meanReward;
-//                    break;
-//                case RANDOM:
-//                    quality = random.nextDouble();
-//                    break;
-//                case RANDOM_UCB1:
-//                    if (treeLevel==0) {
-//                        quality = random.nextDouble();
-//                    } else {
-//                        quality = meanReward +
-//                                JoinConfig.PARA_EXPLORATION_WEIGHT * exploration;
-//                    }
-//                    break;
-//            }
-            //double UB = meanReward + 1E-6 * exploration;
-            //double UB = meanReward + 1E-4 * exploration;
-            //double UB = meanReward + 1E-1 * exploration;
             if (quality > bestQuality) {
                 bestAction = action;
                 bestQuality = quality;
@@ -379,11 +384,14 @@ public class DPNode {
      * @param selectedAction action taken
      * @param reward         reward achieved
      */
-    void updateStatistics(int selectedAction, double reward, int tid) {
-        accumulatedReward[tid][selectedAction] += reward;
-        ++nrVisits[tid];
-        ++nrTries[tid][selectedAction];
+    void updateStatistics(int selectedAction, double reward) {
+        rewardLock.writeLock().lock();
+        accumulatedReward[selectedAction] += reward;
+        ++nrTries[selectedAction];
+        ++nrVisits;
+        rewardLock.writeLock().unlock();
     }
+
     /**
      * Randomly complete join order with remaining tables,
      * invoke evaluation, and return obtained reward.
@@ -481,8 +489,14 @@ public class DPNode {
             boolean canExpand = createdIn != roundCtr;
             DPNode child = childNodes[action];
             if (canExpand && child == null) {
+                if (ParallelConfig.PARALLEL_SPEC == 1) {
+                    nodeLock.lock();
+                }
                 if (childNodes[action] == null) {
                     childNodes[action] = new DPNode(roundCtr, this, table, joinOrder, joinOp.cardinalities);
+                }
+                if (ParallelConfig.PARALLEL_SPEC == 1) {
+                    nodeLock.unlock();
                 }
             }
             // evaluate via recursive invocation or via playout
@@ -491,10 +505,80 @@ public class DPNode {
                     child.sample(roundCtr, joinOrder, joinOp, policy):
                     playout(roundCtr, joinOrder, joinOp);
             // update UCT statistics and return reward
-            nodeStatistics[tid].updateStatistics(reward, action);
+            if (ParallelConfig.PARALLEL_SPEC == 0) {
+                nodeStatistics[tid].updateStatistics(reward, action);
+            }
+            else {
+                updateStatistics(action, reward);
+            }
             return reward;
         }
     }
+
+    public double sampleFinal(long roundCtr, int[] joinOrder, DPJoin joinOp,
+                         SelectionPolicy policy) throws Exception {
+        int tid = joinOp.tid;
+        // Check if this is a (non-extendible) leaf node
+        if (nrActions == 0) {
+            int end = Math.min(5, joinOrder.length);
+            // Initialize table nodes
+            BaseUctInner root = tableRoot;
+            BaseUctNode splitNode = root.getMaxOrderedUCTChildOrder(joinOrder, end);
+            if (splitNode != null) {
+                double reward = joinOp.execute(joinOrder, splitNode.label, (int) roundCtr);
+                if (joinOp.isFinished()) {
+                    reward = 0;
+                }
+                splitNode.updataStatistics(reward);
+                splitNode.parent.updataStatistics(reward);
+                return reward;
+            }
+            else {
+                int splitTable = getSplitTableByCard(joinOrder, joinOp.cardinalities);
+                double reward = joinOp.execute(joinOrder, splitTable, (int) roundCtr);
+                return reward;
+            }
+        } else {
+            // inner node - select next action and expand tree if necessary
+            int table = joinOrder[treeLevel];
+            int action = -1;
+            for (int i = 0; i < nextTable.length; i++) {
+                if (nextTable[i] == table) {
+                    action = i;
+                    break;
+                }
+            }
+            // grow tree if possible
+            boolean canExpand = createdIn != roundCtr;
+            DPNode child = childNodes[action];
+            if (canExpand && child == null) {
+                if (ParallelConfig.PARALLEL_SPEC == 1) {
+                    nodeLock.lock();
+                }
+                if (childNodes[action] == null) {
+                    childNodes[action] = new DPNode(roundCtr, this, table, joinOrder, joinOp.cardinalities);
+                }
+                if (ParallelConfig.PARALLEL_SPEC == 1) {
+                    nodeLock.unlock();
+                }
+            }
+            // evaluate via recursive invocation or via playout
+            boolean isSample = child != null;
+            double reward = isSample ?
+                    child.sampleFinal(roundCtr, joinOrder, joinOp, policy):
+                    playout(roundCtr, joinOrder, joinOp);
+            // update UCT statistics and return reward
+            if (ParallelConfig.PARALLEL_SPEC == 0) {
+                nodeStatistics[tid].updateStatistics(reward, action);
+            }
+            else {
+                updateStatistics(action, reward);
+            }
+            return reward;
+        }
+    }
+
+
 
     /**
      * Get the split table candidate based on cardinalities of tables.
@@ -505,13 +589,13 @@ public class DPNode {
      */
     int getSplitTableByCard(int[] joinOrder, int[] cardinalities) {
         int splitLen = 5;
-        int splitSize = 1000;
+        int splitSize = ParallelConfig.PARTITION_SIZE;
         int splitTable = joinOrder[0];
         int end = Math.min(splitLen, joinOrder.length);
         for (int i = 0; i < end; i++) {
             int table = joinOrder[i];
             int cardinality = cardinalities[table];
-            if (cardinality > splitSize) {
+            if (cardinality >= splitSize) {
                 splitTable = table;
                 break;
             }

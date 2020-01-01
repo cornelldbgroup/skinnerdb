@@ -6,10 +6,7 @@ import buffer.BufferManager;
 import catalog.CatalogManager;
 import catalog.info.ColumnInfo;
 import catalog.info.TableInfo;
-import data.ColumnData;
-import data.DoubleData;
-import data.IntData;
-import data.LongData;
+import data.*;
 import query.ColumnRef;
 import types.SQLtype;
 
@@ -46,6 +43,32 @@ public class SumAggregate {
 					new int[srcCard];
 		// Generate target column
 		int targetCard = grouping ? nrGroups:1;
+		// Handle constant column
+		if (srcData instanceof ConstantData) {
+			ConstantData constantData = (ConstantData) srcData;
+			IntData finalIntTarget = new IntData(targetCard);
+			BufferManager.colToData.put(targetRef, finalIntTarget);
+			if (grouping) {
+				System.out.println("groupBy");
+				for (int i = 0; i < nrGroups; i++) {
+					finalIntTarget.data[i] = (int) (constantData.cardinality * constantData.constant);
+				}
+			}
+			else {
+				finalIntTarget.data[0] = (int) (constantData.cardinality * constantData.constant);
+			}
+			// Register target column in catalog
+			String targetRel = targetRef.aliasName;
+			String targetCol = targetRef.columnName;
+			TableInfo targetRelInfo = CatalogManager.
+					currentDB.nameToTable.get(targetRel);
+			ColumnInfo targetColInfo = new ColumnInfo(targetCol,
+					srcType, false, false, false, false);
+			targetRelInfo.addColumn(targetColInfo);
+			// Update catalog statistics on result table
+			CatalogManager.updateStats(targetRel);
+			return;
+		}
 		ColumnData genericTarget = null;
 		IntData intTarget = null;
 		LongData longTarget = null;

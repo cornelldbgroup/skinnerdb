@@ -1,5 +1,6 @@
 package indexing;
 
+import com.koloboke.collect.IntCollection;
 import com.koloboke.collect.map.DoubleIntCursor;
 import com.koloboke.collect.map.DoubleIntMap;
 import com.koloboke.collect.map.hash.HashDoubleIntMaps;
@@ -144,5 +145,10 @@ public class DoubleIndex extends Index {
 		} else {
 			return positions[firstPos];
 		}
+	}
+
+	@Override
+	public IntCollection posSet() {
+		return keyToPositions.values();
 	}
 }

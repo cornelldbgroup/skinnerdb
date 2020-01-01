@@ -1,6 +1,7 @@
 package joining.parallel.parallelization.lockfree;
 
 import config.LoggingConfig;
+import expressions.compilation.KnaryBoolEval;
 import joining.result.ResultTuple;
 import joining.parallel.join.DPJoin;
 import joining.parallel.join.ModJoin;
@@ -10,14 +11,14 @@ import joining.parallel.progress.ParallelProgressTracker;
 import joining.parallel.threads.ThreadPool;
 import joining.parallel.uct.DPNode;
 import logs.LogUtils;
+import net.sf.jsqlparser.expression.Expression;
+import predicate.NonEquiNode;
 import preprocessing.Context;
 import query.QueryInfo;
 import statistics.JoinStats;
 import statistics.QueryStats;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
@@ -28,7 +29,7 @@ public class LockFreeParallelization extends Parallelization {
     /**
      * Multiple join operators for threads
      */
-    public List<DPJoin> dpJoins = new ArrayList<>();
+    private List<DPJoin> dpJoins = new ArrayList<>();
     /**
      * initialization of parallelization
      *
@@ -38,10 +39,21 @@ public class LockFreeParallelization extends Parallelization {
      */
     public LockFreeParallelization(int nrThreads, int budget, QueryInfo query, Context context) throws Exception {
         super(nrThreads, budget, query, context);
+        // Compile predicates
+        Map<Expression, NonEquiNode> predToEval = new HashMap<>();
+        Map<Expression, KnaryBoolEval> predToComp = new HashMap<>();
+        for (int i = 0; i < query.nonEquiJoinNodes.size(); i++) {
+            // Compile predicate and store in lookup table
+            Expression pred = query.nonEquiJoinPreds.get(i).finalExpression;
+            NonEquiNode node = query.nonEquiJoinNodes.get(i);
+            predToEval.put(pred, node);
+        }
         // Initialize multi-way join operator
-        ParallelProgressTracker tracker = new ParallelProgressTracker(query.nrJoined, nrThreads);
+        int nrTables = query.nrJoined;
+        int nrSplits = query.equiJoinPreds.size() + nrTables;
+        ParallelProgressTracker tracker = new ParallelProgressTracker(nrTables, nrThreads, nrSplits);
         for (int i = 0; i < nrThreads; i++) {
-            ModJoin modJoin = new ModJoin(query, context, budget, nrThreads, i);
+            ModJoin modJoin = new ModJoin(query, context, budget, nrThreads, i, predToEval, predToComp);
             modJoin.tracker = tracker;
             dpJoins.add(modJoin);
         }
@@ -55,18 +67,20 @@ public class LockFreeParallelization extends Parallelization {
         ExecutorService executorService = ThreadPool.executorService;
         // Initialize variables for broadcasting.
         int nrTables = query.nrJoined;
-        EndPlan endPlan = new EndPlan(nrTables);
+        // initialize an end plan.
+        EndPlan endPlan = new EndPlan(nrThreads, nrTables, dpJoins.get(0).cardinalities);
         List<LockFreeTask> tasks = new ArrayList<>();
         // Mutex shared by multiple threads.
         ReentrantLock lock = new ReentrantLock();
         AtomicBoolean end = new AtomicBoolean(false);
+        AtomicBoolean finish = new AtomicBoolean(false);
         // logs list
         List<String>[] logs = new List[nrThreads];
         for (int i = 0; i < nrThreads; i++) {
             logs[i] = new ArrayList<>();
         }
         for (int i = 0; i < nrThreads; i++) {
-            LockFreeTask lockFreeTask = new LockFreeTask(query, context, root, endPlan, end, lock, dpJoins.get(i));
+            LockFreeTask lockFreeTask = new LockFreeTask(query, context, root, endPlan, end, finish, lock, dpJoins.get(i));
             tasks.add(lockFreeTask);
         }
         long executionStart = System.currentTimeMillis();
