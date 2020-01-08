@@ -9,6 +9,8 @@ import config.LoggingConfig;
 import data.IntData;
 import statistics.JoinStats;
 
+import java.util.stream.IntStream;
+
 /**
  * Indexes integer values (not necessarily unique).
  * 
@@ -152,5 +154,20 @@ public class IntIndex extends Index {
 	@Override
 	public IntCollection posSet() {
 		return keyToPositions.values();
+	}
+
+	@Override
+	public void sortRows() {
+		sortedRow = IntStream.range(0, cardinality)
+				.boxed().sorted((o1, o2) -> {
+					int d1 = intData.data[o1];
+					int d2 = intData.data[o2];
+					int diff = d1 - d2;
+					if (diff == 0) {
+						return o1 - o2;
+					}
+					return diff;
+				})
+				.mapToInt(ele -> ele).toArray();
 	}
 }

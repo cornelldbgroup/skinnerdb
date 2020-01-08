@@ -17,6 +17,14 @@ public class GeneralConfig {
 	 */
 	public static boolean isParallel = true;
 	/**
+	 * Whether to apply parallel methods.
+	 */
+	public static boolean parallelPre = true;
+	/**
+	 * Whether to apply parallel methods.
+	 */
+	public static boolean parallelPost = true;
+	/**
 	 * Number of test cases.
 	 */
 	public static int TEST_CASE = 5;

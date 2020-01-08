@@ -28,7 +28,7 @@ public class Indexer {
 	 * 
 	 * @param colRef	create index on this column
 	 */
-	public static void index(ColumnRef colRef) throws Exception {
+	public static void index(ColumnRef colRef, boolean sorted) throws Exception {
 		// Check if index already exists
 		if (!BufferManager.colToIndex.containsKey(colRef)) {
 			ColumnData data = BufferManager.getData(colRef);
@@ -36,6 +36,9 @@ public class Indexer {
 				IntData intData = (IntData)data;
 				IntIndex index = new IntIndex(intData);
 				BufferManager.colToIndex.put(colRef, index);
+				if (sorted) {
+					index.sortRows();
+				}
 			} else if (data instanceof DoubleData) {
 				DoubleData doubleData = (DoubleData)data;
 				DoubleIndex index = new DoubleIndex(doubleData);
@@ -107,7 +110,8 @@ public class Indexer {
 											columnInfo.isPrimary, true, sorted);
 								}
 								else {
-									index(colRef);
+									boolean sorted = columnInfo.type == SQLtype.DATE;
+									index(colRef, sorted);
 								}
 							}
 						} catch (Exception e) {

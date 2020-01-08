@@ -15,10 +15,10 @@ import java.util.Arrays;
 import java.util.stream.IntStream;
 
 /**
- * Calculates the sum (total or per group)
+ * Calculates the average (total or per group)
  * from a given input column.
  * 
- * @author immanueltrummer
+ * @author Ziyun Wei
  *
  */
 public class AvgAggregate {
@@ -101,7 +101,8 @@ public class AvgAggregate {
 				}
 			}
 			IntData finalIntTarget = intTarget;
-			IntStream.range(0, targetCard).parallel().forEach(i -> finalIntTarget.data[i] /= numbers[i]);
+//			IntStream.range(0, targetCard).parallel().forEach(i -> finalIntTarget.data[i] /= numbers[i]);
+			IntStream.range(0, targetCard).forEach(i -> finalIntTarget.data[i] /= numbers[i]);
 
 			break;
 		case LONG:
@@ -117,7 +118,8 @@ public class AvgAggregate {
 				}
 			}
 			LongData finalLongTarget = longTarget;
-			IntStream.range(0, targetCard).parallel().forEach(i -> finalLongTarget.data[i] /= numbers[i]);
+//			IntStream.range(0, targetCard).parallel().forEach(i -> finalLongTarget.data[i] /= numbers[i]);
+			IntStream.range(0, targetCard).forEach(i -> finalLongTarget.data[i] /= numbers[i]);
 			break;
 		case DOUBLE:
 			DoubleData doubleSrc = (DoubleData)srcData;
@@ -132,7 +134,8 @@ public class AvgAggregate {
 				}
 			}
 			DoubleData finalDoubleTarget = doubleTarget;
-			IntStream.range(0, targetCard).parallel().forEach(i -> finalDoubleTarget.data[i] /= numbers[i]);
+//			IntStream.range(0, targetCard).parallel().forEach(i -> finalDoubleTarget.data[i] /= numbers[i]);
+			IntStream.range(0, targetCard).forEach(i -> finalDoubleTarget.data[i] /= numbers[i]);
 			break;
 		default:
 			throw new Exception("Unsupported type: " + srcType);

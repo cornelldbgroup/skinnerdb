@@ -26,6 +26,11 @@ public abstract class Index {
 	 */
 	public int[] sortedRow;
 	/**
+	 * After indexing: contains group id that the element
+	 * belongs to.
+	 */
+	public int[] groupIds;
+	/**
 	 * Initialize for given cardinality of indexed table.
 	 * 
 	 * @param cardinality	number of rows to index
@@ -40,6 +45,10 @@ public abstract class Index {
 	 * @return		Set of first position for each distinct key.
 	 */
 	public abstract IntCollection posSet();
+	/**
+	 * Sort the elements and initialize the array of sortedRow
+	 */
+	public abstract void sortRows();
 
 	/**
 	 * Output given log text if activated.

@@ -11,6 +11,7 @@ import data.ColumnData;
 import data.IntData;
 import expressions.ExpressionInfo;
 import expressions.aggregates.AggInfo;
+import indexing.Index;
 import net.sf.jsqlparser.schema.Column;
 import operators.*;
 import operators.parallel.*;
@@ -144,7 +145,7 @@ public class ParallelPostProcessor {
      * @param context		query processing context
      * @throws Exception
      */
-    static void groupBy(QueryInfo query, Context context) throws Exception {
+    static void groupBy(QueryInfo query, Context context, Index index) throws Exception {
         // Check whether query has group by clause
         if (query.groupByExpressions.isEmpty()) {
             return;
@@ -158,6 +159,7 @@ public class ParallelPostProcessor {
         int groupSrcID = 0;
         // Will contain group-by columns
         List<ColumnRef> sourceRefs = new ArrayList<>();
+        int maxSize = 1;
         for (ExpressionInfo groupExpr : query.groupByExpressions) {
             // Is it raw group by column?
             if (groupExpr.finalExpression instanceof Column) {
@@ -186,8 +188,14 @@ public class ParallelPostProcessor {
         // Update query context for following steps
         context.groupRef = targetRef;
 //        context.nrGroups = GroupBy.execute(sourceRefs, targetRef);
-        context.groupsToIndex = ParallelGroupBy.execute(sourceRefs, targetRef);
-        context.nrGroups = context.groupsToIndex == null ? 0 : context.groupsToIndex.size();
+        if (index != null) {
+            context.groupsToIndex = ParallelGroupBy.executeIndex(sourceRefs, targetRef, index);
+            context.nrGroups = index.groupIds.length;
+        }
+        else {
+            context.groupsToIndex = ParallelGroupBy.execute(sourceRefs, targetRef, maxSize);
+            context.nrGroups = context.groupsToIndex.size();
+        }
         // TODO: need to replace references to columns in GROUP BY clause
     }
 
@@ -241,7 +249,7 @@ public class ParallelPostProcessor {
             // Process aggregate
             int nrGroups = context.nrGroups;
             ColumnRef groupRef = context.groupRef;
-            long timer0 = System.currentTimeMillis();
+//            long timer0 = System.currentTimeMillis();
             switch (aggInfo.aggFunction) {
                 case SUM:
                     if (context.groupsToIndex != null && nrGroups < ParallelConfig.PRE_BATCH_SIZE)
@@ -269,9 +277,109 @@ public class ParallelPostProcessor {
                     throw new Exception("Error - aggregate " + aggInfo +
                             " should have been rewritten");
             }
-            long timer1 = System.currentTimeMillis();
+//            long timer1 = System.currentTimeMillis();
 //            System.out.println("AggColumn: " + aggInfo + "\t" + (timer1 - timer0));
         }
+        // Print out aggregation table if activated
+        if (LoggingConfig.PRINT_INTERMEDIATES) {
+            RelationPrinter.print(aggTbl);
+        }
+    }
+
+    /**
+     * Process aggregates that appear in the query. Stores
+     * references to aggregation results in query context.
+     * Uses results of a prior group by stage if any.
+     *
+     * @param queryInfo		query to process
+     * @param context		query processing context
+     * @throws Exception
+     */
+    static void applyIndex(QueryInfo queryInfo, Context context, String targetRel, boolean tempResult, Index index)
+            throws Exception {
+        // Generate table for holding aggregation input
+        String aggSrcTbl = NamingConfig.AGG_SRC_TBL_NAME;
+        TableInfo aggSrcTblInfo = new TableInfo(aggSrcTbl, true);
+        CatalogManager.currentDB.nameToTable.put(aggSrcTbl, aggSrcTblInfo);
+        // Generate table for holding aggregation results
+        String aggTbl = NamingConfig.AGG_TBL_NAME;
+        TableInfo aggTblInfo = new TableInfo(aggTbl, true);
+        CatalogManager.currentDB.nameToTable.put(aggTbl, aggTblInfo);
+        // Iterate over aggregates for processing
+        int aggInputCtr = 0;
+        // Generate table holding result
+        TableInfo targetInfo = new TableInfo(targetRel, tempResult);
+        CatalogManager.currentDB.addTable(targetInfo);
+
+        for (ExpressionInfo selInfo : queryInfo.selectExpressions) {
+            String colName = queryInfo.selectToAlias.get(selInfo);
+            String resultName = targetInfo.name;
+            // Generate result reference
+            ColumnRef resultRef = new ColumnRef(resultName, colName);
+            // Is it a previously calculated aggregate?
+            ColumnRef columnRef = selInfo.columnsMentioned.iterator().next();
+            if (selInfo.aggregates.isEmpty()) {
+                // Need to generate select item data -
+                // selector must be based on group-by columns.
+                String srcRel = NamingConfig.JOINED_NAME;
+                ParallelMapRows.executeIndex(srcRel, selInfo, index, resultRef);
+            } else {
+                // Need to generate data - selector is
+                // complex expression based on previously
+                // calculated per-group aggregates.
+                AggInfo aggInfo = queryInfo.aggregates.iterator().next();
+                ExpressionInfo aggInput = aggInfo.aggInput;
+                ColumnRef sourceRef = null;
+                if (aggInput.finalExpression instanceof Column) {
+                    // No need to regenerate base column
+                    ColumnRef queryRef = aggInput.columnsMentioned.iterator().next();
+                    sourceRef = context.columnMapping.get(queryRef);
+
+                } else {
+                    // Input is complex expression - generate data
+                    String joinRel = NamingConfig.JOINED_NAME;
+                    String sourceCol = NamingConfig.AGG_SRC_COL_PRE + aggInputCtr;
+                    sourceRef = new ColumnRef(aggSrcTbl, sourceCol);
+                    ++aggInputCtr;
+                    ParallelMapRows.execute(joinRel, aggInput,
+                            context.columnMapping, null,
+                            null, null, -1, sourceRef);
+                }
+                long timer0 = System.currentTimeMillis();
+                if (index != null) {
+                    // Determine target column for aggregation
+                    // Process aggregate
+                    switch (aggInfo.aggFunction) {
+                        case SUM:
+//                        ParallelSumAggregate.executeIndex(sourceRef, index,
+//                                groupRef, targetRef);
+                            break;
+                        case MIN:
+//                        ParallelMinMaxAggregate.executeIndex(sourceRef, nrGroups,
+//                                groupRef, false, targetRef);
+                            break;
+                        case MAX:
+//                        ParallelMinMaxAggregate.execute(sourceRef, nrGroups,
+//                                groupRef, true, targetRef);
+                            break;
+                        case AVG:
+                            ParallelAvgAggregate.executeIndex(sourceRef, index, resultRef, selInfo);
+                            break;
+                        default:
+                            throw new Exception("Error - aggregate " + aggInfo +
+                                    " should have been rewritten");
+                    }
+                }
+                else {
+                    throw new RuntimeException("No index is available!");
+                }
+                long timer1 = System.currentTimeMillis();
+                System.out.println("AggColumn: " + aggInfo + "\t" + (timer1 - timer0));
+            }
+        }
+        // Update statistics on result table
+        CatalogManager.updateStats(targetRel);
+
         // Print out aggregation table if activated
         if (LoggingConfig.PRINT_INTERMEDIATES) {
             RelationPrinter.print(aggTbl);
@@ -297,25 +405,11 @@ public class ParallelPostProcessor {
         TableInfo targetInfo = new TableInfo(targetRel, tempResult);
         CatalogManager.currentDB.addTable(targetInfo);
         // Treat items in SELECT clause
-//        query.selectExpressions.parallelStream().forEach(selInfo -> {
-//            long timer0 = System.currentTimeMillis();
-//            String colName = query.selectToAlias.get(selInfo);
-//            try {
-//                addPerGroupCol(query, context, selInfo, groupRef,
-//                        nrGroups, targetInfo, colName);
-//            } catch (Exception e) {
-//                e.printStackTrace();
-//            }
-//            long timer1 = System.currentTimeMillis();
-//            System.out.println("Column: " + colName + "\t" + (timer1 - timer0));
-//        });
 
         for (ExpressionInfo selInfo : query.selectExpressions) {
-            long timer0 = System.currentTimeMillis();
             String colName = query.selectToAlias.get(selInfo);
             addPerGroupCol(query, context, selInfo, groupRef,
                     nrGroups, targetInfo, colName);
-            long timer1 = System.currentTimeMillis();
 //            System.out.println("Column: " + colName + "\t" + (timer1 - timer0));
         }
         // Update statistics on result table
@@ -455,58 +549,68 @@ public class ParallelPostProcessor {
                                    Context context,
                                    String resultRelName,
                                    boolean tempResult) throws Exception {
-        // Execute group by
-//        long timer0 = System.currentTimeMillis();
-        groupBy(query, context);
-//        long timer1 = System.currentTimeMillis();
-        // Calculate aggregates
-        aggregate(query, context);
-//        long timer2 = System.currentTimeMillis();
-//        System.out.println("Groupby: " + (timer1 - timer0) + "\t" + "Aggregate: " + (timer2 - timer1));
-//        // Determine whether query has HAVING clause
+        // Use index
+        int joinCard = CatalogManager.getCardinality(NamingConfig.JOINED_NAME);
+        Index index = query.groupByExpressions.size() == 1 ?
+                BufferManager.colToIndex.get(query.groupByExpressions.iterator().next().
+                        columnsMentioned.iterator().next()) : null;
+        // Determine whether query has HAVING clause
         ExpressionInfo havingExpr = query.havingExpression;
         boolean hasHaving = havingExpr!=null;
         // Determine whether query has ORDER BY clause
         boolean hasOrder = !query.orderByExpressions.isEmpty();
-        // Different treatment for queries with/without HAVING
-        if (hasHaving) {
-            // Having clause specified - insertinto intermediate result table
-            addPerGroupSelTbl(query, context,
-                    NamingConfig.RESULT_NO_HAVING, true);
-            // Get groups satisfying HAVING clause
-            List<Integer> havingGroups = havingRows(query, context);
-            // Prepare sorting if ORDER BY clause is specified
-            if (hasOrder) {
-                addPerGroupOrderTbl(query, context,
-                        NamingConfig.ORDER_NO_HAVING, true);
+        if (index != null && joinCard == index.cardinality && !hasHaving) {
+            applyIndex(query, context, resultRelName, tempResult, index);
+        }
+        else {
+            if (index != null && joinCard == index.cardinality) {
+                groupBy(query, context, index);
             }
-            // Filter result to having groups
-            TableInfo noHavingResInfo = CatalogManager.getTable(
-                    NamingConfig.RESULT_NO_HAVING);
-            Materialize.execute(NamingConfig.RESULT_NO_HAVING,
-                    noHavingResInfo.columnNames, havingGroups,
-                    null, resultRelName, tempResult);
-            // Filter order table to having groups if applicable
-            if (hasOrder) {
-                TableInfo noHavingOrderInfo = CatalogManager.getTable(
-                        NamingConfig.ORDER_NO_HAVING);
-                Materialize.execute(NamingConfig.ORDER_NO_HAVING,
-                        noHavingOrderInfo.columnNames, havingGroups,
-                        null, NamingConfig.ORDER_NAME, true);
+            else {
+                groupBy(query, context, null);
             }
-        } else {
-            // No having clause specified - insert into final result table
-            addPerGroupSelTbl(query, context, resultRelName, tempResult);
-            // Prepare sorting if ORDER BY clause is specified
-            long timerx = System.currentTimeMillis();
-            if (hasOrder) {
-                // Add table containing values for order-by items
-                addPerGroupOrderTbl(query, context,
-                        NamingConfig.ORDER_NAME, true);
-            }
-            long timery = System.currentTimeMillis();
+            // Calculate aggregates
+            aggregate(query, context);
+            // Different treatment for queries with/without HAVING
+            if (hasHaving) {
+                // Having clause specified - insertinto intermediate result table
+                addPerGroupSelTbl(query, context,
+                        NamingConfig.RESULT_NO_HAVING, true);
+                // Get groups satisfying HAVING clause
+                List<Integer> havingGroups = havingRows(query, context);
+                // Prepare sorting if ORDER BY clause is specified
+                if (hasOrder) {
+                    addPerGroupOrderTbl(query, context,
+                            NamingConfig.ORDER_NO_HAVING, true);
+                }
+                // Filter result to having groups
+                TableInfo noHavingResInfo = CatalogManager.getTable(
+                        NamingConfig.RESULT_NO_HAVING);
+                Materialize.execute(NamingConfig.RESULT_NO_HAVING,
+                        noHavingResInfo.columnNames, havingGroups,
+                        null, resultRelName, tempResult);
+                // Filter order table to having groups if applicable
+                if (hasOrder) {
+                    TableInfo noHavingOrderInfo = CatalogManager.getTable(
+                            NamingConfig.ORDER_NO_HAVING);
+                    Materialize.execute(NamingConfig.ORDER_NO_HAVING,
+                            noHavingOrderInfo.columnNames, havingGroups,
+                            null, NamingConfig.ORDER_NAME, true);
+                }
+            } else {
+                // No having clause specified - insert into final result table
+                addPerGroupSelTbl(query, context, resultRelName, tempResult);
+                // Prepare sorting if ORDER BY clause is specified
+                long timerx = System.currentTimeMillis();
+                if (hasOrder) {
+                    // Add table containing values for order-by items
+                    addPerGroupOrderTbl(query, context,
+                            NamingConfig.ORDER_NAME, true);
+                }
+                long timery = System.currentTimeMillis();
 //            System.out.println("Adding column: " + (timerx - timer2) + "\tOrdering: " + (timery - timerx));
 
+            }
         }
         // Sort result table if applicable
         if (hasOrder) {

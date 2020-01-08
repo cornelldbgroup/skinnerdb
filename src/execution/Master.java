@@ -13,6 +13,7 @@ import net.sf.jsqlparser.schema.Table;
 import net.sf.jsqlparser.statement.select.PlainSelect;
 import operators.Materialize;
 import postprocessing.ParallelPostProcessor;
+import postprocessing.PostProcessor;
 import preprocessing.Context;
 import preprocessing.Preprocessor;
 import query.ColumnRef;
@@ -117,10 +118,14 @@ public class Master {
 			boolean tempResult = lastSubQuery?finalTempResult:true;
 			String resultRel = subQuery.getIntoTables().get(0).getName();
 			// Aggregation, grouping, and sorting if required
-//			PostProcessor.process(subQueryInfo, context,
-//					resultRel, tempResult);
-			ParallelPostProcessor.process(subQueryInfo, context,
-					resultRel, tempResult);
+			if (GeneralConfig.isParallel) {
+				ParallelPostProcessor.process(subQueryInfo, context,
+						resultRel, tempResult);
+			}
+			else {
+				PostProcessor.process(subQueryInfo, context,
+						resultRel, tempResult);
+			}
 			System.out.println(Arrays.toString(PostStats.subPostMillis.toArray()));
 //			RelationPrinter.print(resultRel);
 			// Clean up intermediate results except result table

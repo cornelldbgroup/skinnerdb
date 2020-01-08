@@ -9,14 +9,20 @@ import config.ParallelConfig;
 import data.*;
 import expressions.ExpressionInfo;
 import expressions.compilation.*;
+import indexing.Index;
+import joining.parallel.indexing.DoublePartitionIndex;
+import joining.parallel.indexing.IntPartitionIndex;
 import joining.parallel.threads.ThreadPool;
 import joining.result.ResultTuple;
 import net.sf.jsqlparser.expression.LongValue;
 import operators.Group;
+import operators.OperationTest;
 import operators.OperatorUtils;
 import operators.RowRange;
 import postprocessing.IndexRange;
 import postprocessing.PostExpressionEval;
+import predicate.OperationNode;
+import predicate.Operator;
 import query.ColumnRef;
 import query.QueryInfo;
 import types.JavaType;
@@ -230,5 +236,77 @@ public class ParallelMapRows {
         // Update catalog statistics
         CatalogManager.updateStats(targetTable);
     }
-
+    /**
+     * Creates new column that contains one value for
+     * each row in the source relation.
+     *
+     * @param sourceRel     we iterate over rows of this source relation
+     * @param expression    each source row is mapped using this expression
+     *                      no group reference is specified).
+     * @param targetRef     store results in this target column
+     * @throws Exception
+     */
+    public static void executeIndex(String sourceRel,
+                               ExpressionInfo expression,
+                               Index index,
+                               ColumnRef targetRef) throws Exception {
+        // Do we map to groups?
+        // Register target column in catalog
+        SQLtype resultType = expression.resultType;
+        JavaType jResultType = TypeUtil.toJavaType(resultType);
+        String targetTable = targetRef.aliasName;
+        String targetCol = targetRef.columnName;
+        TableInfo targetTblInf = CatalogManager.
+                currentDB.nameToTable.get(targetTable);
+        ColumnInfo targetColInf = new ColumnInfo(targetCol,
+                resultType, false, false, false, false);
+        targetTblInf.addColumn(targetColInf);
+        // Prepare generating result data
+        int inCard = CatalogManager.getCardinality(sourceRel);
+        OperationTest operationTest = new OperationTest();
+        expression.finalExpression.accept(operationTest);
+        OperationNode operationNode = operationTest.operationNodes.pop();
+        // check more mappings
+        OperationNode evaluator = operationNode.operator == Operator.Variable ? null : operationNode;
+        int[] positions = index.positions;
+        int[] gids = index.groupIds;
+        int outCard = gids.length;
+        // Create result data and load into buffer
+        switch (jResultType) {
+            case INT: {
+                // Generate result data and store in buffer
+                IntData intResult = new IntData(outCard);
+//                intResult.isNull.set(0, outCard - 1);
+                BufferManager.colToData.put(targetRef, intResult);
+                IntStream.range(0, gids.length).parallel().forEach(gid -> {
+                    int pos = index.groupIds[gid];
+                    int rid = positions[pos + 1];
+                    int data = ((IntPartitionIndex)index).intData.data[rid];
+                    if (evaluator != null) {
+                        data = (int) evaluator.evaluate(data);
+                    }
+                    intResult.data[gid] = data;
+                });
+            }
+            break;
+            case DOUBLE: {
+                // Generate result data and store in buffer
+                DoubleData doubleResult = new DoubleData(outCard);
+                doubleResult.isNull.set(0, outCard - 1);
+                BufferManager.colToData.put(targetRef, doubleResult);
+                IntStream.range(0, gids.length).parallel().forEach(gid -> {
+                    int pos = index.groupIds[gid];
+                    int rid = positions[pos + 1];
+                    double data = ((DoublePartitionIndex)index).doubleData.data[rid];
+                    if (evaluator != null) {
+                        data = evaluator.evaluate(data);
+                    }
+                    doubleResult.data[gid] = data;
+                });
+            }
+            break;
+        }
+        // Update catalog statistics
+        CatalogManager.updateStats(targetTable);
+    }
 }

@@ -4,18 +4,29 @@ import buffer.BufferManager;
 import catalog.CatalogManager;
 import catalog.info.ColumnInfo;
 import catalog.info.TableInfo;
+import com.koloboke.collect.IntCollection;
 import data.ColumnData;
 import data.DoubleData;
 import data.IntData;
 import data.LongData;
+import expressions.ExpressionInfo;
+import indexing.Index;
+import joining.parallel.indexing.DoublePartitionIndex;
+import joining.parallel.indexing.IntPartitionIndex;
 import operators.Group;
+import operators.OperationTest;
 import operators.OperatorUtils;
 import operators.RowRange;
+import predicate.OperationNode;
+import predicate.Operator;
+import preprocessing.Context;
 import query.ColumnRef;
 import types.SQLtype;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.IntStream;
 
 /**
  * Calculates the average (total or per group)
@@ -143,6 +154,98 @@ public class ParallelAvgAggregate {
 		}
 		default:
 			throw new Exception("Unsupported type: " + srcType);
+		}
+	}
+
+	/**
+	 * Calculates aggregate from source data for each group
+	 * (or total if no groups are specified) and stores
+	 * result in given target column.
+	 *
+	 * @param sourceRef		reference to source column
+	 * @param targetRef		store results in this column
+	 * @throws Exception
+	 */
+	public static void executeIndex(ColumnRef sourceRef,
+									Index index,
+									ColumnRef targetRef, ExpressionInfo expr) throws Exception {
+		// Get information about source column
+		SQLtype srcType = CatalogManager.getColumn(sourceRef).type;
+		ColumnData srcData = BufferManager.getData(sourceRef);
+		// Create row to group assignments
+		// Generate target column
+		int targetCard = index.groupIds.length;
+		DoubleData target = new DoubleData(targetCard);
+		BufferManager.colToData.put(targetRef, target);
+		// Register target column in catalog
+		String targetRel = targetRef.aliasName;
+		String targetCol = targetRef.columnName;
+		TableInfo targetRelInfo = CatalogManager.
+				currentDB.nameToTable.get(targetRel);
+		ColumnInfo targetColInfo = new ColumnInfo(targetCol,
+				srcType, false, false, false, false);
+		targetRelInfo.addColumn(targetColInfo);
+		OperationTest operationTest = new OperationTest();
+		expr.finalExpression.accept(operationTest);
+		OperationNode operationNode = operationTest.operationNodes.pop();
+		// check more mappings
+		OperationNode evaluator = operationNode.operator == Operator.Variable ? null : operationNode;
+
+		// Update catalog statistics on result table
+		CatalogManager.updateStats(targetRel);
+
+
+		// Switch according to column type (to avoid casts)
+		switch (srcType) {
+			case INT:
+			{
+				IntData intSrc = (IntData)srcData;
+				System.out.println("groupBy");
+				int[] positions = index.positions;
+				int[] gids = index.groupIds;
+				IntStream.range(0, gids.length).parallel().forEach(gid -> {
+					int pos = gids[gid];
+					int groupCard = positions[pos];
+					double data = 0;
+					for (int i = pos + 1; i <= pos + groupCard; i++) {
+						int rid = positions[i];
+						data += intSrc.data[rid];
+					}
+					if (data != 0) {
+						data = data / groupCard;
+					}
+					if (evaluator != null) {
+						data = evaluator.evaluate(data);
+					}
+					target.data[gid] = data;
+				});
+				break;
+			}
+			case DOUBLE: {
+				DoubleData intSrc = (DoubleData)srcData;
+				System.out.println("groupBy");
+				int[] positions = index.positions;
+				int[] gids = index.groupIds;
+				IntStream.range(0, gids.length).parallel().forEach(gid -> {
+					int pos = gids[gid];
+					int groupCard = positions[pos];
+					double data = 0;
+					for (int i = pos + 1; i <= pos + groupCard; i++) {
+						int rid = positions[i];
+						data += intSrc.data[rid];
+					}
+					if (data != 0) {
+						data = data / groupCard;
+					}
+					if (evaluator != null) {
+						data = evaluator.evaluate(data);
+					}
+					target.data[gid] = data;
+				});
+				break;
+			}
+			default:
+				throw new Exception("Unsupported type: " + srcType);
 		}
 	}
 }

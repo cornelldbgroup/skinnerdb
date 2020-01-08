@@ -358,10 +358,10 @@ public class Preprocessor {
 			log("Table name for " + alias + " is " + tableName);
 		}
 		// Determine rows satisfying unary predicate
-		long s1 = System.currentTimeMillis();
+//		long s1 = System.currentTimeMillis();
 		List<Integer> satisfyingRows = Filter.executeToList(
 				unaryPred, tableName, preSummary.columnMapping);
-		long s2 = System.currentTimeMillis();
+//		long s2 = System.currentTimeMillis();
 		// Materialize relevant rows and columns
 		String filteredName = NamingConfig.FILTERED_PRE + alias;
 		List<String> columnNames = new ArrayList<>();
@@ -370,8 +370,8 @@ public class Preprocessor {
 		}
 		Materialize.execute(tableName, columnNames, 
 				satisfyingRows, null, filteredName, true);
-		long s3 = System.currentTimeMillis();
-		System.out.println("Filtering using " + unaryPred + " took " + (s2 - s1) + "\t" + (s3 - s2));
+//		long s3 = System.currentTimeMillis();
+//		System.out.println("Filtering using " + unaryPred + " took " + (s2 - s1) + "\t" + (s3 - s2));
 		// Update pre-processing summary
 		for (ColumnRef srcRef : requiredCols) {
 			String columnName = srcRef.columnName;
@@ -425,7 +425,7 @@ public class Preprocessor {
 					Indexer.partitionIndex(dbRef, queryRef, partitionIndex, columnInfo.isPrimary, false, false);
 				}
 				else {
-					Indexer.index(dbRef);
+					Indexer.index(dbRef, false);
 				}
 			} catch (Exception e) {
 				System.err.println("Error creating index for " + queryRef);

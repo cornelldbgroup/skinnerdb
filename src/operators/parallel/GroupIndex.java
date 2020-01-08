@@ -31,9 +31,9 @@ public class GroupIndex {
      * for calculating groups.
      *
      */
-    public GroupIndex(int gid) {
+    public GroupIndex(int gid, int size) {
         this.gid = gid;
-        this.rows = new ArrayList<>();
+        this.rows = new ArrayList<>(size);
     }
 
     public void addRow(int rowCtr) {

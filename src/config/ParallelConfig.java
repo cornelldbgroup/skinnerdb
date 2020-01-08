@@ -51,4 +51,5 @@ public class ParallelConfig {
 	public static int PARALLEL_SPEC = 3;
 
 	public static final boolean HEURISTIC_SHARING = false;
+	public static final boolean HEURISTIC_STOP = true;
 }

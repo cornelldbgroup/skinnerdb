@@ -116,7 +116,7 @@ public class Filter {
 		List<Integer> result = null;
 //		long s3 = System.currentTimeMillis();
 		// Choose between sequential and joining.parallel processing
-		if (cardinality <= ParallelConfig.PRE_BATCH_SIZE) {
+		if (cardinality <= ParallelConfig.PRE_BATCH_SIZE || !GeneralConfig.isParallel) {
 			RowRange allTuples = new RowRange(0, cardinality - 1);
 			result = filterBatch(unaryBoolEval, allTuples);
 		} else {
@@ -155,16 +155,6 @@ public class Filter {
 						Collectors.toList());
 			}
 		}
-//		long s4 = System.currentTimeMillis();
-//		System.out.println("Filtering details: " + (s2 - s1) + " " + (s3 - s2) + " " + (s4 - s3));
-		// Clean up columns loaded for this operation
-		/*
-		if (!GeneralConfig.inMemory) {
-			for (ColumnRef colRef : unaryPred.columnsMentioned) {
-				BufferManager.unloadColumn(colRef);
-			}
-		}
-		*/
 		return result;
 	}
 	/**

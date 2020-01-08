@@ -1,10 +1,22 @@
 package query.where;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
+import expressions.normalization.CollectReferencesVisitor;
 import net.sf.jsqlparser.expression.Expression;
+import net.sf.jsqlparser.expression.Function;
+import net.sf.jsqlparser.expression.LongValue;
 import net.sf.jsqlparser.expression.Parenthesis;
 import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
+import net.sf.jsqlparser.expression.operators.relational.*;
+import net.sf.jsqlparser.schema.Column;
+import net.sf.jsqlparser.schema.Table;
+import net.sf.jsqlparser.statement.select.*;
+import query.ColumnRef;
+import query.from.FromUtil;
 
 /**
  * Utility functions for analyzing the WHERE clause.
@@ -32,7 +44,64 @@ public class WhereUtil {
 			} else {
 				conjuncts.add(condition);
 			}
-		} else if (condition instanceof AndExpression) {
+		} else if (condition instanceof ExistsExpression) {
+			ExistsExpression exist = (ExistsExpression) condition;
+			if (!exist.isNot()) {
+				PlainSelect subSelect = (PlainSelect) ((SubSelect)exist.getRightExpression()).getSelectBody();
+				List<SelectItem> selectItems = new ArrayList<>();
+				Function function = new Function();
+				function.setName("COUNT");
+				function.setAllColumns(true);
+				selectItems.add(new SelectExpressionItem(function));
+				subSelect.setSelectItems(selectItems);
+				GreaterThan greaterThan = new GreaterThan();
+				greaterThan.setLeftExpression(exist.getRightExpression());
+				greaterThan.setRightExpression(new LongValue(0));
+				conjuncts.add(greaterThan);
+			}
+			else {
+//				PlainSelect subSelect = (PlainSelect) ((SubSelect)exist.getRightExpression()).getSelectBody();
+//				List<SelectItem> selectItems = new ArrayList<>();
+//				Function function = new Function();
+//				function.setName("COUNT");
+//				function.setAllColumns(true);
+//				selectItems.add(new SelectExpressionItem(function));
+//				subSelect.setSelectItems(selectItems);
+//				InExpression inExpression = new InExpression();
+//				List<Expression> subConjuncts = new ArrayList<>();
+//				WhereUtil.extractConjuncts(subSelect.getWhere(), subConjuncts);
+//				CollectReferencesVisitor collectReferencesVisitor = new CollectReferencesVisitor();
+//				List<FromItem> fromItems = FromUtil.allFromItems(subSelect);
+//				Set<String> inTables = new HashSet<>();
+//				// Iterate over base tables in FROM clause
+//				for (FromItem fromItem : fromItems) {
+//					if (fromItem instanceof Table) {
+//						// Extract table and alias name (defaults to table name)
+//						Table table = (Table)fromItem;
+//						String tableAlias = table.getAlias().getName();
+//						inTables.add(tableAlias);
+//					}
+//				}
+//				for (Expression sub: subConjuncts) {
+//					if (sub instanceof EqualsTo) {
+//						sub.accept(collectReferencesVisitor);
+//						for (ColumnRef columnRef: collectReferencesVisitor.mentionedColumns) {
+//							if (!inTables.contains(columnRef.aliasName)) {
+//								inExpression.setLeftExpression(
+//										new Column(new Table(columnRef.aliasName), columnRef.columnName));
+//							}
+//						}
+//					}
+//				}
+//				SubSelect select = new SubSelect();
+//				select.setSelectBody(subSelect);
+//				inExpression.setRightItemsList(select);
+//				inExpression.setNot(true);
+//				conjuncts.add(inExpression);
+				conjuncts.add(condition);
+			}
+		}
+		else if (condition instanceof AndExpression) {
 			AndExpression and = (AndExpression)condition;
 			extractConjuncts(and.getLeftExpression(), conjuncts);
 			extractConjuncts(and.getRightExpression(), conjuncts);

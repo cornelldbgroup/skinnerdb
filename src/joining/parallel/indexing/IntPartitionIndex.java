@@ -62,6 +62,12 @@ public class IntPartitionIndex extends PartitionIndex {
         }
         else if (policy == IndexPolicy.Sequential) {
             sequentialIndex(colRef);
+            groupIds = new int[keyToPositions.size()];
+            int id = 0;
+            for (Integer pos: keyToPositions.values()) {
+                groupIds[id] = pos;
+                id++;
+            }
         }
         else if (policy == IndexPolicy.Sparse) {
             parallelSparseIndex(origin);
@@ -501,6 +507,12 @@ public class IntPartitionIndex extends PartitionIndex {
         }
         else if (operator == Operator.MinorThanEquals) {
             return value <= target;
+        }
+        else if (operator == Operator.NotEqualsTo) {
+            return value != target;
+        }
+        else if (operator == Operator.NotEqualsAll) {
+            return !keyToPositions.containsKey(target);
         }
         System.out.println("Wrong");
         return false;

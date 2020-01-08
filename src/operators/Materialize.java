@@ -72,16 +72,30 @@ public class Materialize {
 				BufferManager.loadColumn(sourceColRef);
 			}
 		}
-		// Generate column data
-		sourceColRefs.parallelStream().forEach(sourceColRef -> {
-			// Copy relevant rows into result column
-			ColumnData srcData = BufferManager.colToData.get(sourceColRef);
-			ColumnData resultData = rowList==null?
-					srcData.copyRows(rowBitSet):srcData.copyRows(rowList);
-			String columnName = sourceColRef.columnName;
-			ColumnRef resultColRef = new ColumnRef(targetRelName, columnName);
-			BufferManager.colToData.put(resultColRef, resultData);
-		});
+		if (GeneralConfig.isParallel) {
+			// Generate column data
+			sourceColRefs.parallelStream().forEach(sourceColRef -> {
+				// Copy relevant rows into result column
+				ColumnData srcData = BufferManager.colToData.get(sourceColRef);
+				ColumnData resultData = rowList==null?
+						srcData.copyRows(rowBitSet):srcData.copyRows(rowList);
+				String columnName = sourceColRef.columnName;
+				ColumnRef resultColRef = new ColumnRef(targetRelName, columnName);
+				BufferManager.colToData.put(resultColRef, resultData);
+			});
+		}
+		else {
+			// Generate column data
+			for (ColumnRef sourceColRef: sourceColRefs) {
+				// Copy relevant rows into result column
+				ColumnData srcData = BufferManager.colToData.get(sourceColRef);
+				ColumnData resultData = rowList==null?
+						srcData.copyRows(rowBitSet):srcData.copyRows(rowList);
+				String columnName = sourceColRef.columnName;
+				ColumnRef resultColRef = new ColumnRef(targetRelName, columnName);
+				BufferManager.colToData.put(resultColRef, resultData);
+			}
+		}
 		// Update statistics in catalog
 		CatalogManager.updateStats(targetRelName);
 		// Unload source data if necessary
@@ -159,7 +173,8 @@ public class Materialize {
 			}
 		}
 		ExecutorService executorService = ThreadPool.preprocessingService;
-		List<RowRange> batches = OperatorUtils.split(cardinality, ParallelConfig.PRE_THREADS);
+		int nrBatches = GeneralConfig.isParallel ? ParallelConfig.PRE_THREADS : 1;
+		List<RowRange> batches = OperatorUtils.split(cardinality, nrBatches);
 		List<Future<Integer>> futures = new ArrayList<>();
 		int[] sortedRow = index.sortedRow;
 		for (RowRange batch: batches) {
@@ -195,32 +210,6 @@ public class Materialize {
 //						doubleDataTarget.isNull.set(offset, doubleDataSource.isNull.get(row));
 					}
 				}
-//				for (int i = 0; i < longSource.size(); i++) {
-//					LongData longDataSource = longSource.get(i);
-//					LongData longDataTarget = longTarget.get(i);
-//					long[] source = longDataSource.data;
-//					long[] target = longDataTarget.data;
-//					for (int rid = batchFirst; rid <= batchLast; rid++) {
-//						int offset = rid - first;
-//						int row = sortedRow[rid];
-//						// Treat special case: insertion of null values
-//						target[offset] = source[row];
-////						longDataTarget.isNull.set(offset, longDataSource.isNull.get(row));
-//					}
-//				}
-//				for (int i = 0; i < stringSource.size(); i++) {
-//					StringData stringDataSource = stringSource.get(i);
-//					StringData stringDataTarget = stringTarget.get(i);
-//					String[] source = stringDataSource.data;
-//					String[] target = stringDataTarget.data;
-//					for (int rid = batchFirst; rid <= batchLast; rid++) {
-//						int offset = rid - first;
-//						int row = sortedRow[rid];
-//						// Treat special case: insertion of null values
-//						target[offset] = source[row];
-////						stringDataTarget.isNull.set(offset, stringDataSource.isNull.get(row));
-//					}
-//				}
 				return 1;
 			}));
 		}
@@ -319,7 +308,8 @@ public class Materialize {
 			}
 		}
 		ExecutorService executorService = ThreadPool.preprocessingService;
-		List<RowRange> batches = OperatorUtils.split(cardinality, ParallelConfig.PRE_THREADS);
+		int nrBatches = GeneralConfig.isParallel ? ParallelConfig.PRE_THREADS : 1;
+		List<RowRange> batches = OperatorUtils.split(cardinality, nrBatches);
 		List<Future<Integer>> futures = new ArrayList<>();
 		int[] sortedRow = index.sortedRow;
 		for (RowRange batch: batches) {

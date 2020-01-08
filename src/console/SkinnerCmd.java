@@ -12,9 +12,11 @@ import java.util.regex.Pattern;
 import benchmark.BenchUtil;
 import buffer.BufferManager;
 import catalog.CatalogManager;
+import catalog.info.ColumnInfo;
 import catalog.info.TableInfo;
 import compression.Compressor;
 import config.*;
+import data.ColumnData;
 import ddl.TableCreator;
 import diskio.LoadCSV;
 import diskio.PathUtil;
@@ -22,18 +24,26 @@ import execution.Master;
 import indexing.Indexer;
 import joining.parallel.threads.ThreadPool;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
+import net.sf.jsqlparser.schema.Table;
 import net.sf.jsqlparser.statement.Statement;
+import net.sf.jsqlparser.statement.create.table.ColDataType;
+import net.sf.jsqlparser.statement.create.table.ColumnDefinition;
 import net.sf.jsqlparser.statement.create.table.CreateTable;
+import net.sf.jsqlparser.statement.create.view.CreateView;
 import net.sf.jsqlparser.statement.drop.Drop;
 import net.sf.jsqlparser.statement.select.PlainSelect;
 import net.sf.jsqlparser.statement.select.Select;
 import print.RelationPrinter;
+import query.ColumnRef;
 import query.SQLexception;
 import statistics.JoinStats;
 import statistics.PostStats;
 import statistics.PreStats;
 import statistics.QueryStats;
 import tools.Configuration;
+import types.SQLtype;
+
+import javax.swing.plaf.synth.ColorType;
 
 /**
  * Runs Skinner command line console.
@@ -202,6 +212,65 @@ public class SkinnerCmd {
                     (CreateTable) sqlStatement);
             CatalogManager.currentDB.storeDB();
             System.out.println("Created " + table.toString());
+        } else if (sqlStatement instanceof CreateView) {
+            CreateView createView = (CreateView) sqlStatement;
+            List<String> columnNames = createView.getColumnNames();
+            PlainSelect plainSelect = (PlainSelect) createView.getSelectBody();
+            Table view = createView.getView();
+            try {
+                if (StartupConfig.WARMUP_RUN) {
+                    PreConfig.IN_CACHE = false;
+                    GeneralConfig.TEST_CASE = 1;
+                    Master.executeSelect(plainSelect,
+                            false, -1, -1, null);
+                    BufferManager.unloadTempData();
+                    CatalogManager.removeTempTables();
+                    sqlStatement = CCJSqlParserUtil.parse(input);
+                    plainSelect = (PlainSelect) ((CreateView) sqlStatement).getSelectBody();
+                }
+                PreConfig.IN_CACHE = true;
+                GeneralConfig.TEST_CASE = 5;
+                Master.executeSelect(plainSelect,
+                        false, -1, -1, null);
+
+            } catch (SQLexception e) {
+                System.out.println(e.getMessage());
+            } catch (Exception e) {
+                throw e;
+            } finally {
+                CreateTable createTable = new CreateTable();
+                createTable.setTable(view);
+                List<ColumnDefinition> definitions = new ArrayList<>();
+                TableInfo tableInfo = CatalogManager.getTable(NamingConfig.FINAL_RESULT_NAME);
+                for (int i = 0; i < columnNames.size(); i++) {
+                    String columnName = columnNames.get(i);
+                    ColumnDefinition columnDefinition = new ColumnDefinition();
+                    columnDefinition.setColumnName(columnName);
+                    ColDataType colDataType = new ColDataType();
+                    String resultColumn = tableInfo.columnNames.get(i);
+                    String resultType = tableInfo.nameToCol.get(resultColumn).type.toString();
+                    colDataType.setDataType(resultType);
+                    columnDefinition.setColDataType(colDataType);
+                    definitions.add(columnDefinition);
+                }
+                createTable.setColumnDefinitions(definitions);
+                TableInfo table = TableCreator.addTable(createTable);
+                CatalogManager.currentDB.storeDB();
+                System.out.println("Created " + table.toString());
+                for (int i = 0; i < columnNames.size(); i++) {
+                    String columnName = columnNames.get(i);
+                    ColDataType colDataType = new ColDataType();
+                    String resultColumn = tableInfo.columnNames.get(i);
+                    ColumnInfo columnInfo = tableInfo.nameToCol.get(resultColumn);
+                    ColumnRef columnRef = new ColumnRef(tableInfo.name, columnInfo.name);
+                    ColumnData resultData = BufferManager.getData(columnRef);
+                    ColumnRef newColumnRef = new ColumnRef(table.name, columnName);
+                    BufferManager.colToData.putIfAbsent(newColumnRef, resultData);
+                }
+                // Clean up intermediate results
+                BufferManager.unloadTempData();
+                CatalogManager.removeTempTables();
+            }
         } else if (sqlStatement instanceof Drop) {
             Drop drop = (Drop) sqlStatement;
             String tableName = drop.getName().getName();
@@ -213,6 +282,10 @@ public class SkinnerCmd {
             CatalogManager.currentDB.nameToTable.remove(tableName);
             CatalogManager.currentDB.storeDB();
             System.out.println("Dropped " + tableName);
+
+        }
+        else if (sqlStatement instanceof Drop) {
+
         } else if (sqlStatement instanceof Select) {
             Select select = (Select) sqlStatement;
             if (select.getSelectBody() instanceof PlainSelect) {
@@ -441,10 +514,11 @@ public class SkinnerCmd {
             // initialize a thread pool
             ThreadPool.initThreadsPool(ParallelConfig.EXE_THREADS, ParallelConfig.PRE_THREADS);
 //            processInput("exec ./tpch/skinnerqueries/q03.sql");
-//            processInput("exec ./jcch/queries/q01.sql");
+            processInput("exec ./jcch/queries/q21.sql");
+//            processInput("exec ./jcch/queries/q17.sql");
 //            processInput("exec ../imdb/queries/26b.sql");
 //            processInput("exec /Users/tracy/Documents/Research/skinnerdb/imdb/queries/33c.sql");
-            processInput("exp");
+//            processInput("exp");
         } else {
 			ThreadPool.initThreadsPool(ParallelConfig.EXE_THREADS, ParallelConfig.PRE_THREADS);
             // Command line processing

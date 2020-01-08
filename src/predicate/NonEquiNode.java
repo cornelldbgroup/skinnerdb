@@ -49,6 +49,9 @@ public class NonEquiNode {
         else if (operator == Operator.AND) {
             return left.evaluate(tupleIndices) && right.evaluate(tupleIndices);
         }
+        else if (operator == Operator.Not) {
+            return !left.evaluate(tupleIndices);
+        }
         else {
             if (constant != null) {
                 int curTuple = tupleIndices[table];
@@ -58,7 +61,11 @@ public class NonEquiNode {
                 int leftTuple = tupleIndices[leftTable];
                 int rightTuple = tupleIndices[rightTable];
                 Number constant = rightIndex.getNumber(rightTuple);
-                return leftIndex.evaluate(leftTuple, constant, operator);
+                boolean evaluation = leftIndex.evaluate(leftTuple, constant, operator);
+                if (operator == Operator.NotEqualsAll && !evaluation) {
+                    tupleIndices[rightTable] = rightIndex.cardinality - 1;
+                }
+                return evaluation;
             }
         }
     }

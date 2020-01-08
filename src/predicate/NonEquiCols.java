@@ -3,10 +3,7 @@ package predicate;
 import buffer.BufferManager;
 import expressions.normalization.PlainVisitor;
 import indexing.Index;
-import net.sf.jsqlparser.expression.CastExpression;
-import net.sf.jsqlparser.expression.LongValue;
-import net.sf.jsqlparser.expression.Parenthesis;
-import net.sf.jsqlparser.expression.StringValue;
+import net.sf.jsqlparser.expression.*;
 import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
 import net.sf.jsqlparser.expression.operators.conditional.OrExpression;
 import net.sf.jsqlparser.expression.operators.relational.*;
@@ -94,6 +91,11 @@ public class NonEquiCols extends PlainVisitor {
     @Override
     public void visit(LongValue longValue) {
 
+    }
+
+    @Override
+    public void visit(NotExpression notExpression) {
+        notExpression.getExpression().accept(this);
     }
 
     @Override

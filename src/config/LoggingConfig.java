@@ -11,7 +11,7 @@ public class LoggingConfig {
 	/**
 	 * Whether to log sub-queries generated during unnesting.
 	 */
-	public final static boolean UNNESTING_VERBOSE = false;
+	public final static boolean UNNESTING_VERBOSE = true;
 	/**
 	 * Whether to log intermediate steps during query analysis.
 	 */

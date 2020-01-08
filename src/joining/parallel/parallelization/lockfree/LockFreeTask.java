@@ -108,6 +108,12 @@ public class LockFreeTask implements Callable<LockFreeResult>{
                         continue;
                     }
                 }
+                else if (ParallelConfig.HEURISTIC_STOP) {
+                    reward = joinOp.execute(joinOrder, finalTable, (int) roundCtr);
+                    if (joinOp.isFinished()) {
+                        break;
+                    }
+                }
                 else {
                     System.arraycopy(endPlan.slowThreads, 0, joinOp.slowThreads, 0, query.nrJoined);
                     if (query.nrJoined < 5 || ParallelConfig.EXE_THREADS <= 10) {
@@ -169,11 +175,13 @@ public class LockFreeTask implements Callable<LockFreeResult>{
                     terminated.set(true);
                     break;
                 }
-//                if (splitTable == endPlan.getSplitTable()) {
-//                    break;
-//                } else {
-//                    System.out.println(tid + ": bad restart");
-//                }
+                if (ParallelConfig.HEURISTIC_STOP) {
+                    if (splitTable == endPlan.getSplitTable()) {
+                        break;
+                    } else {
+                        System.out.println(tid + ": bad restart");
+                    }
+                }
             }
 //            joinOp.writeLog("Episode Time: " + (end - start) + "\tReward: " + reward);
 

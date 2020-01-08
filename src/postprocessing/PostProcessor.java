@@ -14,12 +14,7 @@ import data.IntData;
 import expressions.ExpressionInfo;
 import expressions.aggregates.AggInfo;
 import net.sf.jsqlparser.schema.Column;
-import operators.GroupBy;
-import operators.MapRows;
-import operators.Materialize;
-import operators.MinMaxAggregate;
-import operators.OrderBy;
-import operators.SumAggregate;
+import operators.*;
 import preprocessing.Context;
 import print.RelationPrinter;
 import query.ColumnRef;
@@ -154,6 +149,10 @@ public class PostProcessor {
 			case MAX:
 				MinMaxAggregate.execute(sourceRef, nrGroups, 
 						groupRef, true, targetRef);
+				break;
+			case AVG:
+				AvgAggregate.execute(sourceRef, nrGroups,
+						groupRef, targetRef);
 				break;
 			default:
 				throw new Exception("Error - aggregate " + aggInfo +

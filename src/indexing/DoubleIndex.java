@@ -9,6 +9,9 @@ import config.LoggingConfig;
 import data.DoubleData;
 import statistics.JoinStats;
 
+import java.util.Comparator;
+import java.util.stream.IntStream;
+
 /**
  * Indexes double values (not necessarily unique).
  * 
@@ -150,5 +153,12 @@ public class DoubleIndex extends Index {
 	@Override
 	public IntCollection posSet() {
 		return keyToPositions.values();
+	}
+
+	@Override
+	public void sortRows() {
+		sortedRow = IntStream.range(0, cardinality)
+				.boxed().sorted(Comparator.comparingDouble(i -> doubleData.data[i]))
+				.mapToInt(ele -> ele).toArray();
 	}
 }

@@ -3,10 +3,7 @@ package predicate;
 import buffer.BufferManager;
 import expressions.normalization.PlainVisitor;
 import indexing.Index;
-import net.sf.jsqlparser.expression.CastExpression;
-import net.sf.jsqlparser.expression.LongValue;
-import net.sf.jsqlparser.expression.Parenthesis;
-import net.sf.jsqlparser.expression.StringValue;
+import net.sf.jsqlparser.expression.*;
 import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
 import net.sf.jsqlparser.expression.operators.conditional.OrExpression;
 import net.sf.jsqlparser.expression.operators.relational.*;
@@ -103,6 +100,32 @@ public class NonEquiNodesTest extends PlainVisitor {
             int table = applicableIdx.pop();
             NonEquiNode node = new NonEquiNode(null, null, equalsTo,
                     index, constant, Operator.EqualsTo, table);
+            nonEquiNodes.push(node);
+        }
+    }
+
+    @Override
+    public void visit(NotEqualsTo notEqualsTo) {
+        notEqualsTo.getLeftExpression().accept(this);
+        notEqualsTo.getRightExpression().accept(this);
+        // We assume predicate passed the index test so
+        // there must be one index and one constant.
+        Operator operator = notEqualsTo.isNot() ? Operator.NotEqualsAll : Operator.NotEqualsTo;
+        if (extractedConstants.isEmpty()) {
+            Index rightIndex = applicableIndices.pop();
+            Index leftIndex = applicableIndices.pop();
+            int rightTable = applicableIdx.pop();
+            int leftTable = applicableIdx.pop();
+            NonEquiNode node = new NonEquiNode(null, null, notEqualsTo,
+                    leftIndex, rightIndex, operator, leftTable, rightTable);
+            nonEquiNodes.push(node);
+        }
+        else {
+            Number constant = extractedConstants.pop();
+            Index index = applicableIndices.pop();
+            int table = applicableIdx.pop();
+            NonEquiNode node = new NonEquiNode(null, null, notEqualsTo,
+                    index, constant, operator, table);
             nonEquiNodes.push(node);
         }
     }
@@ -215,6 +238,15 @@ public class NonEquiNodesTest extends PlainVisitor {
     @Override
     public void visit(Parenthesis parenthesis) {
         parenthesis.getExpression().accept(this);
+    }
+
+    @Override
+    public void visit(NotExpression notExpression) {
+        notExpression.getExpression().accept(this);
+        NonEquiNode leftNode = nonEquiNodes.pop();
+        NonEquiNode node = new NonEquiNode(leftNode, null,
+                notExpression, null, null, Operator.Not, -1);
+        nonEquiNodes.push(node);
     }
 
     @Override

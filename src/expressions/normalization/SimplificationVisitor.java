@@ -638,6 +638,9 @@ public class SimplificationVisitor extends SkinnerVisitor {
 	public void visit(NotEqualsTo arg0) {
 		NotEqualsTo newNe = new NotEqualsTo();
 		treatBinaryComparison(arg0, newNe);
+		if (arg0.isNot()) {
+			newNe.setNot();
+		}
 	}
 
 	@Override

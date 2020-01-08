@@ -319,7 +319,7 @@ public class IndexFilter extends PlainVisitor {
 		// We assume predicate passed the index test so
 		// there must be one index and one constant.
 		int constant = extractedConstants.pop();
-		IntPartitionIndex index = (IntPartitionIndex) applicableIndices.pop();
+		Index index = applicableIndices.pop();
 		// Collect indices of satisfying rows via index
 		List<Integer> rows = new ArrayList<>();
 		qualifyingRows.push(rows);
@@ -327,7 +327,13 @@ public class IndexFilter extends PlainVisitor {
 		int lowerBound = 0;
 		int upperBound = last - 1;
 		int first = 0;
-		int[] data = index.intData.data;
+		int[] data;
+		if (GeneralConfig.isParallel) {
+			data = ((IntPartitionIndex)index).intData.data;
+		}
+		else {
+			data = ((IntIndex)index).intData.data;
+		}
 		while (upperBound - lowerBound > 1) {
 			int middle = lowerBound + (upperBound - lowerBound) / 2;
 			int rid = index.sortedRow[middle];
