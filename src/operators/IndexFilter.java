@@ -194,12 +194,13 @@ public class IndexFilter extends PlainVisitor {
 		List<Integer> rows = new ArrayList<>();
 		qualifyingRows.push(rows);
 		int startPos;
-		if (GeneralConfig.isParallel) {
-			startPos = ((IntPartitionIndex)index).keyToPositions.getOrDefault(constant, -1);
-		}
-		else {
-			startPos = ((IntIndex)index).keyToPositions.getOrDefault(constant, -1);
-		}
+//		if (GeneralConfig.isParallel) {
+//			startPos = ((IntPartitionIndex)index).keyToPositions.getOrDefault(constant, -1);
+//		}
+//		else {
+//			startPos = ((IntIndex)index).keyToPositions.getOrDefault(constant, -1);
+//		}
+		startPos = ((IntPartitionIndex)index).keyToPositions.getOrDefault(constant, -1);
 		if (!equalFull) {
 			rows.add(startPos);
 			lastIndex = index;
@@ -328,12 +329,13 @@ public class IndexFilter extends PlainVisitor {
 		int upperBound = last - 1;
 		int first = 0;
 		int[] data;
-		if (GeneralConfig.isParallel) {
-			data = ((IntPartitionIndex)index).intData.data;
-		}
-		else {
-			data = ((IntIndex)index).intData.data;
-		}
+//		if (GeneralConfig.isParallel) {
+//			data = ((IntPartitionIndex)index).intData.data;
+//		}
+//		else {
+//			data = ((IntIndex)index).intData.data;
+//		}
+		data = ((IntPartitionIndex)index).intData.data;
 		while (upperBound - lowerBound > 1) {
 			int middle = lowerBound + (upperBound - lowerBound) / 2;
 			int rid = index.sortedRow[middle];

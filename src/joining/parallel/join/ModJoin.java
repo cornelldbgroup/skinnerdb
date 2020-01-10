@@ -251,7 +251,7 @@ public class ModJoin extends DPJoin {
         // evaluate non-equi join predicates
         boolean nonEquiResults = true;
         for (NonEquiNode pred : preds) {
-            if (!pred.evaluate(tupleIndices)) {
+            if (!pred.evaluate(tupleIndices, nextTable, cardinalities[nextTable])) {
                 nonEquiResults = false;
                 break;
             }

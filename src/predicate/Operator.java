@@ -7,6 +7,8 @@ public enum Operator {
     NotEqualsTo,
     NotEqualsAll,
     Not,
+    NotAll,
+    NotExist,
     GreaterThan,
     GreaterThanEquals,
     MinorThan,

@@ -519,6 +519,19 @@ public class DoublePartitionIndex extends PartitionIndex {
     }
 
     @Override
+    public boolean exist(Number constant, Operator operator) {
+        double target = constant.doubleValue();
+        if (operator == Operator.EqualsTo) {
+            return keyToPositions.containsKey(target);
+        }
+        else if (operator == Operator.NotEqualsTo) {
+            return keyToPositions.size() > 1 || !keyToPositions.containsKey(target);
+        }
+        System.out.println("Wrong");
+        return false;
+    }
+
+    @Override
     public Number getNumber(int curTuple) {
         return doubleData.data[curTuple];
     }

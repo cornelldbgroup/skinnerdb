@@ -1,5 +1,6 @@
 package expressions.normalization;
 
+import java.math.BigDecimal;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -298,25 +299,35 @@ public class SimplificationVisitor extends SkinnerVisitor {
 				newBinaryOp.setRightExpression(op2);
 				opStack.push(newBinaryOp);
 			}
-		} else if (op1 instanceof DoubleValue && op2 instanceof DoubleValue) {
+		}
+		// TODO: precision issues
+		else if (op1 instanceof DoubleValue && op2 instanceof DoubleValue) {
 			// Resolve operation on two constants of type double
 			double doubleVal1 = ((DoubleValue)op1).getValue();
 			double doubleVal2 = ((DoubleValue)op2).getValue();
-			DoubleValue result = new DoubleValue("0");
 			if (newBinaryOp instanceof Addition) {
-				result.setValue(doubleVal1 + doubleVal2);
+				BigDecimal d1 = BigDecimal.valueOf(doubleVal1);
+				BigDecimal d2 = BigDecimal.valueOf(doubleVal2);
+				String value = d1.add(d2).toString();
+				DoubleValue result = new DoubleValue(value);
 				opStack.push(result);
 			} else if (newBinaryOp instanceof Subtraction) {
-				result.setValue(doubleVal1 - doubleVal2);
+				BigDecimal d1 = BigDecimal.valueOf(doubleVal1);
+				BigDecimal d2 = BigDecimal.valueOf(doubleVal2);
+				String value = d1.subtract(d2).toString();
+				DoubleValue result = new DoubleValue(value);
 				opStack.push(result);
 			} else if (newBinaryOp instanceof Multiplication) {
-				result.setValue(doubleVal1 * doubleVal2);
+				double value = doubleVal1 * doubleVal2;
+				DoubleValue result = new DoubleValue(String.valueOf(value));
 				opStack.push(result);
 			} else if (newBinaryOp instanceof Division) {
-				result.setValue(doubleVal1 / doubleVal2);
+				double value = doubleVal1 / doubleVal2;
+				DoubleValue result = new DoubleValue(String.valueOf(value));
 				opStack.push(result);
 			} else if (newBinaryOp instanceof Modulo) {
-				result.setValue(doubleVal1 % doubleVal2);
+				double value = doubleVal1 % doubleVal2;
+				DoubleValue result = new DoubleValue(String.valueOf(value));
 				opStack.push(result);
 			} else {
 				newBinaryOp.setLeftExpression(op1);

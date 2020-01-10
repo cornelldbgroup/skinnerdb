@@ -206,6 +206,11 @@ public class QueryInfo {
 	 */
 	public final int limit;
 	/**
+	 * The set of temporary tables that are the result of
+	 * inner subquery.
+	 */
+	public final Set<Integer> temporaryTables = new HashSet<>();
+	/**
 	 * Extract information from the FROM clause (e.g.,
 	 * all tables referenced with their aliases, the
 	 * number of items in the from clause etc.).
@@ -242,6 +247,11 @@ public class QueryInfo {
 									+ "not unique");
 				}
 			}
+			TableInfo tableInfo = CatalogManager.currentDB.
+					nameToTable.get(tableName);
+			if (tableInfo.tempTable) {
+				temporaryTables.add(i);
+			}
 			// Register mapping from alias to table
 			aliasToTable.put(alias, tableName);
 			// Register mapping from index to alias
@@ -249,8 +259,7 @@ public class QueryInfo {
 			// Register mapping from alias to index
 			aliasToIndex.put(alias, i);
 			// Extract columns with types
-			for (ColumnInfo colInfo : CatalogManager.currentDB.
-					nameToTable.get(tableName).nameToCol.values()) {
+			for (ColumnInfo colInfo : tableInfo.nameToCol.values()) {
 				String colName = colInfo.name;
 				colRefToInfo.put(new ColumnRef(alias, colName), colInfo);
 			}

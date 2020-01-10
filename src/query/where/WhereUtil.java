@@ -47,17 +47,18 @@ public class WhereUtil {
 		} else if (condition instanceof ExistsExpression) {
 			ExistsExpression exist = (ExistsExpression) condition;
 			if (!exist.isNot()) {
-				PlainSelect subSelect = (PlainSelect) ((SubSelect)exist.getRightExpression()).getSelectBody();
-				List<SelectItem> selectItems = new ArrayList<>();
-				Function function = new Function();
-				function.setName("COUNT");
-				function.setAllColumns(true);
-				selectItems.add(new SelectExpressionItem(function));
-				subSelect.setSelectItems(selectItems);
-				GreaterThan greaterThan = new GreaterThan();
-				greaterThan.setLeftExpression(exist.getRightExpression());
-				greaterThan.setRightExpression(new LongValue(0));
-				conjuncts.add(greaterThan);
+//				PlainSelect subSelect = (PlainSelect) ((SubSelect)exist.getRightExpression()).getSelectBody();
+//				List<SelectItem> selectItems = new ArrayList<>();
+//				Function function = new Function();
+//				function.setName("COUNT");
+//				function.setAllColumns(true);
+//				selectItems.add(new SelectExpressionItem(function));
+//				subSelect.setSelectItems(selectItems);
+//				GreaterThan greaterThan = new GreaterThan();
+//				greaterThan.setLeftExpression(exist.getRightExpression());
+//				greaterThan.setRightExpression(new LongValue(0));
+//				conjuncts.add(greaterThan);
+				conjuncts.add(condition);
 			}
 			else {
 //				PlainSelect subSelect = (PlainSelect) ((SubSelect)exist.getRightExpression()).getSelectBody();

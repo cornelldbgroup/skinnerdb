@@ -104,15 +104,16 @@ public class Indexer {
 								String column = columnInfo.name;
 								ColumnRef colRef = new ColumnRef(table, column);
 								System.out.println("Indexing " + colRef + " ...");
-								if (GeneralConfig.isParallel) {
-									boolean sorted = columnInfo.type == SQLtype.DATE;
-									partitionIndex(colRef, colRef, null,
-											columnInfo.isPrimary, true, sorted);
-								}
-								else {
-									boolean sorted = columnInfo.type == SQLtype.DATE;
-									index(colRef, sorted);
-								}
+								boolean sorted = columnInfo.type == SQLtype.DATE;
+//								if (GeneralConfig.isParallel) {
+//									partitionIndex(colRef, colRef, null,
+//											columnInfo.isPrimary, true, sorted);
+//								}
+//								else {
+//									index(colRef, sorted);
+//								}
+								partitionIndex(colRef, colRef, null,
+										columnInfo.isPrimary, true, sorted);
 							}
 						} catch (Exception e) {
 							System.err.println("Error indexing " + columnInfo);

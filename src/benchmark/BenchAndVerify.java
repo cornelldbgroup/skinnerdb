@@ -5,11 +5,17 @@ import java.io.PrintWriter;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.stream.Collectors;
 
+import net.sf.jsqlparser.expression.Function;
+import net.sf.jsqlparser.parser.CCJSqlParserUtil;
+import net.sf.jsqlparser.statement.Statement;
+import net.sf.jsqlparser.statement.select.SelectExpressionItem;
+import net.sf.jsqlparser.statement.select.SelectItem;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.Map.Entry;
@@ -73,9 +79,9 @@ public class BenchAndVerify {
 		PathUtil.initDataPaths(CatalogManager.currentDB);
 		System.out.println("Loading data ...");
 		GeneralConfig.inMemory = true;
-		BufferManager.loadDB();
+//		BufferManager.loadDB();
 		System.out.println("Data loaded.");
-		Indexer.indexAll(StartupConfig.INDEX_CRITERIA);
+//		Indexer.indexAll(StartupConfig.INDEX_CRITERIA);
 		// Read all queries from files
 		Map<String, PlainSelect> nameToQuery = 
 				BenchUtil.readAllQueries(queryDir);
@@ -97,67 +103,77 @@ public class BenchAndVerify {
 			System.out.println(entry.getKey());
 			System.out.println(entry.getValue().toString());
 			long startMillis = System.currentTimeMillis();
-			QueryInfo query = new QueryInfo(entry.getValue(),
-					false, -1, -1, null);
-			Context preSummary = Preprocessor.process(query);
-			long preMillis = System.currentTimeMillis() - startMillis;
-			JoinProcessor.process(query, preSummary);
-			long postStartMillis = System.currentTimeMillis();
-			PostProcessor.process(query, preSummary, 
-					NamingConfig.FINAL_RESULT_NAME, true);
-			long postMillis = System.currentTimeMillis() - postStartMillis;
-			long totalMillis = System.currentTimeMillis() - startMillis;
-			// Check consistency with Postgres results: unary preds
-			for (ExpressionInfo expr : query.unaryPredicates) {
-				// Unary predicates must refer to one table
-				if (expr.aliasesMentioned.size() != 1) {
-					throw new Exception("Alias " + expr + " must mention one table!");
-				}
-				// Get cardinality after PG filtering
-				String alias = expr.aliasesMentioned.iterator().next();
-				String table = query.aliasToTable.get(alias);
-				StringBuilder sqlBuilder = new StringBuilder();
-				sqlBuilder.append("SELECT COUNT(*) FROM ");
-				sqlBuilder.append(table);
-				sqlBuilder.append(" AS ");
-				sqlBuilder.append(alias);
-				sqlBuilder.append(" WHERE ");
-				CollationVisitor collator = new CollationVisitor();
-				expr.originalExpression.accept(collator);
-				sqlBuilder.append(collator.exprStack.pop().toString());
-				String sql = sqlBuilder.toString().replace("STRING", "TEXT");
-				System.out.println(sql);
-				ResultSet result = pgStatement.executeQuery(sql);
-				result.next();
-				int pgCardinality = result.getInt(1);
-				System.out.println("PG cardinality:\t" + pgCardinality);
-				// Get cardinality after Skinner filtering
-				String filteredName = preSummary.aliasToFiltered.get(alias);
-				TableInfo filteredTable = CatalogManager.currentDB.
-						nameToTable.get(filteredName);
-				String columnName = filteredTable.nameToCol.keySet().iterator().next();
-				ColumnRef colRef = new ColumnRef(filteredName, columnName);
-				int skinnerCardinality = BufferManager.colToData.get(colRef).getCardinality();
-				System.out.println("Skinner card:\t" + skinnerCardinality);
-				if (pgCardinality != skinnerCardinality) {
-					throw new Exception("Inconsistent cardinality for "
-							+ "expression " + expr + "!");
-				}
-			}
+//			QueryInfo query = new QueryInfo(entry.getValue(),
+//					false, -1, -1, null);
+//			Context preSummary = Preprocessor.process(query);
+//			long preMillis = System.currentTimeMillis() - startMillis;
+//			JoinProcessor.process(query, preSummary);
+//			long postStartMillis = System.currentTimeMillis();
+//			PostProcessor.process(query, preSummary,
+//					NamingConfig.FINAL_RESULT_NAME, true);
+//			long postMillis = System.currentTimeMillis() - postStartMillis;
+//			long totalMillis = System.currentTimeMillis() - startMillis;
+//			// Check consistency with Postgres results: unary preds
+//			for (ExpressionInfo expr : query.unaryPredicates) {
+//				// Unary predicates must refer to one table
+//				if (expr.aliasesMentioned.size() != 1) {
+//					throw new Exception("Alias " + expr + " must mention one table!");
+//				}
+//				// Get cardinality after PG filtering
+//				String alias = expr.aliasesMentioned.iterator().next();
+//				String table = query.aliasToTable.get(alias);
+//				StringBuilder sqlBuilder = new StringBuilder();
+//				sqlBuilder.append("SELECT COUNT(*) FROM ");
+//				sqlBuilder.append(table);
+//				sqlBuilder.append(" AS ");
+//				sqlBuilder.append(alias);
+//				sqlBuilder.append(" WHERE ");
+//				CollationVisitor collator = new CollationVisitor();
+//				expr.originalExpression.accept(collator);
+//				sqlBuilder.append(collator.exprStack.pop().toString());
+//				String sql = sqlBuilder.toString().replace("STRING", "TEXT");
+//				System.out.println(sql);
+//				ResultSet result = pgStatement.executeQuery(sql);
+//				result.next();
+//				int pgCardinality = result.getInt(1);
+//				System.out.println("PG cardinality:\t" + pgCardinality);
+//				// Get cardinality after Skinner filtering
+//				String filteredName = preSummary.aliasToFiltered.get(alias);
+//				TableInfo filteredTable = CatalogManager.currentDB.
+//						nameToTable.get(filteredName);
+//				String columnName = filteredTable.nameToCol.keySet().iterator().next();
+//				ColumnRef colRef = new ColumnRef(filteredName, columnName);
+//				int skinnerCardinality = BufferManager.colToData.get(colRef).getCardinality();
+//				System.out.println("Skinner card:\t" + skinnerCardinality);
+//				if (pgCardinality != skinnerCardinality) {
+//					throw new Exception("Inconsistent cardinality for "
+//							+ "expression " + expr + "!");
+//				}
+//			}
 			// Check consistency with Postgres: join result size
 			StringBuilder sqlBuilder = new StringBuilder();
-			sqlBuilder.append("SELECT COUNT(*) FROM ");
-			List<String> fromItems = query.aliasToTable.entrySet().stream().
-					map(e -> e.getValue() + " " + e.getKey()).
-					collect(Collectors.toList());
-			String fromClause = StringUtils.join(fromItems, ", ");
-			sqlBuilder.append(fromClause);
-			if (!query.wherePredicates.isEmpty()) {
-				sqlBuilder.append(" WHERE ");
-				String whereCondition = StringUtils.join(
-						query.wherePredicates, " AND ");
-				sqlBuilder.append(whereCondition);
-			}
+			PlainSelect plainSelect = entry.getValue();
+			List<SelectItem> selectItems = new ArrayList<>();
+			Function function = new Function();
+			function.setName("COUNT");
+			function.setAllColumns(true);
+			selectItems.add(new SelectExpressionItem(function));
+			plainSelect.setSelectItems(selectItems);
+			plainSelect.setGroupByColumnReferences(null);
+			plainSelect.setOrderByElements(null);
+
+//			sqlBuilder.append("SELECT COUNT(*) FROM ");
+//			List<String> fromItems = plainSelect.getFromItem();
+//			String fromClause = StringUtils.join(fromItems, ", ");
+//			sqlBuilder.append(fromClause);
+//			if (!query.wherePredicates.isEmpty()) {
+//				sqlBuilder.append(" WHERE ");
+//				String whereCondition = StringUtils.join(
+//						query.wherePredicates, " AND ");
+//				sqlBuilder.append(whereCondition);
+//			}
+
+			sqlBuilder.append(plainSelect.toString());
 			String joinSql = sqlBuilder.toString().replace("STRING", "TEXT");
 			System.out.println("Join query: " + joinSql);
 			ResultSet joinResult = pgStatement.executeQuery(joinSql);
@@ -174,36 +190,35 @@ public class BenchAndVerify {
 			}
 			// Output final result for Postgres
 			StringBuilder pgBuilder = new StringBuilder();
-			PlainSelect plainSelect = entry.getValue();
-			pgBuilder.append("SELECT ");
-			boolean firstSelectItem = true;
-			for (ExpressionInfo selExpr : query.selectExpressions) {
-				if (firstSelectItem) {
-					firstSelectItem = false;
-				} else {
-					pgBuilder.append(", ");
-				}
-				PgPrinter pgPrinter = new PgPrinter(query);
-				pgPrinter.setBuffer(pgBuilder);
-				selExpr.afterNormalization.accept(pgPrinter);
-			}
-			pgBuilder.append(" FROM ");
-			pgBuilder.append(fromClause);
-			pgBuilder.append(" WHERE ");
-			CollationVisitor collator = new CollationVisitor();
-			plainSelect.getWhere().accept(collator);
-			pgBuilder.append(collator.exprStack.pop().toString());
-			String pgQuery = pgBuilder.toString().replace("STRING", "TEXT");
-			System.out.println("PG Query: " + pgQuery);
-			ResultSet queryResult = pgStatement.executeQuery(pgQuery);
-			int nrPgCols = queryResult.getMetaData().getColumnCount();
-			while (queryResult.next()) {
-				for (int colCtr=1; colCtr<=nrPgCols; ++colCtr) {
-					pgOut.print(queryResult.getString(colCtr) + "\t");
-				}
-				pgOut.println();
-			}
-			pgOut.flush();
+//			pgBuilder.append("SELECT ");
+//			boolean firstSelectItem = true;
+//			for (ExpressionInfo selExpr : query.selectExpressions) {
+//				if (firstSelectItem) {
+//					firstSelectItem = false;
+//				} else {
+//					pgBuilder.append(", ");
+//				}
+//				PgPrinter pgPrinter = new PgPrinter(query);
+//				pgPrinter.setBuffer(pgBuilder);
+//				selExpr.afterNormalization.accept(pgPrinter);
+//			}
+//			pgBuilder.append(" FROM ");
+//			pgBuilder.append(fromClause);
+//			pgBuilder.append(" WHERE ");
+//			CollationVisitor collator = new CollationVisitor();
+//			plainSelect.getWhere().accept(collator);
+//			pgBuilder.append(collator.exprStack.pop().toString());
+//			String pgQuery = pgBuilder.toString().replace("STRING", "TEXT");
+//			System.out.println("PG Query: " + pgQuery);
+//			ResultSet queryResult = pgStatement.executeQuery(pgQuery);
+//			int nrPgCols = queryResult.getMetaData().getColumnCount();
+//			while (queryResult.next()) {
+//				for (int colCtr=1; colCtr<=nrPgCols; ++colCtr) {
+//					pgOut.print(queryResult.getString(colCtr) + "\t");
+//				}
+//				pgOut.println();
+//			}
+//			pgOut.flush();
 			// Output final result for Skinner
 			String resultRel = NamingConfig.FINAL_RESULT_NAME;
 			System.setOut(skinnerOut);
@@ -211,22 +226,22 @@ public class BenchAndVerify {
 			skinnerOut.flush();
 			System.setOut(console);
 			// Generate output
-			benchOut.print(entry.getKey() + "\t");
-			benchOut.print(totalMillis + "\t");
-			benchOut.print(preMillis + "\t");
-			benchOut.print(postMillis + "\t");
-			benchOut.print(JoinStats.nrTuples + "\t");
-			benchOut.print(JoinStats.nrIterations + "\t");
-			benchOut.print(JoinStats.nrIndexLookups + "\t");
-			benchOut.print(JoinStats.nrIndexEntries + "\t");
-			benchOut.print(JoinStats.nrUniqueIndexLookups + "\t");
-			benchOut.print(JoinStats.nrUctNodes + "\t");
-			benchOut.print(JoinStats.nrPlansTried + "\t");
-			benchOut.print(skinnerJoinCard + "\t");
-			benchOut.print(JoinStats.nrSamples + "\t");
-			benchOut.print(JoinStats.avgReward + "\t");
-			benchOut.print(JoinStats.maxReward + "\t");
-			benchOut.println(JoinStats.totalWork);
+//			benchOut.print(entry.getKey() + "\t");
+//			benchOut.print(totalMillis + "\t");
+//			benchOut.print(preMillis + "\t");
+//			benchOut.print(postMillis + "\t");
+//			benchOut.print(JoinStats.nrTuples + "\t");
+//			benchOut.print(JoinStats.nrIterations + "\t");
+//			benchOut.print(JoinStats.nrIndexLookups + "\t");
+//			benchOut.print(JoinStats.nrIndexEntries + "\t");
+//			benchOut.print(JoinStats.nrUniqueIndexLookups + "\t");
+//			benchOut.print(JoinStats.nrUctNodes + "\t");
+//			benchOut.print(JoinStats.nrPlansTried + "\t");
+//			benchOut.print(skinnerJoinCard + "\t");
+//			benchOut.print(JoinStats.nrSamples + "\t");
+//			benchOut.print(JoinStats.avgReward + "\t");
+//			benchOut.print(JoinStats.maxReward + "\t");
+//			benchOut.println(JoinStats.totalWork);
 			benchOut.flush();
 			// Clean up
 			BufferManager.unloadTempData();

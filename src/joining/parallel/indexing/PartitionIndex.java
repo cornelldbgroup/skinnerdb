@@ -30,6 +30,15 @@ public abstract class PartitionIndex extends Index {
      * @return              evaluation results
      */
     public abstract boolean evaluate(int curTuple, Number constant, Operator operator);
+    /**
+     * Whether the indices satisfy the given node corresponding to a exist predicate
+     * using the index.
+     *
+     * @param constant      constant in predicate
+     * @param operator      predicate operator
+     * @return              evaluation results
+     */
+    public abstract boolean exist(Number constant, Operator operator);
 
     /**
      * Return the value of row in the column.

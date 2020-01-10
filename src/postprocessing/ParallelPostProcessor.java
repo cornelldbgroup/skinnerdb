@@ -261,6 +261,7 @@ public class ParallelPostProcessor {
                 case MIN:
                     ParallelMinMaxAggregate.execute(sourceRef, nrGroups,
                             groupRef, false, targetRef);
+//                    MinMaxAggregate.execute(sourceRef, nrGroups, groupRef, false, targetRef);
                     break;
                 case MAX:
                     ParallelMinMaxAggregate.execute(sourceRef, nrGroups,

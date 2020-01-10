@@ -403,17 +403,30 @@ public class Preprocessor {
 		if (LoggingConfig.PREPROCESSING_VERBOSE) {
 			startMillis = System.currentTimeMillis();
 		}
-
-		query.indexCols.parallelStream().forEach(queryRef -> {
-			try {
-				// Resolve query-specific column reference
-				ColumnRef dbRef = preSummary.columnMapping.get(queryRef);
-				if (LoggingConfig.PREPROCESSING_VERBOSE) {
-					log("Creating index for " + queryRef +
-							" (query) - " + dbRef + " (DB)");
-				}
-				// Create index (unless it exists already)
-				if (GeneralConfig.isParallel) {
+		if (GeneralConfig.isParallel) {
+			query.indexCols.parallelStream().forEach(queryRef -> {
+				try {
+					// Resolve query-specific column reference
+					ColumnRef dbRef = preSummary.columnMapping.get(queryRef);
+					if (LoggingConfig.PREPROCESSING_VERBOSE) {
+						log("Creating index for " + queryRef +
+								" (query) - " + dbRef + " (DB)");
+					}
+					// Create index (unless it exists already)
+//					if (GeneralConfig.isParallel) {
+//						ColumnInfo columnInfo = query.colRefToInfo.get(queryRef);
+//						String tableName = query.aliasToTable.get(queryRef.aliasName);
+//						String columnName = queryRef.columnName;
+//						ColumnRef columnRef = new ColumnRef(tableName, columnName);
+//						Index index = BufferManager.colToIndex.getOrDefault(columnRef, null);
+//						PartitionIndex partitionIndex = index == null ? null : (PartitionIndex) index;
+//						// Get index generation policy according to statistics.
+//						// Create index (unless it exists already)
+//						Indexer.partitionIndex(dbRef, queryRef, partitionIndex, columnInfo.isPrimary, false, false);
+//					}
+//					else {
+//						Indexer.index(dbRef, false);
+//					}
 					ColumnInfo columnInfo = query.colRefToInfo.get(queryRef);
 					String tableName = query.aliasToTable.get(queryRef.aliasName);
 					String columnName = queryRef.columnName;
@@ -423,15 +436,36 @@ public class Preprocessor {
 					// Get index generation policy according to statistics.
 					// Create index (unless it exists already)
 					Indexer.partitionIndex(dbRef, queryRef, partitionIndex, columnInfo.isPrimary, false, false);
+				} catch (Exception e) {
+					System.err.println("Error creating index for " + queryRef);
+					e.printStackTrace();
 				}
-				else {
-					Indexer.index(dbRef, false);
+			});
+		}
+		else {
+			query.indexCols.forEach(queryRef -> {
+				try {
+					// Resolve query-specific column reference
+					ColumnRef dbRef = preSummary.columnMapping.get(queryRef);
+					if (LoggingConfig.PREPROCESSING_VERBOSE) {
+						log("Creating index for " + queryRef +
+								" (query) - " + dbRef + " (DB)");
+					}
+					ColumnInfo columnInfo = query.colRefToInfo.get(queryRef);
+					String tableName = query.aliasToTable.get(queryRef.aliasName);
+					String columnName = queryRef.columnName;
+					ColumnRef columnRef = new ColumnRef(tableName, columnName);
+					Index index = BufferManager.colToIndex.getOrDefault(columnRef, null);
+					PartitionIndex partitionIndex = index == null ? null : (PartitionIndex) index;
+					// Get index generation policy according to statistics.
+					// Create index (unless it exists already)
+					Indexer.partitionIndex(dbRef, queryRef, partitionIndex, columnInfo.isPrimary, true, false);
+				} catch (Exception e) {
+					System.err.println("Error creating index for " + queryRef);
+					e.printStackTrace();
 				}
-			} catch (Exception e) {
-				System.err.println("Error creating index for " + queryRef);
-				e.printStackTrace();
-			}
-		});
+			});
+		}
 		long totalMillis = System.currentTimeMillis() - startMillis;
 		System.out.println("Created all indices in " + totalMillis + " ms.");
 		log("Created all indices in " + totalMillis + " ms.");

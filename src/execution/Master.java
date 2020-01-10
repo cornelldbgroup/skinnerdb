@@ -105,14 +105,18 @@ public class Master {
 				break;
 			}
 			// Join filtered tables
-			if (GeneralConfig.isParallel) {
-				// Convert nonEqui-predicates into nodes
-				subQueryInfo.convertNonEquiPredicates(context);
-				ParallelJoinProcessor.process(subQueryInfo, context);
-			}
-			else {
-				JoinProcessor.process(subQueryInfo, context);
-			}
+//			if (GeneralConfig.isParallel) {
+//				// Convert nonEqui-predicates into nodes
+//				subQueryInfo.convertNonEquiPredicates(context);
+//				ParallelJoinProcessor.process(subQueryInfo, context);
+//			}
+//			else {
+//				JoinProcessor.process(subQueryInfo, context);
+//			}
+			// Convert nonEqui-predicates into nodes
+			subQueryInfo.convertNonEquiPredicates(context);
+			ParallelJoinProcessor.process(subQueryInfo, context);
+
 			// Determine result table name and properties
 			boolean lastSubQuery = subQueryCtr==nrSubQueries-1;
 			boolean tempResult = lastSubQuery?finalTempResult:true;

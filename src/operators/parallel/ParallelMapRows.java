@@ -87,6 +87,8 @@ public class ParallelMapRows {
             long value = ((LongValue) expression.finalExpression).getValue();
             ConstantData constantData = new ConstantData(inCard, value);
             BufferManager.colToData.put(targetRef, constantData);
+            // Update catalog statistics
+            CatalogManager.updateStats(targetTable);
             return;
         }
 

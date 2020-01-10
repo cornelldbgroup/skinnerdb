@@ -245,7 +245,7 @@ public class NonEquiNodesTest extends PlainVisitor {
         notExpression.getExpression().accept(this);
         NonEquiNode leftNode = nonEquiNodes.pop();
         NonEquiNode node = new NonEquiNode(leftNode, null,
-                notExpression, null, null, Operator.Not, -1);
+                notExpression, null, null, Operator.NotExist, -1);
         nonEquiNodes.push(node);
     }
 

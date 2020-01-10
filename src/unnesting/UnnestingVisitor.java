@@ -10,10 +10,7 @@ import expressions.ExpressionInfo;
 import expressions.normalization.CollectReferencesVisitor;
 import expressions.normalization.CopyVisitor;
 import expressions.normalization.SubstitutionVisitor;
-import net.sf.jsqlparser.expression.Alias;
-import net.sf.jsqlparser.expression.Expression;
-import net.sf.jsqlparser.expression.Function;
-import net.sf.jsqlparser.expression.NotExpression;
+import net.sf.jsqlparser.expression.*;
 import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
 import net.sf.jsqlparser.expression.operators.conditional.OrExpression;
 import net.sf.jsqlparser.expression.operators.relational.*;
@@ -757,6 +754,19 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
                         }
                         addToOuterWhere.add(orExpr);
                     }
+                    else {
+                        PlainSelect subSelect = (PlainSelect) ((SubSelect)existExpr.getRightExpression()).getSelectBody();
+                        List<SelectItem> selectItems = new ArrayList<>();
+                        Function function = new Function();
+                        function.setName("COUNT");
+                        function.setAllColumns(true);
+                        selectItems.add(new SelectExpressionItem(function));
+                        subSelect.setSelectItems(selectItems);
+                        GreaterThan greaterThan = new GreaterThan();
+                        greaterThan.setLeftExpression(existExpr.getRightExpression());
+                        greaterThan.setRightExpression(new LongValue(0));
+                        greaterThan.accept(this);
+                    }
                     continue;
                 }
                 // Default unnesting strategy
@@ -766,6 +776,72 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
             // Replace where clause by unnested version
             plainSelect.setWhere(WhereUtil.conjunction(unnestedConjuncts));
         }
+    }
+
+    List<Column> extractColumnsInExist(ExistsExpression existExpr) {
+        List<Column> columns = new ArrayList<>();
+        PlainSelect subSelect = (PlainSelect) ((SubSelect) existExpr
+                .getRightExpression()).getSelectBody();
+        List<FromItem> fromItems = FromUtil.allFromItems(subSelect);
+        // Iterate over base tables in FROM clause
+        Set<String> inTables = new HashSet<>();
+        Set<ColumnRef> curScopeCols = new HashSet<>();
+        for (FromItem fromItem : fromItems) {
+            if (fromItem instanceof Table) {
+                // Extract table and alias name (defaults to table name)
+                Table table = (Table) fromItem;
+                String tableName = table.getName();
+                String alias = table.getAlias() != null ?
+                        table.getAlias().getName() : tableName;
+                // Extract associated column references
+                TableInfo tableInfo = CatalogManager.currentDB.
+                        nameToTable.get(tableName);
+                // Update scope and mappings
+                for (ColumnInfo colInfo : tableInfo.nameToCol.values()) {
+                    String colName = colInfo.name;
+                    // Update current scope
+                    curScopeCols.add(new ColumnRef("", colName));
+                    curScopeCols.add(new ColumnRef(alias, colName));
+                }
+            }
+        }
+        List<Expression> subConjuncts = new ArrayList<>();
+        WhereUtil.extractConjuncts(subSelect.getWhere(), subConjuncts);
+        Column outerColumn = null;
+        Column innerColumn = null;
+        for (Expression sub : subConjuncts) {
+            if (sub instanceof EqualsTo) {
+                EqualsTo subEqual = (EqualsTo) sub;
+                if (subEqual.getLeftExpression()
+                        instanceof Column && subEqual.getRightExpression() instanceof Column) {
+                    Column leftColumn = (Column) subEqual.getLeftExpression();
+                    Column rightColumn = (Column) subEqual.getRightExpression();
+                    Table leftTable = leftColumn.getTable();
+                    Table rightTable = rightColumn.getTable();
+                    String leftTableName = leftTable == null
+                            ? "" :
+                            (leftTable.getAlias() != null ? leftTable.getAlias().getName() :
+                                    (leftTable.getName() == null ? "" : leftTable.getName()));
+                    String rightTableName = rightTable == null
+                            ? "" :
+                            (rightTable.getAlias() != null ? rightTable.getAlias().getName() :
+                                    (rightTable.getName() == null ? "" : rightTable.getName()));
+                    ColumnRef leftRef = new ColumnRef(leftTableName, leftColumn.getColumnName());
+                    ColumnRef rightRef = new ColumnRef(rightTableName, rightColumn.getColumnName());
+                    if (!curScopeCols.contains(leftRef)) {
+                        outerColumn = leftColumn;
+                        innerColumn = rightColumn;
+                    }
+                    else if (!curScopeCols.contains(rightRef)){
+                        outerColumn = rightColumn;
+                        innerColumn = leftColumn;
+                    }
+                }
+            }
+        }
+        columns.add(outerColumn);
+        columns.add(innerColumn);
+        return columns;
     }
 
     /**

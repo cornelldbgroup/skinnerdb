@@ -33,7 +33,12 @@ public class GroupIndex {
      */
     public GroupIndex(int gid, int size) {
         this.gid = gid;
-        this.rows = new ArrayList<>(size);
+        if (size < 0) {
+            this.rows = new ArrayList<>();
+        }
+        else {
+            this.rows = new ArrayList<>(size);
+        }
     }
 
     public void addRow(int rowCtr) {

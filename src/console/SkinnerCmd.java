@@ -259,13 +259,12 @@ public class SkinnerCmd {
                 System.out.println("Created " + table.toString());
                 for (int i = 0; i < columnNames.size(); i++) {
                     String columnName = columnNames.get(i);
-                    ColDataType colDataType = new ColDataType();
                     String resultColumn = tableInfo.columnNames.get(i);
                     ColumnInfo columnInfo = tableInfo.nameToCol.get(resultColumn);
                     ColumnRef columnRef = new ColumnRef(tableInfo.name, columnInfo.name);
                     ColumnData resultData = BufferManager.getData(columnRef);
                     ColumnRef newColumnRef = new ColumnRef(table.name, columnName);
-                    BufferManager.colToData.putIfAbsent(newColumnRef, resultData);
+                    BufferManager.colToData.put(newColumnRef, resultData);
                 }
                 // Clean up intermediate results
                 BufferManager.unloadTempData();
@@ -493,6 +492,10 @@ public class SkinnerCmd {
         if (GeneralConfig.isParallel) {
 			ParallelConfig.PARALLEL_SPEC = Integer.parseInt(Configuration.getProperty("PARALLEL_SPEC", "0"));
         }
+        else {
+            ParallelConfig.EXE_THREADS = 1;
+            ParallelConfig.PARALLEL_SPEC = 0;
+        }
 		// Load database schema and initialize path mapping
 		dbDir = args[0];
         PathUtil.initSchemaPaths(dbDir);
@@ -509,12 +512,13 @@ public class SkinnerCmd {
         }
 
         Indexer.indexAll(StartupConfig.INDEX_CRITERIA);
-
+        // q09, q18, q21
+        // q04,
         if (args.length == 2) {
             // initialize a thread pool
             ThreadPool.initThreadsPool(ParallelConfig.EXE_THREADS, ParallelConfig.PRE_THREADS);
 //            processInput("exec ./tpch/skinnerqueries/q03.sql");
-            processInput("exec ./jcch/queries/q21.sql");
+            processInput("exec ./jcch/queries/q15.sql");
 //            processInput("exec ./jcch/queries/q17.sql");
 //            processInput("exec ../imdb/queries/26b.sql");
 //            processInput("exec /Users/tracy/Documents/Research/skinnerdb/imdb/queries/33c.sql");

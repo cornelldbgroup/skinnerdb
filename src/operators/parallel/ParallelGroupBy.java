@@ -46,6 +46,9 @@ public class ParallelGroupBy {
         BufferManager.colToData.put(targetRef, groupData);
         // Get data of source columns
         List<ColumnData> sourceCols = new ArrayList<>();
+        for (ColumnRef srcRef : sourceRefs) {
+            sourceCols.add(BufferManager.getData(srcRef));
+        }
         // Fill result column
         Map<Group, GroupIndex> groupIndexListMap = new HashMap<>();
         List<RowRange> batches = OperatorUtils.split(cardinality, 50);
@@ -54,7 +57,7 @@ public class ParallelGroupBy {
             Group curGroup = new Group(rowCtr, sourceCols);
             GroupIndex groupIndex = groupIndexListMap.computeIfAbsent(curGroup, group -> {
                 int nextGroupID = groupIndexListMap.size();
-                return new GroupIndex(nextGroupID, Math.min(cardinality, 100000));
+                return new GroupIndex(nextGroupID, -1);
             });
             groupIndex.addRow(rowCtr);
             groupData.data[rowCtr] = groupIndex.gid;

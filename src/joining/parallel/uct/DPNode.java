@@ -142,7 +142,10 @@ public class DPNode {
         recommendedActions = new HashSet<>();
         for (int action = 0; action < nrActions; ++action) {
 //            accumulatedReward[action] = 0;
-            recommendedActions.add(action);
+            int table = nextTable[action];
+            if (!query.temporaryTables.contains(table)) {
+                recommendedActions.add(action);
+            }
         }
         this.nodeStatistics = new NodeStatistics[nrThreads];
 
@@ -154,7 +157,10 @@ public class DPNode {
         for (int i = 0; i < nrThreads; i++) {
             prioritySet[i] = new LinkedList<>();
             for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
-                prioritySet[i].add(actionCtr);
+                int table = nextTable[actionCtr];
+                if (!query.temporaryTables.contains(table)) {
+                    prioritySet[i].add(actionCtr);
+                }
             }
         }
         // initialize read-write lock for DPDsync
@@ -218,6 +224,16 @@ public class DPNode {
             if (recommendedActions.isEmpty()) {
                 // add all actions to recommended actions
                 for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
+                    int table = nextTable[actionCtr];
+                    if (!query.temporaryTables.contains(table)) {
+                        recommendedActions.add(actionCtr);
+                    }
+                }
+            }
+            if (recommendedActions.isEmpty()) {
+                // add all actions to recommended actions
+                for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
+                    int table = nextTable[actionCtr];
                     recommendedActions.add(actionCtr);
                 }
             }
@@ -376,6 +392,9 @@ public class DPNode {
 //            }
 //        }
         // Otherwise: return best action.
+        if (bestAction == -1) {
+            System.out.println("here");
+        }
         return bestAction;
     }
     /**
@@ -420,14 +439,22 @@ public class DPNode {
                         break;
                     }
                 }
+                int found = -1;
                 if (!foundTable) {
                     for (int table : unjoinedTablesShuffled) {
                         if (!newlyJoined.contains(table)) {
-                            joinOrder[posCtr] = table;
-                            newlyJoined.add(table);
-                            break;
+                            found = table;
+                            if (!query.temporaryTables.contains(table)) {
+                                joinOrder[posCtr] = table;
+                                newlyJoined.add(table);
+                                foundTable = true;
+                                break;
+                            }
                         }
                     }
+                }
+                if (!foundTable) {
+                    joinOrder[posCtr] = found;
                 }
             }
         } else {
