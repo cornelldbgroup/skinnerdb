@@ -206,8 +206,13 @@ public class QueryInfo {
 	 */
 	public final int limit;
 	/**
+	 * The set of temporary alias that are the result of
+	 * inner sub query.
+	 */
+	public final Set<String> temporaryAlias = new HashSet<>();
+	/**
 	 * The set of temporary tables that are the result of
-	 * inner subquery.
+	 * inner sub query.
 	 */
 	public final Set<Integer> temporaryTables = new HashSet<>();
 	/**
@@ -249,9 +254,6 @@ public class QueryInfo {
 			}
 			TableInfo tableInfo = CatalogManager.currentDB.
 					nameToTable.get(tableName);
-			if (tableInfo.tempTable) {
-				temporaryTables.add(i);
-			}
 			// Register mapping from alias to table
 			aliasToTable.put(alias, tableName);
 			// Register mapping from index to alias
@@ -354,7 +356,7 @@ public class QueryInfo {
 			Expression left = equalsExpr.getLeftExpression();
 			Expression right = equalsExpr.getRightExpression();
 			// Is it an equality between two columns?
-			if (left instanceof Column && right instanceof Column) {
+			if (left instanceof Column && right instanceof Column && !equalsExpr.isNot()) {
 				Column leftCol = (Column)left;
 				Column rightCol = (Column)right;
 				ColumnRef leftRef = new ColumnRef(
@@ -430,7 +432,7 @@ public class QueryInfo {
 					for (Expression conjunct : exprInfo.conjuncts) {
 						ExpressionInfo curInfo = new ExpressionInfo(this, conjunct);
 						Set<ColumnRef> curEquiJoinCols = extractEquiJoinCols(curInfo);
-						if (curEquiJoinCols != null) {							
+						if (curEquiJoinCols != null) {
 							equiJoinCols.addAll(curEquiJoinCols);
 							indexCols.addAll(curEquiJoinCols);
 							equiJoinPreds.add(curInfo);
@@ -442,6 +444,14 @@ public class QueryInfo {
 					// Add non-equi join predicates if any
 					if (nonEquiPred != null) {
 						ExpressionInfo curInfo = new ExpressionInfo(this, nonEquiPred);
+						for (String alias: curInfo.aliasesMentioned) {
+							int index = aliasToIndex.get(alias);
+							TableInfo tableInfo = CatalogManager.currentDB.
+									nameToTable.get(aliasToTable.get(alias));
+							if (tableInfo.tempTable || temporaryAlias.contains(alias)) {
+								temporaryTables.add(index);
+							}
+						}
 						nonEquiJoinPreds.add(curInfo);
 						indexCols.addAll(extractNonEquiJoinCols(curInfo));
 					}
@@ -714,6 +724,68 @@ public class QueryInfo {
 		this.plotAtMost = plotAtMost;
 		this.plotEvery = plotEvery;
 		this.plotDir = plotDir;
+		// Extract information in FROM clause
+		extractFromInfo();
+		log("Alias -> table: " + aliasToTable);
+		log("Column info: " + colRefToInfo);
+		// Add implicit references to aliases
+		addImplicitRefs();
+		log("Unique column name -> alias: " + columnToAlias);
+		// Resolve wildcards and add aliases for SELECT clause
+		treatSelectClause();
+		log("Select expressions: " + selectExpressions);
+		log("Select aliases: " + selectToAlias);
+		log("Alias to expression: " + aliasToExpression);
+		// Extract predicates in WHERE clause
+		extractPredicates();
+		log("Unary predicates: " + unaryPredicates);
+		log("Equi join cols: " + equiJoinCols);
+		log("Equi join preds: " + equiJoinPreds);
+		log("Other join preds: " + nonEquiJoinPreds);
+		// Assign integers to predicates
+		maintainPredicatesID();
+		// Add expressions in GROUP BY clause
+		treatGroupBy();
+		log("GROUP BY expressions: " + groupByExpressions);
+		// Add expression in HAVING clause
+		treatHaving();
+		log("HAVING clause: " + (havingExpression!=null?havingExpression:"none"));
+		// Adds expressions in ORDER BY clause
+		treatOrderBy();
+		log("ORDER BY expressions: " + orderByExpressions);
+		// Collect required columns
+		collectRequiredCols();
+		log("Required cols for joins: " + colsForJoins);
+		log("Required for post-processing: " + colsForPostProcessing);
+		// Collect aggregates
+		collectAggregates();
+		log("Extracted aggregates: " + aggregates);
+		// Set aggregation type
+		aggregationType = getAggregationType();
+		log("Aggregation type:\t" + aggregationType);
+		// Set result tuple limit
+		limit = getLimit(plainSelect);
+		log("Limit:\t" + limit);
+	}
+
+	/**
+	 * Analyzes a select query to prepare processing.
+	 *
+	 * @param plainSelect	a plain select query
+	 * @param explain		whether this is an explain query
+	 * @param plotAtMost	plot at most that many plots (in explain mode)
+	 * @param plotEvery		generate one plot after that many samples (in explain mode)
+	 * @param plotDir		add plots to this directory (in explain mode)
+	 */
+	public QueryInfo(PlainSelect plainSelect, Set<String> temporary, boolean explain,
+					 int plotAtMost, int plotEvery, String plotDir) throws Exception {
+		log("Input query: " + plainSelect);
+		this.plainSelect = plainSelect;
+		this.explain = explain;
+		this.plotAtMost = plotAtMost;
+		this.plotEvery = plotEvery;
+		this.plotDir = plotDir;
+		this.temporaryAlias.addAll(temporary);
 		// Extract information in FROM clause
 		extractFromInfo();
 		log("Alias -> table: " + aliasToTable);

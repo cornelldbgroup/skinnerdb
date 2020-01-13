@@ -5,10 +5,12 @@ public enum Operator {
     AND,
     EqualsTo,
     NotEqualsTo,
+    EqualsExist,
     NotEqualsAll,
     Not,
     NotAll,
     NotExist,
+    Exist,
     GreaterThan,
     GreaterThanEquals,
     MinorThan,
@@ -18,5 +20,6 @@ public enum Operator {
     Multiplication,
     Subtraction,
     Constant,
-    Variable
+    Variable,
+    EquiIndices
 }

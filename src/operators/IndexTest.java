@@ -83,6 +83,10 @@ public class IndexTest implements ExpressionVisitor {
 	public Deque<Boolean> constantQueue =
 			new ArrayDeque<>();
 	/**
+	 * Whether the index is sorted.
+	 */
+	public boolean sorted = false;
+	/**
 	 * Initialize index test for given query.
 	 * 
 	 * @param query	meta-data about query
@@ -280,6 +284,7 @@ public class IndexTest implements ExpressionVisitor {
 		Expression right = comparisonOperator.getRightExpression();
 		left.accept(this);
 		right.accept(this);
+		sorted = false;
 		boolean haveConstant = constantQueue.size() > 0;
 		boolean haveColumn = left instanceof Column ||
 				right instanceof Column;

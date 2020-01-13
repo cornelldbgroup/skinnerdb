@@ -270,15 +270,23 @@ public class Preprocessor {
 		IndexTest indexTest = new IndexTest(query);
 		List<Expression> indexedConjuncts = new ArrayList<>();
 		List<Expression> nonIndexedConjuncts = new ArrayList<>();
+		List<Expression> sortedConjuncts = new ArrayList<>();
+		List<Expression> unsortedConjuncts = new ArrayList<>();
 		for (Expression conjunct : unaryPred.conjuncts) {
 			// Re-initialize index test
 			indexTest.canUseIndex = true;
 			indexTest.constantQueue.clear();
+			indexTest.sorted = true;
 			// Compare predicate against indexes
 			conjunct.accept(indexTest);
 			// Can conjunct be evaluated only from indices?
 			if (indexTest.canUseIndex && PreConfig.CONSIDER_INDICES) {
-				indexedConjuncts.add(conjunct);
+				if (indexTest.sorted) {
+					sortedConjuncts.add(conjunct);
+				}
+				else {
+					unsortedConjuncts.add(conjunct);
+				}
 			} else {
 				nonIndexedConjuncts.add(conjunct);
 			}
@@ -288,6 +296,13 @@ public class Preprocessor {
 					"; other: " + nonIndexedConjuncts.toString());
 		}
 		// Create remaining predicate expression
+		if (unsortedConjuncts.size() > 0) {
+			indexedConjuncts.addAll(unsortedConjuncts);
+			nonIndexedConjuncts.addAll(sortedConjuncts);
+		}
+		else {
+			indexedConjuncts.addAll(sortedConjuncts);
+		}
 		Expression remainingExpr = conjunction(nonIndexedConjuncts);
 		// Evaluate indexed predicate part
 		if (!indexedConjuncts.isEmpty()) {

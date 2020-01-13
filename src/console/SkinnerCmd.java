@@ -96,12 +96,12 @@ public class SkinnerCmd {
                 PrintWriter benchOut = new PrintWriter(outputName);
                 BenchUtil.writeBenchHeader(benchOut);
                 // Load all queries to benchmark
-                Map<String, PlainSelect> nameToQuery =
+                Map<String, Statement> nameToQuery =
                         BenchUtil.readAllQueries(dirPath);
                 // Iterate over queries
-                for (Entry<String, PlainSelect> entry : nameToQuery.entrySet()) {
+                for (Entry<String, Statement> entry : nameToQuery.entrySet()) {
                     String queryName = entry.getKey();
-                    PlainSelect query = entry.getValue();
+                    Statement query = entry.getValue();
                     System.out.println(queryName);
                     System.out.println(query.toString());
                     QueryStats.queryName = queryName;
@@ -266,6 +266,7 @@ public class SkinnerCmd {
                     ColumnRef newColumnRef = new ColumnRef(table.name, columnName);
                     BufferManager.colToData.put(newColumnRef, resultData);
                 }
+                CatalogManager.updateStats(table.name);
                 // Clean up intermediate results
                 BufferManager.unloadTempData();
                 CatalogManager.removeTempTables();
@@ -281,9 +282,6 @@ public class SkinnerCmd {
             CatalogManager.currentDB.nameToTable.remove(tableName);
             CatalogManager.currentDB.storeDB();
             System.out.println("Dropped " + tableName);
-
-        }
-        else if (sqlStatement instanceof Drop) {
 
         } else if (sqlStatement instanceof Select) {
             Select select = (Select) sqlStatement;
@@ -512,13 +510,12 @@ public class SkinnerCmd {
         }
 
         Indexer.indexAll(StartupConfig.INDEX_CRITERIA);
-        // q09, q18, q21
-        // q04,
+        // q21
         if (args.length == 2) {
             // initialize a thread pool
             ThreadPool.initThreadsPool(ParallelConfig.EXE_THREADS, ParallelConfig.PRE_THREADS);
 //            processInput("exec ./tpch/skinnerqueries/q03.sql");
-            processInput("exec ./jcch/queries/q15.sql");
+            processInput("exec ./jcch/queries/q21.sql");
 //            processInput("exec ./jcch/queries/q17.sql");
 //            processInput("exec ../imdb/queries/26b.sql");
 //            processInput("exec /Users/tracy/Documents/Research/skinnerdb/imdb/queries/33c.sql");

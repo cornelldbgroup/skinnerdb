@@ -57,10 +57,14 @@ public class ParallelSumAggregate {
 			if (grouping) {
 				System.out.println("groupBy");
 				IntData finalIntTarget = new IntData(targetCard);
+				int constValue = (int) constantData.constant;
 				BufferManager.colToData.put(targetRef, finalIntTarget);
-				int[] constantArray = groupMapping.values().parallelStream().
-						mapToInt(groupList -> (int) (constantData.constant * constantData.cardinality)).toArray();
-
+				groupMapping.values().parallelStream().forEach(groupIndex -> {
+					int gid = groupIndex.gid;
+					int cardinality = groupIndex.rows.size();
+					int value = constValue * cardinality;
+					finalIntTarget.data[gid] = value;
+				});
 			}
 			else {
 				System.out.println("No groupBy");

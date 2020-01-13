@@ -104,8 +104,13 @@ public class WhereUtil {
 		}
 		else if (condition instanceof AndExpression) {
 			AndExpression and = (AndExpression)condition;
-			extractConjuncts(and.getLeftExpression(), conjuncts);
-			extractConjuncts(and.getRightExpression(), conjuncts);
+			if (and.isNot()) {
+				conjuncts.add(and);
+			}
+			else {
+				extractConjuncts(and.getLeftExpression(), conjuncts);
+				extractConjuncts(and.getRightExpression(), conjuncts);
+			}
 		} else {
 			conjuncts.add(condition);
 		}

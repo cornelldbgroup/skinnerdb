@@ -76,8 +76,9 @@ public class Master {
 		for (int subQueryCtr=0; subQueryCtr<nrSubQueries; ++subQueryCtr) {
 			// Retrieve next sub-query
 			PlainSelect subQuery = unnestor.unnestedQueries.get(subQueryCtr);
+			Set<String> temporary = unnestor.temporaryTables.get(subQueryCtr);
 			// Analyze sub-query
-			QueryInfo subQueryInfo = new QueryInfo(subQuery, explain, 
+			QueryInfo subQueryInfo = new QueryInfo(subQuery, temporary, explain,
 					plotAtMost, plotEvery, plotDir);
 			PreConfig.FILTER = PreConfig.PRE_FILTER;
 			// Filter, projection, and indexing for join phase

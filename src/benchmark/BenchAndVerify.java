@@ -83,7 +83,7 @@ public class BenchAndVerify {
 		System.out.println("Data loaded.");
 //		Indexer.indexAll(StartupConfig.INDEX_CRITERIA);
 		// Read all queries from files
-		Map<String, PlainSelect> nameToQuery = 
+		Map<String, Statement> nameToQuery =
 				BenchUtil.readAllQueries(queryDir);
 		// Open connection to Postgres 
 		String url = "jdbc:postgresql:" + PgDB;
@@ -99,7 +99,7 @@ public class BenchAndVerify {
 		PrintStream console = System.out;
 		// Measure pre-processing time for each query
 		BenchUtil.writeBenchHeader(benchOut);
-		for (Entry<String, PlainSelect> entry : nameToQuery.entrySet()) {
+		for (Entry<String, Statement> entry : nameToQuery.entrySet()) {
 			System.out.println(entry.getKey());
 			System.out.println(entry.getValue().toString());
 			long startMillis = System.currentTimeMillis();
@@ -152,15 +152,15 @@ public class BenchAndVerify {
 //			}
 			// Check consistency with Postgres: join result size
 			StringBuilder sqlBuilder = new StringBuilder();
-			PlainSelect plainSelect = entry.getValue();
+			Statement plainSelect = entry.getValue();
 			List<SelectItem> selectItems = new ArrayList<>();
 			Function function = new Function();
 			function.setName("COUNT");
 			function.setAllColumns(true);
 			selectItems.add(new SelectExpressionItem(function));
-			plainSelect.setSelectItems(selectItems);
-			plainSelect.setGroupByColumnReferences(null);
-			plainSelect.setOrderByElements(null);
+//			plainSelect.setSelectItems(selectItems);
+//			plainSelect.setGroupByColumnReferences(null);
+//			plainSelect.setOrderByElements(null);
 
 //			sqlBuilder.append("SELECT COUNT(*) FROM ");
 //			List<String> fromItems = plainSelect.getFromItem();
@@ -252,5 +252,8 @@ public class BenchAndVerify {
 		pgOut.close();
 		skinnerOut.close();
 	}
+
+
+
 
 }

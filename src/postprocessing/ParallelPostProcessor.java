@@ -468,7 +468,7 @@ public class ParallelPostProcessor {
                     context.aggToData, context.groupsToIndex,null, -1, resultRef);
             else
                 MapRows.execute(srcRel, expr, context.columnMapping,
-                        context.aggToData, groupRef, nrGroups, resultRef);
+                        context.aggToData, null, -1, resultRef);
         }
     }
 

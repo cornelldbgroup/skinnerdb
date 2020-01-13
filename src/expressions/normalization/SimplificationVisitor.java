@@ -380,7 +380,11 @@ public class SimplificationVisitor extends SkinnerVisitor {
 		} else if (op1 instanceof NullValue && op2 instanceof NullValue) {
 			opStack.push(new NullValue());
 		} else {
-			opStack.push(new AndExpression(op1, op2));
+			AndExpression newAnd = new AndExpression(op1, op2);
+			if (arg0.isNot()) {
+				newAnd.setNot();
+			}
+			opStack.push(newAnd);
 		}
 	}
 	/**
@@ -560,18 +564,27 @@ public class SimplificationVisitor extends SkinnerVisitor {
 	public void visit(EqualsTo arg0) {
 		EqualsTo newEquals = new EqualsTo();
 		treatBinaryComparison(arg0, newEquals);
+		if (arg0.isNot()) {
+			newEquals.setNot();
+		}
 	}
 
 	@Override
 	public void visit(GreaterThan arg0) {
 		GreaterThan newGt = new GreaterThan();
 		treatBinaryComparison(arg0, newGt);
+		if (arg0.isNot()) {
+			newGt.setNot();
+		}
 	}
 
 	@Override
 	public void visit(GreaterThanEquals arg0) {
 		GreaterThanEquals newGte = new GreaterThanEquals();
 		treatBinaryComparison(arg0, newGte);
+		if (arg0.isNot()) {
+			newGte.setNot();
+		}
 	}
 	/**
 	 * We transform an in expression into nested OR expressions.
@@ -637,12 +650,18 @@ public class SimplificationVisitor extends SkinnerVisitor {
 	public void visit(MinorThan arg0) {
 		MinorThan newMt = new MinorThan();
 		treatBinaryComparison(arg0, newMt);
+		if (arg0.isNot()) {
+			newMt.setNot();
+		}
 	}
 
 	@Override
 	public void visit(MinorThanEquals arg0) {
 		MinorThanEquals newMte = new MinorThanEquals();
 		treatBinaryComparison(arg0, newMte);
+		if (arg0.isNot()) {
+			newMte.setNot();
+		}
 	}
 
 	@Override

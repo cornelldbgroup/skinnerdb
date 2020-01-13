@@ -91,6 +91,11 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
      * scope).
      */
     public Stack<Expression> addToOuterWhere = new Stack<>();
+    /**
+     * List of temporary tables that are
+     * extracted from the inner sub queries.
+     */
+    public List<Set<String>> temporaryTables = new ArrayList<>();
 
     /**
      * Updates current scope and alias-to-columns mapping
@@ -278,22 +283,26 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
     void expandFrom(PlainSelect plainSelect) {
         List<Table> addToThisFrom = addToFrom.peek();
         for (Table toAdd : addToThisFrom) {
-            FromItem firstItem = plainSelect.getFromItem();
-            if (firstItem == null) {
-                plainSelect.setFromItem(toAdd);
-            } else {
-                // Make sure that join list is initialized
-                List<Join> joins = plainSelect.getJoins();
-                if (joins == null) {
-                    joins = new ArrayList<>();
-                    plainSelect.setJoins(joins);
-                }
-                // Add new table via simple join
-                Join join = new Join();
-                join.setSimple(true);
-                join.setRightItem(toAdd);
-                joins.add(join);
+            expandTable(plainSelect, toAdd);
+        }
+    }
+
+    void expandTable(PlainSelect plainSelect, Table toAdd) {
+        FromItem firstItem = plainSelect.getFromItem();
+        if (firstItem == null) {
+            plainSelect.setFromItem(toAdd);
+        } else {
+            // Make sure that join list is initialized
+            List<Join> joins = plainSelect.getJoins();
+            if (joins == null) {
+                joins = new ArrayList<>();
+                plainSelect.setJoins(joins);
             }
+            // Add new table via simple join
+            Join join = new Join();
+            join.setSimple(true);
+            join.setRightItem(toAdd);
+            joins.add(join);
         }
     }
 
@@ -453,12 +462,22 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
             }
         }
         if (outerConjuncts != null) {
-            Expression curWhere = plainSelect.getWhere();
-            if (curWhere == null) {
-                plainSelect.setWhere(outerConjuncts);
-            } else {
-                plainSelect.setWhere(new AndExpression(curWhere, outerConjuncts));
-            }
+            addPredicates(plainSelect, outerConjuncts);
+        }
+    }
+
+    /**
+     * Adds predicates to WHERE clause.
+     *
+     * @param plainSelect add predicates to this query's WHERE clause
+     * @param predicates  predicates to query's WHERE clause
+     */
+    void addPredicates(PlainSelect plainSelect, Expression predicates) {
+        Expression curWhere = plainSelect.getWhere();
+        if (curWhere == null) {
+            plainSelect.setWhere(predicates);
+        } else {
+            plainSelect.setWhere(new AndExpression(curWhere, predicates));
         }
     }
 
@@ -584,6 +603,7 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
                         if (!inExpr.isNot()) {
                             Expression unnestedRight = exprStack.pop();
                             EqualsTo unnestedConjunct = new EqualsTo();
+                            unnestedConjunct.setNot();
                             unnestedConjunct.setLeftExpression(unnestedLeft);
                             unnestedConjunct.setRightExpression(unnestedRight);
                             unnestedConjuncts.add(unnestedConjunct);
@@ -600,71 +620,18 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
                         continue;
                     }
                 }
-//                else if (conjunct instanceof ExistsExpression) {
-//                    ExistsExpression existExpr = (ExistsExpression) conjunct;
-//                    if (existExpr.isNot()) {
-//                        PlainSelect subSelect = (PlainSelect) ((SubSelect) existExpr
-//                                .getRightExpression()).getSelectBody();
-//
-//                        CollectReferencesVisitor collectReferencesVisitor = new CollectReferencesVisitor();
-//                        List<FromItem> fromItems = FromUtil.allFromItems(subSelect);
-//                        List<FromItem> outerItems = FromUtil.allFromItems(plainSelect);
-//                        // Iterate over base tables in FROM clause
-//						Set<String> inTables = new HashSet<>();
-//                        for (FromItem fromItem : fromItems) {
-//                            if (fromItem instanceof Table) {
-//                                // Extract table and alias name (defaults to table name)
-//                                Table table = (Table) fromItem;
-//                                String tableAlias = table.getAlias().getName();
-//                                inTables.add(tableAlias);
-//                            }
-//                        }
-//						List<Expression> subConjuncts = new ArrayList<>();
-//						WhereUtil.extractConjuncts(subSelect.getWhere(), subConjuncts);
-//                        List<Join> joins = subSelect.getJoins();
-//                        if (joins == null) {
-//                            joins = new ArrayList<>();
-//                            subSelect.setJoins(joins);
-//                        }
-//                        Column outerColumn = null;
-//                        Column innerColumn = null;
-//                        for (Expression sub : subConjuncts) {
-//                            if (sub instanceof EqualsTo) {
-//                                EqualsTo subEqual = (EqualsTo) sub;
-//                                if (subEqual.getLeftExpression()
-//                                        instanceof Column && subEqual.getRightExpression() instanceof Column) {
-//                                    Column leftColumn = (Column) subEqual.getLeftExpression();
-//                                    Column rightColumn = (Column) subEqual.getRightExpression();
-//                                    if (!inTables.contains(leftColumn.getTable().getName())) {
-//                                        outerColumn = leftColumn;
-//                                        innerColumn = rightColumn;
-//                                    }
-//                                    else if (!inTables.contains(rightColumn.getTable().getName())){
-//                                        outerColumn = rightColumn;
-//                                        innerColumn = leftColumn;
-//                                    }
-//                                }
-//                            }
-//                        }
-//                        // Add new table via simple join
-//                        for (FromItem fromItem : outerItems) {
-//                            if (fromItem instanceof Table) {
-//                                // Extract table and alias name (defaults to table name)
-//                                Table toAdd = (Table) fromItem;
-//                                if (toAdd.getAlias() != null
-//                                        && toAdd.getAlias().getName().equals(outerColumn.getTable().getName())) {
-//                                    Join join = new Join();
-//                                    join.setSimple(true);
-//                                    join.setRightItem(toAdd);
-//                                    joins.add(join);
-//                                }
-//                            }
-//                        }
-//
+                else if (conjunct instanceof ExistsExpression) {
+                    ExistsExpression existExpr = (ExistsExpression) conjunct;
+                    if (existExpr.isNot()) {
+                        PlainSelect subSelect = (PlainSelect) ((SubSelect) existExpr
+                                .getRightExpression()).getSelectBody();
 //                        List<SelectItem> selectItems = new ArrayList<>();
-//                        selectItems.add(new SelectExpressionItem(innerColumn));
+//                        Function function = new Function();
+//                        function.setName("COUNT");
+//                        function.setAllColumns(true);
+//                        selectItems.add(new SelectExpressionItem(function));
 //                        subSelect.setSelectItems(selectItems);
-//
+//                        int nrOuters = addToOuterWhere.size();
 //                        // Name anonymous sub-query
 //                        String alias = NamingConfig.SUBQUERY_PRE + nextSubqueryID;
 //                        ++nextSubqueryID;
@@ -690,82 +657,81 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 //                        // Schedule table containing sub-query result to
 //                        // be added to FROM clause.
 //                        addToFrom.peek().add(resultTable);
-//
-//                        Expression unnestedRight = exprStack.pop();
-//                        NotEqualsTo unnestedConjunct = new NotEqualsTo();
-//                        unnestedConjunct.setLeftExpression(outerColumn);
-//                        unnestedConjunct.setRightExpression(unnestedRight);
-//                        unnestedConjuncts.add(unnestedConjunct);
-//                        unnestedConjunct.setNot();
-//                    }
-//                    continue;
-//
-//                }
-                else if (conjunct instanceof ExistsExpression) {
-                    ExistsExpression existExpr = (ExistsExpression) conjunct;
-                    if (existExpr.isNot()) {
-                        PlainSelect subSelect = (PlainSelect) ((SubSelect) existExpr
-                                .getRightExpression()).getSelectBody();
-                        List<SelectItem> selectItems = new ArrayList<>();
-                        Function function = new Function();
-                        function.setName("COUNT");
-                        function.setAllColumns(true);
-                        selectItems.add(new SelectExpressionItem(function));
-                        subSelect.setSelectItems(selectItems);
-                        int nrOuters = addToOuterWhere.size();
-                        // Name anonymous sub-query
-                        String alias = NamingConfig.SUBQUERY_PRE + nextSubqueryID;
-                        ++nextSubqueryID;
-                        // Unnest nested sub-query if possible
-                        // Rewrite sub-query and add to query list
-                        Table resultTable = new Table(alias);
-                        subSelect.setIntoTables(Arrays.asList(
-                                new Table[]{resultTable}));
-                        subSelect.accept(this);
-                        // Replace nested sub-query by table reference
-                        List<String> subqueryCols = subqueryFields.pop();
-                        String firstCol = subqueryCols.get(0);
-                        exprStack.push(new Column(resultTable, firstCol));
-                        // Add sub-query fields to scope
-                        Set<ColumnRef> curScope = scopeCols.peek();
-                        for (String subQueryCol : subqueryCols) {
-                            // Only allow fully qualified references -
-                            // the only references should be generated
-                            // during unnesting anyway.
-                            //curScope.add(new ColumnRef("", subQueryCol));
-                            curScope.add(new ColumnRef(alias, subQueryCol));
-                        }
-                        // Schedule table containing sub-query result to
-                        // be added to FROM clause.
-                        addToFrom.peek().add(resultTable);
-                        int newOuters = addToOuterWhere.size();
-                        Expression orExpr = null;
-                        while (addToOuterWhere.size() != nrOuters) {
-                            Expression notExistOuter = addToOuterWhere.pop();
-                            if (orExpr == null) {
-                                orExpr = notExistOuter;
-                            }
-                            else {
-                                orExpr = new AndExpression(orExpr, notExistOuter);
+//                        int newOuters = addToOuterWhere.size();
+//                        Expression orExpr = null;
+//                        while (addToOuterWhere.size() != nrOuters) {
+//                            Expression notExistOuter = addToOuterWhere.pop();
+//                            if (orExpr == null) {
+//                                orExpr = notExistOuter;
+//                            }
+//                            else {
+//                                orExpr = new AndExpression(orExpr, notExistOuter);
+//                            }
+//                        }
+//                        if (orExpr != null) {
+//                            orExpr = new NotExpression(orExpr);
+//                        }
+//                        addToOuterWhere.add(orExpr);
+                        // expand tables
+                        List<FromItem> fromItems = FromUtil.allFromItems(subSelect);
+                        List<Table> outerTables = addToFrom.peek();
+                        Set<String> temporary = temporaryTables.get(addToFrom.size() - 1);
+                        treatSimpleFrom(subSelect);
+                        for (FromItem fromItem : fromItems) {
+                            if (fromItem instanceof Table) {
+                                // Extract table and alias name (defaults to table name)
+                                Table table = (Table) fromItem;
+                                String alias = table.getAlias()!=null?
+                                        table.getAlias().getName().toLowerCase():
+                                        table.getName().toLowerCase();
+                                outerTables.add(table);
+                                temporary.add(alias);
                             }
                         }
-                        if (orExpr != null) {
-                            orExpr = new NotExpression(orExpr);
+                        // extract predicates
+                        Expression wheres = subSelect.getWhere();
+                        if (wheres instanceof AndExpression) {
+                            AndExpression andWheres = (AndExpression) wheres;
+                            NotExpression notExpression = new NotExpression(andWheres);
+                            unnestedConjuncts.add(notExpression);
                         }
-                        addToOuterWhere.add(orExpr);
                     }
                     else {
                         PlainSelect subSelect = (PlainSelect) ((SubSelect)existExpr.getRightExpression()).getSelectBody();
-                        List<SelectItem> selectItems = new ArrayList<>();
-                        Function function = new Function();
-                        function.setName("COUNT");
-                        function.setAllColumns(true);
-                        selectItems.add(new SelectExpressionItem(function));
-                        subSelect.setSelectItems(selectItems);
-                        GreaterThan greaterThan = new GreaterThan();
-                        greaterThan.setLeftExpression(existExpr.getRightExpression());
-                        greaterThan.setRightExpression(new LongValue(0));
-                        greaterThan.accept(this);
+//                        List<SelectItem> selectItems = new ArrayList<>();
+//                        Function function = new Function();
+//                        function.setName("COUNT");
+//                        function.setAllColumns(true);
+//                        selectItems.add(new SelectExpressionItem(function));
+//                        subSelect.setSelectItems(selectItems);
+//                        GreaterThan greaterThan = new GreaterThan();
+//                        greaterThan.setLeftExpression(existExpr.getRightExpression());
+//                        greaterThan.setRightExpression(new LongValue(0));
+//                        greaterThan.accept(this);
+
+                        // expand tables
+                        List<FromItem> fromItems = FromUtil.allFromItems(subSelect);
+                        List<Table> outerTables = addToFrom.peek();
+                        Set<String> temporary = temporaryTables.get(addToFrom.size() - 1);
+                        treatSimpleFrom(subSelect);
+                        for (FromItem fromItem : fromItems) {
+                            if (fromItem instanceof Table) {
+                                // Extract table and alias name (defaults to table name)
+                                Table table = (Table) fromItem;
+                                String alias = table.getAlias()!=null?
+                                        table.getAlias().getName().toLowerCase():
+                                        table.getName().toLowerCase();
+                                outerTables.add(table);
+                                temporary.add(alias);
+                            }
+                        }
+                        // extract predicates
+                        Expression wheres = subSelect.getWhere();
+                        if (wheres instanceof AndExpression) {
+                            AndExpression andWheres = (AndExpression) wheres;
+                            andWheres.setNot();
+                            unnestedConjuncts.add(andWheres);
+                        }
                     }
                     continue;
                 }
@@ -873,6 +839,8 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
             outer.clear();
         }
         unaryPredicates.push(unary);
+        Set<String> temporary = new HashSet<>();
+        temporaryTables.add(temporary);
         // Treat base tables in FROM clause
         treatSimpleFrom(plainSelect);
         // Treat sub-queries in FROM clause

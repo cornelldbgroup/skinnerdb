@@ -1,13 +1,27 @@
 package predicate;
 
+import buffer.BufferManager;
 import indexing.Index;
 import joining.parallel.indexing.DoublePartitionIndex;
 import joining.parallel.indexing.IntPartitionIndex;
 import joining.parallel.indexing.PartitionIndex;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.operators.relational.EqualsTo;
+import net.sf.jsqlparser.schema.Column;
+import query.ColumnRef;
+import query.QueryInfo;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
+/**
+ * The tree structure of nonEquiJoin predicates.
+ * By parsing the complex predicates into tree structure,
+ * the conjunction of predicates is able to be evaluated.
+ *
+ * @author  Ziyun Wei
+ */
 public class NonEquiNode {
     NonEquiNode left;
     NonEquiNode right;
@@ -32,6 +46,12 @@ public class NonEquiNode {
         this.table = table;
     }
 
+    // equi-indices
+    public NonEquiNode(Expression expression, Operator operator) {
+        this.expression = expression;
+        this.operator = operator;
+    }
+
     public NonEquiNode(NonEquiNode left, NonEquiNode right, Expression expression,
                        Index leftIndex, Index rightIndex, Operator operator,
                        int leftTable, int rightTable) {
@@ -43,6 +63,19 @@ public class NonEquiNode {
         this.operator = operator;
         this.leftTable = leftTable;
         this.rightTable = rightTable;
+        if (operator == Operator.EqualsExist) {
+            if (rightTable < leftTable) {
+                int table = this.rightTable;
+                this.rightTable = this.leftTable;
+                this.leftTable = table;
+                PartitionIndex index = this.rightIndex;
+                this.rightIndex = this.leftIndex;
+                this.leftIndex = index;
+            }
+        }
+        if (operator == Operator.Variable) {
+
+        }
     }
 
     public boolean evaluate(int[] tupleIndices) {
@@ -100,8 +133,70 @@ public class NonEquiNode {
         else if (operator == Operator.Not) {
             return !left.evaluate(tupleIndices);
         }
+        else if (operator == Operator.Exist) {
+            NonEquiNode equals = left;
+            NonEquiNode nonEquals = right;
+            // special case: when it starts from 0
+            if (tupleIndices[nextTable] == 0 && curIndex(tupleIndices)) {
+                // whether there exist a row satisfying all predicates?
+                if (nonEquals.evaluate(tupleIndices, nextTable, cardinality)) {
+                    tupleIndices[nextTable] = cardinality;
+                    return true;
+                }
+            }
+            // jump to the next satisfied row in the join table.
+            int nextTuple = equals.nextIndex(tupleIndices, null);
+
+            // whether there is no satisfied row?
+            if (nextTuple == cardinality) {
+                tupleIndices[nextTable] = cardinality;
+                return false;
+            }
+
+            // evaluate nonEquiJoin predicates
+            tupleIndices[nextTable] = nextTuple;
+            boolean evaluation = nonEquals.evaluate(tupleIndices, nextTable, cardinality);
+            // whether there exist a row satisfying all predicates?
+            if (evaluation) {
+                tupleIndices[nextTable] = cardinality;
+                return true;
+            }
+            tupleIndices[nextTable]--;
+            return false;
+        }
         else if (operator == Operator.NotExist) {
-            boolean evaluation = !left.exist(tupleIndices);
+            NonEquiNode equals = left;
+            NonEquiNode nonEquals = right;
+            // special case: when it starts from 0
+            if (tupleIndices[nextTable] == 0 && curIndex(tupleIndices)) {
+                // whether there exist a row satisfying all predicates?
+                if (nonEquals.evaluate(tupleIndices, nextTable, cardinality)) {
+                    tupleIndices[nextTable] = cardinality;
+                    return false;
+                }
+            }
+            // jump to the next satisfied row in the join table.
+            int nextTuple = equals.nextIndex(tupleIndices, null);
+
+            // whether there is no satisfied row?
+            if (nextTuple == cardinality) {
+                tupleIndices[nextTable] = cardinality;
+                return true;
+            }
+
+            // evaluate nonEquiJoin predicates
+            tupleIndices[nextTable] = nextTuple;
+            boolean evaluation = nonEquals.evaluate(tupleIndices, nextTable, cardinality);
+            // whether there exist a row satisfying all predicates?
+            if (evaluation) {
+                tupleIndices[nextTable] = cardinality;
+                return false;
+            }
+            tupleIndices[nextTable]--;
+            return false;
+        }
+        else if (operator == Operator.EqualsExist) {
+            boolean evaluation = exist(tupleIndices);
             tupleIndices[nextTable] = cardinality - 1;
             return evaluation;
         }
@@ -134,23 +229,6 @@ public class NonEquiNode {
                 return evaluation;
             }
         }
-    }
-
-    public boolean notExist(int[] tupleIndices) {
-        // TODO
-        if (operator == Operator.OR) {
-            return false;
-        }
-        else if (operator == Operator.AND) {
-            return !left.exist(tupleIndices) || !right.exist(tupleIndices);
-        }
-        else if (operator == Operator.EqualsTo) {
-
-        }
-        else if (operator == Operator.NotEqualsTo) {
-
-        }
-        return false;
     }
 
     public boolean exist(int[] tupleIndices) {
@@ -209,6 +287,11 @@ public class NonEquiNode {
                 }
             }
         }
+        else if (operator == Operator.EqualsExist) {
+            int leftTuple = tupleIndices[leftTable];
+            Number constant = leftIndex.getNumber(leftTuple);
+            return rightIndex.exist(constant, Operator.EqualsTo);
+        }
         else if (operator == Operator.EqualsTo || operator == Operator.NotEqualsTo) {
             if (rightTable < leftTable) {
                 int table = rightTable;
@@ -228,5 +311,12 @@ public class NonEquiNode {
         return false;
     }
 
+    public int nextIndex(int[] tupleIndices, int[] nextSize) {
+        return 0;
+    }
+
+    public boolean curIndex(int[] tupleIndices) {
+        return false;
+    }
 
 }

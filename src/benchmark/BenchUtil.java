@@ -3,10 +3,8 @@ package benchmark;
 import java.io.File;
 import java.io.PrintWriter;
 import java.nio.file.Files;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Map;
-import java.util.TreeMap;
+import java.util.*;
+import java.util.regex.Pattern;
 
 import catalog.CatalogManager;
 import config.NamingConfig;
@@ -34,21 +32,36 @@ public class BenchUtil {
 	 * @return			ordered mapping from file names to queries
 	 * @throws Exception
 	 */
-	public static Map<String, PlainSelect> readAllQueries(
+	public static Map<String, Statement> readAllQueries(
 			String dirPath) throws Exception {
-		Map<String, PlainSelect> nameToQuery = 
-				new TreeMap<String, PlainSelect>(
+		Map<String, Statement> nameToQuery =
+				new TreeMap<>(
 						Collections.reverseOrder());
 		File dir = new File(dirPath);
 		for (File file : dir.listFiles()) {
+			Scanner scanner = new Scanner(file);
+			scanner.useDelimiter(Pattern.compile(";"));
+			
 			if (file.getName().endsWith(".sql")) {
-				String sql = new String(Files.readAllBytes(file.toPath()));
-				System.out.println(sql);
-				Statement sqlStatement = CCJSqlParserUtil.parse(sql);
-				Select select = (Select)sqlStatement;
-				PlainSelect plainSelect = (PlainSelect)select.getSelectBody();
-				nameToQuery.put(file.getName(), plainSelect);				
+				int id = 0;
+				while (scanner.hasNext()) {
+					String sqlCmd = scanner.next().trim();
+					if (!sqlCmd.equals("")) {
+						System.out.println(sqlCmd);
+						String queryName = file.getName().split(".sql")[0] + (char)('a' - id) + ".sql";
+						id++;
+						try {
+							Statement sqlStatement = CCJSqlParserUtil.parse(sqlCmd);
+//							Select select = (Select)sqlStatement;
+//							PlainSelect plainSelect = (PlainSelect)select.getSelectBody();
+							nameToQuery.put(queryName, sqlStatement);
+						} catch (Exception e) {
+							throw new Exception("query parse error!");
+						}
+					}
+				}
 			}
+			scanner.close();
 		}
 		return nameToQuery;
 	}

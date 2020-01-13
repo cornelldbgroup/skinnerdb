@@ -10,6 +10,8 @@ import net.sf.jsqlparser.expression.operators.relational.*;
 import net.sf.jsqlparser.schema.Column;
 import query.ColumnRef;
 import query.QueryInfo;
+import query.where.WhereUtil;
+import types.SQLtype;
 
 import java.util.*;
 
@@ -58,14 +60,44 @@ public class NonEquiNodesTest extends PlainVisitor {
 
     @Override
     public void visit(AndExpression and) {
-        // construct nodes
-        and.getLeftExpression().accept(this);
-        and.getRightExpression().accept(this);
-        // Intersect bool results for left and right expression.
-        NonEquiNode leftNode = nonEquiNodes.pop();
-        NonEquiNode rightNode = nonEquiNodes.pop();
-        NonEquiNode node = new NonEquiNode(leftNode, rightNode, and, null, null, Operator.AND, -1);
-        nonEquiNodes.push(node);
+        if (and.isNot()) {
+            EqualsExtraction extraction = new EqualsExtraction(query);
+            and.accept(extraction);
+            Expression nonEquals = WhereUtil.conjunction(extraction.nonEquiJoins);
+            NonEquiNode equalNode = null;
+            NonEquiNode nonEqualNode = null;
+            if (extraction.equiJoins.size() > 0) {
+                List<Expression> expressions = new ArrayList<>(extraction.equiJoins);
+                Expression equals = WhereUtil.conjunction(expressions);
+
+                if (extraction.equiType == SQLtype.INT) {
+                    equalNode = new IntIndexNode(equals, extraction.equiJoins, columnMappings, query);
+                }
+                else if (extraction.equiType == SQLtype.DOUBLE) {
+                    equalNode = new DoubleIndexNode(equals, extraction.equiJoins, columnMappings, query);
+                }
+                else {
+                    throw new RuntimeException("Index is not supported!");
+                }
+            }
+            if (nonEquals != null) {
+                nonEquals.accept(this);
+                nonEqualNode = nonEquiNodes.pop();
+            }
+            NonEquiNode node = new NonEquiNode(equalNode, nonEqualNode, and,
+                    null, null, Operator.Exist, -1);
+            nonEquiNodes.push(node);
+        }
+        else {
+            // construct nodes
+            and.getLeftExpression().accept(this);
+            and.getRightExpression().accept(this);
+            // Intersect bool results for left and right expression.
+            NonEquiNode leftNode = nonEquiNodes.pop();
+            NonEquiNode rightNode = nonEquiNodes.pop();
+            NonEquiNode node = new NonEquiNode(leftNode, rightNode, and, null, null, Operator.AND, -1);
+            nonEquiNodes.push(node);
+        }
     }
 
     @Override
@@ -85,13 +117,14 @@ public class NonEquiNodesTest extends PlainVisitor {
         equalsTo.getRightExpression().accept(this);
         // We assume predicate passed the index test so
         // there must be one index and one constant.
+        Operator operator = equalsTo.isNot() ? Operator.EqualsExist : Operator.EqualsTo;
         if (extractedConstants.isEmpty()) {
             Index rightIndex = applicableIndices.pop();
             Index leftIndex = applicableIndices.pop();
             int rightTable = applicableIdx.pop();
             int leftTable = applicableIdx.pop();
             NonEquiNode node = new NonEquiNode(null, null, equalsTo,
-                    leftIndex, rightIndex, Operator.EqualsTo, leftTable, rightTable);
+                    leftIndex, rightIndex, operator, leftTable, rightTable);
             nonEquiNodes.push(node);
         }
         else {
@@ -99,7 +132,7 @@ public class NonEquiNodesTest extends PlainVisitor {
             Index index = applicableIndices.pop();
             int table = applicableIdx.pop();
             NonEquiNode node = new NonEquiNode(null, null, equalsTo,
-                    index, constant, Operator.EqualsTo, table);
+                    index, constant, operator, table);
             nonEquiNodes.push(node);
         }
     }
@@ -241,11 +274,37 @@ public class NonEquiNodesTest extends PlainVisitor {
     }
 
     @Override
-    public void visit(NotExpression notExpression) {
-        notExpression.getExpression().accept(this);
-        NonEquiNode leftNode = nonEquiNodes.pop();
-        NonEquiNode node = new NonEquiNode(leftNode, null,
-                notExpression, null, null, Operator.NotExist, -1);
+    public void visit(NotExpression not) {
+//        notExpression.getExpression().accept(this);
+//        NonEquiNode leftNode = nonEquiNodes.pop();
+//        NonEquiNode node = new NonEquiNode(leftNode, null,
+//                notExpression, null, null, Operator.NotExist, -1);
+//        nonEquiNodes.push(node);
+        EqualsExtraction extraction = new EqualsExtraction(query);
+        not.accept(extraction);
+        Expression nonEquals = WhereUtil.conjunction(extraction.nonEquiJoins);
+        NonEquiNode equalNode = null;
+        NonEquiNode nonEqualNode = null;
+        if (extraction.equiJoins.size() > 0) {
+            List<Expression> expressions = new ArrayList<>(extraction.equiJoins);
+            Expression equals = WhereUtil.conjunction(expressions);
+
+            if (extraction.equiType == SQLtype.INT) {
+                equalNode = new IntIndexNode(equals, extraction.equiJoins, columnMappings, query);
+            }
+            else if (extraction.equiType == SQLtype.DOUBLE) {
+                equalNode = new DoubleIndexNode(equals, extraction.equiJoins, columnMappings, query);
+            }
+            else {
+                throw new RuntimeException("Index is not supported!");
+            }
+        }
+        if (nonEquals != null) {
+            nonEquals.accept(this);
+            nonEqualNode = nonEquiNodes.pop();
+        }
+        NonEquiNode node = new NonEquiNode(equalNode, nonEqualNode, not,
+                null, null, Operator.NotExist, -1);
         nonEquiNodes.push(node);
     }
 

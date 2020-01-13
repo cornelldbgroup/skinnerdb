@@ -361,7 +361,8 @@ public class DoublePartitionIndex extends PartitionIndex {
         }
         // Get number of indexed values
         int nrVals = positions[firstPos];
-        nextSize[0] = nrVals;
+        if (nextSize != null)
+            nextSize[0] = nrVals;
         // Restrict search range via binary search
         int lowerBound = firstPos + 1;
         int upperBound = firstPos + nrVals;
@@ -403,7 +404,8 @@ public class DoublePartitionIndex extends PartitionIndex {
         }
         // Can we return first indexed value?
         int nrVals = positions[firstPos];
-        nextSize[0] = nrVals;
+        if (nextSize != null)
+            nextSize[0] = nrVals;
         int firstOffset = tid + 1;
         if (firstOffset > nrVals) {
             return cardinality;
