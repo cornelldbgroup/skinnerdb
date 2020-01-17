@@ -154,7 +154,9 @@ public class IntPartitionIndex extends PartitionIndex {
                 int prefix = 1;
                 int localNr = batchCursor.value();
                 int startPos = keyToPositions.getOrDefault(key, -1);
-
+                if (startPos == -1) {
+                    System.out.println(index.queryRef + " " + this.queryRef + "； Missing value: " + key);
+                }
                 for (int i = 0; i < bid; i++) {
                     prefix += batches.get(i).valuesMap.getOrDefault(key, 0);
                 }

@@ -311,6 +311,21 @@ public class NonEquiNode {
         return false;
     }
 
+    public boolean evaluateUnary(int curTuple) {
+        if (operator == Operator.OR) {
+            return left.evaluateUnary(curTuple) || right.evaluateUnary(curTuple);
+        }
+        else if (operator == Operator.AND) {
+            return left.evaluateUnary(curTuple) && right.evaluateUnary(curTuple);
+        }
+        else {
+            if (constant != null) {
+                return nonEquiIndex.evaluate(curTuple, constant, operator);
+            }
+        }
+        return false;
+    }
+
     public int nextIndex(int[] tupleIndices, int[] nextSize) {
         return 0;
     }

@@ -510,14 +510,14 @@ public class SkinnerCmd {
         }
 
         Indexer.indexAll(StartupConfig.INDEX_CRITERIA);
-        // q21
+        // q18, q01
         if (args.length == 2) {
             // initialize a thread pool
             ThreadPool.initThreadsPool(ParallelConfig.EXE_THREADS, ParallelConfig.PRE_THREADS);
 //            processInput("exec ./tpch/skinnerqueries/q03.sql");
-            processInput("exec ./jcch/queries/q21.sql");
+            processInput("exec ./jcch/queries/q01.sql");
 //            processInput("exec ./jcch/queries/q17.sql");
-//            processInput("exec ../imdb/queries/26b.sql");
+//            processInput("exec ../imdb/queries/19b.sql");
 //            processInput("exec /Users/tracy/Documents/Research/skinnerdb/imdb/queries/33c.sql");
 //            processInput("exp");
         } else {

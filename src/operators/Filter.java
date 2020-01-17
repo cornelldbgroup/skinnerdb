@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
 import buffer.BufferManager;
@@ -20,7 +22,11 @@ import indexing.Index;
 import joining.parallel.indexing.DoublePartitionIndex;
 import joining.parallel.indexing.IntPartitionIndex;
 import joining.parallel.indexing.PartitionIndex;
+import joining.parallel.threads.ThreadPool;
+import predicate.NonEquiNode;
+import predicate.NonEquiNodesTest;
 import query.ColumnRef;
+import query.QueryInfo;
 import sun.java2d.xr.XRRenderer;
 import types.JavaType;
 
@@ -102,12 +108,10 @@ public class Filter {
 	 * @return				list of satisfying row indices
 	 */
 	public static List<Integer> executeToList(ExpressionInfo unaryPred,
-			String tableName, Map<ColumnRef, ColumnRef> columnMapping) 
+			String tableName, Map<ColumnRef, ColumnRef> columnMapping, QueryInfo query)
 					throws Exception {
-//		long s1 = System.currentTimeMillis();
 		// Load required columns for predicate evaluation
 		loadPredCols(unaryPred, columnMapping);
-//		long s2 = System.currentTimeMillis();
 		// Compile unary predicate for fast evaluation
 		UnaryBoolEval unaryBoolEval = compilePred(unaryPred, columnMapping);
 		// Get cardinality of table referenced in predicate
@@ -125,7 +129,9 @@ public class Filter {
 				ColumnRef col = unaryPred.columnsMentioned.iterator().next();
 				ColumnRef columnRef = columnMapping.get(col);
 				Index index = BufferManager.colToIndex.get(columnRef);
-				result = filterValues(index, unaryBoolEval);
+				NonEquiNodesTest nonEquiNodesTest = new NonEquiNodesTest(query, columnMapping);
+				unaryPred.finalExpression.accept(nonEquiNodesTest);
+				result = filterValues(index, nonEquiNodesTest.nonEquiNodes.pop());
 				// Process batches in joining.parallel
 				if (result == null) {
 					// Divide tuples into batches
@@ -139,20 +145,20 @@ public class Filter {
 			else {
 				// Divide tuples into batches
 				List<RowRange> batches = split(cardinality);
-//				result = new ArrayList<>();
-//				// Process batches in joining.parallel
-//				for (RowRange rowRange: batches) {
-//					// Evaluate predicate for each table row
-//					for (int rowCtr=rowRange.firstTuple;
-//						 rowCtr<=rowRange.lastTuple; ++rowCtr) {
-//						if (unaryBoolEval.evaluate(rowCtr) > 0) {
-//							result.add(rowCtr);
-//						}
-//					}
-//				}
-				result = batches.parallelStream().flatMap(batch ->
-						filterBatch(unaryBoolEval, batch).stream()).collect(
-						Collectors.toList());
+				result = new ArrayList<>();
+				// Process batches in joining.parallel
+				for (RowRange rowRange: batches) {
+					// Evaluate predicate for each table row
+					for (int rowCtr=rowRange.firstTuple;
+						 rowCtr<=rowRange.lastTuple; ++rowCtr) {
+						if (unaryBoolEval.evaluate(rowCtr) > 0) {
+							result.add(rowCtr);
+						}
+					}
+				}
+//				result = batches.parallelStream().flatMap(batch ->
+//						filterBatch(unaryBoolEval, batch).stream()).collect(
+//						Collectors.toList());
 			}
 		}
 		return result;
@@ -183,7 +189,7 @@ public class Filter {
 	 * @param index			column index
 	 * @return				list of row ranges (batches)
 	 */
-	static List<Integer> filterValues(Index index, UnaryBoolEval unaryBoolEval) {
+	static List<Integer> filterValues(Index index, NonEquiNode unaryBoolEval) {
 		if (index == null) {
 			return null;
 		}
@@ -195,7 +201,7 @@ public class Filter {
 				int nrValues = positions[pos];
 				int rowCtr = positions[pos + 1];
 				List<Integer> result = new ArrayList<>();
-				if (unaryBoolEval.evaluate(rowCtr) > 0) {
+				if (unaryBoolEval.evaluateUnary(rowCtr)) {
 					for (int i = pos + 1; i <= pos + nrValues; i++) {
 						result.add(positions[i]);
 					}

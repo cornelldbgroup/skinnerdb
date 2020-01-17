@@ -326,6 +326,7 @@ public class Preprocessor {
 					filter(c -> c.aliasName.equals(alias)).
 					map(c -> c.columnName).collect(Collectors.toList());
 			String targetRelName = NamingConfig.IDX_FILTERED_PRE + alias;
+			long timer1 = System.currentTimeMillis();
 			if (indexFilter.isFull) {
 				Materialize.execute(table, requiredCols, rows,
 						null, targetRelName, true);
@@ -338,6 +339,8 @@ public class Preprocessor {
 				Materialize.executeRange(table, requiredCols, rows,
 						indexFilter.lastIndex, targetRelName, true);
 			}
+			long timer2 = System.currentTimeMillis();
+			System.out.println("Materializing: " + targetRelName + " took " + (timer2 - timer1) + " ms");
 			// Update pre-processing summary
 			for (String colName : requiredCols) {
 				ColumnRef queryRef = new ColumnRef(alias, colName);
@@ -375,7 +378,7 @@ public class Preprocessor {
 		// Determine rows satisfying unary predicate
 //		long s1 = System.currentTimeMillis();
 		List<Integer> satisfyingRows = Filter.executeToList(
-				unaryPred, tableName, preSummary.columnMapping);
+				unaryPred, tableName, preSummary.columnMapping, query);
 //		long s2 = System.currentTimeMillis();
 		// Materialize relevant rows and columns
 		String filteredName = NamingConfig.FILTERED_PRE + alias;

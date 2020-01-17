@@ -43,21 +43,27 @@ public class BenchUtil {
 			scanner.useDelimiter(Pattern.compile(";"));
 			
 			if (file.getName().endsWith(".sql")) {
-				int id = 0;
+				List<Statement> statements = new ArrayList<>();
 				while (scanner.hasNext()) {
 					String sqlCmd = scanner.next().trim();
 					if (!sqlCmd.equals("")) {
 						System.out.println(sqlCmd);
-						String queryName = file.getName().split(".sql")[0] + (char)('a' - id) + ".sql";
-						id++;
 						try {
 							Statement sqlStatement = CCJSqlParserUtil.parse(sqlCmd);
-//							Select select = (Select)sqlStatement;
-//							PlainSelect plainSelect = (PlainSelect)select.getSelectBody();
-							nameToQuery.put(queryName, sqlStatement);
+							statements.add(0, sqlStatement);
 						} catch (Exception e) {
 							throw new Exception("query parse error!");
 						}
+					}
+				}
+				if (statements.size() == 1) {
+					String queryName = file.getName();
+					nameToQuery.put(queryName, statements.get(0));
+				}
+				else {
+					for (int i = 0; i < statements.size(); i++) {
+						String queryName = file.getName().split(".sql")[0] + (char)('a' + i) + ".sql";
+						nameToQuery.put(queryName, statements.get(i));
 					}
 				}
 			}
