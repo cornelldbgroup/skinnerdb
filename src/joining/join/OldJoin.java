@@ -220,6 +220,8 @@ public class OldJoin extends MultiWayJoin {
         // with a specific join index.
         boolean[] matchingTuples = new boolean[nrTables];
         Arrays.fill(matchingTuples, true);
+        // Whether join index was increased in last iteration
+        boolean joinIndexInc = false;
         // Execute join order until budget depleted or all input finished -
         // at each iteration start, tuple indices contain next tuple
         // combination to look at.
@@ -240,7 +242,8 @@ public class OldJoin extends MultiWayJoin {
             KnaryBoolEval unaryPred = unaryPreds[nextTable];
             if ((PreConfig.PRE_FILTER || unaryPred == null || 
             		unaryPred.evaluate(tupleIndices)>0) &&
-            		evaluateAll(applicablePreds.get(joinIndex), tupleIndices)) {
+            		evaluateAll(applicablePreds.get(joinIndex), 
+            				tupleIndices)) {
             	++JoinStats.nrTuples;
                 // Do we have a complete result row?
                 if(joinIndex == plan.joinOrder.order.length - 1) {
@@ -260,13 +263,21 @@ public class OldJoin extends MultiWayJoin {
                         }
                         nextTable = plan.joinOrder.order[joinIndex];
                         nextCardinality = cardinalities[nextTable];
+                        // TODO: check performance impact
                         tupleIndices[nextTable] += 1;
+                        /*
+                        tupleIndices[nextTable] = proposeNext(
+                        		joinIndices.get(joinIndex), 
+                        		nextTable, tupleIndices);
+                        */
                     }
+                    joinIndexInc = false;
                 } else {
                     // No complete result row -> complete further
                 	matchingTuples[joinIndex] = true;
                     joinIndex++;
                     matchingTuples[joinIndex] = false;
+                    joinIndexInc = true;
                     //System.out.println("Current Join Index2:"+ joinIndex);
                 }
             } else {
@@ -277,43 +288,46 @@ public class OldJoin extends MultiWayJoin {
                 		nextTable, tupleIndices);
                 int curJoinIdx = joinIndex;
                 int curTable = nextTable;
-                boolean curNoMatch = !matchingTuples[joinIndex];
+                boolean curNoMatch = 
+                		tupleIndices[nextTable] >= nextCardinality && 
+                		joinIndexInc;
+                // Cannot find matching tuple in current table?
+                int maxNextJoinIdx = -1;
+                if (curNoMatch && (PreConfig.PRE_FILTER || 
+                		unaryPred == null)) {
+            		for (JoinIndexWrapper joinWrap : 
+            			joinIndices.get(curJoinIdx)) {
+            			for (int i=0; i<nrTables; ++i) {
+            				if (plan.joinOrder.order[i] == 
+            						joinWrap.priorTable) {
+            					maxNextJoinIdx = Math.max(i, maxNextJoinIdx);
+            				}
+            			}
+            		}
+                }
+                if (maxNextJoinIdx == -1) {
+                	maxNextJoinIdx = joinIndex;
+                }
+                // Go back to last table that could make a difference
                 // Have reached end of current table? -> we backtrack.
-                while (tupleIndices[nextTable] >= nextCardinality) {
+                while (tupleIndices[nextTable] >= nextCardinality ||
+                		joinIndex > maxNextJoinIdx) {
+                	// TODO: check correctness
                     tupleIndices[nextTable] = 0;
+                	//tupleIndices[nextTable] = offsets[nextTable];
                     --joinIndex;
                     if (joinIndex < 0) {
                         break;
                     }
                     nextTable = plan.joinOrder.order[joinIndex];
                     nextCardinality = cardinalities[nextTable];
-                    tupleIndices[nextTable] += 1;
-                    // Special case: no unary preds on current
-                    // table or pre-processing activated.
-                    /*
-                    if (curNoMatch && (PreConfig.PRE_FILTER || 
-                    		unaryPred == null)) {
-                    	if (nextTable != curTable) {
-                    		// Change in this table can only lead to
-                    		// result tuple if it is connected to
-                    		// current table (before backtracking).
-                    		boolean connected = false;
-                    		for (JoinIndexWrapper joinWrap : 
-                    			joinIndices.get(curJoinIdx)) {
-                    			if (joinWrap.priorTable == nextTable) {
-                    				connected = true;
-                    				break;
-                    			}
-                    		}
-                    		if (!connected && 
-                    				!joinIndices.get(curJoinIdx).isEmpty()) {
-                    			tupleIndices[nextTable] = 
-                    					cardinalities[nextTable];
-                    		}
-                    	}
-                    }    
-                    */                
+                    // TODO: check performance
+                    //tupleIndices[nextTable] += 1;
+                    tupleIndices[nextTable] = proposeNext(
+                    		joinIndices.get(joinIndex), 
+                    		nextTable, tupleIndices);
                 }
+                joinIndexInc = false;
             }
             --remainingBudget;
         }
