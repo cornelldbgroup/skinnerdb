@@ -166,6 +166,8 @@ public class JoinProcessor {
 						(double)joinOp.cardinalities[tableCtr];				
 			}
 		}
+		// Measure pure join processing time (without materialization)
+		JoinStats.pureJoinMillis = System.currentTimeMillis() - startMillis;
 		// Output final stats if join logging enabled
 		if (LoggingConfig.MAX_JOIN_LOGS > 0) {
 			System.out.println("Exploration weight:\t" + 

@@ -12,7 +12,7 @@ public class ParallelConfig {
 	/**
 	 * Whether to parallelize.
 	 */
-	public static final boolean PARALLEL = false;
+	public static final boolean PARALLEL = true;
 	/**
 	 * Maximal number of tuples per batch during pre-processing.
 	 */

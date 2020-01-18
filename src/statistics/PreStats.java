@@ -11,6 +11,12 @@ package statistics;
  */
 public class PreStats {
 	/**
+	 * Milliseconds spent with filtering and projections
+	 * (i.e., pre-processing time without overhead due to
+	 * creating join indices).
+	 */
+	public static long filterProjectMillis = 0;
+	/**
 	 * Preprocessing time in milliseconds.
 	 */
 	public static long preMillis = 0;

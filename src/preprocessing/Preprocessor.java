@@ -138,8 +138,10 @@ public class Preprocessor {
 		if (hadError) {
 			throw new Exception("Error in pre-processor.");
 		}
+		// Measure processing time without join index creation
+		PreStats.filterProjectMillis = System.currentTimeMillis() - startMillis;
 		// Create missing indices for columns involved in equi-joins.
-		log("Creating indices ...");			
+		log("Creating indices ...");	
 		createJoinIndices(query, preSummary);
 		// Measure processing time
 		PreStats.preMillis = System.currentTimeMillis() - startMillis;

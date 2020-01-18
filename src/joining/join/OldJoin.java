@@ -29,6 +29,11 @@ public class OldJoin extends MultiWayJoin {
      */
     public int remainingBudget;
     /**
+     * Maximal join index during 
+     * last invocation.
+     */
+    public int maxJoinIndex;
+    /**
      * Number of completed tuples produced
      * during last invocation.
      */
@@ -207,6 +212,8 @@ public class OldJoin extends MultiWayJoin {
             tupleIndices[tableCtr] = state.tupleIndices[tableCtr];
         }
         int remainingBudget = budget;
+        // Maximal join index during current execution
+        maxJoinIndex = 0;
         // Number of completed tuples added
         nrResultTuples = 0;
         // Execute join order until budget depleted or all input finished -
@@ -214,6 +221,8 @@ public class OldJoin extends MultiWayJoin {
         // combination to look at.
         while (remainingBudget > 0 && joinIndex >= 0) {
         	++JoinStats.nrIterations;
+        	// Update maximal join index
+        	maxJoinIndex = Math.max(maxJoinIndex, joinIndex);
         	//log("Offsets:\t" + Arrays.toString(offsets));
         	//log("Indices:\t" + Arrays.toString(tupleIndices));
             // Get next table in join order

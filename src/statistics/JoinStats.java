@@ -10,6 +10,11 @@ package statistics;
  */
 public class JoinStats {
 	/**
+	 * Duration of pure join phase, not counting
+	 * materialization of join result.
+	 */
+	public static long pureJoinMillis = 0;
+	/**
 	 * Duration of join phase in milliseconds.
 	 */
 	public static long joinMillis = 0;
