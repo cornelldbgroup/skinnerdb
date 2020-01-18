@@ -264,9 +264,13 @@ public class OldJoin extends MultiWayJoin {
             } else {
                 // At least one of applicable predicates evaluates to false -
                 // try next tuple in same table.
+            	boolean atOffsetBefore = 
+            			tupleIndices[nextTable] <= offsets[nextTable];
                 tupleIndices[nextTable] = proposeNext(
                 		joinIndices.get(joinIndex), 
                 		nextTable, tupleIndices);
+                boolean atEndAfter = 
+                		tupleIndices[nextTable] >= cardinalities[nextTable];
                 int curTable = nextTable;
                 // Have reached end of current table? -> we backtrack.
                 while (tupleIndices[nextTable] >= nextCardinality) {
@@ -280,7 +284,8 @@ public class OldJoin extends MultiWayJoin {
                     tupleIndices[nextTable] += 1;
                     // Special case: no unary preds on current
                     // table or pre-processing activated.
-                    if (PreConfig.PRE_FILTER || unaryPred == null) {
+                    if (atOffsetBefore && atEndAfter && 
+                    		(PreConfig.PRE_FILTER || unaryPred == null)) {
                     	if (nextTable != curTable) {
                     		// Change in this table can only lead to
                     		// result tuple if it is connected to
