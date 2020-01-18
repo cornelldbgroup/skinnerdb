@@ -290,6 +290,7 @@ public class OldJoin extends MultiWayJoin {
                     tupleIndices[nextTable] += 1;
                     // Special case: no unary preds on current
                     // table or pre-processing activated.
+                    /*
                     if (curNoMatch && (PreConfig.PRE_FILTER || 
                     		unaryPred == null)) {
                     	if (nextTable != curTable) {
@@ -310,7 +311,8 @@ public class OldJoin extends MultiWayJoin {
                     					cardinalities[nextTable];
                     		}
                     	}
-                    }                    
+                    }    
+                    */                
                 }
             }
             --remainingBudget;
