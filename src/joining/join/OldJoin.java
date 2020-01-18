@@ -271,6 +271,7 @@ public class OldJoin extends MultiWayJoin {
                 		nextTable, tupleIndices);
                 boolean atEndAfter = 
                 		tupleIndices[nextTable] >= cardinalities[nextTable];
+                int curJoinIdx = joinIndex;
                 int curTable = nextTable;
                 // Have reached end of current table? -> we backtrack.
                 while (tupleIndices[nextTable] >= nextCardinality) {
@@ -292,14 +293,14 @@ public class OldJoin extends MultiWayJoin {
                     		// current table (before backtracking).
                     		boolean connected = false;
                     		for (JoinIndexWrapper joinWrap : 
-                    			joinIndices.get(curTable)) {
+                    			joinIndices.get(curJoinIdx)) {
                     			if (joinWrap.priorTable == nextTable) {
                     				connected = true;
                     				break;
                     			}
                     		}
                     		if (!connected && 
-                    				!joinIndices.get(curTable).isEmpty()) {
+                    				!joinIndices.get(curJoinIdx).isEmpty()) {
                     			tupleIndices[nextTable] = 
                     					cardinalities[nextTable];
                     		}
