@@ -244,6 +244,8 @@ public class OldJoin extends MultiWayJoin {
             	++JoinStats.nrTuples;
                 // Do we have a complete result row?
                 if(joinIndex == plan.joinOrder.order.length - 1) {
+                	// Found at least one matching tuple
+                	matchingTuples[joinIndex] = true;
                     // Complete result row -> add to result
                 	++nrResultTuples;
                     result.add(tupleIndices);
