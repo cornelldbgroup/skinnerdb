@@ -3,7 +3,7 @@ package joining.join;
 import java.util.Set;
 
 import data.IntData;
-import indexing.IntIndex;
+import indexing.DefaultIntIndex;
 import preprocessing.Context;
 import query.ColumnRef;
 import query.QueryInfo;
@@ -24,7 +24,7 @@ public class JoinIntWrapper extends JoinIndexWrapper {
 	/**
 	 * Reference to next integer index.
 	 */
-	final IntIndex nextIntIndex;
+	final DefaultIntIndex nextIntIndex;
 	/**
 	 * Initializes wrapper providing access to integer index
 	 * on column that appears in equi-join predicate.
@@ -39,7 +39,7 @@ public class JoinIntWrapper extends JoinIndexWrapper {
 			int[] order) throws Exception {
 		super(queryInfo, preSummary, joinCols, order);
 		priorIntData = (IntData)priorData;
-		nextIntIndex = (IntIndex)nextIndex;
+		nextIntIndex = (DefaultIntIndex)nextIndex;
 	}
 	@Override
 	public int nextIndex(int[] tupleIndices) {

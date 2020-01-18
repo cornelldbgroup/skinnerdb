@@ -3,7 +3,7 @@ package operators;
 import buffer.BufferManager;
 import data.Dictionary;
 import indexing.Index;
-import indexing.IntIndex;
+import indexing.DefaultIntIndex;
 import net.sf.jsqlparser.expression.AllComparisonExpression;
 import net.sf.jsqlparser.expression.AnalyticExpression;
 import net.sf.jsqlparser.expression.AnyComparisonExpression;
@@ -272,7 +272,7 @@ public class IndexTest implements ExpressionVisitor {
 		// Check that index of right type is available
 		Index index = BufferManager.colToIndex.get(colRef);
 		if (index != null) {
-			if (!(index instanceof IntIndex)) {
+			if (!(index instanceof DefaultIntIndex)) {
 				// Wrong index type
 				canUseIndex = false;
 			}

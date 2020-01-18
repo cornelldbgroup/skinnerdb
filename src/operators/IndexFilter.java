@@ -9,7 +9,7 @@ import java.util.List;
 import buffer.BufferManager;
 import expressions.normalization.PlainVisitor;
 import indexing.Index;
-import indexing.IntIndex;
+import indexing.DefaultIntIndex;
 import net.sf.jsqlparser.expression.LongValue;
 import net.sf.jsqlparser.expression.StringValue;
 import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
@@ -141,7 +141,7 @@ public class IndexFilter extends PlainVisitor {
 		// Collect indices of satisfying rows via index
 		List<Integer> rows = new ArrayList<Integer>();
 		qualifyingRows.push(rows);
-		IntIndex intIndex = (IntIndex)index;
+		DefaultIntIndex intIndex = (DefaultIntIndex)index;
 		int startPos = intIndex.keyToPositions.getOrDefault(constant, -1);
 		if (startPos >= 0) {
 			int nrEntries = intIndex.positions[startPos];

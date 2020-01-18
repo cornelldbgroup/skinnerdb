@@ -14,7 +14,7 @@ import config.PreConfig;
 import expressions.ExpressionInfo;
 import indexing.Index;
 import indexing.Indexer;
-import indexing.IntIndex;
+import indexing.DefaultIntIndex;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.LongValue;
 import net.sf.jsqlparser.expression.StringValue;

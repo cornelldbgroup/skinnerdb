@@ -26,8 +26,14 @@ public class Indexer {
 			ColumnData data = BufferManager.getData(colRef);
 			if (data instanceof IntData) {
 				IntData intData = (IntData)data;
-				IntIndex index = new IntIndex(intData);
-				BufferManager.colToIndex.put(colRef, index);
+				// Use specialized index for columns without duplicates
+				if (CatalogManager.getColumn(colRef).isUnique) {
+					BufferManager.colToIndex.put(colRef, 
+							new UniqueIntIndex(intData));
+				} else {
+					BufferManager.colToIndex.put(colRef, 
+							new DefaultIntIndex(intData));
+				}
 			} else if (data instanceof DoubleData) {
 				DoubleData doubleData = (DoubleData)data;
 				DoubleIndex index = new DoubleIndex(doubleData);
