@@ -178,11 +178,16 @@ public class OldJoin extends MultiWayJoin {
 		if (indexWrappers.isEmpty()) {
 			return tupleIndices[curTable]+1;
 		}
+		int min = Integer.MAX_VALUE;
 		int max = -1;
-		for (JoinIndexWrapper wrapper : indexWrappers) {
-			int nextRaw = wrapper.nextIndex(tupleIndices);
-			int next = nextRaw<0?cardinalities[curTable]:nextRaw;
-			max = Math.max(max, next);
+		while (min != max) {
+			for (JoinIndexWrapper wrapper : indexWrappers) {
+				int nextRaw = wrapper.nextIndex(tupleIndices);
+				int next = nextRaw<0?cardinalities[curTable]:nextRaw;
+				max = Math.max(max, next);
+				min = Math.min(min, next);
+			}
+			tupleIndices[curTable] = max;
 		}
 		if (max<0) {
 			System.out.println(Arrays.toString(tupleIndices));
