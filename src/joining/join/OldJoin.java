@@ -216,6 +216,10 @@ public class OldJoin extends MultiWayJoin {
         maxJoinIndex = 0;
         // Number of completed tuples added
         nrResultTuples = 0;
+        // Whether at least one matching tuple was found
+        // with a specific join index.
+        boolean[] matchingTuples = new boolean[nrTables];
+        Arrays.fill(matchingTuples, true);
         // Execute join order until budget depleted or all input finished -
         // at each iteration start, tuple indices contain next tuple
         // combination to look at.
@@ -258,21 +262,20 @@ public class OldJoin extends MultiWayJoin {
                     }
                 } else {
                     // No complete result row -> complete further
+                	matchingTuples[joinIndex] = true;
                     joinIndex++;
+                    matchingTuples[joinIndex] = false;
                     //System.out.println("Current Join Index2:"+ joinIndex);
                 }
             } else {
                 // At least one of applicable predicates evaluates to false -
                 // try next tuple in same table.
-            	boolean atOffsetBefore = 
-            			tupleIndices[nextTable] <= offsets[nextTable];
                 tupleIndices[nextTable] = proposeNext(
                 		joinIndices.get(joinIndex), 
                 		nextTable, tupleIndices);
-                boolean atEndAfter = 
-                		tupleIndices[nextTable] >= cardinalities[nextTable];
                 int curJoinIdx = joinIndex;
                 int curTable = nextTable;
+                boolean curNoMatch = !matchingTuples[joinIndex];
                 // Have reached end of current table? -> we backtrack.
                 while (tupleIndices[nextTable] >= nextCardinality) {
                     tupleIndices[nextTable] = 0;
@@ -285,8 +288,8 @@ public class OldJoin extends MultiWayJoin {
                     tupleIndices[nextTable] += 1;
                     // Special case: no unary preds on current
                     // table or pre-processing activated.
-                    if (atOffsetBefore && atEndAfter && 
-                    		(PreConfig.PRE_FILTER || unaryPred == null)) {
+                    if (curNoMatch && (PreConfig.PRE_FILTER || 
+                    		unaryPred == null)) {
                     	if (nextTable != curTable) {
                     		// Change in this table can only lead to
                     		// result tuple if it is connected to
