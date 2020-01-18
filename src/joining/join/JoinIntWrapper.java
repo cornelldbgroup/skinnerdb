@@ -4,6 +4,7 @@ import java.util.Set;
 
 import data.IntData;
 import indexing.DefaultIntIndex;
+import indexing.IntIndex;
 import preprocessing.Context;
 import query.ColumnRef;
 import query.QueryInfo;
@@ -24,7 +25,7 @@ public class JoinIntWrapper extends JoinIndexWrapper {
 	/**
 	 * Reference to next integer index.
 	 */
-	final DefaultIntIndex nextIntIndex;
+	final IntIndex nextIntIndex;
 	/**
 	 * Initializes wrapper providing access to integer index
 	 * on column that appears in equi-join predicate.
