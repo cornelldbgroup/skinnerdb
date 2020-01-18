@@ -3,7 +3,6 @@ package joining.join;
 import java.util.Set;
 
 import data.IntData;
-import indexing.DefaultIntIndex;
 import indexing.IntIndex;
 import preprocessing.Context;
 import query.ColumnRef;
@@ -40,7 +39,7 @@ public class JoinIntWrapper extends JoinIndexWrapper {
 			int[] order) throws Exception {
 		super(queryInfo, preSummary, joinCols, order);
 		priorIntData = (IntData)priorData;
-		nextIntIndex = (DefaultIntIndex)nextIndex;
+		nextIntIndex = (IntIndex)nextIndex;
 	}
 	@Override
 	public int nextIndex(int[] tupleIndices) {
