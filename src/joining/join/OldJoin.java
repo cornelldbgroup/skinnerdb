@@ -293,7 +293,8 @@ public class OldJoin extends MultiWayJoin {
                     				break;
                     			}
                     		}
-                    		if (!connected) {
+                    		if (!connected && 
+                    				!joinIndices.get(curTable).isEmpty()) {
                     			tupleIndices[nextTable] = 
                     					cardinalities[nextTable];
                     		}
