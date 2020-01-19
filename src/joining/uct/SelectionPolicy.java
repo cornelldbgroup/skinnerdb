@@ -11,6 +11,7 @@ package joining.uct;
 public enum SelectionPolicy {
 	UCB1,			// apply the standard UCT formula 
 	MAX_REWARD,		// use actions with maximal reward
+	MAX_VISIT,		// use action with most visits
 	EPSILON_GREEDY,	// apply epsilon-greedy selection
 	RANDOM,			// select with uniform random distribution
 	RANDOM_UCB1		// random selection in root, then UCB1

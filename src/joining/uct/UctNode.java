@@ -249,6 +249,9 @@ public class UctNode {
                 case EPSILON_GREEDY:
                 	quality = meanReward;
                 	break;
+                case MAX_VISIT:
+                	quality = nrTries[action];
+                	break;
                 case RANDOM:
                 	quality = random.nextDouble();
                 	break;

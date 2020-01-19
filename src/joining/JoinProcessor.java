@@ -147,6 +147,15 @@ public class JoinProcessor {
 				++plotCtr;
 			}
 		}
+		// Output most frequently used join order
+		root.sample(roundCtr, joinOrder, SelectionPolicy.MAX_VISIT);
+		System.out.print("MFJO: ");
+		for (int joinCtr=0; joinCtr<query.nrJoined; ++joinCtr) {
+			int table = joinOrder[joinCtr];
+			String alias = query.aliases[table];
+			System.out.print(alias + "\t");
+		}
+		System.out.println();
 		// Draw final plot if activated
 		if (query.explain) {
 			String plotName = "ucttreefinal.pdf";
