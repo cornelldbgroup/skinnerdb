@@ -244,7 +244,7 @@ public class OldJoin extends MultiWayJoin {
         long startMillis = System.currentTimeMillis();
         // TODO: remove below again
         //while (remainingBudget > 0 && joinIndex >= 0) {
-        while (System.currentTimeMillis() - startMillis < 10 
+        while (System.currentTimeMillis() - startMillis < 5 
         		&& joinIndex >= 0) {
         	++JoinStats.nrIterations;
         	// Update maximal join index
