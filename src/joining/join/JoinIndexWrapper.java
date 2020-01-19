@@ -39,6 +39,12 @@ public abstract class JoinIndexWrapper {
 	 */
 	final Index nextIndex;
 	/**
+	 * The index for the next tuple
+	 * proposed for the next tuple
+	 * in the last invocation.
+	 */
+	public int lastProposed = -1;
+	/**
 	 * Initialize index wrapper for
 	 * given query and join order.
 	 * 

@@ -325,12 +325,14 @@ public class OldJoin extends MultiWayJoin {
                 	int maxNextJoinIdx = -1;
             		for (JoinIndexWrapper joinWrap : 
             			joinIndices.get(curJoinIdx)) {
-            			for (int i=0; i<nrTables; ++i) {
-            				if (plan.joinOrder.order[i] == 
-            						joinWrap.priorTable) {
-            					maxNextJoinIdx = Math.max(
-            							i, maxNextJoinIdx);
-            				}
+            			if (joinWrap.lastProposed >= nextCardinality) {
+                			for (int i=0; i<nrTables; ++i) {
+                				if (plan.joinOrder.order[i] == 
+                						joinWrap.priorTable) {
+                					maxNextJoinIdx = Math.max(
+                							i, maxNextJoinIdx);
+                				}
+                			}
             			}
             		}
             		if (maxNextJoinIdx > -1 && 

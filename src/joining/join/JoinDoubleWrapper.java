@@ -46,7 +46,8 @@ public class JoinDoubleWrapper extends JoinIndexWrapper {
 		int priorTuple = tupleIndices[priorTable];
 		double priorVal = priorDoubleData.data[priorTuple];
 		int curTuple = tupleIndices[nextTable];
-		return nextDoubleIndex.nextTuple(priorVal, curTuple);
+		lastProposed = nextDoubleIndex.nextTuple(priorVal, curTuple);
+		return lastProposed;
 	}
 	@Override
 	public int nrIndexed(int[] tupleIndices) {
