@@ -24,6 +24,11 @@ public class JoinStats {
      */
     public static long nrTuples = 0;
     /**
+     * How often did we exploit fast backtracking
+     * in the join algorithm?
+     */
+    public static long nrFastBacktracks = 0;
+    /**
      * Number of index lookups during the last invocation.
      */
     public static long nrIndexLookups = 0;

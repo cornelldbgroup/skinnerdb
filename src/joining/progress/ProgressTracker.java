@@ -2,9 +2,12 @@ package joining.progress;
 
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 import joining.plan.JoinOrder;
+import joining.result.ResultTuple;
 import query.QueryInfo;
 
 /**
@@ -40,6 +43,10 @@ public class ProgressTracker {
      * Indicates whether processing is finished.
      */
     public boolean isFinished = false;
+    // TODO: check performance
+    public Set<ResultTuple> excluded = new HashSet<>();
+    
+    
     /**
      * Initializes progress tracking for given tables.
      *

@@ -46,6 +46,7 @@ public class JoinProcessor {
         // Initialize statistics
 		long startMillis = System.currentTimeMillis();
         JoinStats.nrTuples = 0;
+        JoinStats.nrFastBacktracks = 0;
         JoinStats.nrIndexLookups = 0;
         JoinStats.nrIndexEntries = 0;
         JoinStats.nrUniqueIndexLookups = 0;

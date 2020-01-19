@@ -5,6 +5,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import catalog.CatalogManager;
 import config.LoggingConfig;
 import config.PreConfig;
 import expressions.ExpressionInfo;
@@ -13,6 +14,7 @@ import joining.plan.JoinOrder;
 import joining.plan.LeftDeepPlan;
 import joining.progress.ProgressTracker;
 import joining.progress.State;
+import joining.result.ResultTuple;
 import preprocessing.Context;
 import query.QueryInfo;
 import statistics.JoinStats;
@@ -190,6 +192,20 @@ public class OldJoin extends MultiWayJoin {
 		}
 		return max;
 	}
+	
+	final static int cachedDepth = 3;
+	
+	ResultTuple exclusionTuple(int[] tupleIndices, 
+			int joinIndex, int[] order) {
+		ResultTuple exclusion = new ResultTuple(tupleIndices);
+		int nrTables = tupleIndices.length;
+		for (int i=joinIndex+1; i<nrTables; ++i) {
+			int table = order[i];
+			exclusion.baseIndices[table] = -1;
+		}
+		return exclusion;
+	}
+	
     /**
      * Executes a given join order for a given budget of steps
      * (i.e., predicate evaluations). Result tuples are added
@@ -243,7 +259,14 @@ public class OldJoin extends MultiWayJoin {
             if ((PreConfig.PRE_FILTER || unaryPred == null || 
             		unaryPred.evaluate(tupleIndices)>0) &&
             		evaluateAll(applicablePreds.get(joinIndex), 
-            				tupleIndices)) {
+            				tupleIndices)
+            		/*
+            		&&
+            		(joinIndex >= cachedDepth || !tracker.excluded.contains(
+            				exclusionTuple(tupleIndices, joinIndex, 
+            						plan.joinOrder.order)))
+            		*/
+            		) {
             	++JoinStats.nrTuples;
                 // Do we have a complete result row?
                 if(joinIndex == plan.joinOrder.order.length - 1) {
@@ -261,6 +284,9 @@ public class OldJoin extends MultiWayJoin {
                         if (joinIndex < 0) {
                             break;
                         }
+                        
+                        
+                        
                         nextTable = plan.joinOrder.order[joinIndex];
                         nextCardinality = cardinalities[nextTable];
                         // TODO: check performance impact
@@ -292,26 +318,39 @@ public class OldJoin extends MultiWayJoin {
                 		tupleIndices[nextTable] >= nextCardinality && 
                 		joinIndexInc;
                 // Cannot find matching tuple in current table?
-                int maxNextJoinIdx = -1;
                 if (curNoMatch && (PreConfig.PRE_FILTER || 
                 		unaryPred == null)) {
+                	int maxNextJoinIdx = -1;
             		for (JoinIndexWrapper joinWrap : 
             			joinIndices.get(curJoinIdx)) {
             			for (int i=0; i<nrTables; ++i) {
             				if (plan.joinOrder.order[i] == 
             						joinWrap.priorTable) {
-            					maxNextJoinIdx = Math.max(i, maxNextJoinIdx);
+            					maxNextJoinIdx = Math.max(
+            							i, maxNextJoinIdx);
             				}
             			}
             		}
-                }
-                if (maxNextJoinIdx == -1) {
-                	maxNextJoinIdx = joinIndex;
+            		if (maxNextJoinIdx > -1 && 
+            				maxNextJoinIdx < joinIndex-1) {
+	                    // Exploit fast back-tracking
+	                    for (int i=maxNextJoinIdx+1; i<=joinIndex; ++i) {
+	                    	int table = plan.joinOrder.order[i];
+	                    	tupleIndices[table] = 0;
+	                    }
+	                    joinIndex = maxNextJoinIdx;
+	                    nextTable = plan.joinOrder.order[joinIndex];
+	                    nextCardinality = cardinalities[nextTable];
+	                    tupleIndices[nextTable] = proposeNext(
+	                    		joinIndices.get(joinIndex), 
+	                    		nextTable, tupleIndices);
+	                    // Update statistics on backtracking
+	                    JoinStats.nrFastBacktracks++;
+            		}
                 }
                 // Go back to last table that could make a difference
                 // Have reached end of current table? -> we backtrack.
-                while (tupleIndices[nextTable] >= nextCardinality ||
-                		joinIndex > maxNextJoinIdx) {
+                while (tupleIndices[nextTable] >= nextCardinality) {
                 	// TODO: check correctness
                     tupleIndices[nextTable] = 0;
                 	//tupleIndices[nextTable] = offsets[nextTable];
@@ -319,6 +358,14 @@ public class OldJoin extends MultiWayJoin {
                     if (joinIndex < 0) {
                         break;
                     }
+                    // TODO: check performance
+                    /*
+                    if (joinIndex < cachedDepth) {
+                    	tracker.excluded.add(exclusionTuple(
+                    			tupleIndices, joinIndex, 
+                    			plan.joinOrder.order));
+                    }
+                    */
                     nextTable = plan.joinOrder.order[joinIndex];
                     nextCardinality = cardinalities[nextTable];
                     // TODO: check performance

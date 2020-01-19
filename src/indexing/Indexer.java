@@ -32,7 +32,8 @@ public class Indexer {
 							new UniqueIntIndex(intData));
 				} else {
 					BufferManager.colToIndex.put(colRef, 
-							new DefaultIntIndex(intData));
+							//new DefaultIntIndex(intData));
+							new DummyIntIndex());
 				}
 			} else if (data instanceof DoubleData) {
 				DoubleData doubleData = (DoubleData)data;

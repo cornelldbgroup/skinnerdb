@@ -216,6 +216,7 @@ public class BenchAndVerify {
 			benchOut.print(preMillis + "\t");
 			benchOut.print(postMillis + "\t");
 			benchOut.print(JoinStats.nrTuples + "\t");
+			benchOut.print(JoinStats.nrFastBacktracks + "\t");
 			benchOut.print(JoinStats.nrIterations + "\t");
 			benchOut.print(JoinStats.nrIndexLookups + "\t");
 			benchOut.print(JoinStats.nrIndexEntries + "\t");
