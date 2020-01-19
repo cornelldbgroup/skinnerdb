@@ -323,6 +323,7 @@ public class OldJoin extends MultiWayJoin {
                 if (curNoMatch && (PreConfig.PRE_FILTER || 
                 		unaryPred == null)) {
                 	int maxNextJoinIdx = -1;
+                	/*
             		for (JoinIndexWrapper joinWrap : 
             			joinIndices.get(curJoinIdx)) {
             			for (int i=0; i<nrTables; ++i) {
@@ -333,6 +334,7 @@ public class OldJoin extends MultiWayJoin {
             				}
             			}
             		}
+            		*/
             		if (maxNextJoinIdx > -1 && 
             				maxNextJoinIdx < joinIndex-1) {
 	                    // Exploit fast back-tracking
