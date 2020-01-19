@@ -241,7 +241,11 @@ public class OldJoin extends MultiWayJoin {
         // Execute join order until budget depleted or all input finished -
         // at each iteration start, tuple indices contain next tuple
         // combination to look at.
-        while (remainingBudget > 0 && joinIndex >= 0) {
+        long startMillis = System.currentTimeMillis();
+        // TODO: remove below again
+        //while (remainingBudget > 0 && joinIndex >= 0) {
+        while (System.currentTimeMillis() - startMillis < 10 
+        		&& joinIndex >= 0) {
         	++JoinStats.nrIterations;
         	// Update maximal join index
         	maxJoinIndex = Math.max(maxJoinIndex, joinIndex);
