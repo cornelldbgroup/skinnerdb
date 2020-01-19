@@ -292,12 +292,10 @@ public class OldJoin extends MultiWayJoin {
                         nextTable = plan.joinOrder.order[joinIndex];
                         nextCardinality = cardinalities[nextTable];
                         // TODO: check performance impact
-                        tupleIndices[nextTable] += 1;
-                        /*
+                        //tupleIndices[nextTable] += 1;
                         tupleIndices[nextTable] = proposeNext(
                         		joinIndices.get(joinIndex), 
                         		nextTable, tupleIndices);
-                        */
                     }
                     joinIndexInc = false;
                 } else {
