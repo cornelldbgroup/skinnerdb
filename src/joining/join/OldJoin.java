@@ -10,6 +10,7 @@ import config.LoggingConfig;
 import config.PreConfig;
 import expressions.ExpressionInfo;
 import expressions.compilation.KnaryBoolEval;
+import indexing.UniqueIntIndex;
 import joining.plan.JoinOrder;
 import joining.plan.LeftDeepPlan;
 import joining.progress.ProgressTracker;
@@ -180,6 +181,9 @@ public class OldJoin extends MultiWayJoin {
 		if (indexWrappers.isEmpty()) {
 			return tupleIndices[curTable]+1;
 		}
+		if (uniqueIndex[curTable] && indexedTuple[curTable]) {
+			return cardinalities[curTable];
+		}
 		int max = -1;
 		for (JoinIndexWrapper wrapper : indexWrappers) {
 			int nextRaw = wrapper.nextIndex(tupleIndices);
@@ -206,6 +210,9 @@ public class OldJoin extends MultiWayJoin {
 		return exclusion;
 	}
 	
+	boolean[] uniqueIndex;
+	boolean[] indexedTuple;
+	
     /**
      * Executes a given join order for a given budget of steps
      * (i.e., predicate evaluations). Result tuples are added
@@ -222,6 +229,18 @@ public class OldJoin extends MultiWayJoin {
         int[] tupleIndices = new int[nrTables];
         List<List<KnaryBoolEval>> applicablePreds = plan.applicablePreds;
         List<List<JoinIndexWrapper>> joinIndices = plan.joinIndices;
+        // Which tables use indices with unique values?
+        uniqueIndex = new boolean[nrTables];
+        for (int joinCtr=0; joinCtr<nrTables; ++joinCtr) {
+        	int table = plan.joinOrder.order[joinCtr];
+        	for (JoinIndexWrapper wrap : joinIndices.get(joinCtr)) {
+        		if (wrap.nextIndex instanceof UniqueIntIndex) {
+        			uniqueIndex[table] = true;
+        		}
+        	}
+        }
+        // Whether tuple at this position comes from index.
+        indexedTuple = new boolean[nrTables];
         // Initialize state and flags to prepare budgeted execution
         int joinIndex = state.lastIndex;
         for (int tableCtr = 0; tableCtr < nrTables; ++tableCtr) {
@@ -282,6 +301,7 @@ public class OldJoin extends MultiWayJoin {
                     // Have reached end of current table? -> we backtrack.
                     while (tupleIndices[nextTable] >= nextCardinality) {
                         tupleIndices[nextTable] = 0;
+                        indexedTuple[nextTable] = false;
                         --joinIndex;
                         if (joinIndex < 0) {
                             break;
@@ -292,10 +312,12 @@ public class OldJoin extends MultiWayJoin {
                         nextTable = plan.joinOrder.order[joinIndex];
                         nextCardinality = cardinalities[nextTable];
                         // TODO: check performance impact
-                        //tupleIndices[nextTable] += 1;
+                        tupleIndices[nextTable] += 1;
+                        /*
                         tupleIndices[nextTable] = proposeNext(
                         		joinIndices.get(joinIndex), 
                         		nextTable, tupleIndices);
+                        */
                     }
                     joinIndexInc = false;
                 } else {
@@ -312,6 +334,7 @@ public class OldJoin extends MultiWayJoin {
                 tupleIndices[nextTable] = proposeNext(
                 		joinIndices.get(joinIndex), 
                 		nextTable, tupleIndices);
+                indexedTuple[nextTable] = true;
                 int curJoinIdx = joinIndex;
                 int curTable = nextTable;
                 boolean curNoMatch = 
@@ -339,6 +362,7 @@ public class OldJoin extends MultiWayJoin {
 	                    for (int i=maxNextJoinIdx+1; i<=joinIndex; ++i) {
 	                    	int table = plan.joinOrder.order[i];
 	                    	tupleIndices[table] = 0;
+	                    	indexedTuple[table] = false;
 	                    }
 	                    joinIndex = maxNextJoinIdx;
 	                    nextTable = plan.joinOrder.order[joinIndex];
@@ -355,6 +379,7 @@ public class OldJoin extends MultiWayJoin {
                 while (tupleIndices[nextTable] >= nextCardinality) {
                 	// TODO: check correctness
                     tupleIndices[nextTable] = 0;
+                    indexedTuple[nextTable] = false;
                 	//tupleIndices[nextTable] = offsets[nextTable];
                     --joinIndex;
                     if (joinIndex < 0) {

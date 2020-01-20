@@ -5,10 +5,15 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.Iterator;
 import java.util.List;
+import java.util.stream.Collector;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import buffer.BufferManager;
+import config.ParallelConfig;
 import expressions.normalization.PlainVisitor;
 import indexing.Index;
+import indexing.UniqueIntIndex;
 import indexing.DefaultIntIndex;
 import net.sf.jsqlparser.expression.LongValue;
 import net.sf.jsqlparser.expression.StringValue;
@@ -141,16 +146,34 @@ public class IndexFilter extends PlainVisitor {
 		// Collect indices of satisfying rows via index
 		List<Integer> rows = new ArrayList<Integer>();
 		qualifyingRows.push(rows);
-		DefaultIntIndex intIndex = (DefaultIntIndex)index;
-		int startPos = intIndex.keyToPositions.getOrDefault(constant, -1);
-		if (startPos >= 0) {
-			int nrEntries = intIndex.positions[startPos];
-			for (int i=0; i<nrEntries; ++i) {
-				int pos = startPos + 1 + i;
-				int rowIdx = intIndex.positions[pos];
-				rows.add(rowIdx);
-			}				
+		if (index instanceof UniqueIntIndex) {
+			UniqueIntIndex intIndex = (UniqueIntIndex)index;
+			if (intIndex.nrIndexed(constant)>0) {
+				rows.add(intIndex.keyToRow.get(constant));
+			}
+		} else if (index instanceof DefaultIntIndex) {
+			DefaultIntIndex intIndex = (DefaultIntIndex)index;
+			int startPos = intIndex.keyToPositions.getOrDefault(constant, -1);
+			if (startPos >= 0) {
+				int nrEntries = intIndex.positions[startPos];
+				// Parallel or sequential evaluation?
+				if (!ParallelConfig.PARALLEL || 
+						nrEntries < ParallelConfig.PRE_BATCH_SIZE) {
+					// Sequential evaluation
+					for (int i=0; i<nrEntries; ++i) {
+						int pos = startPos + 1 + i;
+						int rowIdx = intIndex.positions[pos];
+						rows.add(rowIdx);
+					}
+				} else {
+					// Parallel evaluation
+					rows.addAll(IntStream.range(0, nrEntries).parallel().
+							map(i -> intIndex.positions[startPos+1+i]).
+								boxed().collect(Collectors.toList()));
+				}				
+			}			
 		}
+
 	}
 	
 	@Override
