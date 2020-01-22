@@ -22,6 +22,9 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static preprocessing.PreprocessorUtil.DBref;
+import static preprocessing.PreprocessorUtil.log;
+
 /**
  * Filters query tables via unary predicates and stores
  * result in newly created tables. Creates hash tables
@@ -38,26 +41,12 @@ public class OldPreprocessor implements Preprocessor {
     private boolean hadError = false;
 
     /**
-     * Translates a column reference using a table
-     * alias into one using the original table.
-     *
-     * @param query    meta-data about query
-     * @param queryRef reference to alias column
-     * @return resolved column reference
-     */
-    private ColumnRef DBref(QueryInfo query, ColumnRef queryRef) {
-        String alias = queryRef.aliasName;
-        String table = query.aliasToTable.get(alias);
-        String colName = queryRef.columnName;
-        return new ColumnRef(table, colName);
-    }
-
-    /**
      * Executes pre-processing.
      *
      * @param query the query to pre-process
      * @return summary of pre-processing steps
      */
+    @Override
     public Context process(QueryInfo query) throws Exception {
         // Start counter
         long startMillis = System.currentTimeMillis();
@@ -302,16 +291,5 @@ public class OldPreprocessor implements Preprocessor {
         });
         long totalMillis = System.currentTimeMillis() - startMillis;
         log("Created all indices in " + totalMillis + " ms.");
-    }
-
-    /**
-     * Output logging message if pre-processing logging activated.
-     *
-     * @param toLog text to display if logging is activated
-     */
-    private void log(String toLog) {
-        if (LoggingConfig.PREPROCESSING_VERBOSE) {
-            System.out.println(toLog);
-        }
     }
 }
