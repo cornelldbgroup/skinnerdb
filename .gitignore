@@ -56,3 +56,4 @@ db-*
 # Data
 imdb/data/
 tpch/data/
+uberlandia/data/
