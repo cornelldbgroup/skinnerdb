@@ -4,9 +4,9 @@ import joining.uct.ExplorationWeightPolicy;
 import joining.uct.SelectionPolicy;
 
 /**
- * Configures reinforcement-learning based
+ * Configures reinforcement-search based
  * search for optimal join orders.
- * 
+ *
  * @author immanueltrummer
  *
  */
@@ -42,7 +42,7 @@ public class JoinConfig {
 	 * Whether to regularly forget everything that was
 	 * learned about join orders so far. This is helpful
 	 * since the reward distribution keeps changing due
-	 * to table offsets etc. Also helps against 
+	 * to table offsets etc. Also helps against
 	 * non-uniform data which may cause (too) early
 	 * convergence to one specific join order.
 	 */

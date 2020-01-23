@@ -1,7 +1,7 @@
 # SkinnerDB
 
 This repository contains a very early version of a (slightly refined) re-implementation of SkinnerDB,
-described in the paper <a href="https://dl.acm.org/citation.cfm?id=3275600">SkinnerDB: Regret-bounded query evaluation via reinforcement learning</a> at SIGMOD 2019 (see video recording of SIGMOD talk <a href="https://www.youtube.com/watch?v=QRYVnKaZ9fw">here</a>).
+described in the paper <a href="https://dl.acm.org/citation.cfm?id=3275600">SkinnerDB: Regret-bounded query evaluation via reinforcement search</a> at SIGMOD 2019 (see video recording of SIGMOD talk <a href="https://www.youtube.com/watch?v=QRYVnKaZ9fw">here</a>).
 
 This source code is currently under development and **NOT CONSIDERED STABLE**.
 
@@ -54,7 +54,7 @@ SkinnerDB is specialized for in-memory processing. The default settings for java
 
 # Tuning
 
-SkinnerDB includes various tuning parameters that can improve performance for specific benchmarks and data sets. Those parameters are hardcoded in the current version and can be found in the sub-folder src/config. Among the most important parameters are the `EXPLORATION_WEIGHT`, the `BUDGET_PER_EPISODE`, and the `FORGET` parameter (all in JoinConfig.java). Increasing the exploration weight makes the algorithm more "curious", thereby spending more effort in exploration as opposed to exploitation (here: using promising join orders). Increasing the budget per episode decreases learning overheads but may reduce the quality of join order decisions. If the forget parameter is enabled, the UCT tree is rebuilt regularly to increase exploration.
+SkinnerDB includes various tuning parameters that can improve performance for specific benchmarks and data sets. Those parameters are hardcoded in the current version and can be found in the sub-folder src/config. Among the most important parameters are the `EXPLORATION_WEIGHT`, the `BUDGET_PER_EPISODE`, and the `FORGET` parameter (all in JoinConfig.java). Increasing the exploration weight makes the algorithm more "curious", thereby spending more effort in exploration as opposed to exploitation (here: using promising join orders). Increasing the budget per episode decreases search overheads but may reduce the quality of join order decisions. If the forget parameter is enabled, the UCT tree is rebuilt regularly to increase exploration.
 
 # Team
 

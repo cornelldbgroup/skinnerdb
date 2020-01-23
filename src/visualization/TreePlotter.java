@@ -11,15 +11,15 @@ import joining.uct.UctNode;
 
 /**
  * Provides functions to visualize the UCT search tree
- * used during join order learning.
- * 
+ * used during join order search.
+ *
  * @author immanueltrummer
  *
  */
 public class TreePlotter {
 	/**
 	 * Draw sub-tree via recursive invocations.
-	 * 
+	 *
 	 * @param root			root of sub-tree to plot
 	 * @param xOffset		root node is placed at this x coordinate
 	 * @param xRange		width of horizontal range usable for subtree
@@ -27,7 +27,7 @@ public class TreePlotter {
 	 * @param yOffset		place root of sub-tree at this y coordinate
 	 * @param pdfContent	reference to pdf canvas
 	 */
-	static void plotSubtree(UctNode root, int xRange, 
+	static void plotSubtree(UctNode root, int xRange,
 			int xOffset, int yStep, int yOffset,
 			PdfContentByte pdfContent) {
 		// Check for null pointer
@@ -44,10 +44,10 @@ public class TreePlotter {
 		    int nrActions = root.nrActions;
 		    if (nrActions>0) {
 		    	// Draw child nodes and connections
-		    	int childXrange = Math.floorDiv(xRange, nrActions);		    	
+		    	int childXrange = Math.floorDiv(xRange, nrActions);
 				for (int childCtr=0; childCtr<nrActions; ++childCtr) {
 					// Draw connection to child node
-					int childXoffset = xOffset - xRange/2 + 
+					int childXoffset = xOffset - xRange/2 +
 							childXrange * childCtr + childXrange/2;
 					int childYoffset = yCenter - 25;
 					pdfContent.setLineWidth(1);
@@ -57,16 +57,16 @@ public class TreePlotter {
 					pdfContent.stroke();
 					// Draw child tree
 					UctNode child = root.childNodes[childCtr];
-					plotSubtree(child, childXrange, childXoffset, 
+					plotSubtree(child, childXrange, childXoffset,
 							yStep, childYoffset, pdfContent);
-				}	    	
-		    }			
+				}
+		    }
 		}
 	}
 	/**
 	 * Draws sub-tree starting at given root into a pdf
 	 * document at the given path.
-	 * 
+	 *
 	 * @param root	root of sub-tree to draw
 	 * @param path	create drawing at this path
 	 * @throws Exception
