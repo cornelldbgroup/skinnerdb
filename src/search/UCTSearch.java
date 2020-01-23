@@ -4,14 +4,14 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class UCTSearch<T extends Action> extends MCTreeSearch<T> {
-    public UCTSearch(SearchNode<T> root, Agent<T> agent) {
+    public UCTSearch(SearchNode<T> root, Agent agent) {
         super(root, agent);
     }
 
     @Override
-    protected List<T> sample(SearchNode<T> root) {
+    protected List<Action> sample(SearchNode<T> root) {
         SearchNode<T> node = root, parent = null;
-        List<T> actions = new ArrayList<>();
+        List<Action> actions = new ArrayList<>();
         while (node != null) {
             T action = node.selectAction();
             actions.add(action);
@@ -27,7 +27,7 @@ public class UCTSearch<T extends Action> extends MCTreeSearch<T> {
     }
 
     @Override
-    protected void expandTree(SearchNode<T> root, List<T> trace) {
+    protected void expandTree(SearchNode<T> root, List<Action> trace) {
         SearchNode node = root;
 
         for (Action action : trace) {
@@ -40,7 +40,7 @@ public class UCTSearch<T extends Action> extends MCTreeSearch<T> {
     }
 
     @Override
-    protected void updateStatistics(SearchNode<T> root, List<T> trace,
+    protected void updateStatistics(SearchNode<T> root, List<Action> trace,
                                     double reward) {
         SearchNode node = root;
         for (Action action : trace) {

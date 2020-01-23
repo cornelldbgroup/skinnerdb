@@ -4,7 +4,7 @@ public class PreprocessorManager {
     private static final Preprocessor INSTANCE;
 
     static {
-        INSTANCE = new OldPreprocessor();
+        INSTANCE = new BasicPreprocessor();
     }
 
     public static Preprocessor getPreprocessor() {

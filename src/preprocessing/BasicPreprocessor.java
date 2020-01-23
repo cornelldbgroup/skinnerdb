@@ -32,7 +32,7 @@ import static preprocessing.PreprocessorUtil.log;
  *
  * @author immanueltrummer
  */
-public class OldPreprocessor implements Preprocessor {
+public class BasicPreprocessor implements Preprocessor {
     /**
      * Whether an error occurred during last invocation.
      * This flag is used in cases where an error occurs

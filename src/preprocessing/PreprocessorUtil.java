@@ -13,7 +13,7 @@ public class PreprocessorUtil {
      * @param queryRef reference to alias column
      * @return resolved column reference
      */
-    static ColumnRef DBref(QueryInfo query, ColumnRef queryRef) {
+    public static ColumnRef DBref(QueryInfo query, ColumnRef queryRef) {
         String alias = queryRef.aliasName;
         String table = query.aliasToTable.get(alias);
         String colName = queryRef.columnName;
@@ -25,7 +25,7 @@ public class PreprocessorUtil {
      *
      * @param toLog text to display if logging is activated
      */
-    static void log(String toLog) {
+    public static void log(String toLog) {
         if (LoggingConfig.PREPROCESSING_VERBOSE) {
             System.out.println(toLog);
         }

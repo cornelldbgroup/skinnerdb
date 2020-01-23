@@ -1,16 +1,20 @@
-package preprocessing;
+package preprocessing.search;
 
 import expressions.ExpressionInfo;
+import preprocessing.Context;
+import preprocessing.Preprocessor;
 import query.ColumnRef;
 import query.QueryInfo;
+import search.Agent;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import static preprocessing.PreprocessorUtil.DBref;
 import static preprocessing.PreprocessorUtil.log;
 
-public class RLPreprocessor implements Preprocessor {
+public class SearchPreprocessor implements Preprocessor, Agent<TableAction> {
     /**
      * Whether an error occurred during last invocation.
      * This flag is used in cases where an error occurs
@@ -54,5 +58,10 @@ public class RLPreprocessor implements Preprocessor {
         System.exit(1);
 
         return preSummary;
+    }
+
+    @Override
+    public double simulate(List<TableAction> action) {
+        return 0;
     }
 }
