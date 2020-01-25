@@ -1,5 +1,6 @@
 package preprocessing.search;
 
+import catalog.CatalogManager;
 import config.LoggingConfig;
 import config.NamingConfig;
 import config.PreConfig;
@@ -14,7 +15,10 @@ import query.ColumnRef;
 import query.QueryInfo;
 import statistics.PreStats;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 import static operators.Filter.compilePred;
 import static operators.Filter.loadPredCols;
@@ -133,7 +137,7 @@ public class SearchPreprocessor implements Preprocessor {
             compiled.add(compilePred(unaryPred, expression,
                     preSummary.columnMapping));
         }
-        List<Integer> satisfyingRows = null;//filter();
+        List<Integer> satisfyingRows = filter(tableName, compiled);
 
         // Materialize relevant rows and columns
         String filteredName = NamingConfig.FILTERED_PRE + alias;
@@ -157,10 +161,22 @@ public class SearchPreprocessor implements Preprocessor {
         }
     }
 
+    //--------------------------------------------------------------------------
+    private int lastRow = -1;
 
-    private List<Integer> filter(ExpressionInfo unaryPred, String tableName,
-                                 List<UnaryBoolEval> compiled,
-                                 Map<ColumnRef, ColumnRef> columnMapping) {
-        return null;
+    private List<Integer> filter(String tableName,
+                                 List<UnaryBoolEval> compiled) {
+        List<Integer> result = new ArrayList<>();
+        int cardinality = CatalogManager.getCardinality(tableName);
+        // Evaluate predicate for each table row
+        for (int rowCtr = 0; rowCtr < cardinality; ++rowCtr) {
+            for (UnaryBoolEval eval : compiled) {
+                if (eval.evaluate(rowCtr) > 0) {
+                    result.add(rowCtr);
+                    break;
+                }
+            }
+        }
+        return result;
     }
 }
