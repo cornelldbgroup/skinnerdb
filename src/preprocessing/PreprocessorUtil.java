@@ -1,6 +1,7 @@
 package preprocessing;
 
 import config.LoggingConfig;
+import indexing.Indexer;
 import query.ColumnRef;
 import query.QueryInfo;
 
@@ -18,6 +19,33 @@ public class PreprocessorUtil {
         String table = query.aliasToTable.get(alias);
         String colName = queryRef.columnName;
         return new ColumnRef(table, colName);
+    }
+
+    /**
+     * Create indices on equality join columns if not yet available.
+     *
+     * @param query      query for which to create indices
+     * @param preSummary summary of pre-processing steps executed so far
+     * @throws Exception
+     */
+    public static void createJoinIndices(QueryInfo query, Context preSummary) {
+        // Iterate over columns in equi-joins
+        long startMillis = System.currentTimeMillis();
+        query.equiJoinCols.parallelStream().forEach(queryRef -> {
+            try {
+                // Resolve query-specific column reference
+                ColumnRef dbRef = preSummary.columnMapping.get(queryRef);
+                log("Creating index for " + queryRef +
+                        " (query) - " + dbRef + " (DB)");
+                // Create index (unless it exists already)
+                Indexer.index(dbRef);
+            } catch (Exception e) {
+                System.err.println("Error creating index for " + queryRef);
+                e.printStackTrace();
+            }
+        });
+        long totalMillis = System.currentTimeMillis() - startMillis;
+        log("Created all indices in " + totalMillis + " ms.");
     }
 
     /**

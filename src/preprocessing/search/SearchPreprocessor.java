@@ -1,11 +1,14 @@
 package preprocessing.search;
 
+import config.LoggingConfig;
+import config.NamingConfig;
 import config.PreConfig;
 import expressions.ExpressionInfo;
-import indexing.Indexer;
 import net.sf.jsqlparser.expression.Expression;
+import operators.Materialize;
 import preprocessing.Context;
 import preprocessing.Preprocessor;
+import print.RelationPrinter;
 import query.ColumnRef;
 import query.QueryInfo;
 import statistics.PreStats;
@@ -15,8 +18,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import static preprocessing.PreprocessorUtil.DBref;
-import static preprocessing.PreprocessorUtil.log;
+import static preprocessing.PreprocessorUtil.*;
 
 public class SearchPreprocessor implements Preprocessor {
     /**
@@ -39,7 +41,7 @@ public class SearchPreprocessor implements Preprocessor {
         // Reset error flag
         hadError = false;
         // Collect columns required for joins and post-processing
-        Set<ColumnRef> requiredCols = new HashSet<ColumnRef>();
+        Set<ColumnRef> requiredCols = new HashSet<>();
         requiredCols.addAll(query.colsForJoins);
         requiredCols.addAll(query.colsForPostProcessing);
         log("Required columns: " + requiredCols);
@@ -64,7 +66,7 @@ public class SearchPreprocessor implements Preprocessor {
         query.aliasToTable.keySet().parallelStream().forEach(alias -> {
             // Collect required columns (for joins and post-processing) for
             // this table
-            List<ColumnRef> curRequiredCols = new ArrayList<ColumnRef>();
+            List<ColumnRef> curRequiredCols = new ArrayList<>();
             for (ColumnRef requiredCol : requiredCols) {
                 if (requiredCol.aliasName.equals(alias)) {
                     curRequiredCols.add(requiredCol);
@@ -123,18 +125,20 @@ public class SearchPreprocessor implements Preprocessor {
         String tableName = preSummary.aliasToFiltered.get(alias);
         log("Table name for " + alias + " is " + tableName);
 
-        /*
         // Determine rows satisfying unary predicate
-        List<Integer> satisfyingRows = Filter.executeToList(
-                unaryPred, tableName, preSummary.columnMapping);
+        List<Integer> satisfyingRows = null;
+        //Filter.executeToList(unaryPred, tableName, preSummary
+        // .columnMapping);
+
         // Materialize relevant rows and columns
         String filteredName = NamingConfig.FILTERED_PRE + alias;
-        List<String> columnNames = new ArrayList<String>();
+        List<String> columnNames = new ArrayList<>();
         for (ColumnRef colRef : requiredCols) {
             columnNames.add(colRef.columnName);
         }
         Materialize.execute(tableName, columnNames,
                 satisfyingRows, null, filteredName, true);
+
         // Update pre-processing summary
         for (ColumnRef srcRef : requiredCols) {
             String columnName = srcRef.columnName;
@@ -143,37 +147,10 @@ public class SearchPreprocessor implements Preprocessor {
         }
         preSummary.aliasToFiltered.put(alias, filteredName);
         long totalMillis = System.currentTimeMillis() - startMillis;
-        // Print out intermediate result table if logging is enabled
         if (LoggingConfig.PRINT_INTERMEDIATES) {
             RelationPrinter.print(filteredName);
-        } */
+        }
     }
 
-    /**
-     * Create indices on equality join columns if not yet available.
-     *
-     * @param query      query for which to create indices
-     * @param preSummary summary of pre-processing steps executed so far
-     * @throws Exception
-     */
-    private void createJoinIndices(QueryInfo query, Context preSummary)
-            throws Exception {
-        // Iterate over columns in equi-joins
-        long startMillis = System.currentTimeMillis();
-        query.equiJoinCols.parallelStream().forEach(queryRef -> {
-            try {
-                // Resolve query-specific column reference
-                ColumnRef dbRef = preSummary.columnMapping.get(queryRef);
-                log("Creating index for " + queryRef +
-                        " (query) - " + dbRef + " (DB)");
-                // Create index (unless it exists already)
-                Indexer.index(dbRef);
-            } catch (Exception e) {
-                System.err.println("Error creating index for " + queryRef);
-                e.printStackTrace();
-            }
-        });
-        long totalMillis = System.currentTimeMillis() - startMillis;
-        log("Created all indices in " + totalMillis + " ms.");
-    }
+
 }

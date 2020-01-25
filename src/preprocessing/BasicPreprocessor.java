@@ -4,7 +4,6 @@ import config.LoggingConfig;
 import config.NamingConfig;
 import config.PreConfig;
 import expressions.ExpressionInfo;
-import indexing.Indexer;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
 import operators.Filter;
@@ -22,8 +21,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static preprocessing.PreprocessorUtil.DBref;
-import static preprocessing.PreprocessorUtil.log;
+import static preprocessing.PreprocessorUtil.*;
 
 /**
  * Filters query tables via unary predicates and stores
@@ -263,33 +261,5 @@ public class BasicPreprocessor implements Preprocessor {
         if (LoggingConfig.PRINT_INTERMEDIATES) {
             RelationPrinter.print(filteredName);
         }
-    }
-
-    /**
-     * Create indices on equality join columns if not yet available.
-     *
-     * @param query      query for which to create indices
-     * @param preSummary summary of pre-processing steps executed so far
-     * @throws Exception
-     */
-    private void createJoinIndices(QueryInfo query, Context preSummary)
-            throws Exception {
-        // Iterate over columns in equi-joins
-        long startMillis = System.currentTimeMillis();
-        query.equiJoinCols.parallelStream().forEach(queryRef -> {
-            try {
-                // Resolve query-specific column reference
-                ColumnRef dbRef = preSummary.columnMapping.get(queryRef);
-                log("Creating index for " + queryRef +
-                        " (query) - " + dbRef + " (DB)");
-                // Create index (unless it exists already)
-                Indexer.index(dbRef);
-            } catch (Exception e) {
-                System.err.println("Error creating index for " + queryRef);
-                e.printStackTrace();
-            }
-        });
-        long totalMillis = System.currentTimeMillis() - startMillis;
-        log("Created all indices in " + totalMillis + " ms.");
     }
 }
