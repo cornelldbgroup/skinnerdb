@@ -161,22 +161,22 @@ public class SearchPreprocessor implements Preprocessor {
         }
     }
 
-    //--------------------------------------------------------------------------
-    private int lastRow = -1;
-
     private List<Integer> filter(String tableName,
                                  List<UnaryBoolEval> compiled) {
         List<Integer> result = new ArrayList<>();
         int cardinality = CatalogManager.getCardinality(tableName);
         // Evaluate predicate for each table row
+        ROW_LOOP:
         for (int rowCtr = 0; rowCtr < cardinality; ++rowCtr) {
             for (UnaryBoolEval eval : compiled) {
-                if (eval.evaluate(rowCtr) > 0) {
-                    result.add(rowCtr);
-                    break;
+                if (eval.evaluate(rowCtr) <= 0) {
+                    continue ROW_LOOP;
                 }
             }
+            result.add(rowCtr);
         }
         return result;
     }
+
+
 }
