@@ -8,6 +8,7 @@ import expressions.ExpressionInfo;
 import expressions.compilation.EvaluatorType;
 import expressions.compilation.ExpressionCompiler;
 import expressions.compilation.UnaryBoolEval;
+import net.sf.jsqlparser.expression.Expression;
 import query.ColumnRef;
 
 import java.util.ArrayList;
@@ -49,13 +50,14 @@ public class Filter {
      * @return compiled predicate evaluator
      * @throws Exception
      */
-    static UnaryBoolEval compilePred(ExpressionInfo unaryPred,
-                                     Map<ColumnRef, ColumnRef> columnMapping)
+    public static UnaryBoolEval compilePred(ExpressionInfo unaryPred,
+                                            Expression expr,
+                                            Map<ColumnRef, ColumnRef> columnMapping)
             throws Exception {
         ExpressionCompiler unaryCompiler = new ExpressionCompiler(
                 unaryPred, columnMapping, null, null,
                 EvaluatorType.UNARY_BOOLEAN);
-        unaryPred.finalExpression.accept(unaryCompiler);
+        expr.accept(unaryCompiler);
         return (UnaryBoolEval) unaryCompiler.getBoolEval();
     }
 
@@ -75,7 +77,8 @@ public class Filter {
         // Load required columns for predicate evaluation
         loadPredCols(unaryPred, columnMapping);
         // Compile unary predicate for fast evaluation
-        UnaryBoolEval predEval = compilePred(unaryPred, columnMapping);
+        UnaryBoolEval predEval = compilePred(unaryPred,
+                unaryPred.finalExpression, columnMapping);
         // Get cardinality of table referenced in predicate
         int cardinality = CatalogManager.getCardinality(tableName);
         // Generate result set
@@ -106,7 +109,8 @@ public class Filter {
         // Load required columns for predicate evaluation
         loadPredCols(unaryPred, columnMapping);
         // Compile unary predicate for fast evaluation
-        UnaryBoolEval unaryBoolEval = compilePred(unaryPred, columnMapping);
+        UnaryBoolEval unaryBoolEval = compilePred(unaryPred,
+                unaryPred.finalExpression, columnMapping);
         // Get cardinality of table referenced in predicate
         int cardinality = CatalogManager.getCardinality(tableName);
         // Initialize filter result
@@ -165,7 +169,7 @@ public class Filter {
      */
     static List<Integer> filterBatch(UnaryBoolEval unaryBoolEval,
                                      RowRange rowRange) {
-        List<Integer> result = new ArrayList<Integer>();
+        List<Integer> result = new ArrayList<>();
         // Evaluate predicate for each table row
         for (int rowCtr = rowRange.firstTuple;
              rowCtr <= rowRange.lastTuple; ++rowCtr) {

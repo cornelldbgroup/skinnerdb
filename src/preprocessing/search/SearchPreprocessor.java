@@ -4,6 +4,7 @@ import config.LoggingConfig;
 import config.NamingConfig;
 import config.PreConfig;
 import expressions.ExpressionInfo;
+import expressions.compilation.UnaryBoolEval;
 import net.sf.jsqlparser.expression.Expression;
 import operators.Materialize;
 import preprocessing.Context;
@@ -13,11 +14,10 @@ import query.ColumnRef;
 import query.QueryInfo;
 import statistics.PreStats;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
+import static operators.Filter.compilePred;
+import static operators.Filter.loadPredCols;
 import static preprocessing.PreprocessorUtil.*;
 
 public class SearchPreprocessor implements Preprocessor {
@@ -83,8 +83,8 @@ public class SearchPreprocessor implements Preprocessor {
             if (curUnaryPred != null && PreConfig.PRE_FILTER) {
                 try {
                     List<Expression> conjuncts = curUnaryPred.conjuncts;
-                    filterProject(conjuncts, alias, curRequiredCols,
-                            preSummary);
+                    filterProject(curUnaryPred, conjuncts, alias,
+                            curRequiredCols, preSummary);
                 } catch (Exception e) {
                     System.err.println("Error filtering " + alias);
                     e.printStackTrace();
@@ -117,7 +117,8 @@ public class SearchPreprocessor implements Preprocessor {
      * @param requiredCols project on those columns
      * @param preSummary   summary of pre-processing steps
      */
-    private void filterProject(List<Expression> predicates, String alias,
+    private void filterProject(ExpressionInfo unaryPred,
+                               List<Expression> predicates, String alias,
                                List<ColumnRef> requiredCols,
                                Context preSummary) throws Exception {
         long startMillis = System.currentTimeMillis();
@@ -126,9 +127,13 @@ public class SearchPreprocessor implements Preprocessor {
         log("Table name for " + alias + " is " + tableName);
 
         // Determine rows satisfying unary predicate
-        List<Integer> satisfyingRows = null;
-        //Filter.executeToList(unaryPred, tableName, preSummary
-        // .columnMapping);
+        loadPredCols(unaryPred, preSummary.columnMapping);
+        List<UnaryBoolEval> compiled = new ArrayList<>(predicates.size());
+        for (Expression expression : predicates) {
+            compiled.add(compilePred(unaryPred, expression,
+                    preSummary.columnMapping));
+        }
+        List<Integer> satisfyingRows = null;//filter();
 
         // Materialize relevant rows and columns
         String filteredName = NamingConfig.FILTERED_PRE + alias;
@@ -153,4 +158,9 @@ public class SearchPreprocessor implements Preprocessor {
     }
 
 
+    private List<Integer> filter(ExpressionInfo unaryPred, String tableName,
+                                 List<UnaryBoolEval> compiled,
+                                 Map<ColumnRef, ColumnRef> columnMapping) {
+        return null;
+    }
 }
