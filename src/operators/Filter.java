@@ -27,7 +27,6 @@ import predicate.NonEquiNode;
 import predicate.NonEquiNodesTest;
 import query.ColumnRef;
 import query.QueryInfo;
-import sun.java2d.xr.XRRenderer;
 import types.JavaType;
 
 /**
