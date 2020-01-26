@@ -18,9 +18,10 @@ public class BudgetedFilter {
         this.compiled = compiled;
         this.cardinality = CatalogManager.getCardinality(tableName);
         this.completedTuples = 0;
+        this.index = -1;
     }
 
-    private void executeWithBudget(int budget, int[] order) {
+    public void executeWithBudget(int budget, int[] order) {
         int remainingBudget = budget;
         // last completed row index
         int currentIndex = index;
@@ -47,5 +48,9 @@ public class BudgetedFilter {
 
     public int getCompletedTuples() {
         return completedTuples;
+    }
+
+    public List<Integer> getResult() {
+        return result;
     }
 }
