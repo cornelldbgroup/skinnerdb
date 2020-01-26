@@ -9,7 +9,6 @@ import java.util.List;
 public class BudgetedFilter {
     private final int cardinality;
     private int index;
-    private int completedTuples;
     private List<Integer> result;
     private List<UnaryBoolEval> compiled;
 
@@ -17,11 +16,10 @@ public class BudgetedFilter {
         this.result = new ArrayList<>();
         this.compiled = compiled;
         this.cardinality = CatalogManager.getCardinality(tableName);
-        this.completedTuples = 0;
         this.index = -1;
     }
 
-    public void executeWithBudget(int budget, int[] order) {
+    public int executeWithBudget(int budget, int[] order) {
         int remainingBudget = budget;
         // last completed row index
         int currentIndex = index;
@@ -31,7 +29,8 @@ public class BudgetedFilter {
             currentIndex++;
             for (int predIndex : order) {
                 --remainingBudget;
-                if (compiled.get(predIndex).evaluate(currentIndex) <= 0) {
+                if (compiled.get(predIndex).evaluate(currentIndex) <= 0
+                        || remainingBudget <= 0) {
                     continue ROW_LOOP;
                 }
             }
@@ -39,15 +38,11 @@ public class BudgetedFilter {
         }
 
         index = currentIndex;
-        completedTuples = currentIndex - index;
+        return currentIndex - index;
     }
 
     public boolean isFinished() {
         return index == cardinality - 1;
-    }
-
-    public int getCompletedTuples() {
-        return completedTuples;
     }
 
     public List<Integer> getResult() {
