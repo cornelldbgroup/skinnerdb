@@ -5,6 +5,78 @@
     <groupId>skinnerdb</groupId>
     <artifactId>skinnerdb</artifactId>
     <version>0.0.1</version>
+    <profiles>
+        <profile>
+            <id>CreateDb</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <artifactId>maven-assembly-plugin</artifactId>
+                        <version>2.4</version>
+                        <executions>
+                            <execution>
+                                <id>build-createdb</id>
+                                <configuration>
+                                    <appendAssemblyId>false</appendAssemblyId>
+                                    <archive>
+                                        <manifest>
+                                            <mainClass>tools.CreateDB
+                                            </mainClass>
+                                        </manifest>
+                                    </archive>
+                                    <descriptorRefs>
+                                        <descriptorRef>jar-with-dependencies
+                                        </descriptorRef>
+                                    </descriptorRefs>
+                                    <finalName>CreateDb</finalName>
+                                    <attach>false</attach>
+                                </configuration>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>single</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <id>BenchAndVerify</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <artifactId>maven-assembly-plugin</artifactId>
+                        <version>2.4</version>
+                        <executions>
+                            <execution>
+                                <id>build-BenchAndVerify</id>
+                                <configuration>
+                                    <appendAssemblyId>false</appendAssemblyId>
+                                    <archive>
+                                        <manifest>
+                                            <mainClass>benchmark.BenchAndVerify
+                                            </mainClass>
+                                        </manifest>
+                                    </archive>
+                                    <descriptorRefs>
+                                        <descriptorRef>jar-with-dependencies
+                                        </descriptorRef>
+                                    </descriptorRefs>
+                                    <finalName>BenchAndVerify</finalName>
+                                    <attach>false</attach>
+                                </configuration>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>single</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
     <build>
         <sourceDirectory>src</sourceDirectory>
         <testSourceDirectory>test</testSourceDirectory>
@@ -55,48 +127,15 @@
                             <goal>single</goal>
                         </goals>
                     </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>2.4</version>
+                <executions>
                     <execution>
-                        <id>build-createdb</id>
-                        <configuration>
-                            <appendAssemblyId>false</appendAssemblyId>
-                            <archive>
-                                <manifest>
-                                    <mainClass>tools.CreateDB</mainClass>
-                                </manifest>
-                            </archive>
-                            <descriptorRefs>
-                                <descriptorRef>jar-with-dependencies
-                                </descriptorRef>
-                            </descriptorRefs>
-                            <finalName>CreateDb</finalName>
-                            <attach>false</attach>
-                        </configuration>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>single</goal>
-                        </goals>
-                    </execution>
-                    <execution>
-                        <id>build-BenchAndVerify</id>
-                        <configuration>
-                            <appendAssemblyId>false</appendAssemblyId>
-                            <archive>
-                                <manifest>
-                                    <mainClass>benchmark.BenchAndVerify
-                                    </mainClass>
-                                </manifest>
-                            </archive>
-                            <descriptorRefs>
-                                <descriptorRef>jar-with-dependencies
-                                </descriptorRef>
-                            </descriptorRefs>
-                            <finalName>BenchAndVerify</finalName>
-                            <attach>false</attach>
-                        </configuration>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>single</goal>
-                        </goals>
+                        <id>default-jar</id>
+                        <phase>none</phase>
                     </execution>
                 </executions>
             </plugin>
