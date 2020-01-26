@@ -162,14 +162,23 @@ public class SearchPreprocessor implements Preprocessor {
 
     private List<Integer> filter(String tableName,
                                  List<UnaryBoolEval> compiled) {
+        long roundCtr = 0;
+        int nrCompiled = compiled.size();
         BudgetedFilter filterOp = new BudgetedFilter(tableName, compiled);
-        int[] order = new int[compiled.size()];
-        for (int i = 0; i < order.length; i++) {
-            order[i] = i;
-        }
+        int[] order = new int[nrCompiled];
+        FilterUCTNode root = new FilterUCTNode(filterOp, roundCtr, nrCompiled);
+        long nextForget = 1;
+
+        boolean FORGET = true;
 
         while (!filterOp.isFinished()) {
-            filterOp.executeWithBudget(100, order);
+            ++roundCtr;
+            int reward = root.sample(roundCtr, order);
+
+            if (FORGET && roundCtr == nextForget) {
+                root = new FilterUCTNode(filterOp, roundCtr, nrCompiled);
+                nextForget *= 10;
+            }
         }
 
         return filterOp.getResult();
