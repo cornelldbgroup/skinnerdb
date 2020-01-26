@@ -136,7 +136,7 @@ public class SearchPreprocessor implements Preprocessor {
             compiled.add(compilePred(unaryPred, expression,
                     preSummary.columnMapping));
         }
-        List<Integer> satisfyingRows = filter(tableName, compiled);
+        List<Integer> satisfyingRows = filterUCT(tableName, compiled);
 
         // Materialize relevant rows and columns
         String filteredName = NamingConfig.FILTERED_PRE + alias;
@@ -160,8 +160,8 @@ public class SearchPreprocessor implements Preprocessor {
         }
     }
 
-    private List<Integer> filter(String tableName,
-                                 List<UnaryBoolEval> compiled) {
+    private List<Integer> filterUCT(String tableName,
+                                    List<UnaryBoolEval> compiled) {
         long roundCtr = 0;
         int nrCompiled = compiled.size();
         BudgetedFilter filterOp = new BudgetedFilter(tableName, compiled);
