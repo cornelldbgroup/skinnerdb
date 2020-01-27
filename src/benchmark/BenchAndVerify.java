@@ -71,6 +71,7 @@ public class BenchAndVerify {
         System.out.println("Loading data ...");
         GeneralConfig.inMemory = true;
         BufferManager.loadDB();
+        CatalogManager.generateStats();
         System.out.println("Data loaded.");
         Indexer.indexAll(StartupConfig.INDEX_CRITERIA);
         // Read all queries from files
@@ -97,7 +98,7 @@ public class BenchAndVerify {
             QueryInfo query = new QueryInfo(entry.getValue(),
                     false, -1, -1, null);
             Context preSummary =
-					PreprocessorManager.getPreprocessor().process(query);
+                    PreprocessorManager.getPreprocessor().process(query);
             long preMillis = System.currentTimeMillis() - startMillis;
             JoinProcessor.process(query, preSummary);
             long postStartMillis = System.currentTimeMillis();
@@ -110,7 +111,7 @@ public class BenchAndVerify {
                 // Unary predicates must refer to one table
                 if (expr.aliasesMentioned.size() != 1) {
                     throw new Exception("Alias " + expr + " must mention one " +
-							"table!");
+                            "table!");
                 }
                 // Get cardinality after PG filtering
                 String alias = expr.aliasesMentioned.iterator().next();
@@ -135,10 +136,10 @@ public class BenchAndVerify {
                 TableInfo filteredTable = CatalogManager.currentDB.
                         nameToTable.get(filteredName);
                 String columnName =
-						filteredTable.nameToCol.keySet().iterator().next();
+                        filteredTable.nameToCol.keySet().iterator().next();
                 ColumnRef colRef = new ColumnRef(filteredName, columnName);
                 int skinnerCardinality =
-						BufferManager.colToData.get(colRef).getCardinality();
+                        BufferManager.colToData.get(colRef).getCardinality();
                 System.out.println("Skinner card:\t" + skinnerCardinality);
                 if (pgCardinality != skinnerCardinality) {
                     throw new Exception("Inconsistent cardinality for "
