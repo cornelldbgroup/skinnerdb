@@ -1,2 +1,2 @@
-load Uberlandia_1 data/Uberlandia_1.sample.csv , NULL;
+load uberlandia_1 uberlandia/data/uberlandia_1.csv | null;
 compress;
