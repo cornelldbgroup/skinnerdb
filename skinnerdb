@@ -7,5 +7,5 @@ if [ ! -f ${DIR}/build/Skinner.jar ]; then
    exit 1
 fi
 
-java -jar -Xmx16G -XX:+UseConcMarkSweepGC build/Skinner.jar $*
+java -jar -Xmx80G -XX:+UseConcMarkSweepGC build/Skinner.jar $*
 
