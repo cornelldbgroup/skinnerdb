@@ -9,12 +9,10 @@ import expressions.compilation.EvaluatorType;
 import expressions.compilation.ExpressionCompiler;
 import expressions.compilation.UnaryBoolEval;
 import net.sf.jsqlparser.expression.Expression;
+import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
 import query.ColumnRef;
 
-import java.util.ArrayList;
-import java.util.BitSet;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -76,9 +74,29 @@ public class Filter {
             throws Exception {
         // Load required columns for predicate evaluation
         loadPredCols(unaryPred, columnMapping);
+
+        Expression combinedPredicate;
+        if (unaryPred.conjuncts.size() > 1) {
+            Collections.sort(unaryPred.conjuncts,
+                    Comparator.comparing(p -> p.toString().length()));
+
+            int nextConjunct = unaryPred.conjuncts.size() - 2;
+            AndExpression conjunction =
+                    new AndExpression(unaryPred.conjuncts.get(nextConjunct),
+                            unaryPred.conjuncts.get(nextConjunct + 1));
+            while (--nextConjunct >= 0) {
+                conjunction =
+                        new AndExpression(unaryPred.conjuncts.get(nextConjunct),
+                                conjunction);
+            }
+            combinedPredicate = conjunction;
+        } else {
+            combinedPredicate = unaryPred.finalExpression;
+        }
+
         // Compile unary predicate for fast evaluation
         UnaryBoolEval predEval = compilePred(unaryPred,
-                unaryPred.finalExpression, columnMapping);
+                combinedPredicate, columnMapping);
         // Get cardinality of table referenced in predicate
         int cardinality = CatalogManager.getCardinality(tableName);
         // Generate result set
@@ -116,7 +134,7 @@ public class Filter {
         // Initialize filter result
         List<Integer> result = null;
         // Choose between sequential and parallel processing
-        if (true || cardinality <= ParallelConfig.PRE_BATCH_SIZE) {
+        if (cardinality <= ParallelConfig.PRE_BATCH_SIZE) {
             RowRange allTuples = new RowRange(0, cardinality - 1);
             result = filterBatch(unaryBoolEval, allTuples);
         } else {
