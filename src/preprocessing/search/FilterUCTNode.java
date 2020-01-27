@@ -153,12 +153,12 @@ public class FilterUCTNode {
         return bestAction;
     }
 
-    public int sample(long roundCtr, int[] order) {
+    public int sample(long roundCtr, int[] order, int budget) {
         if (nrActions == 0) {
-            return filterOp.executeWithBudget(250, order);
+            return filterOp.executeWithBudget(budget, order);
         }
 
-        int action = selectAction(SelectionPolicy.UCB1);
+        int action = selectAction(SelectionPolicy.MAX_REWARD);
         int predicate = actionToPredicate[action];
         order[treeLevel] = predicate;
         boolean canExpand = createdIn != roundCtr;
@@ -168,14 +168,14 @@ public class FilterUCTNode {
 
         FilterUCTNode child = childNodes[action];
         int reward = (child != null) ?
-                child.sample(roundCtr, order) :
-                playout(order);
+                child.sample(roundCtr, order, budget) :
+                playout(order, budget);
 
         updateStatistics(action, reward);
         return reward;
     }
 
-    private int playout(int[] order) {
+    private int playout(int[] order, int budget) {
         int lastPred = order[treeLevel];
 
         Collections.shuffle(unchosenPreds);
@@ -188,7 +188,7 @@ public class FilterUCTNode {
             order[posCtr] = nextTable;
         }
 
-        return filterOp.executeWithBudget(250, order);
+        return filterOp.executeWithBudget(budget, order);
     }
 
     void updateStatistics(int selectedAction, int reward) {

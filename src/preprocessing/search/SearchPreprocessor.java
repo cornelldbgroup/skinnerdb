@@ -169,16 +169,19 @@ public class SearchPreprocessor implements Preprocessor {
         FilterUCTNode root = new FilterUCTNode(filterOp, roundCtr, nrCompiled);
         long nextForget = 1;
 
-        boolean FORGET = true;
+        boolean FORGET = false;
+        int budget = 100;
 
         while (!filterOp.isFinished()) {
             ++roundCtr;
-            int reward = root.sample(roundCtr, order);
+            int reward = root.sample(roundCtr, order, budget);
 
             if (FORGET && roundCtr == nextForget) {
                 root = new FilterUCTNode(filterOp, roundCtr, nrCompiled);
                 nextForget *= 10;
             }
+
+            budget *= 5;
         }
 
         return filterOp.getResult();
