@@ -60,23 +60,21 @@ public class Filter {
     }
 
     /**
-     * Returns list of indices of rows satisfying given
-     * unary predicate.s
+     * Returns bit set indicating which rows satisfy a given unary predicate.
      *
      * @param unaryPred     unary predicate
-     * @param tableName     name of DB table to which predicate applies
-     * @param columnMapping maps query columns to buffered columns -
-     *                      assume identity mapping if null is specified.
-     * @return list of satisfying row indices
+     * @param tableName     name of DB table to which predicate refers
+     * @param columnMapping maps query to database columns
+     * @return bit set indicating satisfying rows
+     * @throws Exception
      */
-    public static List<Integer> executeToList(
-            ExpressionInfo unaryPred,
-            String tableName,
-            Map<ColumnRef, ColumnRef> columnMapping)
+    public static BitSet executeToBitSet(ExpressionInfo unaryPred,
+                                         String tableName, Map<ColumnRef,
+            ColumnRef> columnMapping)
             throws Exception {
         // Load required columns for predicate evaluation
         loadPredCols(unaryPred, columnMapping);
-        // Compile unary predicate for fast evaluation
+
         Expression combinedPredicate;
         if (unaryPred.conjuncts.size() > 1) {
             Collections.sort(unaryPred.conjuncts,
@@ -97,8 +95,40 @@ public class Filter {
         }
 
         // Compile unary predicate for fast evaluation
-        UnaryBoolEval unaryBoolEval = compilePred(unaryPred,
+        UnaryBoolEval predEval = compilePred(unaryPred,
                 combinedPredicate, columnMapping);
+        // Get cardinality of table referenced in predicate
+        int cardinality = CatalogManager.getCardinality(tableName);
+        // Generate result set
+        BitSet result = new BitSet(cardinality);
+        for (int i = 0; i < cardinality; ++i) {
+            if (predEval.evaluate(i) > 0) {
+                result.set(i);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Returns list of indices of rows satisfying given
+     * unary predicate.s
+     *
+     * @param unaryPred     unary predicate
+     * @param tableName     name of DB table to which predicate applies
+     * @param columnMapping maps query columns to buffered columns -
+     *                      assume identity mapping if null is specified.
+     * @return list of satisfying row indices
+     */
+    public static List<Integer> executeToList(
+            ExpressionInfo unaryPred,
+            String tableName,
+            Map<ColumnRef, ColumnRef> columnMapping)
+            throws Exception {
+        // Load required columns for predicate evaluation
+        loadPredCols(unaryPred, columnMapping);
+        // Compile unary predicate for fast evaluation
+        UnaryBoolEval unaryBoolEval = compilePred(unaryPred,
+                unaryPred.finalExpression, columnMapping);
         // Get cardinality of table referenced in predicate
         int cardinality = CatalogManager.getCardinality(tableName);
         // Initialize filter result
