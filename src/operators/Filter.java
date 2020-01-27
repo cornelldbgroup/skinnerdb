@@ -116,7 +116,7 @@ public class Filter {
         // Initialize filter result
         List<Integer> result = null;
         // Choose between sequential and parallel processing
-        if (cardinality <= ParallelConfig.PRE_BATCH_SIZE) {
+        if (true || cardinality <= ParallelConfig.PRE_BATCH_SIZE) {
             RowRange allTuples = new RowRange(0, cardinality - 1);
             result = filterBatch(unaryBoolEval, allTuples);
         } else {
