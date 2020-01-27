@@ -1,1 +1,1 @@
-SELECT "Uberlandia_1"."nome da sit matricula (situacao detalhada)" AS "nome da sit matricula (situacao detalhada)" FROM "Uberlandia_1" GROUP BY "Uberlandia_1"."nome da sit matricula (situacao detalhada)" LIMIT 28;
+SELECT uberlandia_1.nome_da_sit_matricula_situacao_detalhada AS nome_da_sit_matricula_situacao_detalhada FROM uberlandia_1 GROUP BY uberlandia_1.nome_da_sit_matricula_situacao_detalhada LIMIT 28;
