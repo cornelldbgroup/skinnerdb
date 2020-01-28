@@ -196,17 +196,15 @@ public class LockFreeTask implements Callable<LockFreeResult>{
                 System.out.println("forget");
             }
 
-            if (roundCtr == 50000) {
-                List<String>[] logs = new List[1];
-                for (int i = 0; i < 1; i++) {
-                    logs[i] = joinOp.logs;
-                }
-                LogUtils.writeLogs(logs, "verbose/seq/" + QueryStats.queryName);
-                System.out.println("Write to logs!");
-                System.exit(0);
-            }
-//            joinOp.writeLog("Episode Time: " + (end - start) + "\tReward: " + reward);
-
+//            if (roundCtr == 50000) {
+//                List<String>[] logs = new List[1];
+//                for (int i = 0; i < 1; i++) {
+//                    logs[i] = joinOp.logs;
+//                }
+//                LogUtils.writeLogs(logs, "verbose/seq/" + QueryStats.queryName);
+//                System.out.println("Write to logs!");
+//                System.exit(0);
+//            }
         }
 
         // Update statistics
