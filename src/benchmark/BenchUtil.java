@@ -107,13 +107,14 @@ public class BenchUtil {
 		benchOut.print(JoinStats.nrUniqueIndexLookups + "\t");
 		benchOut.print(JoinStats.nrUctNodes + "\t");
 		benchOut.print(JoinStats.nrPlansTried + "\t");
-		benchOut.print(JoinStats.skinnerJoinCards + "\t");
+		benchOut.print(JoinStats.lastJoinCard + "\t");
 		benchOut.print(JoinStats.nrSamples + "\t");
 		benchOut.print(JoinStats.avgReward + "\t");
 		benchOut.print(JoinStats.maxReward + "\t");
 		benchOut.print(JoinStats.totalWork + "\t");
 		benchOut.print(PreStats.filterTime + "\t");
 		benchOut.print(PreStats.indexTime + "\t");
+		benchOut.print(JoinStats.skinnerJoinCards + "\t");
 		benchOut.print(Arrays.toString(PreStats.subPreMillis.toArray()) + "\t");
 		benchOut.print(Arrays.toString(JoinStats.subExeTime.toArray()) + "\t");
 		benchOut.print(Arrays.toString(JoinStats.subMateriazed.toArray()) + "\t");
