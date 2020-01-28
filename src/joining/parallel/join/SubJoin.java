@@ -183,7 +183,8 @@ public class SubJoin extends SPJoin {
      * @param tupleIndices
      * @return
      */
-    boolean evaluateInScope(List<JoinPartitionIndexWrapper> indexWrappers, List<NonEquiNode> preds, int[] tupleIndices) {
+    boolean evaluateInScope(List<JoinPartitionIndexWrapper> indexWrappers, List<NonEquiNode> preds,
+                            int[] tupleIndices, int nextTable) {
         if (indexWrappers.isEmpty() && preds.isEmpty()) {
             return true;
         }
@@ -194,7 +195,7 @@ public class SubJoin extends SPJoin {
         }
         // evaluate non-equi join predicates
         for (NonEquiNode pred : preds) {
-            if (!pred.evaluate(tupleIndices)) {
+            if (!pred.evaluate(tupleIndices, nextTable, cardinalities[nextTable])) {
                 return false;
             }
         }
@@ -238,7 +239,7 @@ public class SubJoin extends SPJoin {
                         continue;
                     }
                 }
-                int nextRaw = wrapper.nextIndex(tupleIndices, new int[0]);
+                int nextRaw = wrapper.nextIndex(tupleIndices, null);
                 if (nextRaw < 0 || nextRaw == nextCardinality) {
                     tupleIndices[nextTable] = nextCardinality;
                     break;
@@ -282,7 +283,7 @@ public class SubJoin extends SPJoin {
         List<List<NonEquiNode>> applicablePreds = plan.nonEquiNodes;
         // Initialize state and flags to prepare budgeted execution
 //        int joinIndex = state.lastIndex;
-        int joinIndex = 1;
+        int joinIndex = 0;
         System.arraycopy(state.tupleIndices, 0, tupleIndices, 0, nrTables);
         int remainingBudget = budget;
         // Number of completed tuples added
@@ -304,9 +305,8 @@ public class SubJoin extends SPJoin {
             if ((PreConfig.PRE_FILTER || unaryPred == null ||
                     unaryPred.evaluate(tupleIndices)>0) &&
 //                    evaluateAll(applicablePreds.get(joinIndex), tupleIndices)
-                    evaluateInScope(joinIndices.get(joinIndex), applicablePreds.get(joinIndex), tupleIndices)
+                    evaluateInScope(joinIndices.get(joinIndex), applicablePreds.get(joinIndex), tupleIndices, nextTable)
             ) {
-//                ++statsInstance.nrTuples;
                 // Do we have a complete result row?
                 if(joinIndex == plan.joinOrder.order.length - 1) {
                     // Complete result row -> add to result

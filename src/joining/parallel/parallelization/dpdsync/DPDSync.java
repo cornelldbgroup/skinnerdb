@@ -54,6 +54,7 @@ public class DPDSync extends Parallelization {
         // Initialize multi-way join operator
         int nrTables = query.nrJoined;
         int nrSplits = query.equiJoinPreds.size();
+
         ParallelProgressTracker tracker = new ParallelProgressTracker(nrTables, nrThreads, nrSplits);
         for (int i = 0; i < nrThreads; i++) {
             ModJoin modJoin = new ModJoin(query, context, budget, nrThreads, i, predToEval, predToComp);

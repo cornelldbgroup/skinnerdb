@@ -80,7 +80,7 @@ public class BenchUtil {
 		benchOut.println("Query\tMillis\tPreMillis\tJoinMillis\tExeMillis\tPostMillis\tTuples\t"
 				+ "Iterations\tLookups\tNrIndexEntries\tnrUniqueLookups\t"
 				+ "NrUctNodes\tNrPlans\tJoinCard\tNrSamples\tAvgReward\t"
-				+ "MaxReward\tTotalWork\tFilterMillis\tIndexMillis\tSubPre\tSubJoin\tSubMaterial\tSubPost");
+				+ "MaxReward\tTotalWork\tFilterMillis\tIndexMillis\tSubPre\tSubJoin\tSubMaterial\tSubPost\tAllCases");
 	}
 	/**
 	 * Writes out statistics concerning last query execution
@@ -117,7 +117,8 @@ public class BenchUtil {
 		benchOut.print(Arrays.toString(PreStats.subPreMillis.toArray()) + "\t");
 		benchOut.print(Arrays.toString(JoinStats.subExeTime.toArray()) + "\t");
 		benchOut.print(Arrays.toString(JoinStats.subMateriazed.toArray()) + "\t");
-		benchOut.println(Arrays.toString(PostStats.subPostMillis.toArray()));
+		benchOut.print(Arrays.toString(PostStats.subPostMillis.toArray()) + "\t");
+		benchOut.println(Arrays.toString(JoinStats.subAllExeTime.toArray()));
 		benchOut.flush();
 	}
 }

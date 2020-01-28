@@ -28,11 +28,15 @@ public class ParallelConfig {
 	/**
 	 * Maximal number of tuples per batch during pre-processing.
 	 */
-	public static int PRE_THREADS = 24;
+	public static int PRE_THREADS = 48;
 	/**
 	 * The minimal size of sparse columns.
 	 */
 	public static int SPARSE_KEY_SIZE = 10000;
+	/**
+	 * The minimal size of sparse columns.
+	 */
+	public static int SPARSE_FILTER_SIZE = 100;
 	/**
 	 * The minimum size of partitioned table
 	 */
@@ -46,9 +50,9 @@ public class ParallelConfig {
 	 * 4: Root parallelization
 	 * 5: Leaf parallelization
 	 * 6: Tree parallelization
-	 *
+	 * 7: Extended PSS
 	 */
-	public static int PARALLEL_SPEC = 3;
+	public static int PARALLEL_SPEC = 1;
 
 	public static final boolean HEURISTIC_SHARING = false;
 	public static final boolean HEURISTIC_STOP = true;

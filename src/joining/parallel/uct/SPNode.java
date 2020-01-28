@@ -7,6 +7,7 @@ import query.QueryInfo;
 
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.stream.IntStream;
 
 /**
  * Represents node in search parallel UCT search tree.
@@ -36,6 +37,10 @@ public class SPNode {
      * Assigns each action index to child node.
      */
     public final SPNode[] childNodes;
+    /**
+     * The table to join.
+     */
+    public final int joinedTable;
     /**
      * Number of times this node was visited.
      */
@@ -120,6 +125,7 @@ public class SPNode {
     public SPNode(long roundCtr, QueryInfo query,
                   boolean useHeuristic, int nrThreads) {
         // Count node generation
+        joinedTable = 0;
         this.query = query;
         this.nrTables = query.nrJoined;
         this.nrThreads = nrThreads;
@@ -141,7 +147,10 @@ public class SPNode {
         this.useHeuristic = useHeuristic;
         recommendedActions = new HashSet<>();
         for (int action = 0; action < nrActions; ++action) {
-            recommendedActions.add(action);
+            int table = nextTable[action];
+            if (!query.temporaryTables.contains(table)) {
+                recommendedActions.add(action);
+            }
         }
         this.nodeStatistics = new NodeStatistics[nrThreads];
 
@@ -151,7 +160,10 @@ public class SPNode {
 
         this.prioritySet = new LinkedList<>();
         for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
-            prioritySet.add(actionCtr);
+            int table = nextTable[actionCtr];
+            if (!query.temporaryTables.contains(table)) {
+                prioritySet.add(actionCtr);
+            }
         }
         this.action = 0;
         nextForget = new int[nrThreads];
@@ -166,6 +178,7 @@ public class SPNode {
      */
     public SPNode(long roundCtr, SPNode parent, int joinedTable, int action) {
         // Count node generation
+        this.joinedTable = joinedTable;
         createdIn = roundCtr;
         treeLevel = parent.treeLevel + 1;
         nrActions = parent.nrActions - 1;
@@ -447,6 +460,61 @@ public class SPNode {
                 updateStatistics(action, reward, tid);
             }
             return reward;
+        }
+    }
+
+    public void maxJoinOrder(int[] joinOrder, int tid) {
+        if (nrActions > 0) {
+            int maxAction = -1;
+            double maxRewad = -1;
+            NodeStatistics threadStats = nodeStatistics[tid];
+            for(Integer recAction : recommendedActions) {
+                int threadTries = threadStats.nrTries[recAction];
+                double reward = 0;
+                if (threadTries != 0) {
+                    reward = threadStats.accumulatedReward[recAction] / threadTries;
+                }
+                if (reward > maxRewad) {
+                    maxRewad = reward;
+                    maxAction = recAction;
+                }
+            }
+
+            int table = nextTable[maxAction];
+            joinOrder[treeLevel] = table;
+            SPNode child = childNodes[maxAction];
+            if (child == null) {
+                int lastTable = joinOrder[treeLevel];
+                Set<Integer> newlyJoined = new HashSet<>(joinedTables);
+                newlyJoined.add(lastTable);
+                // Iterate over join order positions to fill
+                List<Integer> unjoinedTablesShuffled = new ArrayList<>(unjoinedTables);
+                Collections.shuffle(unjoinedTablesShuffled, ThreadLocalRandom.current());
+                for (int posCtr = treeLevel + 1; posCtr < nrTables; ++posCtr) {
+                    boolean foundTable = false;
+                    for (int joinedTable : unjoinedTablesShuffled) {
+                        if (!newlyJoined.contains(joinedTable) &&
+                                query.connected(newlyJoined, joinedTable)) {
+                            joinOrder[posCtr] = joinedTable;
+                            newlyJoined.add(joinedTable);
+                            foundTable = true;
+                            break;
+                        }
+                    }
+                    if (!foundTable) {
+                        for (int joinedTable : unjoinedTablesShuffled) {
+                            if (!newlyJoined.contains(joinedTable)) {
+                                joinOrder[posCtr] = joinedTable;
+                                newlyJoined.add(joinedTable);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            else {
+                child.maxJoinOrder(joinOrder, tid);
+            }
         }
     }
 

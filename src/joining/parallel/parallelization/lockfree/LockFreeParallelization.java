@@ -1,7 +1,9 @@
 package joining.parallel.parallelization.lockfree;
 
+import config.JoinConfig;
 import config.LoggingConfig;
 import expressions.compilation.KnaryBoolEval;
+import joining.progress.ProgressTracker;
 import joining.result.ResultTuple;
 import joining.parallel.join.DPJoin;
 import joining.parallel.join.ModJoin;
@@ -51,11 +53,20 @@ public class LockFreeParallelization extends Parallelization {
         // Initialize multi-way join operator
         int nrTables = query.nrJoined;
         int nrSplits = query.equiJoinPreds.size() + nrTables;
-        ParallelProgressTracker tracker = new ParallelProgressTracker(nrTables, nrThreads, nrSplits);
-        for (int i = 0; i < nrThreads; i++) {
-            ModJoin modJoin = new ModJoin(query, context, budget, nrThreads, i, predToEval, predToComp);
-            modJoin.tracker = tracker;
-            dpJoins.add(modJoin);
+        if (JoinConfig.NEWTRACKER && nrThreads > 1) {
+            ParallelProgressTracker tracker = new ParallelProgressTracker(nrTables, nrThreads, nrSplits);
+            for (int i = 0; i < nrThreads; i++) {
+                ModJoin modJoin = new ModJoin(query, context, budget, nrThreads, i, predToEval, predToComp);
+                modJoin.tracker = tracker;
+                dpJoins.add(modJoin);
+            }
+        }
+        else {
+            for (int i = 0; i < nrThreads; i++) {
+                ModJoin modJoin = new ModJoin(query, context, budget, nrThreads, i, predToEval, predToComp);
+                modJoin.oldTracker = new ProgressTracker(nrTables, modJoin.cardinalities);
+                dpJoins.add(modJoin);
+            }
         }
     }
 
@@ -101,10 +112,12 @@ public class LockFreeParallelization extends Parallelization {
             }
 
         });
-        JoinStats.nrSamples = 0;
+        long nrSamples = 0;
         for (DPJoin joinOp: dpJoins) {
-            JoinStats.nrSamples = Math.max(joinOp.roundCtr, JoinStats.nrSamples);
+            nrSamples = Math.max(joinOp.roundCtr, nrSamples);
+            JoinStats.nrTuples += joinOp.statsInstance.nrTuples;
         }
+        JoinStats.nrSamples += nrSamples;
         // Write log to the local file.
         if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
             LogUtils.writeLogs(logs, "verbose/lockFree/" + QueryStats.queryName);

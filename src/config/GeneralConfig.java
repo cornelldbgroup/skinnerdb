@@ -28,4 +28,8 @@ public class GeneralConfig {
 	 * Number of test cases.
 	 */
 	public static int TEST_CASE = 5;
+	/**
+	 * Whether it is the test case.
+	 */
+	public static boolean ISTESTCASE = false;
 }

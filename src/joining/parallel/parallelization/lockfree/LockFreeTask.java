@@ -1,5 +1,6 @@
 package joining.parallel.parallelization.lockfree;
 
+import config.JoinConfig;
 import config.ParallelConfig;
 import joining.parallel.uct.SimpleUctNode;
 import joining.result.ResultTuple;
@@ -7,9 +8,11 @@ import joining.uct.SelectionPolicy;
 import joining.parallel.join.DPJoin;
 import joining.parallel.parallelization.EndPlan;
 import joining.parallel.uct.DPNode;
+import joining.uct.UctNode;
 import logs.LogUtils;
 import preprocessing.Context;
 import query.QueryInfo;
+import statistics.JoinStats;
 import statistics.QueryStats;
 
 import java.util.ArrayList;
@@ -25,6 +28,9 @@ public class LockFreeTask implements Callable<LockFreeResult>{
      * Query to process.
      */
     private final QueryInfo query;
+    /**
+     * context after pre-processing.
+     */
     private final Context context;
     /**
      * The root of parallel UCT tree.
@@ -182,6 +188,22 @@ public class LockFreeTask implements Callable<LockFreeResult>{
                         System.out.println(tid + ": bad restart");
                     }
                 }
+            }
+            // Consider memory loss
+            if (JoinConfig.FORGET && ParallelConfig.EXE_THREADS == 1 && roundCtr==nextForget) {
+                root = new DPNode(roundCtr, query, true, 1);
+                nextForget *= 10;
+                System.out.println("forget");
+            }
+
+            if (roundCtr == 50000) {
+                List<String>[] logs = new List[1];
+                for (int i = 0; i < 1; i++) {
+                    logs[i] = joinOp.logs;
+                }
+                LogUtils.writeLogs(logs, "verbose/seq/" + QueryStats.queryName);
+                System.out.println("Write to logs!");
+                System.exit(0);
             }
 //            joinOp.writeLog("Episode Time: " + (end - start) + "\tReward: " + reward);
 

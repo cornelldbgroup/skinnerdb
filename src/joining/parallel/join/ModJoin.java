@@ -1,10 +1,12 @@
 package joining.parallel.join;
 
+import config.JoinConfig;
 import config.ParallelConfig;
 import config.PreConfig;
 import expressions.ExpressionInfo;
 import expressions.compilation.KnaryBoolEval;
 import joining.plan.JoinOrder;
+import joining.progress.ProgressTracker;
 import joining.progress.State;
 import joining.parallel.plan.LeftDeepPartitionPlan;
 import joining.parallel.progress.ParallelProgressTracker;
@@ -32,6 +34,10 @@ public class ModJoin extends DPJoin {
      * Avoids redundant evaluation work by tracking evaluation progress.
      */
     public ParallelProgressTracker tracker;
+    /**
+     * Avoids redundant evaluation work by using old progress tracker.
+     */
+    public ProgressTracker oldTracker;
     /**
      * Associates each table index with unary predicates.
      */
@@ -137,12 +143,20 @@ public class ModJoin extends DPJoin {
             planCache.putIfAbsent(joinHash, plan);
         }
 //        long timer1 = System.currentTimeMillis();
-        int splitHash = plan.splitStrategies[splitTable];
+        int splitHash = nrThreads == 1 ? 0 : plan.splitStrategies[splitTable];
         // Execute from ing state, save progress, return progress
-        State state = tracker.continueFrom(joinOrder, splitHash, tid, isShared);
-//        writeLog("Round: " + roundCtr);
-//        writeLog("Join: " + Arrays.toString(order) + "\tSplit: " + splitTable);
-        int[] offsets = tracker.tableOffset;
+
+        State state;
+        int[] offsets;
+        if (JoinConfig.NEWTRACKER && nrThreads > 1) {
+            state = tracker.continueFrom(joinOrder, splitHash, tid, isShared);
+            offsets = tracker.tableOffset;
+        }
+        else {
+            state = oldTracker.continueFrom(joinOrder);
+            offsets = oldTracker.tableOffset;
+        }
+//        writeLog("Round: " + roundCtr + "\tJoin Order: " + Arrays.toString(order));
 //        writeLog("Start: " + state.toString());
 //        writeLog("Offset: " + Arrays.toString(offsets));
 //        long timer2 = System.currentTimeMillis();
@@ -172,7 +186,12 @@ public class ModJoin extends DPJoin {
         // Get the first table whose cardinality is larger than 1.
         int firstTable = getFirstLargeTable(order);
         if (!state.isFinished()) {
-            slowest = tracker.updateProgress(joinOrder, splitHash, state, tid, roundCtr, splitTable, firstTable);
+            if (JoinConfig.NEWTRACKER && nrThreads > 1) {
+                slowest = tracker.updateProgress(joinOrder, splitHash, state, tid, roundCtr, splitTable, firstTable);
+            }
+            else {
+                oldTracker.updateProgress(joinOrder, state);
+            }
         }
 //        writeLog("Visit: " + Arrays.toString(nrVisits) + "\tLarge: " + largeTable + "\tSlow: " + slowest);
 //        writeLog("End: " + state.toString() + "\tReward: " + reward);
@@ -405,7 +424,7 @@ public class ModJoin extends DPJoin {
                     evaluateInScope(joinIndices.get(joinIndex), applicablePreds.get(joinIndex),
                             tupleIndices, splitTable, nextTable, tid)
             ) {
-//                ++statsInstance.nrTuples;
+                ++statsInstance.nrTuples;
                 // Do we have a complete result row?
                 if(joinIndex == plan.joinOrder.order.length - 1) {
                     // Complete result row -> add to result

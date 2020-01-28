@@ -3,9 +3,13 @@ package operators.parallel;
 import buffer.BufferManager;
 import catalog.CatalogManager;
 import catalog.info.ColumnInfo;
+import com.koloboke.collect.map.IntIntCursor;
+import com.koloboke.collect.map.hash.HashIntIntMaps;
+import config.ParallelConfig;
 import data.ColumnData;
 import data.IntData;
 import indexing.Index;
+import joining.parallel.indexing.IntIndexRange;
 import operators.Group;
 import operators.OperatorUtils;
 import operators.RowRange;
@@ -51,7 +55,7 @@ public class ParallelGroupBy {
         }
         // Fill result column
         Map<Group, GroupIndex> groupIndexListMap = new HashMap<>();
-        List<RowRange> batches = OperatorUtils.split(cardinality, 50);
+
 
         for (int rowCtr = 0; rowCtr < cardinality; ++rowCtr) {
             Group curGroup = new Group(rowCtr, sourceCols);
@@ -62,6 +66,49 @@ public class ParallelGroupBy {
             groupIndex.addRow(rowCtr);
             groupData.data[rowCtr] = groupIndex.gid;
         }
+
+//        List<GroupIndexRange> batches = split(cardinality);
+//        int nrBatches = batches.size();
+//        batches.parallelStream().forEach(batch -> {
+//            // Evaluate predicate for each table row
+//            int first = batch.firstTuple;
+//            int last = batch.lastTuple;
+//            for (int rowCtr = first; rowCtr <= last; ++rowCtr) {
+//                Group curGroup = new Group(rowCtr, sourceCols);
+//                batch.add(curGroup, rowCtr - first);
+//            }
+//        });
+//
+//        for (GroupIndexRange batch : batches) {
+//            batch.prefixMap = HashIntIntMaps.newMutableMap(batch.valuesMap.size());
+//            batch.valuesMap.forEach((curGroup, value) -> {
+//                int number = value;
+//                GroupIndex groupIndex = groupIndexListMap.computeIfAbsent(curGroup, group -> {
+//                    int nextGroupID = groupIndexListMap.size();
+//                    return new GroupIndex(nextGroupID);
+//                });
+//                batch.prefixMap.put(groupIndex.gid, groupIndex.number);
+//                groupIndex.number += number;
+//            });
+//        }
+//
+//        groupIndexListMap.values().parallelStream().forEach(index -> index.rows = new ArrayList<>(index.number));
+//
+//        IntStream.range(0, nrBatches).parallel().forEach(bid -> {
+//            GroupIndexRange batch = batches.get(bid);
+//            int first = batch.firstTuple;
+//            int last = batch.lastTuple;
+//            for (int rowCtr = first; rowCtr <= last; ++rowCtr) {
+//                GroupIndex index = groupIndexListMap.get(batch.groups[rowCtr - first]);
+//                int gid = index.gid;
+//                int offset = batch.prefixMap.getOrDefault(gid, -1);
+//                index.rows.set(offset, rowCtr);
+//                batch.prefixMap.put(gid, offset + 1);
+//                groupData.data[rowCtr] = gid;
+//            }
+//        });
+
+
         // Update catalog statistics
         CatalogManager.updateStats(targetTbl);
         // Retrieve data for
@@ -101,5 +148,25 @@ public class ParallelGroupBy {
         CatalogManager.updateStats(targetTbl);
         // Retrieve data for
         return null;
+    }
+
+    /**
+     * Splits table with given cardinality into tuple batches
+     * according to the configuration for joining.parallel processing.
+     *
+     * @return list of row ranges (batches)
+     */
+    static List<GroupIndexRange> split(int cardinality) {
+        List<GroupIndexRange> batches = new ArrayList<>();
+        int batchSize = Math.max(ParallelConfig.PRE_INDEX_SIZE, cardinality / 100);
+        for (int batchCtr = 0; batchCtr * batchSize < cardinality;
+             ++batchCtr) {
+            int startIdx = batchCtr * batchSize;
+            int tentativeEndIdx = startIdx + batchSize - 1;
+            int endIdx = Math.min(cardinality - 1, tentativeEndIdx);
+            GroupIndexRange groupIndexRange = new GroupIndexRange(startIdx, endIdx, batchCtr);
+            batches.add(groupIndexRange);
+        }
+        return batches;
     }
 }

@@ -3,7 +3,9 @@ package operators;
 import java.util.*;
 
 import buffer.BufferManager;
+import com.google.common.primitives.Ints;
 import config.GeneralConfig;
+import expressions.ExpressionInfo;
 import expressions.normalization.PlainVisitor;
 import indexing.Index;
 import indexing.IntIndex;
@@ -74,9 +76,20 @@ public class IndexFilter extends PlainVisitor {
 	 */
 	public boolean equalFull = false;
 	/**
+	 * The type of returned results:
+	 * 0: full results.
+	 * 1: range.
+	 * 2: equal positions.
+	 */
+	public int resultType = 0;
+	/**
 	 * Last filtering index.
 	 */
 	public Index lastIndex;
+	/**
+	 * Remaining unary predicate information
+	 */
+	public ExpressionInfo remainingInfo;
 	/**
 	 * Initialize index filter for given query.
 	 * 
@@ -96,16 +109,18 @@ public class IndexFilter extends PlainVisitor {
 		// Intersect sorted row index lists
 		List<Integer> rows1 = qualifyingRows.pop();
 		List<Integer> rows2 = qualifyingRows.pop();
-		List<Integer> intersectedRows = new ArrayList<>();
+		List<Integer> intersectedRows = new ArrayList<>(Math.min(rows1.size(), rows2.size()));
 		qualifyingRows.push(intersectedRows);
 		if (!rows1.isEmpty() && !rows2.isEmpty()) {
 			if (!leftFull && !rightFull) {
+				resultType = 1;
 				int first = Math.max(rows1.get(0), rows2.get(0));
 				int last = Math.min(rows1.get(1), rows2.get(1));
 				intersectedRows.add(first);
 				intersectedRows.add(last);
 			}
 			else {
+				resultType = 0;
 				Iterator<Integer> row1iter = rows1.iterator();
 				Iterator<Integer> row2iter = rows2.iterator();
 				int row1 = row1iter.next();
@@ -136,6 +151,7 @@ public class IndexFilter extends PlainVisitor {
 		// Merge sorted row index lists
 		List<Integer> rows1 = qualifyingRows.pop();
 		List<Integer> rows2 = qualifyingRows.pop();
+		resultType = 0;
 		if (rows1.isEmpty()) {
 			qualifyingRows.push(rows2);
 		} else if (rows2.isEmpty()) {
@@ -157,7 +173,7 @@ public class IndexFilter extends PlainVisitor {
 			}
 
 			// Both input lists are non-empty
-			List<Integer> mergedRows = new ArrayList<>();
+			List<Integer> mergedRows = new ArrayList<>(rows1.size() + rows2.size());
 			qualifyingRows.push(mergedRows);
 			// Assume that tables contain at most Integer.MAX_VALUE - 1 elements
 			while (row1 != Integer.MAX_VALUE || 
@@ -190,35 +206,46 @@ public class IndexFilter extends PlainVisitor {
 		// there must be one index and one constant.
 		int constant = extractedConstants.pop();
 		Index index = applicableIndices.pop();
-		// Collect indices of satisfying rows via index
-		List<Integer> rows = new ArrayList<>();
-		qualifyingRows.push(rows);
 		int startPos;
-//		if (GeneralConfig.isParallel) {
-//			startPos = ((IntPartitionIndex)index).keyToPositions.getOrDefault(constant, -1);
+		startPos = ((IntPartitionIndex)index).keyToPositions.getOrDefault(constant, -1);
+//		if (!equalFull) {
+//			// Collect indices of satisfying rows via index
+//			List<Integer> rows = new ArrayList<>();
+//			qualifyingRows.push(rows);
+//			rows.add(startPos);
+//			lastIndex = index;
+//			isFull = false;
+//			fullResults.push(false);
+//			resultType = 2;
 //		}
 //		else {
-//			startPos = ((IntIndex)index).keyToPositions.getOrDefault(constant, -1);
+//			if (startPos >= 0) {
+//				int nrEntries = index.positions[startPos];
+//				// Collect indices of satisfying rows via index
+//				int[] newArray = Arrays.copyOfRange(index.positions, startPos + 1, startPos + 1 + nrEntries);
+//				List<Integer> rows = Ints.asList(newArray);
+//				qualifyingRows.push(rows);
+//			}
+//			else {
+//				qualifyingRows.push(new ArrayList<>());
+//			}
+//			isFull = true;
+//			fullResults.push(true);
+//			resultType = 0;
 //		}
-		startPos = ((IntPartitionIndex)index).keyToPositions.getOrDefault(constant, -1);
-		if (!equalFull) {
-			rows.add(startPos);
-			lastIndex = index;
-			isFull = false;
-			fullResults.push(false);
+		if (startPos >= 0) {
+			int nrEntries = index.positions[startPos];
+			// Collect indices of satisfying rows via index
+			int[] newArray = Arrays.copyOfRange(index.positions, startPos + 1, startPos + 1 + nrEntries);
+			List<Integer> rows = Ints.asList(newArray);
+			qualifyingRows.push(rows);
 		}
 		else {
-			if (startPos >= 0) {
-				int nrEntries = index.positions[startPos];
-				for (int i=0; i<nrEntries; ++i) {
-					int pos = startPos + 1 + i;
-					int rowIdx = index.positions[pos];
-					rows.add(rowIdx);
-				}
-			}
-			isFull = true;
-			fullResults.push(true);
+			qualifyingRows.push(new ArrayList<>());
 		}
+		isFull = true;
+		fullResults.push(true);
+		resultType = 0;
 	}
 	
 	@Override
@@ -393,6 +420,7 @@ public class IndexFilter extends PlainVisitor {
 					rows.add(index.sortedRow[i]);
 				}
 			}
+			resultType = 0;
 		}
 		else {
 			if (found) {
@@ -405,6 +433,7 @@ public class IndexFilter extends PlainVisitor {
 				rows.add(index.cardinality);
 				lastIndex = index;
 			}
+			resultType = 1;
 		}
 	}
 

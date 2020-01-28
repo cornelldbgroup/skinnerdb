@@ -1,19 +1,22 @@
 package operators;
 
-import java.util.ArrayList;
-import java.util.BitSet;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import buffer.BufferManager;
 import catalog.CatalogManager;
+import catalog.info.ColumnInfo;
+import catalog.info.TableInfo;
+import com.google.common.collect.Iterables;
 import com.koloboke.collect.IntCollection;
 import config.GeneralConfig;
+import config.NamingConfig;
 import config.ParallelConfig;
 import config.PreConfig;
+import data.ColumnData;
 import expressions.ExpressionInfo;
 import expressions.compilation.EvaluatorType;
 import expressions.compilation.ExpressionCompiler;
@@ -107,9 +110,10 @@ public class Filter {
 	 * 						assume identity mapping if null is specified.
 	 * @return				list of satisfying row indices
 	 */
-	public static List<Integer> executeToList(ExpressionInfo unaryPred,
-			String tableName, Map<ColumnRef, ColumnRef> columnMapping, QueryInfo query)
+	public static List<Integer> executeToList(IndexFilter filter,
+			String tableName, Map<ColumnRef, ColumnRef> columnMapping, QueryInfo query, List<ColumnRef> requiredCols)
 					throws Exception {
+		ExpressionInfo unaryPred = filter.remainingInfo;
 		// Load required columns for predicate evaluation
 		loadPredCols(unaryPred, columnMapping);
 		// Compile unary predicate for fast evaluation
@@ -131,10 +135,73 @@ public class Filter {
 				Index index = BufferManager.colToIndex.get(columnRef);
 				NonEquiNodesTest nonEquiNodesTest = new NonEquiNodesTest(query, columnMapping);
 				unaryPred.finalExpression.accept(nonEquiNodesTest);
-				result = filterValues(index, nonEquiNodesTest.nonEquiNodes.pop());
-				// Process batches in joining.parallel
-				if (result == null) {
-					// Divide tuples into batches
+				long timer1 = System.currentTimeMillis();
+				if (index != null && index.posSet().size() < ParallelConfig.SPARSE_FILTER_SIZE) {
+					IntCollection posSet = index.posSet();
+					int size = posSet.size();
+					NonEquiNode evaluator = nonEquiNodesTest.nonEquiNodes.pop();
+					int[] positions = index.positions;
+					List<Integer> posList = new ArrayList<>(posSet);
+					int[] posResults = new int[size];
+					int[] valueResults = new int[size];
+					IntStream.range(0, size).parallel().forEach(pid -> {
+						int pos = posList.get(pid);
+						int nrValues = positions[pos];
+						int rowCtr = positions[pos + 1];
+						if (evaluator.evaluateUnary(rowCtr)) {
+							posResults[pid] = pos;
+							valueResults[pid] = nrValues;
+						} else {
+							posResults[pid] = -1;
+							valueResults[pid] = 0;
+						}
+					});
+					int filteredSize = 0;
+					for (int i = 0; i < size; i++) {
+						filteredSize += valueResults[i];
+					}
+					String filteredName = NamingConfig.FILTERED_PRE;
+					List<String> columnNames = new ArrayList<>();
+					for (ColumnRef colRef : requiredCols) {
+						columnNames.add(colRef.columnName);
+						filteredName = NamingConfig.FILTERED_PRE + colRef.aliasName;
+					}
+					if (filteredSize == index.cardinality) {
+						List<ColumnRef> sourceColRefs = new ArrayList<>();
+						for (String columnName : columnNames) {
+							sourceColRefs.add(new ColumnRef(tableName, columnName));
+						}
+						// Update catalog, inserting materialized table
+						TableInfo resultTable = new TableInfo(filteredName, true);
+						CatalogManager.currentDB.addTable(resultTable);
+						for (ColumnRef sourceColRef : sourceColRefs) {
+							// Add result column to result table, using type of source column
+							ColumnInfo sourceCol = CatalogManager.getColumn(sourceColRef);
+							ColumnInfo resultCol = new ColumnInfo(sourceColRef.columnName,
+									sourceCol.type, sourceCol.isPrimary,
+									sourceCol.isUnique, sourceCol.isNotNull,
+									sourceCol.isForeign);
+							resultTable.addColumn(resultCol);
+						}
+						// Generate column data
+						String finalFilteredName = filteredName;
+						sourceColRefs.parallelStream().forEach(sourceColRef -> {
+							// Copy relevant rows into result column
+							ColumnData srcData = BufferManager.colToData.get(sourceColRef);
+							String columnName = sourceColRef.columnName;
+							ColumnRef resultColRef = new ColumnRef(finalFilteredName, columnName);
+							BufferManager.colToData.put(resultColRef, srcData);
+						});
+						CatalogManager.updateStats(finalFilteredName);
+					}
+					else {
+						throw new RuntimeException("Not implemented");
+					}
+					long timer2 = System.currentTimeMillis();
+					System.out.println("Time: " + (timer2 - timer1));
+					return null;
+				}
+				else {
 					List<RowRange> batches = split(cardinality);
 					// Process batches in joining.parallel
 					result = batches.parallelStream().flatMap(batch ->
@@ -145,17 +212,28 @@ public class Filter {
 			else {
 				// Divide tuples into batches
 				List<RowRange> batches = split(cardinality);
-				result = new ArrayList<>();
-				// Process batches in joining.parallel
-				for (RowRange rowRange: batches) {
-					// Evaluate predicate for each table row
-					for (int rowCtr=rowRange.firstTuple;
-						 rowCtr<=rowRange.lastTuple; ++rowCtr) {
-						if (unaryBoolEval.evaluate(rowCtr) > 0) {
-							result.add(rowCtr);
-						}
-					}
+//				result = new ArrayList<>(cardinality);
+//				// Process batches in joining.parallel
+//				for (RowRange rowRange: batches) {
+//					// Evaluate predicate for each table row
+//					for (int rowCtr=rowRange.firstTuple;
+//						 rowCtr<=rowRange.lastTuple; ++rowCtr) {
+//						if (unaryBoolEval.evaluate(rowCtr) > 0) {
+//							result.add(rowCtr);
+//						}
+//					}
+//				}
+
+				SimpleLinkedList<Integer>[] batchResults = new SimpleLinkedList[batches.size()];
+				IntStream.range(0, batches.size()).parallel().forEach(bid ->
+						batchResults[bid] = filterSimpleBatch(unaryBoolEval, batches.get(bid)));
+
+				SimpleLinkedList<Integer> simpleResult = new SimpleLinkedList<>();
+				for (SimpleLinkedList<Integer> batchResult : batchResults) {
+					simpleResult.concat(batchResult);
 				}
+
+				return simpleResult;
 //				result = batches.parallelStream().flatMap(batch ->
 //						filterBatch(unaryBoolEval, batch).stream()).collect(
 //						Collectors.toList());
@@ -189,25 +267,34 @@ public class Filter {
 	 * @param index			column index
 	 * @return				list of row ranges (batches)
 	 */
-	static List<Integer> filterValues(Index index, NonEquiNode unaryBoolEval) {
+	static int[] filterValues(Index index, NonEquiNode unaryBoolEval) {
 		if (index == null) {
 			return null;
 		}
 		IntCollection posSet = index.posSet();
 		int cardinality = posSet.size();
-		if (cardinality < ParallelConfig.SPARSE_KEY_SIZE) {
-			return posSet.parallelStream().flatMap(pos -> {
-				int[] positions = index.positions;
+		if (cardinality < ParallelConfig.SPARSE_FILTER_SIZE) {
+			int[] positions = index.positions;
+			List<Integer> posList = new ArrayList<>(posSet);
+			int[] posResults = new int[cardinality];
+			int[] valueResults = new int[cardinality];
+			IntStream.range(0, cardinality).parallel().forEach(pid -> {
+				int pos = posList.get(pid);
 				int nrValues = positions[pos];
 				int rowCtr = positions[pos + 1];
-				List<Integer> result = new ArrayList<>();
 				if (unaryBoolEval.evaluateUnary(rowCtr)) {
-					for (int i = pos + 1; i <= pos + nrValues; i++) {
-						result.add(positions[i]);
-					}
+//					for (int i = pos + 1; i <= pos + nrValues; i++) {
+//						result.add(positions[i]);
+//					}
+					posResults[pid] = pos;
+					valueResults[pid] = nrValues;
 				}
-				return result.stream();
-			}).collect(Collectors.toList());
+				else {
+					posResults[pid] = -1;
+					valueResults[pid] = 0;
+				}
+			});
+			return posResults;
 		}
 		else {
 			return null;
@@ -224,11 +311,28 @@ public class Filter {
 	 */
 	static List<Integer> filterBatch(UnaryBoolEval unaryBoolEval, 
 			RowRange rowRange) {
-		List<Integer> result = new ArrayList<Integer>();
+		List<Integer> result = new ArrayList<>(rowRange.lastTuple - rowRange.firstTuple);
+//		List<Integer> result = new SimpleLinkedList<>();
 		// Evaluate predicate for each table row
 //		long s1 = System.currentTimeMillis();
 		for (int rowCtr=rowRange.firstTuple; 
 				rowCtr<=rowRange.lastTuple; ++rowCtr) {
+			if (unaryBoolEval.evaluate(rowCtr) > 0) {
+				result.add(rowCtr);
+			}
+		}
+//		long s2 = System.currentTimeMillis();
+//		System.out.println("Start: " + rowRange.firstTuple + "\tTime: " + (s2 - s1));
+		return result;
+	}
+
+	static SimpleLinkedList<Integer> filterSimpleBatch(UnaryBoolEval unaryBoolEval,
+									 RowRange rowRange) {
+		SimpleLinkedList<Integer> result = new SimpleLinkedList<>();
+		// Evaluate predicate for each table row
+//		long s1 = System.currentTimeMillis();
+		for (int rowCtr=rowRange.firstTuple;
+			 rowCtr<=rowRange.lastTuple; ++rowCtr) {
 			if (unaryBoolEval.evaluate(rowCtr) > 0) {
 				result.add(rowCtr);
 			}

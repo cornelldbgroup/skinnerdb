@@ -240,7 +240,7 @@ public class BufferManager {
 	 * @throws Exception
 	 */
 	public static void unloadTempData() throws Exception {
-		unloadTempData(new HashSet<String>());
+		unloadTempData(new HashSet<>());
 	}
 	/**
 	 * Log given text if buffer logging activated.

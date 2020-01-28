@@ -59,6 +59,9 @@ public class CatalogManager {
 	 */
 	public static int getCardinality(String tableName) {
 		TableStats tableStats = currentStats.tableToStats.get(tableName);
+		if (tableStats == null) {
+			System.out.println("Null Table: " + tableName);
+		}
 		return tableStats.cardinality;
 	}
 	/**

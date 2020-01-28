@@ -2,6 +2,7 @@ package catalog.stats;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import catalog.info.DbInfo;
 import catalog.info.TableInfo;
@@ -28,7 +29,7 @@ public class DbStats {
 		// Make sure that data paths are initialized
 		PathUtil.initDataPaths(dbInfo);
 		// Collect statistics about each table
-		tableToStats = new HashMap<>();
+		tableToStats = new ConcurrentHashMap<>();
 		for (TableInfo tableInfo : dbInfo.nameToTable.values()) {
 			String tableName = tableInfo.name;
 			TableStats tableStats = new TableStats(tableInfo);

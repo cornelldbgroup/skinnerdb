@@ -29,6 +29,7 @@ public class SearchTask implements Callable<SearchResult> {
     private final SPJoin spJoin;
     private final AtomicBoolean finish;
     private final SearchScheduler scheduler;
+    private boolean isSample = true;
 
     public SearchTask(QueryInfo query, Context context,
                       SPNode root, SPJoin spJoin, SearchScheduler scheduler, AtomicBoolean finish) {
@@ -66,11 +67,37 @@ public class SearchTask implements Callable<SearchResult> {
                     scheduler.redistribution();
                 }
             }
-            if (scheduler.isChanged[tid]) {
-                spJoin.initSearchRoot(scheduler.preNodes, scheduler.nodePerThread.get(tid), scheduler.treeLevel);
+            else if (ParallelConfig.PARALLEL_SPEC == 7) {
+                if (tid == nrThreads - 1 &&
+                        roundCtr == 10 * Math.pow(10, adaptive)) {
+                    scheduler.fixOptimalJoinOrder();
+                }
             }
-            spJoin.sid = -1;
-            reward = root.sample(roundCtr, joinOrder, spJoin, policy, true);
+            if (scheduler.isChanged[tid]) {
+                if (ParallelConfig.PARALLEL_SPEC == 7) {
+                    if (tid == scheduler.optimalTid) {
+                        joinOrder = scheduler.optimalJoinOrder;
+                        spJoin.sid = scheduler.optimalSid;
+                        System.out.println(adaptive + ": " + Arrays.toString(joinOrder) + " " + tid + " " + spJoin.sid);
+                        isSample = false;
+                    }
+                    else {
+                        isSample = true;
+                    }
+
+                }
+                else {
+                    spJoin.initSearchRoot(scheduler.preNodes, scheduler.nodePerThread.get(tid), scheduler.treeLevel);
+                }
+                scheduler.isChanged[tid] = false;
+            }
+            if (ParallelConfig.PARALLEL_SPEC == 7 && !isSample) {
+                reward = spJoin.execute(joinOrder, (int) roundCtr);
+            }
+            else {
+                spJoin.sid = -1;
+                reward = root.sample(roundCtr, joinOrder, spJoin, policy, true);
+            }
             scheduler.updateStatistics(spJoin.sid, reward);
             // Count reward except for final sample
             if (!spJoin.isFinished()) {

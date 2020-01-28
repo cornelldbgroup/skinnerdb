@@ -15,6 +15,7 @@ import operators.Materialize;
 import postprocessing.ParallelPostProcessor;
 import postprocessing.PostProcessor;
 import preprocessing.Context;
+import preprocessing.NewPreprocessor;
 import preprocessing.Preprocessor;
 import query.ColumnRef;
 import query.QueryInfo;
@@ -84,6 +85,7 @@ public class Master {
 			// Filter, projection, and indexing for join phase
 			Preprocessor.performance = true;
 			Context context = Preprocessor.process(subQueryInfo);
+//			Context context = NewPreprocessor.process(subQueryInfo);
 			if (Preprocessor.terminated) {
 				JoinStats.exeTime = 0;
 				JoinStats.subExeTime.add(JoinStats.exeTime);
@@ -146,6 +148,9 @@ public class Master {
 		JoinStats.subJoinTime = new ArrayList<>();
 		JoinStats.subMateriazed = new ArrayList<>();
 		JoinStats.subExeTime = new ArrayList<>();
+		JoinStats.subAllExeTime = new ArrayList<>();
 		PostStats.subPostMillis = new ArrayList<>();
+		JoinStats.nrTuples = 0;
+		JoinStats.nrSamples = 0;
 	}
 }

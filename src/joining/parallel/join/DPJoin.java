@@ -137,6 +137,7 @@ public abstract class DPJoin {
             String table = preSummary.aliasToFiltered.get(alias);
             int index = entry.getValue();
             int cardinality = CatalogManager.getCardinality(table);
+//            System.out.println(table + " " + index + " " + cardinality);
             cardinalities[index] = cardinality;
         }
         this.result = new JoinResult(nrJoined);

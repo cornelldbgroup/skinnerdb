@@ -19,7 +19,7 @@ public class GroupIndex {
     /**
      * The list of rows that belong to a certain group.
      */
-    public final List<Integer> rows;
+    public List<Integer> rows;
     /**
      * The number of all not null elements.
      */
@@ -39,6 +39,10 @@ public class GroupIndex {
         else {
             this.rows = new ArrayList<>(size);
         }
+    }
+
+    public GroupIndex(int gid) {
+        this.gid = gid;
     }
 
     public void addRow(int rowCtr) {

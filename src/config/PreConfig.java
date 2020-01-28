@@ -26,5 +26,5 @@ public class PreConfig {
 	/**
 	 * Whether to write filtered rows in the cache.
 	 */
-	public static final boolean PROCESS_KEYS = true;
+	public static final boolean PROCESS_KEYS = false;
 }

@@ -14,6 +14,10 @@ import java.util.stream.IntStream;
 
 public class SearchScheduler {
     /**
+     * The number of tables to join
+     */
+    public final int nrJoined;
+    /**
      * A list of nodes to partition in the same level.
      */
     public final SPNode[] preNodes;
@@ -49,6 +53,18 @@ public class SearchScheduler {
      * Number of adaptive count.
      */
     public int adaptiveCtr = 1;
+    /**
+     * The optimal join order after some episodes.
+     */
+    public int[] optimalJoinOrder;
+    /**
+     * The optimal thread after some episodes.
+     */
+    public int optimalTid;
+    /**
+     * The optimal node index after some episodes
+     */
+    public int optimalSid;
 
     /**
      * Initialization of search scheduler
@@ -62,8 +78,9 @@ public class SearchScheduler {
         // initialize nodes for the first level.
         int sid = -2;
         int MAX_SIZE = 20;
+        this.nrJoined = query.nrJoined;
         List<SPNode> preNodes = new ArrayList<>();
-        for (int i = 0 ; i < query.nrJoined; i++) {
+        for (int i = 0 ; i < root.prioritySet.size(); i++) {
             int action = root.prioritySet.get(i);
             int table = root.nextTable[action];
             SPNode children = new SPNode(0, root, table, action);
@@ -225,6 +242,37 @@ public class SearchScheduler {
         Arrays.fill(isChanged, true);
         adaptiveCtr++;
 
+    }
+
+    /**
+     * Find an optimal join order.
+     * One of threads will join tables in this order.
+     */
+    public void fixOptimalJoinOrder() {
+        // a list of weights
+        List<Double> weights = getRewardWeights();
+        int index = IntStream.range(0, weights.size()).boxed()
+                .max(Comparator.comparing(weights::get)).orElse(-1);
+        SPNode maxNode = preNodes[index];
+        int tid = 0;
+        for (int i = 0; i < nodePerThread.size(); i++) {
+            if (nodePerThread.get(i).contains(index)) {
+                tid = i;
+                break;
+            }
+        }
+        int[] joinOrder = new int[nrJoined];
+        maxNode.maxJoinOrder(joinOrder, tid);
+        SPNode node = maxNode;
+        while (node.parent != null) {
+            joinOrder[node.treeLevel - 1] = node.joinedTable;
+            node = node.parent;
+        }
+        optimalJoinOrder = joinOrder;
+        this.optimalTid = tid;
+        this.optimalSid = index;
+        Arrays.fill(isChanged, true);
+        adaptiveCtr++;
     }
 
     /**

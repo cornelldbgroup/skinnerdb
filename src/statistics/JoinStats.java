@@ -82,7 +82,11 @@ public class JoinStats {
      */
     public static List<Long> subJoinTime;
     /**
-     * A list of total execution time for sub queries.
+     * A list of median execution time for sub queries.
      */
     public static List<Long> subExeTime;
+    /**
+     * A list of all execution time for sub queries.
+     */
+    public static List<String> subAllExeTime;
 }

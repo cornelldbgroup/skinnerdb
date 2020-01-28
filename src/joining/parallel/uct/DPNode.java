@@ -615,6 +615,9 @@ public class DPNode {
      * @return
      */
     int getSplitTableByCard(int[] joinOrder, int[] cardinalities) {
+        if (nrThreads == 1) {
+            return 0;
+        }
         int splitLen = 5;
         int splitSize = ParallelConfig.PARTITION_SIZE;
         int splitTable = joinOrder[0];

@@ -219,8 +219,7 @@ public class SkinnerCmd {
             Table view = createView.getView();
             try {
                 if (StartupConfig.WARMUP_RUN) {
-                    PreConfig.IN_CACHE = false;
-                    GeneralConfig.TEST_CASE = 1;
+                    GeneralConfig.ISTESTCASE = false;
                     Master.executeSelect(plainSelect,
                             false, -1, -1, null);
                     BufferManager.unloadTempData();
@@ -228,8 +227,7 @@ public class SkinnerCmd {
                     sqlStatement = CCJSqlParserUtil.parse(input);
                     plainSelect = (PlainSelect) ((CreateView) sqlStatement).getSelectBody();
                 }
-                PreConfig.IN_CACHE = true;
-                GeneralConfig.TEST_CASE = 5;
+                GeneralConfig.ISTESTCASE = true;
                 Master.executeSelect(plainSelect,
                         false, -1, -1, null);
 
@@ -292,8 +290,7 @@ public class SkinnerCmd {
                 BufferManager.unloadCache(name.charAt(0) + "" + name.charAt(1));
                 try {
                     if (StartupConfig.WARMUP_RUN) {
-                        PreConfig.IN_CACHE = false;
-                        GeneralConfig.TEST_CASE = 1;
+                        GeneralConfig.ISTESTCASE = false;
                         Master.executeSelect(plainSelect,
                                 false, -1, -1, null);
                         BufferManager.unloadTempData();
@@ -302,8 +299,7 @@ public class SkinnerCmd {
                         select = (Select) sqlStatement;
                         plainSelect = (PlainSelect) select.getSelectBody();
                     }
-                    PreConfig.IN_CACHE = true;
-                    GeneralConfig.TEST_CASE = 5;
+                    GeneralConfig.ISTESTCASE = true;
                     Master.executeSelect(plainSelect,
                             false, -1, -1, null);
                     // Display query result if no target tables specified
@@ -424,6 +420,9 @@ public class SkinnerCmd {
                 } else if (spec == 6) {
                     output += "Tree_" + ParallelConfig.EXE_THREADS + ".txt";
                 }
+                else if (spec == 7) {
+                    output += "PSJ_" + ParallelConfig.EXE_THREADS + ".txt";
+                }
             } else {
                 output += "Seq_1.txt";
             }
@@ -515,9 +514,9 @@ public class SkinnerCmd {
             // initialize a thread pool
             ThreadPool.initThreadsPool(ParallelConfig.EXE_THREADS, ParallelConfig.PRE_THREADS);
 //            processInput("exec ./tpch/skinnerqueries/q03.sql");
-            processInput("exec ./jcch/queries/q01.sql");
+//            processInput("exec ./jcch/queries/q02.sql");
 //            processInput("exec ./jcch/queries/q17.sql");
-//            processInput("exec ../imdb/queries/19b.sql");
+            processInput("exec ../imdb/queries/26a.sql");
 //            processInput("exec /Users/tracy/Documents/Research/skinnerdb/imdb/queries/33c.sql");
 //            processInput("exp");
         } else {

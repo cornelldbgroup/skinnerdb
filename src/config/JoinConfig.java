@@ -47,4 +47,10 @@ public class JoinConfig {
 	 * convergence to one specific join order.
 	 */
 	public static final boolean FORGET = true;
+	/**
+	 * Whether to use the new progress tracker.
+	 * The new progress tracker optimize the information stored
+	 * in each node. It is better in terms of complexity.
+	 */
+	public static final boolean NEWTRACKER = true;
 }

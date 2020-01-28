@@ -1,11 +1,10 @@
 package preprocessing;
 
 import java.io.PrintWriter;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.nio.Buffer;
+import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
 
 import buffer.BufferManager;
@@ -104,9 +103,10 @@ public class Preprocessor {
 		}
 		// Initialize mapping from query alias to DB tables
 		preSummary.aliasToFiltered.putAll(query.aliasToTable);
+		boolean inCached = GeneralConfig.ISTESTCASE && PreConfig.IN_CACHE;
 		log("Column mapping:\t" + preSummary.columnMapping.toString());
 		// Iterate over query aliases
-		for (String alias: query.aliasToTable.keySet()) {
+		query.aliasToTable.keySet().parallelStream().forEach(alias -> {
 			long s1 = System.currentTimeMillis();
 			// Collect required columns (for joins and post-processing) for this table
 			List<ColumnRef> curRequiredCols = new ArrayList<>();
@@ -127,35 +127,39 @@ public class Preprocessor {
 				try {
 					//check if the predicate is in the cache
 					List<Integer> inCacheRows = null;
-					if (PreConfig.IN_CACHE) {
+					if (inCached) {
 						inCacheRows = applyCache(curUnaryPred);
 					}
 					if (inCacheRows == null) {
 						// Apply index to prune rows if possible
-						ExpressionInfo remainingPred = applyIndex(
+						IndexFilter filter = applyIndex(
 								query, curUnaryPred, preSummary);
+						ExpressionInfo remainingPred = filter.remainingInfo;
 						// TODO: reinsert index usage
 						//ExpressionInfo remainingPred = curUnaryPred;
 						// Filter remaining rows by remaining predicate
 						if (remainingPred != null) {
-							List<Integer> rows = filterProject(query, alias, remainingPred,
+							List<Integer> rows = filterProject(query, alias, filter,
 									curRequiredCols, preSummary);
-							if (rows.size() > 0 && PreConfig.IN_CACHE) {
+							if (inCached && rows.size() > 0 && rows.get(0) >= 0) {
 								BufferManager.indexCache.putIfAbsent(curUnaryPred.pid, rows);
 							}
-							String filteredName = NamingConfig.FILTERED_PRE + alias;
-							int cardinality = CatalogManager.getCardinality(filteredName);
-							if (cardinality == 0) {
-								terminated = true;
-								break;
-							}
+//							String filteredName = NamingConfig.FILTERED_PRE + alias;
+//							int cardinality = CatalogManager.getCardinality(filteredName);
+//							if (cardinality == 0) {
+//								terminated = true;
+////								break;
+//							}
 						}
 						else {
+							if (inCached && filter.resultType == 0 && filter.qualifyingRows.size() > 0) {
+								BufferManager.indexCache.putIfAbsent(curUnaryPred.pid, filter.qualifyingRows.pop());
+							}
 							String filteredName = NamingConfig.IDX_FILTERED_PRE + alias;
 							int cardinality = CatalogManager.getCardinality(filteredName);
 							if (cardinality == 0) {
 								terminated = true;
-								break;
+//								break;
 							}
 						}
 					}
@@ -167,8 +171,11 @@ public class Preprocessor {
 						for (ColumnRef colRef : curRequiredCols) {
 							columnNames.add(colRef.columnName);
 						}
+						long timer1 = System.currentTimeMillis();
 						Materialize.execute(tableName, columnNames,
 								inCacheRows, null, filteredName, true);
+						long timer2 = System.currentTimeMillis();
+						System.out.println("Materializing after cache: " + filteredName + " took " + (timer2 - timer1) + " ms");
 						// Update pre-processing summary
 						for (ColumnRef srcRef : curRequiredCols) {
 							String columnName = srcRef.columnName;
@@ -179,9 +186,8 @@ public class Preprocessor {
 						int cardinality = CatalogManager.getCardinality(filteredName);
 						if (cardinality == 0) {
 							terminated = true;
-							break;
+//							break;
 						}
-						log("Cache hit using " + curUnaryPred);
 					}
 				} catch (Exception e) {
 					System.err.println("Error filtering " + alias);
@@ -196,7 +202,12 @@ public class Preprocessor {
 			if (curUnaryPred != null) {
 				System.out.println("Predicate: " + curUnaryPred.toString() + "\tTime: " + (s2 - s1));
 			}
-		}
+		});
+
+
+//		for (String alias: query.aliasToTable.keySet()) {
+//
+//		}
 		// Abort pre-processing if filtering error occurred
 		if (hadError) {
 			throw new Exception("Error in pre-processor.");
@@ -210,8 +221,8 @@ public class Preprocessor {
 		createJoinIndices(query, preSummary);
 		// Measure processing time
 		if (performance) {
-			PreStats.preMillis = System.currentTimeMillis() - startMillis;
-			PreStats.subPreMillis.add(PreStats.preMillis);
+			long total = System.currentTimeMillis() - startMillis;
+			PreStats.subPreMillis.add(total);
 		}
 
 		// construct mapping from join tables to index for each join predicate
@@ -261,7 +272,7 @@ public class Preprocessor {
 	 * @param preSummary	summary of pre-processing steps
 	 * @return	remaining unary predicate to apply afterwards
 	 */
-	static ExpressionInfo applyIndex(QueryInfo query, ExpressionInfo unaryPred,
+	static IndexFilter applyIndex(QueryInfo query, ExpressionInfo unaryPred,
 			Context preSummary) throws Exception {
 		log("Searching applicable index for " + unaryPred + " ...");
 		// Divide predicate conjuncts depending on whether they can
@@ -309,38 +320,48 @@ public class Preprocessor {
 			IndexFilter indexFilter = new IndexFilter(query);
 			Expression indexedExpr = conjunction(indexedConjuncts);
 			indexedExpr.accept(indexFilter);
-			List<Integer> rows = indexFilter.qualifyingRows.pop();
 			// Create filtered table
+			List<Integer> rows = indexFilter.qualifyingRows.peek();
+			// Need to keep columns for evaluating remaining predicates, if any
+			ExpressionInfo remainingInfo = null;
 			String alias = unaryPred.aliasesMentioned.iterator().next();
 			String table = query.aliasToTable.get(alias);
 			Set<ColumnRef> colSuperset = new HashSet<>();
 			colSuperset.addAll(query.colsForJoins);
 			colSuperset.addAll(query.colsForPostProcessing);
-			// Need to keep columns for evaluating remaining predicates, if any
-			ExpressionInfo remainingInfo = null;
 			if (remainingExpr != null) {
 				remainingInfo = new ExpressionInfo(query, remainingExpr);
-				colSuperset.addAll(remainingInfo.columnsMentioned);				
+				indexFilter.remainingInfo = remainingInfo;
+				colSuperset.addAll(remainingInfo.columnsMentioned);
 			}
 			List<String> requiredCols = colSuperset.stream().
 					filter(c -> c.aliasName.equals(alias)).
 					map(c -> c.columnName).collect(Collectors.toList());
 			String targetRelName = NamingConfig.IDX_FILTERED_PRE + alias;
-			long timer1 = System.currentTimeMillis();
 			if (indexFilter.isFull) {
 				Materialize.execute(table, requiredCols, rows,
 						null, targetRelName, true);
 			}
-			else if (!indexFilter.equalFull && rows.size() == 1) {
+			else if (!indexFilter.equalFull && rows != null && rows.size() == 1) {
 				Materialize.executeEqualPos(table, requiredCols, rows,
 						indexFilter.lastIndex, targetRelName, true);
 			}
 			else {
+				int[] sort = indexFilter.lastIndex.sortedRow;
+				int nrIndexes = 0;
+				for (String columnName: requiredCols) {
+					ColumnRef columnRef = new ColumnRef(alias, columnName);
+					if (query.indexCols.contains(columnRef)) {
+						nrIndexes++;
+					}
+				}
+				if (nrIndexes > 0) {
+					sort = indexFilter.lastIndex.sortedRow.clone();
+					Arrays.parallelSort(sort, rows.get(0), rows.get(1));
+				}
 				Materialize.executeRange(table, requiredCols, rows,
-						indexFilter.lastIndex, targetRelName, true);
+						sort, targetRelName, true);
 			}
-			long timer2 = System.currentTimeMillis();
-			System.out.println("Materializing: " + targetRelName + " took " + (timer2 - timer1) + " ms");
 			// Update pre-processing summary
 			for (String colName : requiredCols) {
 				ColumnRef queryRef = new ColumnRef(alias, colName);
@@ -348,9 +369,12 @@ public class Preprocessor {
 				preSummary.columnMapping.put(queryRef, dbRef);
 			}
 			preSummary.aliasToFiltered.put(alias, targetRelName);
-			return remainingInfo;
+			return indexFilter;
 		} else {
-			return unaryPred;
+			IndexFilter indexFilter = new IndexFilter(query);
+			indexFilter.lastIndex = null;
+			indexFilter.remainingInfo = unaryPred;
+			return indexFilter;
 		}
 	}
 	/**
@@ -360,13 +384,14 @@ public class Preprocessor {
 	 * 
 	 * @param query			query to pre-process
 	 * @param alias			alias of table to filter
-	 * @param unaryPred		unary predicate on that table
+	 * @param filter		unary predicate filter
 	 * @param requiredCols	project on those columns
 	 * @param preSummary	summary of pre-processing steps
 	 */
-	static List<Integer> filterProject(QueryInfo query, String alias, ExpressionInfo unaryPred,
+	static List<Integer> filterProject(QueryInfo query, String alias, IndexFilter filter,
 			List<ColumnRef> requiredCols, Context preSummary) throws Exception {
 		long startMillis = 0;
+		ExpressionInfo unaryPred = filter.remainingInfo;
 		if (LoggingConfig.PERFORMANCE_VERBOSE) {
 			startMillis = System.currentTimeMillis();
 			log("Filtering and projection for " + alias + " ...");
@@ -376,20 +401,24 @@ public class Preprocessor {
 			log("Table name for " + alias + " is " + tableName);
 		}
 		// Determine rows satisfying unary predicate
-//		long s1 = System.currentTimeMillis();
 		List<Integer> satisfyingRows = Filter.executeToList(
-				unaryPred, tableName, preSummary.columnMapping, query);
-//		long s2 = System.currentTimeMillis();
+				filter, tableName, preSummary.columnMapping, query, requiredCols);
+		if (satisfyingRows == null) {
+			List<Integer> returnedResults = new ArrayList<>();
+			returnedResults.add(-1);
+			return returnedResults;
+		}
 		// Materialize relevant rows and columns
 		String filteredName = NamingConfig.FILTERED_PRE + alias;
 		List<String> columnNames = new ArrayList<>();
 		for (ColumnRef colRef : requiredCols) {
 			columnNames.add(colRef.columnName);
 		}
+		long s2 = System.currentTimeMillis();
 		Materialize.execute(tableName, columnNames, 
 				satisfyingRows, null, filteredName, true);
-//		long s3 = System.currentTimeMillis();
-//		System.out.println("Filtering using " + unaryPred + " took " + (s2 - s1) + "\t" + (s3 - s2));
+		long s3 = System.currentTimeMillis();
+		System.out.println("Materializing after filtering " + unaryPred + " took " + (s3 - s2));
 		// Update pre-processing summary
 		for (ColumnRef srcRef : requiredCols) {
 			String columnName = srcRef.columnName;
@@ -430,21 +459,7 @@ public class Preprocessor {
 						log("Creating index for " + queryRef +
 								" (query) - " + dbRef + " (DB)");
 					}
-					// Create index (unless it exists already)
-//					if (GeneralConfig.isParallel) {
-//						ColumnInfo columnInfo = query.colRefToInfo.get(queryRef);
-//						String tableName = query.aliasToTable.get(queryRef.aliasName);
-//						String columnName = queryRef.columnName;
-//						ColumnRef columnRef = new ColumnRef(tableName, columnName);
-//						Index index = BufferManager.colToIndex.getOrDefault(columnRef, null);
-//						PartitionIndex partitionIndex = index == null ? null : (PartitionIndex) index;
-//						// Get index generation policy according to statistics.
-//						// Create index (unless it exists already)
-//						Indexer.partitionIndex(dbRef, queryRef, partitionIndex, columnInfo.isPrimary, false, false);
-//					}
-//					else {
-//						Indexer.index(dbRef, false);
-//					}
+//					long timer1 = System.currentTimeMillis();
 					ColumnInfo columnInfo = query.colRefToInfo.get(queryRef);
 					String tableName = query.aliasToTable.get(queryRef.aliasName);
 					String columnName = queryRef.columnName;
@@ -454,6 +469,8 @@ public class Preprocessor {
 					// Get index generation policy according to statistics.
 					// Create index (unless it exists already)
 					Indexer.partitionIndex(dbRef, queryRef, partitionIndex, columnInfo.isPrimary, false, false);
+//					long timer2 = System.currentTimeMillis();
+//					System.out.println("Indexing " + queryRef + " " + (timer2 - timer1));
 				} catch (Exception e) {
 					System.err.println("Error creating index for " + queryRef);
 					e.printStackTrace();

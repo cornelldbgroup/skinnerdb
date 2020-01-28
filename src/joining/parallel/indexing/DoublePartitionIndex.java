@@ -28,7 +28,7 @@ public class DoublePartitionIndex extends PartitionIndex {
     /**
      * Number of threads.
      */
-    int nrThreads;
+    public int nrThreads;
     /**
      * Data is distributed to different scopes of threads.
      */
@@ -56,7 +56,7 @@ public class DoublePartitionIndex extends PartitionIndex {
         this.scopes = new byte[this.cardinality];
         this.queryRef = queryRef;
 
-        if (policy == IndexPolicy.Key) {
+        if (policy == IndexPolicy.Key || unique) {
             keyColumnIndex(origin);
         }
         else if (policy == IndexPolicy.Sparse) {
@@ -70,10 +70,20 @@ public class DoublePartitionIndex extends PartitionIndex {
                 groupIds[id] = pos;
                 id++;
             }
+            if (keyToPositions.size() == doubleData.cardinality) {
+                unique = true;
+            }
         }
         else {
             parallelDenseIndex(colRef);
         }
+    }
+
+    public DoublePartitionIndex(int cardinality, ColumnRef queryRef) {
+        super(cardinality);
+        this.scopes = new byte[cardinality];
+        this.queryRef = queryRef;
+        this.doubleData = new DoubleData(cardinality);
     }
 
     /**
@@ -131,64 +141,88 @@ public class DoublePartitionIndex extends PartitionIndex {
         double[] data = doubleData.data;
         keyToPositions = doubleIndex.keyToPositions;
         positions = new int[doubleIndex.positions.length];
-        List<DoubleIndexRange> batches = this.split();
-        // Count number of occurrences for each batch.
-        batches.parallelStream().forEach(batch -> {
-            // Evaluate predicate for each table row
-            for (int rowCtr = batch.firstTuple; rowCtr <= batch.lastTuple; ++rowCtr) {
-                if (!doubleData.isNull.get(rowCtr)) {
-                    double value = data[rowCtr];
-                    batch.add(value);
-                }
-            }
-        });
-        int nrBatches = batches.size();
-        // joining.parallel fill prefix and indices value into positions array.
-        IntStream.range(0, nrBatches).parallel().forEach(bid -> {
-            DoubleIndexRange batch = batches.get(bid);
-            DoubleIntCursor batchCursor = batch.valuesMap.cursor();
-            batch.prefixMap = HashDoubleIntMaps.newMutableMap(batch.valuesMap.size());
-            while (batchCursor.moveNext()) {
-                double key = batchCursor.key();
-                int prefix = 1;
-                int localNr = batchCursor.value();
-                int startPos = keyToPositions.getOrDefault(key, -1);
+        boolean sorted = doubleIndex.sorted;
 
-                for (int i = 0; i < bid; i++) {
-                    prefix += batches.get(i).valuesMap.getOrDefault(key, 0);
-                }
-                int nrValue = positions[startPos];
-                if (nrValue == 0) {
-                    int nr = prefix - 1 + localNr;
-                    for (int i = bid + 1; i < nrBatches; i++) {
-                        nr += batches.get(i).valuesMap.getOrDefault(key, 0);
-                    }
-                    positions[startPos] = nr;
-                    nrValue = nr;
-                }
-                if (nrValue > 1) {
-                    batch.prefixMap.put(key, prefix + startPos);
-                }
-            }
-            // Evaluate predicate for each table row
-            for (int rowCtr = batch.firstTuple; rowCtr <= batch.lastTuple; ++rowCtr) {
-                if (!doubleData.isNull.get(rowCtr)) {
-                    double value = data[rowCtr];
-                    int firstPos = keyToPositions.getOrDefault(value, -1);
-                    int nr = positions[firstPos];
-                    if (nr == 1) {
-                        positions[firstPos + 1] = rowCtr;
-                        scopes[rowCtr] = 0;
-                    }
-                    else {
-                        int pos = batch.prefixMap.computeIfPresent(value, (k, v) -> v + 1) - 1;
+        if (sorted) {
+            List<DoubleIndexRange> batches = this.split(true);
+            int nrBatches = batches.size();
+            IntStream.range(0, nrBatches).parallel().forEach(bid -> {
+                DoubleIndexRange batch = batches.get(bid);
+                // Evaluate predicate for each table row
+                for (int rowCtr = batch.firstTuple; rowCtr <= batch.lastTuple; ++rowCtr) {
+                    if (!doubleData.isNull.get(rowCtr)) {
+                        double value = data[rowCtr];
+                        int firstPos = keyToPositions.getOrDefault(value, -1);
+                        int nr = positions[firstPos];
+                        int pos = firstPos + 1 + nr;
                         positions[pos] = rowCtr;
-                        int startThread = (pos - firstPos - 1) % nrThreads;
+                        int startThread = nr % nrThreads;
                         scopes[rowCtr] = (byte) startThread;
+                        positions[firstPos]++;
                     }
                 }
-            }
-        });
+            });
+        }
+        else {
+            List<DoubleIndexRange> batches = this.split(false);
+            // Count number of occurrences for each batch.
+            batches.parallelStream().forEach(batch -> {
+                // Evaluate predicate for each table row
+                for (int rowCtr = batch.firstTuple; rowCtr <= batch.lastTuple; ++rowCtr) {
+                    if (!doubleData.isNull.get(rowCtr)) {
+                        double value = data[rowCtr];
+                        batch.add(value);
+                    }
+                }
+            });
+            int nrBatches = batches.size();
+            // joining.parallel fill prefix and indices value into positions array.
+            IntStream.range(0, nrBatches).parallel().forEach(bid -> {
+                DoubleIndexRange batch = batches.get(bid);
+                DoubleIntCursor batchCursor = batch.valuesMap.cursor();
+                batch.prefixMap = HashDoubleIntMaps.newMutableMap(batch.valuesMap.size());
+                while (batchCursor.moveNext()) {
+                    double key = batchCursor.key();
+                    int prefix = 1;
+                    int localNr = batchCursor.value();
+                    int startPos = keyToPositions.getOrDefault(key, -1);
+
+                    for (int i = 0; i < bid; i++) {
+                        prefix += batches.get(i).valuesMap.getOrDefault(key, 0);
+                    }
+                    int nrValue = positions[startPos];
+                    if (nrValue == 0) {
+                        int nr = prefix - 1 + localNr;
+                        for (int i = bid + 1; i < nrBatches; i++) {
+                            nr += batches.get(i).valuesMap.getOrDefault(key, 0);
+                        }
+                        positions[startPos] = nr;
+                        nrValue = nr;
+                    }
+                    if (nrValue > 1) {
+                        batch.prefixMap.put(key, prefix + startPos);
+                    }
+                }
+                // Evaluate predicate for each table row
+                for (int rowCtr = batch.firstTuple; rowCtr <= batch.lastTuple; ++rowCtr) {
+                    if (!doubleData.isNull.get(rowCtr)) {
+                        double value = data[rowCtr];
+                        int firstPos = keyToPositions.getOrDefault(value, -1);
+                        int nr = positions[firstPos];
+                        if (nr == 1) {
+                            positions[firstPos + 1] = rowCtr;
+                            scopes[rowCtr] = 0;
+                        }
+                        else {
+                            int pos = batch.prefixMap.computeIfPresent(value, (k, v) -> v + 1) - 1;
+                            positions[pos] = rowCtr;
+                            int startThread = (pos - firstPos - 1) % nrThreads;
+                            scopes[rowCtr] = (byte) startThread;
+                        }
+                    }
+                }
+            });
+        }
     }
 
     /**
@@ -324,7 +358,7 @@ public class DoublePartitionIndex extends PartitionIndex {
      *
      * @return list of row ranges (batches)
      */
-    private List<DoubleIndexRange> split() {
+    public List<DoubleIndexRange> split() {
         List<DoubleIndexRange> batches = new ArrayList<>();
         int batchSize = Math.max(ParallelConfig.PRE_INDEX_SIZE, cardinality / 100);
         for (int batchCtr = 0; batchCtr * batchSize < cardinality;
@@ -336,6 +370,40 @@ public class DoublePartitionIndex extends PartitionIndex {
             batches.add(doubleIndexRange);
         }
         return batches;
+    }
+
+    /**
+     * Splits table with given cardinality into tuple batches
+     * according to the configuration for joining.parallel processing.
+     *
+     * @return list of row ranges (batches)
+     */
+    public List<DoubleIndexRange> split(boolean sorted) {
+        if (sorted) {
+            List<DoubleIndexRange> batches = new ArrayList<>();
+            int batchSize = Math.max(ParallelConfig.PRE_INDEX_SIZE, cardinality / 200);
+            int startIdx = 0;
+            int tentativeEndIdx = startIdx + batchSize - 1;
+            double[] data = doubleData.data;
+            for (int batchCtr = 0; batchCtr * batchSize < cardinality;
+                 ++batchCtr) {
+                int endIdx = Math.min(cardinality - 1, tentativeEndIdx);
+                while (endIdx < cardinality - 1 && data[endIdx + 1] == data[endIdx]) {
+                    endIdx = Math.min(cardinality - 1, endIdx + 1);
+                }
+                DoubleIndexRange IntIndexRange = new DoubleIndexRange(startIdx, endIdx, batchCtr);
+                batches.add(IntIndexRange);
+                startIdx = endIdx + 1;
+                tentativeEndIdx = startIdx + batchSize - 1;
+                if (startIdx >= cardinality) {
+                    break;
+                }
+            }
+            return batches;
+        }
+        else {
+            return split();
+        }
     }
 
     /**

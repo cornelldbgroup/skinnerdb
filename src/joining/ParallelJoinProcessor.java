@@ -75,7 +75,8 @@ public class ParallelJoinProcessor {
         else {
             Set<ResultTuple> resultTuples = new HashSet<>();
             List<Long> subExes = new ArrayList<>();
-            for (int i = 0; i < GeneralConfig.TEST_CASE; i++) {
+            int nrCases = GeneralConfig.ISTESTCASE ? GeneralConfig.TEST_CASE : 1;
+            for (int i = 0; i < nrCases; i++) {
                 System.out.println("Case " + i);
                 // DPD async
                 if (ParallelConfig.PARALLEL_SPEC == 0) {
@@ -119,15 +120,23 @@ public class ParallelJoinProcessor {
                             JoinConfig.BUDGET_PER_EPISODE, query, context);
                     parallelization.execute(resultTuples);
                 }
+                // Search parallelization fixing one join order
+                else if (ParallelConfig.PARALLEL_SPEC == 7) {
+                    Parallelization parallelization = new SearchParallelization(ParallelConfig.EXE_THREADS,
+                            JoinConfig.BUDGET_PER_EPISODE, query, context);
+                    parallelization.execute(resultTuples);
+                }
                 subExes.add(JoinStats.subExeTime.remove(JoinStats.subExeTime.size() - 1));
-                if (i < GeneralConfig.TEST_CASE - 1)
+                if (i < nrCases - 1)
                     resultTuples = new HashSet<>();
             }
             System.out.println("Finish Parallel Join!");
-            int median = GeneralConfig.TEST_CASE / 2;
+            int median = nrCases / 2;
             long[] subExe = subExes.stream().mapToLong(exe->exe).toArray();
             Arrays.sort(subExe);
             JoinStats.subExeTime.add(subExe[median]);
+            JoinStats.subAllExeTime.add(Arrays.toString(subExe));
+
 
             long materializeStart = System.currentTimeMillis();
             // Materialize result table
@@ -153,9 +162,6 @@ public class ParallelJoinProcessor {
             System.out.println("Join card: " + skinnerJoinCard + "\tJoin time:" + Arrays.toString(JoinStats.subExeTime.toArray()));
 
         }
-        // Measure execution time for join phase
-        JoinStats.joinMillis = System.currentTimeMillis() - startMillis;
-
     }
     /**
      * Print out log entry if the maximal number of log
