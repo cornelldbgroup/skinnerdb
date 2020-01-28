@@ -20,6 +20,7 @@ import net.sf.jsqlparser.expression.Alias;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
 import net.sf.jsqlparser.expression.operators.relational.EqualsTo;
+import net.sf.jsqlparser.expression.operators.relational.ExistsExpression;
 import net.sf.jsqlparser.expression.operators.relational.InExpression;
 import net.sf.jsqlparser.expression.operators.relational.ItemsList;
 import net.sf.jsqlparser.schema.Column;
@@ -453,14 +454,27 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 						unnestedConjunct.setRightExpression(unnestedRight);
 						unnestedConjuncts.add(unnestedConjunct);
 						continue;
+					} else if (inExpr.isNot()) {
+						sqlExceptions.add(new SQLexception("NOT IN "
+								+ "not yet supported - rewrite "
+								+ "using NOT EXISTS"));
 					}
+				} else if (conjunct instanceof ExistsExpression) {
+					// Rewrite sub-query within exists clause
+					ExistsExpression exists = (ExistsExpression)conjunct;
+					exists.getRightExpression().accept(this);
+					Expression unnestedRight = exprStack.pop();
+					exists.setRightExpression(unnestedRight);
+					unnestedConjuncts.add(exists);
+					continue;
 				}
 				// Default unnesting strategy
 				conjunct.accept(this);
 				unnestedConjuncts.add(exprStack.pop());
 			}
 			// Replace where clause by unnested version
-			plainSelect.setWhere(WhereUtil.conjunction(unnestedConjuncts));
+			plainSelect.setWhere(WhereUtil.conjunction(
+					unnestedConjuncts));
 		}
 	}
 	/**
