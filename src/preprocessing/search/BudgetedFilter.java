@@ -19,7 +19,7 @@ public class BudgetedFilter {
         this.lastCompletedRow = -1;
     }
 
-    public int executeWithBudget(int budget, int[] order) {
+    public double executeWithBudget(int budget, int[] order) {
         int remainingBudget = budget;
         int currentCompletedRow = lastCompletedRow;
 
@@ -42,7 +42,9 @@ public class BudgetedFilter {
             result.add(currentCompletedRow);
         }
 
-        int reward = currentCompletedRow - lastCompletedRow;
+        double reward =
+                (currentCompletedRow - lastCompletedRow) * 1.0 /
+                        (cardinality - 1 - lastCompletedRow);
         lastCompletedRow = currentCompletedRow;
         return reward;
     }

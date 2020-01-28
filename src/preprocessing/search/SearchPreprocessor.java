@@ -22,6 +22,7 @@ import java.util.Set;
 import static operators.Filter.compilePred;
 import static operators.Filter.loadPredCols;
 import static preprocessing.PreprocessorUtil.*;
+import static preprocessing.search.FilterSearchConfig.BUDGET;
 
 public class SearchPreprocessor implements Preprocessor {
     /**
@@ -170,18 +171,15 @@ public class SearchPreprocessor implements Preprocessor {
         long nextForget = 1;
 
         boolean FORGET = false;
-        int budget = 100;
 
         while (!filterOp.isFinished()) {
             ++roundCtr;
-            int reward = root.sample(roundCtr, order, budget);
+            double reward = root.sample(roundCtr, order, BUDGET);
 
             if (FORGET && roundCtr == nextForget) {
                 root = new FilterUCTNode(filterOp, roundCtr, nrCompiled);
                 nextForget *= 10;
             }
-
-            budget *= 5;
         }
 
         return filterOp.getResult();

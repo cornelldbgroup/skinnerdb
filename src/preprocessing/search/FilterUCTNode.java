@@ -18,7 +18,7 @@ public class FilterUCTNode {
     private final List<Integer> unchosenPreds;
 
     private final int[] nrTries;
-    private final int[] accumulatedReward;
+    private final double[] accumulatedReward;
     private int nrVisits;
 
     private List<Integer> priorityActions;
@@ -43,7 +43,7 @@ public class FilterUCTNode {
 
         this.nrVisits = 0;
         this.nrTries = new int[nrActions];
-        this.accumulatedReward = new int[nrActions];
+        this.accumulatedReward = new double[nrActions];
         for (int i = 0; i < nrActions; i++) {
             nrTries[i] = 0;
             accumulatedReward[i] = 0;
@@ -81,7 +81,7 @@ public class FilterUCTNode {
 
         this.nrVisits = 0;
         this.nrTries = new int[nrActions];
-        this.accumulatedReward = new int[nrActions];
+        this.accumulatedReward = new double[nrActions];
         for (int i = 0; i < nrActions; i++) {
             nrTries[i] = 0;
             accumulatedReward[i] = 0;
@@ -153,12 +153,12 @@ public class FilterUCTNode {
         return bestAction;
     }
 
-    public int sample(long roundCtr, int[] order, int budget) {
+    public double sample(long roundCtr, int[] order, int budget) {
         if (nrActions == 0) {
             return filterOp.executeWithBudget(budget, order);
         }
 
-        int action = selectAction(SelectionPolicy.MAX_REWARD);
+        int action = selectAction(SelectionPolicy.UCB1);
         int predicate = actionToPredicate[action];
         order[treeLevel] = predicate;
         boolean canExpand = createdIn != roundCtr;
@@ -167,7 +167,7 @@ public class FilterUCTNode {
         }
 
         FilterUCTNode child = childNodes[action];
-        int reward = (child != null) ?
+        double reward = (child != null) ?
                 child.sample(roundCtr, order, budget) :
                 playout(order, budget);
 
@@ -175,7 +175,7 @@ public class FilterUCTNode {
         return reward;
     }
 
-    private int playout(int[] order, int budget) {
+    private double playout(int[] order, int budget) {
         int lastPred = order[treeLevel];
 
         Collections.shuffle(unchosenPreds);
@@ -191,7 +191,7 @@ public class FilterUCTNode {
         return filterOp.executeWithBudget(budget, order);
     }
 
-    void updateStatistics(int selectedAction, int reward) {
+    void updateStatistics(int selectedAction, double reward) {
         ++nrVisits;
         ++nrTries[selectedAction];
         accumulatedReward[selectedAction] += reward;
