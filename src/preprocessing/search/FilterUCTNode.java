@@ -153,7 +153,7 @@ public class FilterUCTNode {
         return bestAction;
     }
 
-    public double sample(long roundCtr, int[] order, int budget) {
+    public double sample(long roundCtr, int[] order, long budget) {
         if (nrActions == 0) {
             return filterOp.executeWithBudget(budget, order);
         }
@@ -175,7 +175,7 @@ public class FilterUCTNode {
         return reward;
     }
 
-    private double playout(int[] order, int budget) {
+    private double playout(int[] order, long budget) {
         int lastPred = order[treeLevel];
 
         Collections.shuffle(unchosenPreds);

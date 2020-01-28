@@ -19,7 +19,7 @@ public class BudgetedFilter {
         this.lastCompletedRow = -1;
     }
 
-    public double executeWithBudget(int budget, int[] order) {
+    /*public double executeWithBudget(int budget, int[] order) {
         int remainingBudget = budget;
         int currentCompletedRow = lastCompletedRow;
 
@@ -28,7 +28,8 @@ public class BudgetedFilter {
             currentCompletedRow++;
             for (int predIndex : order) {
                 --remainingBudget;
-                if (compiled.get(predIndex).evaluate(currentCompletedRow) <= 0) {
+                if (compiled.get(predIndex).evaluate(currentCompletedRow) <=
+                0) {
                     continue ROW_LOOP;
                 }
 
@@ -37,6 +38,28 @@ public class BudgetedFilter {
                     // complete and exit
                     currentCompletedRow--;
                     break ROW_LOOP;
+                }
+            }
+            result.add(currentCompletedRow);
+        }
+
+        double reward =
+                (currentCompletedRow - lastCompletedRow) * 1.0 /
+                        (cardinality - 1 - lastCompletedRow);
+        lastCompletedRow = currentCompletedRow;
+        return reward;
+    }*/
+
+    public double executeWithBudget(long budget, int[] order) {
+        int currentCompletedRow = lastCompletedRow;
+
+        long future = System.currentTimeMillis() + budget;
+        ROW_LOOP:
+        while (System.currentTimeMillis() < future && currentCompletedRow + 1 < cardinality) {
+            currentCompletedRow++;
+            for (int predIndex : order) {
+                if (compiled.get(predIndex).evaluate(currentCompletedRow) <= 0) {
+                    continue ROW_LOOP;
                 }
             }
             result.add(currentCompletedRow);
