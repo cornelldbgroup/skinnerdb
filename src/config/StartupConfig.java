@@ -14,5 +14,5 @@ public class StartupConfig {
 	/**
 	 * Whether to have extra run for warm up.
 	 */
-	public static final boolean WARMUP_RUN = true;
+	public static final boolean WARMUP_RUN = false;
 }

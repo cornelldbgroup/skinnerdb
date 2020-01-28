@@ -507,36 +507,25 @@ public class SkinnerCmd {
             // string dictionary is still loaded.
             BufferManager.loadDictionary();
         }
-
         Indexer.indexAll(StartupConfig.INDEX_CRITERIA);
-        // q18, q01
-        if (args.length == 2) {
-            // initialize a thread pool
-            ThreadPool.initThreadsPool(ParallelConfig.EXE_THREADS, ParallelConfig.PRE_THREADS);
-//            processInput("exec ./tpch/skinnerqueries/q03.sql");
-//            processInput("exec ./jcch/queries/q02.sql");
-//            processInput("exec ./jcch/queries/q17.sql");
-            processInput("exec ../imdb/queries/26a.sql");
-//            processInput("exec /Users/tracy/Documents/Research/skinnerdb/imdb/queries/33c.sql");
-//            processInput("exp");
-        } else {
-			ThreadPool.initThreadsPool(ParallelConfig.EXE_THREADS, ParallelConfig.PRE_THREADS);
-            // Command line processing
-            System.out.println("Enter 'help' for help and 'quit' to exit");
-            Scanner scanner = new Scanner(System.in);
-            boolean continueProcessing = true;
-            while (continueProcessing) {
-                System.out.print("> ");
-                String input = scanner.nextLine();
-                try {
-                    continueProcessing = processInput(input);
-                } catch (Exception e) {
-                    System.err.println("Error processing command: ");
-                    e.printStackTrace();
-                }
+		ThreadPool.initThreadsPool(ParallelConfig.EXE_THREADS, ParallelConfig.PRE_THREADS);
+		System.out.println("SkinnerDB is using " + 
+				ParallelConfig.EXE_THREADS + " threads.");
+        // Command line processing
+        System.out.println("Enter 'help' for help and 'quit' to exit");
+        Scanner scanner = new Scanner(System.in);
+        boolean continueProcessing = true;
+        while (continueProcessing) {
+            System.out.print("> ");
+            String input = scanner.nextLine();
+            try {
+                continueProcessing = processInput(input);
+            } catch (Exception e) {
+                System.err.println("Error processing command: ");
+                e.printStackTrace();
             }
-            scanner.close();
         }
+        scanner.close();
         ThreadPool.close();
     }
 }
