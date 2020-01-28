@@ -118,7 +118,7 @@ public class FilterUCTNode {
             switch (policy) {
                 case UCB1:
                     quality = meanReward +
-                            JoinConfig.EXPLORATION_WEIGHT * exploration;
+                            FilterSearchConfig.EXPLORATION_FACTOR * exploration;
                     break;
                 case MAX_REWARD:
                 case EPSILON_GREEDY:
@@ -132,7 +132,7 @@ public class FilterUCTNode {
                         quality = random.nextDouble();
                     } else {
                         quality = meanReward +
-                                JoinConfig.EXPLORATION_WEIGHT * exploration;
+                                FilterSearchConfig.EXPLORATION_FACTOR * exploration;
                     }
                     break;
             }
