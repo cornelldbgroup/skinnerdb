@@ -144,8 +144,10 @@ public class SearchPreprocessor implements Preprocessor {
         for (Pair<UnaryBoolEval, Double> pair : compiled) {
             maxValue = Math.max(pair.getRight(), maxValue);
         }
-        for (Pair<UnaryBoolEval, Double> pair : compiled) {
-            pair.setValue(pair.getValue() / maxValue * 10);
+        for (int i = 0; i < compiled.size(); i++) {
+            Pair<UnaryBoolEval, Double> pair = compiled.get(i);
+            compiled.set(i, Pair.of(pair.getLeft(),
+                    pair.getValue() / maxValue * 10));
         }
 
         List<Integer> satisfyingRows = filterUCT(tableName, compiled);
