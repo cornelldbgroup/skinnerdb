@@ -118,6 +118,8 @@ public class ExpressionCompiler extends SkinnerVisitor {
      */
     //static Calendar calendar = Calendar.getInstance();
 
+    private int cost;
+
     /**
      * Initializes fields and writes expression evaluator boilerplate code.
      *
@@ -133,6 +135,7 @@ public class ExpressionCompiler extends SkinnerVisitor {
                               Map<String, Integer> tableMapping,
                               Map<String, ColumnRef> aggMapping,
                               EvaluatorType evaluatorType) {
+        cost = 0;
         // Increment expression ID (used in class name)
         ++expressionID;
         // Initialize final fields
@@ -311,7 +314,7 @@ public class ExpressionCompiler extends SkinnerVisitor {
     public static double[] getDoubleData(String tableName, String columnName) {
         ColumnRef columnRef = new ColumnRef(tableName, columnName);
         DoubleData doubleData =
-				(DoubleData) BufferManager.colToData.get(columnRef);
+                (DoubleData) BufferManager.colToData.get(columnRef);
         return doubleData.data;
     }
 
@@ -386,11 +389,11 @@ public class ExpressionCompiler extends SkinnerVisitor {
                 null);                // exceptions (array of strings)
         constructorVisitor.visitCode();        // Start the code for this method
         constructorVisitor.visitVarInsn(Opcodes.ALOAD, 0);    // Load "this"
-		// onto the stack
+        // onto the stack
         constructorVisitor.visitMethodInsn(Opcodes.INVOKESPECIAL,    //
-				// Invoke an instance method (non-virtual)
+                // Invoke an instance method (non-virtual)
                 "java/lang/Object",            // Class on which the method
-				// is defined
+                // is defined
                 "<init>",                    // Name of the method
                 "()V",                        // Descriptor
                 false);                        // Is this class an interface?
@@ -663,8 +666,8 @@ public class ExpressionCompiler extends SkinnerVisitor {
      * Can be either unary or k-nary Boolean expressions (a cast
      * is required after invocation).
      *
-     * @throws Exception
      * @return newly generated evaluator instance
+     * @throws Exception
      */
     public Object getBoolEval() throws Exception {
         if (!sqlExceptions.isEmpty()) {
@@ -690,12 +693,19 @@ public class ExpressionCompiler extends SkinnerVisitor {
         if (LoggingConfig.COMPILATION_VERBOSE) {
             outputBytecode(classWriter);
         }
+
+        cost = getNumberOfInstructions(classWriter);
+
         // Create instance of freshly generated class
         DynamicClassLoader loader = new DynamicClassLoader();
         Class<?> expressionClass = loader.defineClass(
                 "expressions.compilation." + className,
                 classWriter.toByteArray());
         return expressionClass.newInstance();
+    }
+
+    public int getCost() {
+        return cost;
     }
 
     /**
@@ -755,8 +765,8 @@ public class ExpressionCompiler extends SkinnerVisitor {
      * Instantiates a new class for evaluating unary
      * integer expressions.
      *
-     * @throws Exception
      * @return newly generated evaluator object
+     * @throws Exception
      */
     public UnaryIntEval getUnaryIntEval() throws Exception {
         // Finalize code for unary evaluator of integer result
@@ -773,8 +783,8 @@ public class ExpressionCompiler extends SkinnerVisitor {
      * Instantiates a new class for evaluating unary
      * long expressions.
      *
-     * @throws Exception
      * @return newly generated evaluator object
+     * @throws Exception
      */
     public UnaryLongEval getUnaryLongEval() throws Exception {
         // Finalize code for unary evaluator of integer result
@@ -791,8 +801,8 @@ public class ExpressionCompiler extends SkinnerVisitor {
      * Instantiates a new class for evaluating unary
      * double expressions.
      *
-     * @throws Exception
      * @return newly generated evaluator object
+     * @throws Exception
      */
     public UnaryDoubleEval getUnaryDoubleEval() throws Exception {
         // Finalize code for unary evaluator of integer result
@@ -809,8 +819,8 @@ public class ExpressionCompiler extends SkinnerVisitor {
      * Instantiates new class for evaluating unary
      * string expression.
      *
-     * @throws Exception
      * @return newly generated evaluator object
+     * @throws Exception
      */
     public UnaryStringEval getUnaryStringEval() throws Exception {
         // Finalize code for unary evaluator of string result
@@ -854,6 +864,18 @@ public class ExpressionCompiler extends SkinnerVisitor {
                 ++lineCtr;
             }
         }
+    }
+
+    public static int getNumberOfInstructions(ClassWriter classWriter) {
+        ClassReader classReader = new ClassReader(classWriter.toByteArray());
+        ClassNode classNode = new ClassNode();
+        classReader.accept(classNode, 0);
+        List<MethodNode> methodNodes = classNode.methods;
+        int instrCounter = 1;
+        for (MethodNode methodNode : methodNodes) {
+            instrCounter += methodNode.instructions.size();
+        }
+        return instrCounter;
     }
 
     /**

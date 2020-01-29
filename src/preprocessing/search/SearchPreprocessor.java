@@ -7,6 +7,7 @@ import expressions.ExpressionInfo;
 import expressions.compilation.UnaryBoolEval;
 import net.sf.jsqlparser.expression.Expression;
 import operators.Materialize;
+import org.apache.commons.lang3.tuple.Pair;
 import preprocessing.Context;
 import preprocessing.Preprocessor;
 import print.RelationPrinter;
@@ -132,10 +133,11 @@ public class SearchPreprocessor implements Preprocessor {
 
         // Determine rows satisfying unary predicate
         loadPredCols(unaryPred, preSummary.columnMapping);
-        List<UnaryBoolEval> compiled = new ArrayList<>(predicates.size());
+        List<Pair<UnaryBoolEval, Integer>> compiled =
+                new ArrayList<>(predicates.size());
         for (Expression expression : predicates) {
-            compiled.add(compilePred(unaryPred, expression,
-                    preSummary.columnMapping));
+            compiled.add(compilePred(unaryPred,
+                    expression, preSummary.columnMapping));
         }
         List<Integer> satisfyingRows = filterUCT(tableName, compiled);
 
@@ -162,7 +164,7 @@ public class SearchPreprocessor implements Preprocessor {
     }
 
     private List<Integer> filterUCT(String tableName,
-                                    List<UnaryBoolEval> compiled) {
+                                    List<Pair<UnaryBoolEval, Integer>> compiled) {
         long roundCtr = 0;
         int nrCompiled = compiled.size();
         BudgetedFilter filterOp = new BudgetedFilter(tableName, compiled);

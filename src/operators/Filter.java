@@ -9,10 +9,10 @@ import expressions.compilation.EvaluatorType;
 import expressions.compilation.ExpressionCompiler;
 import expressions.compilation.UnaryBoolEval;
 import net.sf.jsqlparser.expression.Expression;
+import org.apache.commons.lang3.tuple.Pair;
 import query.ColumnRef;
 
 import java.util.ArrayList;
-import java.util.BitSet;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -50,45 +50,16 @@ public class Filter {
      * @return compiled predicate evaluator
      * @throws Exception
      */
-    public static UnaryBoolEval compilePred(ExpressionInfo unaryPred,
-                                            Expression expr,
-                                            Map<ColumnRef, ColumnRef> columnMapping)
-            throws Exception {
+    public static Pair<UnaryBoolEval, Integer> compilePred(
+            ExpressionInfo unaryPred,
+            Expression expr,
+            Map<ColumnRef, ColumnRef> columnMapping) throws Exception {
         ExpressionCompiler unaryCompiler = new ExpressionCompiler(
                 unaryPred, columnMapping, null, null,
                 EvaluatorType.UNARY_BOOLEAN);
         expr.accept(unaryCompiler);
-        return (UnaryBoolEval) unaryCompiler.getBoolEval();
-    }
-
-    /**
-     * Returns bit set indicating which rows satisfy a given unary predicate.
-     *
-     * @param unaryPred     unary predicate
-     * @param tableName     name of DB table to which predicate refers
-     * @param columnMapping maps query to database columns
-     * @return bit set indicating satisfying rows
-     * @throws Exception
-     */
-    public static BitSet executeToBitSet(ExpressionInfo unaryPred,
-                                         String tableName, Map<ColumnRef,
-            ColumnRef> columnMapping)
-            throws Exception {
-        // Load required columns for predicate evaluation
-        loadPredCols(unaryPred, columnMapping);
-        // Compile unary predicate for fast evaluation
-        UnaryBoolEval predEval = compilePred(unaryPred,
-                unaryPred.finalExpression, columnMapping);
-        // Get cardinality of table referenced in predicate
-        int cardinality = CatalogManager.getCardinality(tableName);
-        // Generate result set
-        BitSet result = new BitSet(cardinality);
-        for (int i = 0; i < cardinality; ++i) {
-            if (predEval.evaluate(i) > 0) {
-                result.set(i);
-            }
-        }
-        return result;
+        return Pair.of((UnaryBoolEval) unaryCompiler.getBoolEval(),
+                unaryCompiler.getCost());
     }
 
     /**
@@ -110,7 +81,7 @@ public class Filter {
         loadPredCols(unaryPred, columnMapping);
         // Compile unary predicate for fast evaluation
         UnaryBoolEval unaryBoolEval = compilePred(unaryPred,
-                unaryPred.finalExpression, columnMapping);
+                unaryPred.finalExpression, columnMapping).getLeft();
         // Get cardinality of table referenced in predicate
         int cardinality = CatalogManager.getCardinality(tableName);
         // Initialize filter result

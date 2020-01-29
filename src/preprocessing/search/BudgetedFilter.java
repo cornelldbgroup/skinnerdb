@@ -2,6 +2,7 @@ package preprocessing.search;
 
 import catalog.CatalogManager;
 import expressions.compilation.UnaryBoolEval;
+import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -10,9 +11,10 @@ public class BudgetedFilter {
     private final int cardinality;
     private int lastCompletedRow;
     private List<Integer> result;
-    private List<UnaryBoolEval> compiled;
+    private List<Pair<UnaryBoolEval, Integer>> compiled;
 
-    public BudgetedFilter(String tableName, List<UnaryBoolEval> compiled) {
+    public BudgetedFilter(String tableName,
+                          List<Pair<UnaryBoolEval, Integer>> compiled) {
         this.result = new ArrayList<>();
         this.compiled = compiled;
         this.cardinality = CatalogManager.getCardinality(tableName);
@@ -28,13 +30,15 @@ public class BudgetedFilter {
         while (remainingBudget > 0 && currentCompletedRow + 1 < cardinality) {
             currentCompletedRow++;
             for (int predIndex : order) {
-                --remainingBudget;
-                if (compiled.get(predIndex).evaluate(currentCompletedRow) <=
+                Pair<UnaryBoolEval, Integer> expr = compiled.get(predIndex);
+                remainingBudget -= expr.getRight();
+
+                if (expr.getLeft().evaluate(currentCompletedRow) <=
                         0) {
                     continue ROW_LOOP;
                 }
 
-                if (remainingBudget == 0) {
+                if (remainingBudget <= 0) {
                     // Since we're out of budget undo marking current row as
                     // complete and exit
                     currentCompletedRow--;
