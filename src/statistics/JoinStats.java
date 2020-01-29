@@ -66,6 +66,10 @@ public class JoinStats {
      */
     public static double totalWork = 0;
     /**
+     * Join result cardinality of last processed sub-query.
+     */
+    public static int lastJoinCard = -1;
+    /**
      * Number of tuples in join result (before post-processing).
      */
     public static List<Integer> skinnerJoinCards;

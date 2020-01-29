@@ -238,6 +238,7 @@ public class JoinProcessor {
 		System.out.println("Round count: " + roundCtr);
 		System.out.println("Join Order: " + Arrays.toString(joinOrder));
 		System.out.println("Join card: " + skinnerJoinCard + "\tJoin time:" + JoinStats.joinMillis);
+		JoinStats.lastJoinCard = nrTuples;
 	}
 	/**
 	 * Print out log entry if the maximal number of log

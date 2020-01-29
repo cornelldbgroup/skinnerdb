@@ -71,6 +71,7 @@ public class ParallelJoinProcessor {
             int skinnerJoinCard = CatalogManager.getCardinality(targetRelName);
             JoinStats.skinnerJoinCards.add(skinnerJoinCard);
             System.out.println("Join card: " + skinnerJoinCard + "\tJoin time:" + Arrays.toString(JoinStats.subExeTime.toArray()));
+            JoinStats.lastJoinCard = skinnerJoinCard;
         }
         else {
             Set<ResultTuple> resultTuples = new HashSet<>();
@@ -160,7 +161,7 @@ public class ParallelJoinProcessor {
             int skinnerJoinCard = resultTuples.size();
             JoinStats.skinnerJoinCards.add(skinnerJoinCard);
             System.out.println("Join card: " + skinnerJoinCard + "\tJoin time:" + Arrays.toString(JoinStats.subExeTime.toArray()));
-
+            JoinStats.lastJoinCard = skinnerJoinCard;
         }
     }
     /**

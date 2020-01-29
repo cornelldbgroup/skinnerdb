@@ -27,7 +27,7 @@ public class GeneralConfig {
 	/**
 	 * Number of test cases.
 	 */
-	public static int TEST_CASE = 5;
+	public static int TEST_CASE = 1;
 	/**
 	 * Whether it is the test case.
 	 */
