@@ -196,7 +196,7 @@ public class LockFreeTask implements Callable<LockFreeResult>{
 //                System.out.println("forget");
             }
 
-//            if (roundCtr == 50000) {
+//            if (roundCtr == 20000) {
 //                List<String>[] logs = new List[1];
 //                for (int i = 0; i < 1; i++) {
 //                    logs[i] = joinOp.logs;

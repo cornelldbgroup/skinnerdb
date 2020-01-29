@@ -148,13 +148,18 @@ public class ModJoin extends DPJoin {
 
         State state;
         int[] offsets;
-        if (JoinConfig.NEWTRACKER && nrThreads > 1) {
+        if (JoinConfig.NEWTRACKER) {
             state = tracker.continueFrom(joinOrder, splitHash, tid, isShared);
             offsets = tracker.tableOffset;
         }
         else {
             state = oldTracker.continueFrom(joinOrder);
             offsets = oldTracker.tableOffset;
+        }
+        if (roundCtr >= 19990) {
+            System.out.println("Round: " + roundCtr + "\tJoin Order: " + Arrays.toString(order));
+            System.out.println("Start: " + state.toString());
+            System.out.println("Offset: " + Arrays.toString(offsets));
         }
 //        writeLog("Round: " + roundCtr + "\tJoin Order: " + Arrays.toString(order));
 //        writeLog("Start: " + state.toString());
@@ -186,7 +191,8 @@ public class ModJoin extends DPJoin {
         // Get the first table whose cardinality is larger than 1.
         int firstTable = getFirstLargeTable(order);
         if (!state.isFinished()) {
-            if (JoinConfig.NEWTRACKER && nrThreads > 1) {
+            if (JoinConfig.NEWTRACKER) {
+                state.roundCtr = 0;
                 slowest = tracker.updateProgress(joinOrder, splitHash, state, tid, roundCtr, splitTable, firstTable);
             }
             else {
