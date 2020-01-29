@@ -50,7 +50,7 @@ public class Filter {
      * @return compiled predicate evaluator
      * @throws Exception
      */
-    public static Pair<UnaryBoolEval, Integer> compilePred(
+    public static Pair<UnaryBoolEval, Double> compilePred(
             ExpressionInfo unaryPred,
             Expression expr,
             Map<ColumnRef, ColumnRef> columnMapping) throws Exception {
@@ -59,7 +59,7 @@ public class Filter {
                 EvaluatorType.UNARY_BOOLEAN);
         expr.accept(unaryCompiler);
         return Pair.of((UnaryBoolEval) unaryCompiler.getBoolEval(),
-                unaryCompiler.getCost());
+                (double) unaryCompiler.getCost());
     }
 
     /**

@@ -11,10 +11,10 @@ public class BudgetedFilter {
     private final int cardinality;
     private int lastCompletedRow;
     private List<Integer> result;
-    private List<Pair<UnaryBoolEval, Integer>> compiled;
+    private List<Pair<UnaryBoolEval, Double>> compiled;
 
     public BudgetedFilter(String tableName,
-                          List<Pair<UnaryBoolEval, Integer>> compiled) {
+                          List<Pair<UnaryBoolEval, Double>> compiled) {
         this.result = new ArrayList<>();
         this.compiled = compiled;
         this.cardinality = CatalogManager.getCardinality(tableName);
@@ -22,7 +22,7 @@ public class BudgetedFilter {
     }
 
     public double executeWithBudget(long budget, int[] order) {
-        int remainingBudget = (int) budget;
+        double remainingBudget = (double) budget;
         int currentCompletedRow = lastCompletedRow;
 
 
@@ -30,11 +30,10 @@ public class BudgetedFilter {
         while (remainingBudget > 0 && currentCompletedRow + 1 < cardinality) {
             currentCompletedRow++;
             for (int predIndex : order) {
-                Pair<UnaryBoolEval, Integer> expr = compiled.get(predIndex);
+                Pair<UnaryBoolEval, Double> expr = compiled.get(predIndex);
                 remainingBudget -= expr.getRight();
 
-                if (expr.getLeft().evaluate(currentCompletedRow) <=
-                        0) {
+                if (expr.getLeft().evaluate(currentCompletedRow) <= 0) {
                     continue ROW_LOOP;
                 }
 

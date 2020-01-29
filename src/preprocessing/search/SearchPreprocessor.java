@@ -133,12 +133,21 @@ public class SearchPreprocessor implements Preprocessor {
 
         // Determine rows satisfying unary predicate
         loadPredCols(unaryPred, preSummary.columnMapping);
-        List<Pair<UnaryBoolEval, Integer>> compiled =
+        List<Pair<UnaryBoolEval, Double>> compiled =
                 new ArrayList<>(predicates.size());
         for (Expression expression : predicates) {
             compiled.add(compilePred(unaryPred,
                     expression, preSummary.columnMapping));
         }
+
+        double maxValue = Double.MIN_VALUE;
+        for (Pair<UnaryBoolEval, Double> pair : compiled) {
+            maxValue = Math.max(pair.getRight(), maxValue);
+        }
+        for (Pair<UnaryBoolEval, Double> pair : compiled) {
+            pair.setValue(pair.getValue() / maxValue * 10);
+        }
+
         List<Integer> satisfyingRows = filterUCT(tableName, compiled);
 
         // Materialize relevant rows and columns
@@ -164,7 +173,7 @@ public class SearchPreprocessor implements Preprocessor {
     }
 
     private List<Integer> filterUCT(String tableName,
-                                    List<Pair<UnaryBoolEval, Integer>> compiled) {
+                                    List<Pair<UnaryBoolEval, Double>> compiled) {
         long roundCtr = 0;
         int nrCompiled = compiled.size();
         BudgetedFilter filterOp = new BudgetedFilter(tableName, compiled);
