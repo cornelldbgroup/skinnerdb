@@ -126,6 +126,14 @@ public class QueryInfo {
 	public Map<String, Boolean> aliasToExistsFlag =
 			new HashMap<>();
 	/**
+	 * Stores for each table a flag indicating whether
+	 * the table represent a sub-query appearing in an
+	 * exists expression (+1), or in a not exists
+	 * expression (-1), or whether it is a standard
+	 * table (0).
+	 */
+	public int[] existsFlags;
+	/**
 	 * List of expressions that correspond to unary
 	 * predicates.
 	 */
@@ -368,6 +376,7 @@ public class QueryInfo {
 	 * @throws Exception
 	 */
 	void treatExistsPreds(List<Expression> conjuncts) throws Exception {
+		existsFlags = new int[nrJoined];
 		Iterator<Expression> conjunctsIter = conjuncts.iterator();
 		while (conjunctsIter.hasNext()) {
 			Expression conjunct = conjunctsIter.next();
@@ -381,6 +390,8 @@ public class QueryInfo {
 					String alias = table.getName();
 					boolean existsFlag = !exists.isNot();
 					aliasToExistsFlag.put(alias, existsFlag);
+					int aliasIdx = aliasToIndex.get(alias);
+					existsFlags[aliasIdx] = existsFlag?1:-1;
 				} else {
 					// Only single table sub-queries should
 					// remain after unnesting.

@@ -5,6 +5,8 @@ import query.QueryInfo;
 import statistics.JoinStats;
 
 import java.util.*;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import config.JoinConfig;
 
@@ -148,10 +150,6 @@ public class UctNode {
         createdIn = roundCtr;
         treeLevel = 0;
         nrActions = nrTables;
-        priorityActions = new ArrayList<Integer>();
-        for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
-            priorityActions.add(actionCtr);
-        }
         childNodes = new UctNode[nrActions];
         nrTries = new int[nrActions];
         accumulatedReward = new double[nrActions];
@@ -171,6 +169,13 @@ public class UctNode {
         }
         this.eligibleExists = new boolean[nrActions];
         determineEligibility();
+        // All eligible actions become priority actions
+        priorityActions = new ArrayList<Integer>();
+        for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
+        	if (eligibleExists[actionCtr]) {
+                priorityActions.add(actionCtr);        		
+        	}
+        }
     }
     /**
      * Initializes UCT node by expanding parent node.
@@ -345,6 +350,51 @@ public class UctNode {
         accumulatedReward[selectedAction] += reward;
     }
     /**
+     * Repairs given join order by pushing tables representing
+     * sub-queries in exists expression backwards if some of
+     * their dependencies cannot be immediately evaluated.
+     * 
+     * @param joinOrder		repair this join order
+     */
+    void repairExistPos(int[] joinOrder) {
+    	int[] repairedJoinOrder = new int[nrTables];
+    	Set<Integer> pushedBacks = new HashSet<>();
+    	Set<Integer> joined = new HashSet<>();
+    	Set<Integer> unjoined = IntStream.range(0, nrTables).
+    			boxed().collect(Collectors.toSet());
+    	int targetCtr = 0;
+    	for (int srcCtr=0; srcCtr<nrTables; ++srcCtr) {
+    		// Take care of tables that were previously pushed back
+    		Iterator<Integer> pushedIter = pushedBacks.iterator();
+    		while (pushedIter.hasNext()) {
+    			int nextPushed = pushedIter.next();
+    			// Can we add table now?
+    			if (!query.connected(unjoined, nextPushed)) {
+    				pushedIter.remove();
+    				repairedJoinOrder[targetCtr] = nextPushed;
+    				++targetCtr;
+    				joined.add(nextPushed);
+    				unjoined.remove(nextPushed);
+    			}
+    		}
+    		// Can we simply add the next table?
+    		int nextTable = joinOrder[srcCtr];
+    		if (query.existsFlags[nextTable] == 0 ||
+    				!query.connected(unjoined, nextTable)) {
+    			repairedJoinOrder[targetCtr] = nextTable;
+    			++targetCtr;
+    			joined.add(nextTable);
+    			unjoined.remove(nextTable);
+    		} else {
+    			pushedBacks.add(nextTable);
+    		}
+    	}
+    	// Copy repaired join order
+    	for (int joinCtr=0; joinCtr<nrTables; ++joinCtr) {
+    		joinOrder[joinCtr] = repairedJoinOrder[joinCtr];
+    	}
+    }
+    /**
      * Randomly complete join order with remaining tables,
      * invoke evaluation, and return obtained reward.
      *
@@ -384,6 +434,7 @@ public class UctNode {
                     }
                 }
             }
+            repairExistPos(joinOrder);
         } else {
             // Shuffle remaining tables
             Collections.shuffle(unjoinedTables);
@@ -396,7 +447,9 @@ public class UctNode {
                 }
                 joinOrder[posCtr] = nextTable;
             }
+            repairExistPos(joinOrder);
         }
+        System.out.println("JOIN ORDER: " + Arrays.toString(joinOrder));
         // Evaluate completed join order and return reward
         return joinOp.execute(joinOrder);
     }

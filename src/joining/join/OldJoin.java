@@ -226,9 +226,11 @@ public class OldJoin extends MultiWayJoin {
 			int[] tupleIndices, int joinIndex, 
 			int nextCardinality) {
 		if (plan.existsFlags[joinIndex] != 0) {
+			/*
 			System.out.println("Jump at " + joinIndex + 
 					" to " + nextCardinality + " " +
 					Arrays.toString(tupleIndices));
+			*/
 			int nextTable = plan.joinOrder.order[joinIndex];
 			tupleIndices[nextTable] = nextCardinality;
 		}
@@ -249,6 +251,7 @@ public class OldJoin extends MultiWayJoin {
         int[] tupleIndices = new int[nrTables];
         List<List<KnaryBoolEval>> applicablePreds = plan.applicablePreds;
         List<List<JoinIndexWrapper>> joinIndices = plan.joinIndices;
+        System.out.println(plan);
         // Which tables use indices with unique values?
         uniqueIndex = new boolean[nrTables];
         for (int joinCtr=0; joinCtr<nrTables; ++joinCtr) {
@@ -429,11 +432,13 @@ public class OldJoin extends MultiWayJoin {
                 joinIndexInc = false;
             }
             --remainingBudget;
+            /*
             if (nrTables>1) {
                 System.out.println("End of loop tuples: " + 
                 		Arrays.toString(tupleIndices));
                 System.out.println("Join index: " + joinIndex);            	
             }
+            */
         }
         // Store tuple index deltas used to calculate reward
         for (int tableCtr = 0; tableCtr < nrTables; ++tableCtr) {
