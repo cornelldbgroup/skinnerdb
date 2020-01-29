@@ -516,9 +516,9 @@ public class SkinnerCmd {
 //            processInput("exec ./tpch/skinnerqueries/q03.sql");
 //            processInput("exec ./jcch/queries/q02.sql");
 //            processInput("exec ./jcch/queries/q17.sql");
-            processInput("exec ../imdb/queries/26a.sql");
+//            processInput("exec ../imdb/queries/26a.sql");
 //            processInput("exec /Users/tracy/Documents/Research/skinnerdb/imdb/queries/33c.sql");
-//            processInput("exp");
+            processInput("exp");
         } else {
 			ThreadPool.initThreadsPool(ParallelConfig.EXE_THREADS, ParallelConfig.PRE_THREADS);
             // Command line processing

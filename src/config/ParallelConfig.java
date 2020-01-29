@@ -24,7 +24,7 @@ public class ParallelConfig {
 	/**
 	 * Maximal number of tuples per batch during execution.
 	 */
-	public static int EXE_THREADS = 2;
+	public static int EXE_THREADS = 1;
 	/**
 	 * Maximal number of tuples per batch during pre-processing.
 	 */

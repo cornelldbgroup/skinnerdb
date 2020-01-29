@@ -16,6 +16,7 @@ import catalog.info.ColumnInfo;
 import catalog.info.TableInfo;
 import catalog.stats.TableStats;
 import config.GeneralConfig;
+import config.LoadConfig;
 import data.ColumnData;
 import data.DoubleData;
 import data.IntData;
@@ -45,7 +46,8 @@ public class LoadCSV {
 		@SuppressWarnings("unused")
 		String line = null;
 		int lineCtr = 0;
-		while ((line = reader.readLine()) != null) {
+		int maxRows = LoadConfig.MAXROWS;
+		while ((line = reader.readLine()) != null && lineCtr < maxRows) {
 			++lineCtr;
 		}
 		reader.close();
@@ -109,7 +111,8 @@ public class LoadCSV {
 				new FileReader(csvPath), separator);
 		String[] inputFields;
 		int rowCtr = 0;
-		while ((inputFields = csvReader.readNext()) != null) {
+		int maxRows = LoadConfig.MAXROWS;
+		while ((inputFields = csvReader.readNext()) != null && rowCtr < maxRows) {
 			for (int colCtr=0; colCtr<nrColumns; ++colCtr) {
 				String field = inputFields[colCtr];
 				boolean isNull = field==null||

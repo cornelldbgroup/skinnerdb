@@ -224,19 +224,20 @@ public class Filter {
 //					}
 //				}
 
-				SimpleLinkedList<Integer>[] batchResults = new SimpleLinkedList[batches.size()];
-				IntStream.range(0, batches.size()).parallel().forEach(bid ->
-						batchResults[bid] = filterSimpleBatch(unaryBoolEval, batches.get(bid)));
-
-				SimpleLinkedList<Integer> simpleResult = new SimpleLinkedList<>();
-				for (SimpleLinkedList<Integer> batchResult : batchResults) {
-					simpleResult.concat(batchResult);
-				}
-
-				return simpleResult;
-//				result = batches.parallelStream().flatMap(batch ->
-//						filterBatch(unaryBoolEval, batch).stream()).collect(
-//						Collectors.toList());
+//				SimpleLinkedList<Integer>[] batchResults = new SimpleLinkedList[batches.size()];
+//				IntStream.range(0, batches.size()).parallel().forEach(bid ->
+//						batchResults[bid] = filterSimpleBatch(unaryBoolEval, batches.get(bid)));
+//
+//				SimpleLinkedList<Integer> simpleResult = new SimpleLinkedList<>();
+//				for (SimpleLinkedList<Integer> batchResult : batchResults) {
+//					simpleResult.concat(batchResult);
+//				}
+//
+//				return simpleResult;
+				result = batches.parallelStream().flatMap(batch ->
+						filterBatch(unaryBoolEval, batch).stream()).collect(
+						Collectors.toList());
+				return result;
 			}
 		}
 		return result;

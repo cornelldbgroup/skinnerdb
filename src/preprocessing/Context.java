@@ -48,7 +48,6 @@ public class Context {
 	 * to an index containing group id and satisfied rows.
 	 */
 	public Map<Group, GroupIndex> groupsToIndex;
-	public Map<Group, List<Group>> groupsToList;
 	/**
 	 * Maps aggregation expressions (in string representation)
 	 * to columns containing corresponding (per-group) results.

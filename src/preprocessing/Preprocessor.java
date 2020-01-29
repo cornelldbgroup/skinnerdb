@@ -106,7 +106,7 @@ public class Preprocessor {
 		boolean inCached = GeneralConfig.ISTESTCASE && PreConfig.IN_CACHE;
 		log("Column mapping:\t" + preSummary.columnMapping.toString());
 		// Iterate over query aliases
-		query.aliasToTable.keySet().parallelStream().forEach(alias -> {
+		query.aliasToTable.keySet().stream().forEach(alias -> {
 			long s1 = System.currentTimeMillis();
 			// Collect required columns (for joins and post-processing) for this table
 			List<ColumnRef> curRequiredCols = new ArrayList<>();
@@ -141,7 +141,7 @@ public class Preprocessor {
 						if (remainingPred != null) {
 							List<Integer> rows = filterProject(query, alias, filter,
 									curRequiredCols, preSummary);
-							if (inCached && rows.size() > 0 && rows.get(0) >= 0) {
+							if (inCached && rows.size() > 0 && rows.get(0) >= 0 && filter.qualifyingRows.size() == 0) {
 								BufferManager.indexCache.putIfAbsent(curUnaryPred.pid, rows);
 							}
 //							String filteredName = NamingConfig.FILTERED_PRE + alias;
@@ -153,17 +153,23 @@ public class Preprocessor {
 						}
 						else {
 							if (inCached && filter.resultType == 0 && filter.qualifyingRows.size() > 0) {
-								BufferManager.indexCache.putIfAbsent(curUnaryPred.pid, filter.qualifyingRows.pop());
+								List<Integer> rows = filter.qualifyingRows.pop();
+								if (rows.size() > 0 && rows.get(0) >= 0) {
+									BufferManager.indexCache.putIfAbsent(curUnaryPred.pid, rows);
+								}
 							}
-							String filteredName = NamingConfig.IDX_FILTERED_PRE + alias;
-							int cardinality = CatalogManager.getCardinality(filteredName);
-							if (cardinality == 0) {
-								terminated = true;
-//								break;
-							}
+//							String filteredName = NamingConfig.IDX_FILTERED_PRE + alias;
+//							int cardinality = CatalogManager.getCardinality(filteredName);
+//							if (cardinality == 0) {
+//								terminated = true;
+////								break;
+//							}
 						}
 					}
 					else {
+//						if (inCacheRows.size() < 10) {
+//							System.out.println("Cache Index " + curUnaryPred + " " + Arrays.toString(inCacheRows.toArray()));
+//						}
 						// Materialize relevant rows and columns
 						String tableName = preSummary.aliasToFiltered.get(alias);
 						String filteredName = NamingConfig.FILTERED_PRE + alias;
@@ -322,6 +328,9 @@ public class Preprocessor {
 			indexedExpr.accept(indexFilter);
 			// Create filtered table
 			List<Integer> rows = indexFilter.qualifyingRows.peek();
+//			if (rows.size() < 10) {
+//				System.out.println("Indexing " + unaryPred + " " + Arrays.toString(rows.toArray()) + " " + indexFilter.isFull);
+//			}
 			// Need to keep columns for evaluating remaining predicates, if any
 			ExpressionInfo remainingInfo = null;
 			String alias = unaryPred.aliasesMentioned.iterator().next();
@@ -414,11 +423,11 @@ public class Preprocessor {
 		for (ColumnRef colRef : requiredCols) {
 			columnNames.add(colRef.columnName);
 		}
-		long s2 = System.currentTimeMillis();
+//		long s2 = System.currentTimeMillis();
 		Materialize.execute(tableName, columnNames, 
 				satisfyingRows, null, filteredName, true);
-		long s3 = System.currentTimeMillis();
-		System.out.println("Materializing after filtering " + unaryPred + " took " + (s3 - s2));
+//		long s3 = System.currentTimeMillis();
+//		System.out.println("Materializing after filtering " + unaryPred + " took " + (s3 - s2));
 		// Update pre-processing summary
 		for (ColumnRef srcRef : requiredCols) {
 			String columnName = srcRef.columnName;

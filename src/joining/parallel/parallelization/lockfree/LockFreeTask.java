@@ -193,7 +193,7 @@ public class LockFreeTask implements Callable<LockFreeResult>{
             if (JoinConfig.FORGET && ParallelConfig.EXE_THREADS == 1 && roundCtr==nextForget) {
                 root = new DPNode(roundCtr, query, true, 1);
                 nextForget *= 10;
-                System.out.println("forget");
+//                System.out.println("forget");
             }
 
 //            if (roundCtr == 50000) {
