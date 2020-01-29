@@ -689,8 +689,12 @@ public class SimplificationVisitor extends SkinnerVisitor {
 
 	@Override
 	public void visit(ExistsExpression arg0) {
-		// TODO Auto-generated method stub
-		
+		arg0.getRightExpression().accept(this);
+		Expression newRight = opStack.pop();
+		ExistsExpression newExists = new ExistsExpression();
+		newExists.setNot(arg0.isNot());
+		newExists.setRightExpression(newRight);
+		opStack.push(newExists);
 	}
 
 	@Override

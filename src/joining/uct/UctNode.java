@@ -96,6 +96,42 @@ public class UctNode {
      */
     final Set<Integer> recommendedActions;
     /**
+     * Set to false only for actions representing sub-queries
+     * in exists expressions that are connected via predicates
+     * to some of the unselected tables. (the treatment of
+     * exists expression in the join algorithm assumes that
+     * the corresponding tables are selected only when all
+     * connected predicates can be immediately evaluated).
+     */
+    final boolean[] eligibleExists;
+    /**
+     * Set flags for all tables indicating whether they
+     * are eligible for selection. We assume that this
+     * function is only called after all fields except
+     * for eligibleExists have been initialized.
+     */
+    void determineEligibility() {
+    	// All actions are eligible by default
+    	Arrays.fill(eligibleExists, true);
+    	// Check for ineligible actions
+    	for (int actionCtr=0; actionCtr<nrActions; ++actionCtr) {
+    		// Does this action select a table representing
+    		// a sub-query in an exists expression?
+    		int tableIdx = nextTable[actionCtr];
+    		String alias = query.aliases[tableIdx];
+    		if (query.aliasToExistsFlag.containsKey(alias)) {
+    			// Is this table connected to unselected
+    			// tables via predicates?
+    			Set<Integer> otherUnjoined = new HashSet<>();
+    			otherUnjoined.addAll(unjoinedTables);
+    			otherUnjoined.remove(tableIdx);
+    			if (query.connected(otherUnjoined, tableIdx)) {
+    				eligibleExists[actionCtr] = false;
+    			}
+    		}
+    	}
+    }
+    /**
      * Initialize UCT root node.
      *
      * @param roundCtr     	current round number
@@ -133,6 +169,8 @@ public class UctNode {
             accumulatedReward[action] = 0;
             recommendedActions.add(action);
         }
+        this.eligibleExists = new boolean[nrActions];
+        determineEligibility();
     }
     /**
      * Initializes UCT node by expanding parent node.
@@ -165,6 +203,9 @@ public class UctNode {
             nextTable[actionCtr] = unjoinedTables.get(actionCtr);
         }
         this.joinOp = parent.joinOp;
+        // Determine eligibility
+        this.eligibleExists = new boolean[nrActions];
+        determineEligibility();
         // Calculate recommended actions if heuristic is activated
         this.useHeuristic = parent.useHeuristic;
         if (useHeuristic) {
@@ -175,14 +216,17 @@ public class UctNode {
                 int table = nextTable[actionCtr];
                 // Check if at least one predicate connects current
                 // tables to new table.
-                if (query.connected(joinedTables, table)) {
+                if (query.connected(joinedTables, table) && 
+                		eligibleExists[actionCtr]) {
                     recommendedActions.add(actionCtr);
                 } // over predicates
             } // over actions
             if (recommendedActions.isEmpty()) {
-                // add all actions to recommended actions
+                // add all eligible actions to recommended actions
                 for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
-                    recommendedActions.add(actionCtr);
+                	if (eligibleExists[actionCtr]) {
+                        recommendedActions.add(actionCtr);                		
+                	}
                 }
             }
         } // if heuristic is used
@@ -193,7 +237,8 @@ public class UctNode {
         // if the heuristic is activated.
         priorityActions = new ArrayList<Integer>();
         for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
-            if (!useHeuristic || recommendedActions.contains(actionCtr)) {
+            if (eligibleExists[actionCtr] && (!useHeuristic || 
+            		recommendedActions.contains(actionCtr))) {
                 priorityActions.add(actionCtr);
             }
         }
@@ -213,7 +258,7 @@ public class UctNode {
             int action = priorityActions.get(actionIndex);
             // Remove from untried actions and return
             priorityActions.remove(actionIndex);
-            // System.out.println("Untried action: " + action);
+            System.out.println("Untried action: " + action);
             return action;
         } else {
             /* When using the default selection policy (UCB1):
@@ -230,6 +275,10 @@ public class UctNode {
             for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
                 // Calculate index of current action
                 int action = (offset + actionCtr) % nrActions;
+                // Check if action is eligible
+                if (!eligibleExists[action]) {
+                	continue;
+                }
                 // if heuristic is used, choose only from recommended actions
                 if (useHeuristic && recommendedActions.size() == 0) {
                     throw new RuntimeException("there are no recommended exception and we are trying to use heuristic");
@@ -260,7 +309,8 @@ public class UctNode {
                 		quality = random.nextDouble();
                 	} else {
                 		quality = meanReward + 
-                				JoinConfig.EXPLORATION_WEIGHT * exploration;
+                				JoinConfig.EXPLORATION_WEIGHT * 
+                				exploration;
                 	}
                 	break;
                 }

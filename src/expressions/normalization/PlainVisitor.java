@@ -278,8 +278,7 @@ public class PlainVisitor extends SkinnerVisitor {
 
 	@Override
 	public void visit(ExistsExpression existsExpression) {
-		// TODO Auto-generated method stub
-		
+		existsExpression.getRightExpression().accept(this);
 	}
 
 	@Override

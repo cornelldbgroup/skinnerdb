@@ -11,11 +11,11 @@ public class LoggingConfig {
 	/**
 	 * Whether to log sub-queries generated during unnesting.
 	 */
-	public final static boolean UNNESTING_VERBOSE = false;
+	public final static boolean UNNESTING_VERBOSE = true;
 	/**
 	 * Whether to log intermediate steps during query analysis.
 	 */
-	public final static boolean QUERY_ANALYSIS_VERBOSE = false;
+	public final static boolean QUERY_ANALYSIS_VERBOSE = true;
 	/**
 	 * Whether to log expressions after each transformation stage.
 	 */
@@ -35,7 +35,7 @@ public class LoggingConfig {
 	/**
 	 * Whether to generate verbose output about pre-processing.
 	 */
-	public final static boolean PREPROCESSING_VERBOSE = false;
+	public final static boolean PREPROCESSING_VERBOSE = true;
 	/**
 	 * Whether to generate verbose output during index creation.
 	 */
@@ -55,7 +55,7 @@ public class LoggingConfig {
 	 * How many log entries to generate during join processing
 	 * per query - set to zero to avoid join logging.
 	 */
-	public final static int MAX_JOIN_LOGS = 0;
+	public final static int MAX_JOIN_LOGS = 5000;
 	/**
 	 * Whether to generate debugging output during post-processing.
 	 */

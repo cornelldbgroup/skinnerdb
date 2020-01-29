@@ -717,8 +717,11 @@ public class TypeVisitor extends SkinnerVisitor {
 
 	@Override
 	public void visit(ExistsExpression arg0) {
-		// TODO Auto-generated method stub
-		
+		// Output type is Boolean
+		outputType.put(arg0, SQLtype.BOOL);
+		// Currently we always assume per-tuple output scope
+		// TODO: check if this is always correct 
+		outputScope.put(arg0, ExpressionScope.PER_TUPLE);
 	}
 
 	@Override

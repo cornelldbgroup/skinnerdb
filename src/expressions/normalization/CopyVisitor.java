@@ -400,8 +400,12 @@ public class CopyVisitor extends SkinnerVisitor {
 
 	@Override
 	public void visit(ExistsExpression arg0) {
-		sqlExceptions.add(new SQLexception("Error - exist "
-				+ "expressions are currently not supported"));
+		arg0.getRightExpression().accept(this);
+		Expression rightCopy = exprStack.pop();
+		ExistsExpression existsCopy = new ExistsExpression();
+		existsCopy.setNot(arg0.isNot());
+		existsCopy.setRightExpression(rightCopy);
+		exprStack.push(existsCopy);
 	}
 
 	@Override

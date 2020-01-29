@@ -20,7 +20,7 @@ import preprocessing.Context;
 import query.QueryInfo;
 import statistics.JoinStats;
 
-public class OldJoin extends MultiWayJoin {
+public class OldJoinDepr extends MultiWayJoin {
     /**
      * Number of steps per episode.
      */
@@ -69,7 +69,7 @@ public class OldJoin extends MultiWayJoin {
      * @param preSummary	summary of pre-processing
      * @param budget		budget per episode
      */
-    public OldJoin(QueryInfo query, Context preSummary, 
+    public OldJoinDepr(QueryInfo query, Context preSummary, 
     		int budget) throws Exception {
         super(query, preSummary);
         this.budget = budget;
@@ -212,27 +212,7 @@ public class OldJoin extends MultiWayJoin {
 	
 	boolean[] uniqueIndex;
 	boolean[] indexedTuple;
-	/**
-	 * Jumps to the end of the current table
-	 * if this table only appears within exists
-	 * expressions. 
-	 * 
-	 * @param plan				currently executed plan
-	 * @param tupleIndices		update those tuple indices
-	 * @param joinIndex			current join index
-	 * @param nextCardinality	cardinality of current table
-	 */
-	private void jumpForExists(LeftDeepPlan plan, 
-			int[] tupleIndices, int joinIndex, 
-			int nextCardinality) {
-		if (plan.existsFlags[joinIndex] != 0) {
-			System.out.println("Jump at " + joinIndex + 
-					" to " + nextCardinality + " " +
-					Arrays.toString(tupleIndices));
-			int nextTable = plan.joinOrder.order[joinIndex];
-			tupleIndices[nextTable] = nextCardinality;
-		}
-	}	
+	
     /**
      * Executes a given join order for a given budget of steps
      * (i.e., predicate evaluations). Result tuples are added
@@ -285,7 +265,7 @@ public class OldJoin extends MultiWayJoin {
         	// Update maximal join index
         	maxJoinIndex = Math.max(maxJoinIndex, joinIndex);
         	//log("Offsets:\t" + Arrays.toString(offsets));
-        	log("Indices:\t" + Arrays.toString(tupleIndices));
+        	//log("Indices:\t" + Arrays.toString(tupleIndices));
             // Get next table in join order
             int nextTable = plan.joinOrder.order[joinIndex];
             int nextCardinality = cardinalities[nextTable];
@@ -315,10 +295,7 @@ public class OldJoin extends MultiWayJoin {
                 	++nrResultTuples;
                     result.add(tupleIndices);
                     tupleIndices[nextTable] = proposeNext(
-                    		joinIndices.get(joinIndex), nextTable, 
-                    		tupleIndices);
-                    jumpForExists(plan, tupleIndices, 
-                    		joinIndex, nextCardinality);
+                    		joinIndices.get(joinIndex), nextTable, tupleIndices);
                     // Have reached end of current table? -> we backtrack.
                     while (tupleIndices[nextTable] >= nextCardinality) {
                         tupleIndices[nextTable] = 0;
@@ -327,12 +304,13 @@ public class OldJoin extends MultiWayJoin {
                         if (joinIndex < 0) {
                             break;
                         }
+                        
+                        
+                        
                         nextTable = plan.joinOrder.order[joinIndex];
                         nextCardinality = cardinalities[nextTable];
                         // TODO: check performance impact
                         tupleIndices[nextTable] += 1;
-                        jumpForExists(plan, tupleIndices, 
-                        		joinIndex, nextCardinality);
                         /*
                         tupleIndices[nextTable] = proposeNext(
                         		joinIndices.get(joinIndex), 
@@ -364,8 +342,6 @@ public class OldJoin extends MultiWayJoin {
                 if (curNoMatch && (PreConfig.PRE_FILTER || 
                 		unaryPred == null)) {
                 	int maxNextJoinIdx = -1;
-                	// TODO: re-enable fast backtrack
-                	/*
             		for (JoinIndexWrapper joinWrap : 
             			joinIndices.get(curJoinIdx)) {
             			if (joinWrap.lastProposed >= nextCardinality) {
@@ -378,7 +354,6 @@ public class OldJoin extends MultiWayJoin {
                 			}
             			}
             		}
-            		*/
             		if (maxNextJoinIdx > -1 && 
             				maxNextJoinIdx < joinIndex-1) {
 	                    // Exploit fast back-tracking
@@ -423,17 +398,10 @@ public class OldJoin extends MultiWayJoin {
                     tupleIndices[nextTable] = proposeNext(
                     		joinIndices.get(joinIndex), 
                     		nextTable, tupleIndices);
-                    jumpForExists(plan, tupleIndices, 
-                    		joinIndex, nextCardinality);
                 }
                 joinIndexInc = false;
             }
             --remainingBudget;
-            if (nrTables>1) {
-                System.out.println("End of loop tuples: " + 
-                		Arrays.toString(tupleIndices));
-                System.out.println("Join index: " + joinIndex);            	
-            }
         }
         // Store tuple index deltas used to calculate reward
         for (int tableCtr = 0; tableCtr < nrTables; ++tableCtr) {

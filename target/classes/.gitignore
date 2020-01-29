@@ -1,5 +1,7 @@
-/META-INF/
-/indexing/
+/query/
 /joining/
+/config/
+/execution/
+/expressions/
 /operators/
-/unnesting/
+/preprocessing/

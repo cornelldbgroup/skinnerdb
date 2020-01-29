@@ -42,6 +42,14 @@ public class LeftDeepPlan {
 	 */
 	public final List<List<KnaryBoolEval>> applicablePreds;
 	/**
+	 * Associates join order positions with corresponding
+	 * exists flag, i.e. 0 if the table does not appear in
+	 * any exists clause, 1 if the table does appear in
+	 * an exists clause, -1 if the table does appear in
+	 * a not exists clause.
+	 */
+	public final int[] existsFlags;
+	/**
 	 * Determines the join order positions at which to
 	 * evaluate specific equality and other predicates.
 	 * 
@@ -121,10 +129,23 @@ public class LeftDeepPlan {
 				}
 			}
 		} // over join positions
+		// Initialize exists flags
+		existsFlags = new int[nrTables];
+		for (int joinCtr=0; joinCtr<nrTables; ++joinCtr) {
+			int table = order[joinCtr];
+			String alias = query.aliases[table];
+			if (query.aliasToExistsFlag.containsKey(alias)) {
+				boolean curFlag = query.aliasToExistsFlag.get(alias);
+				existsFlags[joinCtr] = curFlag?1:-1;
+			}
+		}
 	}
 	@Override
 	public String toString() {
-		return "Join indices:\t" + joinIndices.toString() + System.lineSeparator() +
-				"Other preds:\t" + applicablePreds.toString();
+		return "Join indices:\t" + joinIndices.toString() + 
+				System.lineSeparator() +
+				"Other preds:\t" + applicablePreds.toString() + 
+				System.lineSeparator() +
+				"Exists flags:\t" + Arrays.toString(existsFlags);
 	}
 }

@@ -1,8 +1,10 @@
 package query;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -21,6 +23,7 @@ import net.sf.jsqlparser.expression.Function;
 import net.sf.jsqlparser.expression.LongValue;
 import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
 import net.sf.jsqlparser.expression.operators.relational.EqualsTo;
+import net.sf.jsqlparser.expression.operators.relational.ExistsExpression;
 import net.sf.jsqlparser.schema.Column;
 import net.sf.jsqlparser.schema.Table;
 import net.sf.jsqlparser.statement.select.AllColumns;
@@ -115,6 +118,13 @@ public class QueryInfo {
 	 */
 	public List<ExpressionInfo> wherePredicates = 
 			new ArrayList<ExpressionInfo>();
+	/**
+	 * Maps table aliases that appear in exists or
+	 * not exists predicates to the corresponding
+	 * Boolean flag.
+	 */
+	public Map<String, Boolean> aliasToExistsFlag =
+			new HashMap<>();
 	/**
 	 * List of expressions that correspond to unary
 	 * predicates.
@@ -351,8 +361,38 @@ public class QueryInfo {
 		return null;
 	}
 	/**
-	 * Extracts predicates from normalized WHERE clause, separating
-	 * predicates by the tables they refer to.
+	 * Treat exists/not exists predicates and remove
+	 * from list of conjuncts.
+	 * 
+	 * @param conjuncts		some conjuncts are exists predicates
+	 * @throws Exception
+	 */
+	void treatExistsPreds(List<Expression> conjuncts) throws Exception {
+		Iterator<Expression> conjunctsIter = conjuncts.iterator();
+		while (conjunctsIter.hasNext()) {
+			Expression conjunct = conjunctsIter.next();
+			if (conjunct instanceof ExistsExpression) {
+				conjunctsIter.remove();
+				ExistsExpression exists = (ExistsExpression)conjunct;
+				Expression right = exists.getRightExpression();
+				if (right instanceof Column) {
+					Column column = (Column)right;
+					Table table = column.getTable();
+					String alias = table.getName();
+					boolean existsFlag = !exists.isNot();
+					aliasToExistsFlag.put(alias, existsFlag);
+				} else {
+					// Only single table sub-queries should
+					// remain after unnesting.
+					throw new SQLexception("Unrewritten "
+							+ "exists predicate: " + conjunct);
+				}
+			}
+		}
+	}
+	/**
+	 * Extracts predicates from normalized WHERE clause, 
+	 * separating predicates by the tables they refer to.
 	 */
 	void extractPredicates() throws Exception {
 		Expression where = plainSelect.getWhere();
@@ -361,6 +401,8 @@ public class QueryInfo {
 			ExpressionInfo whereInfo = new ExpressionInfo(this, where);
 			// Decompose into conjuncts
 			List<Expression> conjuncts = whereInfo.conjuncts;
+			// Handle exists/not exists predicates
+			treatExistsPreds(conjuncts);
 			// Merge conditions that refer to the same tables
 			Map<Set<String>, Expression> tablesToCondition = 
 					new HashMap<Set<String>, Expression>();
@@ -559,7 +601,8 @@ public class QueryInfo {
 	 * @param newIndex		index of new alias to check
 	 * @return				true iff join predicates connect
 	 */
-	public boolean connected(Set<Integer> aliasIndices, int newIndex) {
+	public boolean connected(Collection<Integer> aliasIndices, 
+			int newIndex) {
 		// Resulting join indices if selecting new table for join
 		Set<Integer> indicesAfterJoin = new HashSet<Integer>();
 		indicesAfterJoin.addAll(aliasIndices);
@@ -656,6 +699,7 @@ public class QueryInfo {
 		log("Alias to expression: " + aliasToExpression);
 		// Extract predicates in WHERE clause
 		extractPredicates();
+		log("Exists aliases: " + aliasToExistsFlag);
 		log("Unary predicates: " + unaryPredicates);
 		log("Equi join cols: " + equiJoinCols);
 		log("Equi join preds: " + equiJoinPreds);
