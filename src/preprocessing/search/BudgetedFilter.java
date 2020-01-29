@@ -24,7 +24,6 @@ public class BudgetedFilter {
         int currentCompletedRow = lastCompletedRow;
 
 
-        System.out.println(System.currentTimeMillis());
         ROW_LOOP:
         while (remainingBudget > 0 && currentCompletedRow + 1 < cardinality) {
             currentCompletedRow++;
@@ -44,7 +43,6 @@ public class BudgetedFilter {
             }
             result.add(currentCompletedRow);
         }
-        System.out.println(System.currentTimeMillis());
 
 
         double reward =
