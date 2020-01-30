@@ -326,6 +326,8 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 				Set<ColumnRef> outerScope = scopeCols.peek();
 				// Raise exception if predicate is no binary equality
 				// between two query columns.
+				// TODO: make sure assumption not needed
+				/*
 				if (conjunct instanceof EqualsTo) {
 					EqualsTo equalsTo = (EqualsTo)conjunct;
 					if (!(equalsTo.getLeftExpression() instanceof Column) ||
@@ -343,6 +345,7 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 							+ "via binary equality predicates ("
 							+ conjunct + ")"));
 				}
+				*/
 				// Obtain table that will contain sub-query result
 				Table resultTbl = plainSelect.getIntoTables().get(0);
 				// Need to make sure that local

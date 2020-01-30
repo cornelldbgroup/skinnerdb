@@ -234,7 +234,96 @@ public class OldJoin extends MultiWayJoin {
 			int nextTable = plan.joinOrder.order[joinIndex];
 			tupleIndices[nextTable] = nextCardinality;
 		}
-	}	
+	}
+	/**
+	 * "Backtrack", meaning decrease join index until we
+	 * find a table with more tuples left to examine.
+	 * Reset tuple indices on the way and return updated
+	 * join index.
+	 * 
+	 * @param plan			join order and associated meta-data
+	 * @param cardinalities	
+	 * @param order			join order to execute
+	 * @param tupleIndices	current tuple indices
+	 * @param joinIndex		current join order position
+	 * @param singleSteps	whether to increase indices by one
+	 * @return				updated join order position
+	 */
+	private int backtrack(LeftDeepPlan plan, int[] cardinalities, 
+			int[] tupleIndices, int joinIndex, boolean singleSteps) {
+		int nextTable = plan.joinOrder.order[joinIndex];
+		int nextCardinality = cardinalities[nextTable];
+		// Go back to last table that could make a difference
+        // Have reached end of current table? -> we backtrack.
+        while (tupleIndices[nextTable] >= nextCardinality) {
+        	// TODO: check correctness
+            tupleIndices[nextTable] = 0;
+            indexedTuple[nextTable] = false;
+        	//tupleIndices[nextTable] = offsets[nextTable];
+            --joinIndex;
+            if (joinIndex < 0) {
+                break;
+            }
+            // TODO: check performance
+            /*
+            if (joinIndex < cachedDepth) {
+            	tracker.excluded.add(exclusionTuple(
+            			tupleIndices, joinIndex, 
+            			plan.joinOrder.order));
+            }
+            */
+            nextTable = plan.joinOrder.order[joinIndex];
+            nextCardinality = cardinalities[nextTable];
+            // Consider next tuple
+            if (singleSteps) {
+            	tupleIndices[nextTable] += 1;            	
+            } else {
+                tupleIndices[nextTable] = proposeNext(
+                		plan.joinIndices.get(joinIndex), 
+                		nextTable, tupleIndices);            	
+            }
+            jumpForExists(plan, tupleIndices, 
+            		joinIndex, nextCardinality);
+        }
+        return joinIndex;
+	}
+	/**
+	 * Execute this function if all predicates evaluate to
+	 * true for the current join order prefix. We add result
+	 * tuples if the maximal depth is reached. Otherwise,
+	 * we advance to the next table in join order.
+	 * 
+	 * @param plan				execute this query plan
+	 * @param cardinalities		cardinalities of query tables
+	 * @param tupleIndices		current tuple considered in each table
+	 * @param joinIndex			current position in join order
+	 * @param singleSteps		whether to advance tuples slowly
+	 * @return					updated join index
+	 */
+	int increaseDepth(LeftDeepPlan plan, int[] cardinalities, 
+			int[] tupleIndices, int joinIndex, boolean singleSteps) {
+		// Get current join order table
+		int nextTable = plan.joinOrder.order[joinIndex];
+		int nextCardinality = cardinalities[nextTable];
+        // Do we have a complete result row?
+        if(joinIndex == plan.joinOrder.order.length - 1) {
+            // Complete result row -> add to result
+        	++nrResultTuples;
+            result.add(tupleIndices);
+            tupleIndices[nextTable] = proposeNext(
+            		plan.joinIndices.get(joinIndex), nextTable, 
+            		tupleIndices);
+            jumpForExists(plan, tupleIndices, 
+            		joinIndex, nextCardinality);
+            // Have reached end of current table? -> we backtrack.
+            joinIndex = backtrack(plan, cardinalities, 
+            		tupleIndices, joinIndex, singleSteps);
+        } else {
+            // No complete result row -> complete further
+            joinIndex++;
+        }
+        return joinIndex;
+	}
     /**
      * Executes a given join order for a given budget of steps
      * (i.e., predicate evaluations). Result tuples are added
@@ -301,56 +390,21 @@ public class OldJoin extends MultiWayJoin {
             if ((PreConfig.PRE_FILTER || unaryPred == null || 
             		unaryPred.evaluate(tupleIndices)>0) &&
             		evaluateAll(applicablePreds.get(joinIndex), 
-            				tupleIndices)
-            		/*
-            		&&
-            		(joinIndex >= cachedDepth || !tracker.excluded.contains(
-            				exclusionTuple(tupleIndices, joinIndex, 
-            						plan.joinOrder.order)))
-            		*/
-            		) {
+            				tupleIndices)) {
             	++JoinStats.nrTuples;
-                // Do we have a complete result row?
-                if(joinIndex == plan.joinOrder.order.length - 1) {
-                	// Found at least one matching tuple
-                	matchingTuples[joinIndex] = true;
-                    // Complete result row -> add to result
-                	++nrResultTuples;
-                    result.add(tupleIndices);
-                    tupleIndices[nextTable] = proposeNext(
-                    		joinIndices.get(joinIndex), nextTable, 
-                    		tupleIndices);
-                    jumpForExists(plan, tupleIndices, 
-                    		joinIndex, nextCardinality);
-                    // Have reached end of current table? -> we backtrack.
-                    while (tupleIndices[nextTable] >= nextCardinality) {
-                        tupleIndices[nextTable] = 0;
-                        indexedTuple[nextTable] = false;
-                        --joinIndex;
-                        if (joinIndex < 0) {
-                            break;
-                        }
-                        nextTable = plan.joinOrder.order[joinIndex];
-                        nextCardinality = cardinalities[nextTable];
-                        // TODO: check performance impact
-                        tupleIndices[nextTable] += 1;
-                        jumpForExists(plan, tupleIndices, 
-                        		joinIndex, nextCardinality);
-                        /*
-                        tupleIndices[nextTable] = proposeNext(
-                        		joinIndices.get(joinIndex), 
-                        		nextTable, tupleIndices);
-                        */
-                    }
-                    joinIndexInc = false;
-                } else {
-                    // No complete result row -> complete further
-                	matchingTuples[joinIndex] = true;
-                    joinIndex++;
-                    matchingTuples[joinIndex] = false;
-                    joinIndexInc = true;
-                    //System.out.println("Current Join Index2:"+ joinIndex);
-                }
+            	// Does current table represent sub-query in
+            	// not exists clause?
+            	int newJoinIndex = joinIndex;
+            	if (query.existsFlags[nextTable] < 0) {
+            		tupleIndices[nextTable] = nextCardinality;
+            		newJoinIndex = backtrack(plan, cardinalities, 
+            				tupleIndices, joinIndex, false);
+            	} else {
+                	newJoinIndex = increaseDepth(plan, cardinalities, 
+                			tupleIndices, joinIndex, true);            		
+            	}
+            	joinIndexInc = newJoinIndex > joinIndex;
+            	joinIndex = newJoinIndex;
             } else {
                 // At least one of applicable predicates evaluates to false -
                 // try next tuple in same table.
@@ -400,36 +454,22 @@ public class OldJoin extends MultiWayJoin {
 	                    JoinStats.nrFastBacktracks++;
             		}
                 }
-                // Go back to last table that could make a difference
-                // Have reached end of current table? -> we backtrack.
-                while (tupleIndices[nextTable] >= nextCardinality) {
-                	// TODO: check correctness
-                    tupleIndices[nextTable] = 0;
-                    indexedTuple[nextTable] = false;
-                	//tupleIndices[nextTable] = offsets[nextTable];
-                    --joinIndex;
-                    if (joinIndex < 0) {
-                        break;
-                    }
-                    // TODO: check performance
-                    /*
-                    if (joinIndex < cachedDepth) {
-                    	tracker.excluded.add(exclusionTuple(
-                    			tupleIndices, joinIndex, 
-                    			plan.joinOrder.order));
-                    }
-                    */
-                    nextTable = plan.joinOrder.order[joinIndex];
-                    nextCardinality = cardinalities[nextTable];
-                    // TODO: check performance
-                    //tupleIndices[nextTable] += 1;
-                    tupleIndices[nextTable] = proposeNext(
-                    		joinIndices.get(joinIndex), 
-                    		nextTable, tupleIndices);
-                    jumpForExists(plan, tupleIndices, 
-                    		joinIndex, nextCardinality);
+                // Special treatment for tables representing 
+                // sub-queries within not exists expressions.
+                int newJoinIndex = joinIndex;
+                if (query.existsFlags[nextTable] < 0) {
+                	// No matching tuples in NOT EXISTS sub-query?
+                	if (tupleIndices[nextTable] >= nextCardinality) {
+                		tupleIndices[nextTable] = nextCardinality - 1;
+                		newJoinIndex = increaseDepth(plan, cardinalities, 
+                				tupleIndices, joinIndex, true);
+                	}
+                } else {
+                    newJoinIndex = backtrack(plan, cardinalities, 
+                    		tupleIndices, joinIndex, false);
                 }
-                joinIndexInc = false;
+                joinIndexInc = joinIndex < newJoinIndex;
+                joinIndex = newJoinIndex;
             }
             --remainingBudget;
             /*

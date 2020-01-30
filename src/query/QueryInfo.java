@@ -376,7 +376,6 @@ public class QueryInfo {
 	 * @throws Exception
 	 */
 	void treatExistsPreds(List<Expression> conjuncts) throws Exception {
-		existsFlags = new int[nrJoined];
 		Iterator<Expression> conjunctsIter = conjuncts.iterator();
 		while (conjunctsIter.hasNext()) {
 			Expression conjunct = conjunctsIter.next();
@@ -406,6 +405,8 @@ public class QueryInfo {
 	 * separating predicates by the tables they refer to.
 	 */
 	void extractPredicates() throws Exception {
+		// Initialize exists flags
+		existsFlags = new int[nrJoined];
 		Expression where = plainSelect.getWhere();
 		if (where != null) {
 			// Normalize WHERE clause and transform into CNF
