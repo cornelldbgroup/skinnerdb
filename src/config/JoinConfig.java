@@ -69,5 +69,5 @@ public class JoinConfig {
 	 * for which changes are guaranteed not to lead 
 	 * to valid result tuples.
 	 */
-	public static final boolean FAST_BACKTRACK = true;
+	public static final boolean FAST_BACKTRACK = false;
 }
