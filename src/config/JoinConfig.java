@@ -51,7 +51,7 @@ public class JoinConfig {
 	 * Whether to heuristically restrict join orders to
 	 * avoid Cartesian product joins if possible.
 	 */
-	public static final boolean AVOID_CARTESIANS = true;
+	public static final boolean AVOID_CARTESIANS = false;
 	/**
 	 * Whether to skip tables during backtracking
 	 * for which changes are guaranteed not to lead 
