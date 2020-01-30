@@ -165,7 +165,7 @@ public class BenchAndVerify {
 			int pgJoinCard = joinResult.getInt(1);
 			// Get cardinality of Skinner join result
 			int skinnerJoinCard = CatalogManager.getCardinality(
-					NamingConfig.JOINED_NAME);
+					NamingConfig.DEFAULT_JOINED_NAME);
 			System.out.println("PG Card: " + pgJoinCard + 
 					"; Skinner card: " + skinnerJoinCard);
 			if (pgJoinCard != skinnerJoinCard) {

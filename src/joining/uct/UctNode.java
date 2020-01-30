@@ -263,7 +263,6 @@ public class UctNode {
             int action = priorityActions.get(actionIndex);
             // Remove from untried actions and return
             priorityActions.remove(actionIndex);
-            System.out.println("Untried action: " + action);
             return action;
         } else {
             /* When using the default selection policy (UCB1):
@@ -449,7 +448,6 @@ public class UctNode {
             }
             repairExistPos(joinOrder);
         }
-        System.out.println("JOIN ORDER: " + Arrays.toString(joinOrder));
         // Evaluate completed join order and return reward
         return joinOp.execute(joinOrder);
     }

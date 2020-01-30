@@ -25,9 +25,10 @@ public class NamingConfig {
 	 */
 	public static final String FILTERED_PRE = "filtered.";
 	/**
-	 * Name of table containing result after join phase.
+	 * Default name of table containing result after join phase
+	 * (a different name may be used if the join phase is skipped).
 	 */
-	public static final String JOINED_NAME = "joined.";
+	public static final String DEFAULT_JOINED_NAME = "joined.";
 	/**
 	 * Name of table containing for each join result row
 	 * the associated group (and potentially columns used

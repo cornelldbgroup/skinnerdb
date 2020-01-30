@@ -340,7 +340,6 @@ public class OldJoin extends MultiWayJoin {
         int[] tupleIndices = new int[nrTables];
         List<List<KnaryBoolEval>> applicablePreds = plan.applicablePreds;
         List<List<JoinIndexWrapper>> joinIndices = plan.joinIndices;
-        System.out.println(plan);
         // Which tables use indices with unique values?
         uniqueIndex = new boolean[nrTables];
         for (int joinCtr=0; joinCtr<nrTables; ++joinCtr) {

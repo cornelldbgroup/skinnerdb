@@ -56,15 +56,19 @@ public class JoinProcessor {
         JoinStats.nrSamples = 0;
 		// Initialize logging for new query
 		nrLogEntries = 0;
+		// Can we skip the join phase?
+		if (query.nrJoined == 1) {
+			String alias = query.aliases[0];
+			String table = context.aliasToFiltered.get(alias);
+			context.joinedTable = table;
+			return;
+		}
 		// Initialize multi-way join operator
-		/*
-		DefaultJoin joinOp = new DefaultJoin(query, preSummary, 
-				LearningConfig.BUDGET_PER_EPISODE);
-		*/
 		OldJoin joinOp = new OldJoin(query, context, 
 				JoinConfig.BUDGET_PER_EPISODE);
 		// Initialize UCT join order search tree
-		UctNode root = new UctNode(0, query, false, joinOp);
+		UctNode root = new UctNode(0, query, 
+				JoinConfig.AVOID_CARTESIANS, joinOp);
 		// Initialize counters and variables
 		int[] joinOrder = new int[query.nrJoined];
 		long roundCtr = 0;
@@ -192,11 +196,12 @@ public class JoinProcessor {
 		Collection<ResultTuple> tuples = joinOp.result.getTuples();
 		int nrTuples = tuples.size();
 		log("Materializing join result with " + nrTuples + " tuples ...");
-		String targetRelName = NamingConfig.JOINED_NAME;
+		String targetRelName = NamingConfig.DEFAULT_JOINED_NAME;
 		Materialize.execute(tuples, query.aliasToIndex, 
 				query.colsForPostProcessing, 
 				context.columnMapping, targetRelName);
 		// Update processing context
+		context.joinedTable = NamingConfig.DEFAULT_JOINED_NAME;
 		context.columnMapping.clear();
 		for (ColumnRef postCol : query.colsForPostProcessing) {
 			String newColName = postCol.aliasName + "." + postCol.columnName;
@@ -205,7 +210,7 @@ public class JoinProcessor {
 		}
 		// Store number of join result tuples
 		JoinStats.skinnerJoinCard = CatalogManager.
-				getCardinality(NamingConfig.JOINED_NAME);
+				getCardinality(NamingConfig.DEFAULT_JOINED_NAME);
 		// Measure execution time for join phase
 		JoinStats.joinMillis = System.currentTimeMillis() - startMillis;
 	}

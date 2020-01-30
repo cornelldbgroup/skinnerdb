@@ -47,4 +47,9 @@ public class JoinConfig {
 	 * convergence to one specific join order.
 	 */
 	public static final boolean FORGET = true;
+	/**
+	 * Whether to heuristically restrict join orders to
+	 * avoid Cartesian product joins if possible.
+	 */
+	public static final boolean AVOID_CARTESIANS = true;
 }

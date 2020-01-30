@@ -75,8 +75,10 @@ public class BenchUtil {
 	public static void writeStats(String queryName, long totalMillis, 
 			PrintWriter benchOut) throws Exception {
 		// Get cardinality of Skinner join result
+		/*
 		int skinnerJoinCard = CatalogManager.getCardinality(
-				NamingConfig.JOINED_NAME);
+				NamingConfig.DEFAULT_JOINED_NAME);
+		*/
 		// Generate output
 		benchOut.print(queryName + "\t");
 		benchOut.print(totalMillis + "\t");
@@ -93,7 +95,7 @@ public class BenchUtil {
 		benchOut.print(JoinStats.nrUniqueIndexLookups + "\t");
 		benchOut.print(JoinStats.nrUctNodes + "\t");
 		benchOut.print(JoinStats.nrPlansTried + "\t");
-		benchOut.print(skinnerJoinCard + "\t");
+		benchOut.print(JoinStats.skinnerJoinCard + "\t");
 		benchOut.print(JoinStats.nrSamples + "\t");
 		benchOut.print(JoinStats.avgReward + "\t");
 		benchOut.print(JoinStats.maxReward + "\t");

@@ -30,6 +30,11 @@ public class Context {
 	public final Map<String, String> aliasToFiltered =
 			new ConcurrentHashMap<String, String>();
 	/**
+	 * Name of table containing the result of the join
+	 * phase.
+	 */
+	public String joinedTable = null;
+	/**
 	 * References column that contains group IDs for
 	 * each row in the join result (null if query
 	 * contains no group-by clause).

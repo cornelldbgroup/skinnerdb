@@ -67,7 +67,7 @@ public class PostProcessor {
 				sourceRefs.add(dbRef);
 			} else {
 				// Composite expression - need to execute map
-				String sourceRel = NamingConfig.JOINED_NAME;
+				String sourceRel = context.joinedTable;
 				String targetCol = NamingConfig.GROUPS_SRC_COL_PRE + groupSrcID;
 				++groupSrcID;
 				ColumnRef targetRef = new ColumnRef(groupTbl, targetCol);
@@ -122,7 +122,7 @@ public class PostProcessor {
 				sourceRef = context.columnMapping.get(queryRef);
 			} else {
 				// Input is complex expression - generate data
-				String joinRel = NamingConfig.JOINED_NAME;
+				String joinRel = context.joinedTable;
 				String sourceCol = NamingConfig.AGG_SRC_COL_PRE + aggInputCtr;
 				sourceRef = new ColumnRef(aggSrcTbl, sourceCol);
 				++aggInputCtr;
@@ -224,7 +224,7 @@ public class PostProcessor {
 		TableInfo result = new TableInfo(resultTbl, tempResult);
 		CatalogManager.currentDB.nameToTable.put(resultTbl, result);
 		// Name of source relation
-		String joinRel = NamingConfig.JOINED_NAME;
+		String joinRel = context.joinedTable;
 		// Name of result relation
 		String resultRel = result.name;
 		// Iterate over expressions in SELECT clause
@@ -336,7 +336,7 @@ public class PostProcessor {
 		} else if (expr.aggregates.isEmpty()) {
 			// Need to generate select item data -
 			// selector must be based on group-by columns.
-			String srcRel = NamingConfig.JOINED_NAME;
+			String srcRel = context.joinedTable;
 			MapRows.execute(srcRel, expr, context.columnMapping, 
 					context.aggToData, groupRef, nrGroups, resultRef);
 		} else {
