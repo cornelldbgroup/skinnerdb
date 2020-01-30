@@ -376,7 +376,7 @@ public class OldJoin extends MultiWayJoin {
         	// Update maximal join index
         	maxJoinIndex = Math.max(maxJoinIndex, joinIndex);
         	//log("Offsets:\t" + Arrays.toString(offsets));
-        	log("Indices:\t" + Arrays.toString(tupleIndices));
+        	//log("Indices:\t" + Arrays.toString(tupleIndices));
             // Get next table in join order
             int nextTable = plan.joinOrder.order[joinIndex];
             int nextCardinality = cardinalities[nextTable];
