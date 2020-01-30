@@ -25,13 +25,13 @@ public class JoinConfig {
 	 * percentage of input processed when calculating
 	 * reward.
 	 */
-	public static double INPUT_REWARD_WEIGHT = 1.0;
+	public static double INPUT_REWARD_WEIGHT = 0;
 	/**
 	 * How to weigh progress calculated based on the
 	 * percentage of output generated when calculating
 	 * reward.
 	 */
-	public static double OUTPUT_REWARD_WEIGHT = 0;
+	public static double OUTPUT_REWARD_WEIGHT = 1.0;
 	/**
 	 * Weight for UCT exploration term (used to select
 	 * most interesting action to try next). This
