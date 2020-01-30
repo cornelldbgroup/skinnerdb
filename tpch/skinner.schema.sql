@@ -1,5 +1,5 @@
 CREATE TABLE supplier (
-        s_suppkey  INTEGER NOT NULL,
+        s_suppkey  INTEGER NOT NULL UNIQUE,
         s_name CHAR(25) NOT NULL,
         s_address VARCHAR(40) NOT NULL,
         s_nationkey INTEGER NOT NULL,
@@ -9,7 +9,7 @@ CREATE TABLE supplier (
 );
 
 CREATE TABLE part (
-        p_partkey INTEGER NOT NULL,
+        p_partkey INTEGER NOT NULL UNIQUE,
         p_name VARCHAR(55) NOT NULL,
         p_mfgr CHAR(25) NOT NULL,
         p_brand CHAR(10) NOT NULL,
@@ -29,7 +29,7 @@ CREATE TABLE partsupp (
 );
 
 CREATE TABLE customer (
-        c_custkey INTEGER NOT NULL,
+        c_custkey INTEGER NOT NULL UNIQUE,
         c_name VARCHAR(25) NOT NULL,
         c_address VARCHAR(40) NOT NULL,
         c_nationkey INTEGER NOT NULL,
@@ -40,7 +40,7 @@ CREATE TABLE customer (
 );
 
 CREATE TABLE orders (
-        o_orderkey INTEGER NOT NULL,
+        o_orderkey INTEGER NOT NULL UNIQUE,
         o_custkey INTEGER NOT NULL,
         o_orderstatus CHAR(1) NOT NULL,
         o_totalprice NUMERIC NOT NULL,
@@ -71,14 +71,14 @@ CREATE TABLE lineitem (
 );
 
 CREATE TABLE nation (
-        n_nationkey INTEGER NOT NULL,
+        n_nationkey INTEGER NOT NULL UNIQUE,
         n_name CHAR(25) NOT NULL,
         n_regionkey INTEGER NOT NULL,
         n_comment VARCHAR(152) NOT NULL
 );
 
 CREATE TABLE region (
-        r_regionkey INTEGER NOT NULL,
+        r_regionkey INTEGER NOT NULL UNIQUE,
         r_name CHAR(25) NOT NULL,
         r_comment VARCHAR(152) NOT NULL
 );
