@@ -41,13 +41,8 @@ public class BudgetedFilter {
             result.add(currentCompletedRow);
         }
         long endTime = System.nanoTime();
-
         long duration = endTime - startTime;
-        System.out.println(duration);
-
-        double reward =
-                (currentCompletedRow - lastCompletedRow) * 1.0 /
-                        (cardinality - 1 - lastCompletedRow);
+        double reward = Math.exp(-duration * 0.0001);
         lastCompletedRow = currentCompletedRow;
         return reward;
     }
