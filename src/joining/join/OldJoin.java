@@ -111,7 +111,8 @@ public class OldJoin extends MultiWayJoin {
 			// Fully processed tuples from this table
 			progress += tupleIndexDelta[curTable] * weight;
 		}
-		return 0.5*progress + 0.5*nrResultTuples/(double)budget;
+		return JoinConfig.INPUT_REWARD_WEIGHT*progress + 
+				JoinConfig.OUTPUT_REWARD_WEIGHT*nrResultTuples/(double)budget;
 	}
     /**
      * Executes a given join order for a given budget of steps
