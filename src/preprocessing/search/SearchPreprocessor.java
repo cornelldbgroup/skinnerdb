@@ -23,7 +23,7 @@ import java.util.Set;
 import static operators.Filter.compilePred;
 import static operators.Filter.loadPredCols;
 import static preprocessing.PreprocessorUtil.*;
-import static preprocessing.search.FilterSearchConfig.BUDGET;
+import static preprocessing.search.FilterSearchConfig.ROWS_PER_TIMESTEP;
 
 public class SearchPreprocessor implements Preprocessor {
     /**
@@ -187,7 +187,7 @@ public class SearchPreprocessor implements Preprocessor {
 
         while (!filterOp.isFinished()) {
             ++roundCtr;
-            double reward = root.sample(roundCtr, order, BUDGET);
+            double reward = root.sample(roundCtr, order, ROWS_PER_TIMESTEP);
 
             if (FORGET && roundCtr == nextForget) {
                 root = new FilterUCTNode(filterOp, roundCtr, nrCompiled);

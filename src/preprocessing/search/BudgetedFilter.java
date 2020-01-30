@@ -21,32 +21,29 @@ public class BudgetedFilter {
         this.lastCompletedRow = -1;
     }
 
-    public double executeWithBudget(long budget, int[] order) {
-        double remainingBudget = (double) budget;
+    public double executeWithBudget(int remainingRows, int[] order) {
         int currentCompletedRow = lastCompletedRow;
 
-
+        long startTime = System.nanoTime();
         ROW_LOOP:
-        while (remainingBudget > 0 && currentCompletedRow + 1 < cardinality) {
+        while (remainingRows > 0 && currentCompletedRow + 1 < cardinality) {
             currentCompletedRow++;
+            remainingRows--;
+
             for (int predIndex : order) {
                 Pair<UnaryBoolEval, Double> expr = compiled.get(predIndex);
-                remainingBudget -= expr.getRight();
 
                 if (expr.getLeft().evaluate(currentCompletedRow) <= 0) {
                     continue ROW_LOOP;
                 }
 
-                if (remainingBudget <= 0) {
-                    // Since we're out of budget undo marking current row as
-                    // complete and exit
-                    currentCompletedRow--;
-                    break ROW_LOOP;
-                }
             }
             result.add(currentCompletedRow);
         }
+        long endTime = System.nanoTime();
 
+        long duration = endTime - startTime;
+        System.out.println(duration);
 
         double reward =
                 (currentCompletedRow - lastCompletedRow) * 1.0 /
