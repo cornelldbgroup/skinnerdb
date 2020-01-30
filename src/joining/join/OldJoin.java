@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 
 import catalog.CatalogManager;
+import config.JoinConfig;
 import config.LoggingConfig;
 import config.PreConfig;
 import expressions.ExpressionInfo;
@@ -420,21 +421,21 @@ public class OldJoin extends MultiWayJoin {
                 if (curNoMatch && (PreConfig.PRE_FILTER || 
                 		unaryPred == null)) {
                 	int maxNextJoinIdx = -1;
-                	// TODO: re-enable fast backtrack
-                	/*
-            		for (JoinIndexWrapper joinWrap : 
-            			joinIndices.get(curJoinIdx)) {
-            			if (joinWrap.lastProposed >= nextCardinality) {
-                			for (int i=0; i<nrTables; ++i) {
-                				if (plan.joinOrder.order[i] == 
-                						joinWrap.priorTable) {
-                					maxNextJoinIdx = Math.max(
-                							i, maxNextJoinIdx);
-                				}
+                	// Is fast backtracking enabled?
+                	if (JoinConfig.FAST_BACKTRACK) {
+                		for (JoinIndexWrapper joinWrap : 
+                			joinIndices.get(curJoinIdx)) {
+                			if (joinWrap.lastProposed >= nextCardinality) {
+                    			for (int i=0; i<nrTables; ++i) {
+                    				if (plan.joinOrder.order[i] == 
+                    						joinWrap.priorTable) {
+                    					maxNextJoinIdx = Math.max(
+                    							i, maxNextJoinIdx);
+                    				}
+                    			}
                 			}
-            			}
-            		}
-            		*/
+                		}                		
+                	}
             		if (maxNextJoinIdx > -1 && 
             				maxNextJoinIdx < joinIndex-1) {
 	                    // Exploit fast back-tracking

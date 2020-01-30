@@ -52,4 +52,10 @@ public class JoinConfig {
 	 * avoid Cartesian product joins if possible.
 	 */
 	public static final boolean AVOID_CARTESIANS = true;
+	/**
+	 * Whether to skip tables during backtracking
+	 * for which changes are guaranteed not to lead 
+	 * to valid result tuples.
+	 */
+	public static final boolean FAST_BACKTRACK = true;
 }
