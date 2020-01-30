@@ -445,8 +445,7 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 					InExpression inExpr = (InExpression)conjunct;
 					Expression left = inExpr.getLeftExpression();
 					ItemsList right = inExpr.getRightItemsList();
-					if (left != null && !inExpr.isNot() && 
-							right instanceof SubSelect) {
+					if (left != null && right instanceof SubSelect) {
 						left.accept(this);
 						Expression unnestedLeft = exprStack.pop();
 						SubSelect rightSubSel = (SubSelect)right;
@@ -456,11 +455,14 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 						unnestedConjunct.setLeftExpression(unnestedLeft);
 						unnestedConjunct.setRightExpression(unnestedRight);
 						unnestedConjuncts.add(unnestedConjunct);
+						if (inExpr.isNot()) {
+							ExistsExpression notExists = 
+									new ExistsExpression();
+							notExists.setRightExpression(unnestedRight);
+							notExists.setNot(true);
+							unnestedConjuncts.add(notExists);
+						}
 						continue;
-					} else if (inExpr.isNot()) {
-						sqlExceptions.add(new SQLexception("NOT IN "
-								+ "not yet supported - rewrite "
-								+ "using NOT EXISTS"));
 					}
 				} else if (conjunct instanceof ExistsExpression) {
 					// Rewrite sub-query within exists clause
