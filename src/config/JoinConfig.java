@@ -37,7 +37,7 @@ public class JoinConfig {
 	 * most interesting action to try next). This
 	 * factor may be dynamically adapted.
 	 */
-	public static double EXPLORATION_WEIGHT = 1E-5;
+	public static double EXPLORATION_WEIGHT = 1E-6;
 	/**
 	 * Determines how the weight for the exploration term
 	 * of the UCT algorithm is updated over time.
