@@ -58,7 +58,7 @@ public class JoinConfig {
 	 * non-uniform data which may cause (too) early
 	 * convergence to one specific join order.
 	 */
-	public static final boolean FORGET = true;
+	public static final boolean FORGET = false;
 	/**
 	 * Whether to heuristically restrict join orders to
 	 * avoid Cartesian product joins if possible.
