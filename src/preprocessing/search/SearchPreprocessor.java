@@ -109,7 +109,6 @@ public class SearchPreprocessor implements Preprocessor {
         createJoinIndices(query, preSummary);
         // Measure processing time
         PreStats.preMillis = System.currentTimeMillis() - startMillis;
-        System.out.println(PreStats.preMillis);
         return preSummary;
     }
 
