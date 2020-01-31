@@ -12,7 +12,6 @@ public class BudgetedFilter {
     private int lastCompletedRow;
     private List<Integer> result;
     private List<Pair<UnaryBoolEval, Double>> compiled;
-    private long totalDuration;
 
     public BudgetedFilter(String tableName,
                           List<Pair<UnaryBoolEval, Double>> compiled) {
@@ -20,7 +19,6 @@ public class BudgetedFilter {
         this.compiled = compiled;
         this.cardinality = CatalogManager.getCardinality(tableName);
         this.lastCompletedRow = -1;
-        this.totalDuration = 0;
     }
 
     public double executeWithBudget(int remainingRows, int[] order) {
@@ -44,7 +42,6 @@ public class BudgetedFilter {
         }
         long endTime = System.nanoTime();
         long duration = endTime - startTime;
-        totalDuration += duration;
         double reward = Math.exp(-duration * 0.0001);
         lastCompletedRow = currentCompletedRow;
         return reward;
@@ -56,9 +53,5 @@ public class BudgetedFilter {
 
     public List<Integer> getResult() {
         return result;
-    }
-
-    public long getTotalDuration() {
-        return totalDuration;
     }
 }
