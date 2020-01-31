@@ -196,7 +196,7 @@ public class SearchPreprocessor implements Preprocessor {
             }
         }
 
-        System.out.println(filterOp.getTotalDuration());
+        System.out.print(filterOp.getTotalDuration());
         return filterOp.getResult();
     }
 }
