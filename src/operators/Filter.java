@@ -87,7 +87,7 @@ public class Filter {
         // Initialize filter result
         List<Integer> result = null;
         // Choose between sequential and parallel processing
-        if (cardinality <= ParallelConfig.PRE_BATCH_SIZE) {
+        if (true || cardinality <= ParallelConfig.PRE_BATCH_SIZE) {
             RowRange allTuples = new RowRange(0, cardinality - 1);
             result = filterBatch(unaryBoolEval, allTuples);
         } else {
@@ -116,7 +116,7 @@ public class Filter {
      * @param cardinality cardinality of table to split
      * @return list of row ranges (batches)
      */
-    public static List<RowRange> split(int cardinality) {
+    static List<RowRange> split(int cardinality) {
         List<RowRange> batches = new ArrayList<RowRange>();
         for (int batchCtr = 0; batchCtr * ParallelConfig.PRE_BATCH_SIZE
                 < cardinality; ++batchCtr) {

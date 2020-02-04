@@ -1,23 +1,23 @@
 package preprocessing.search;
 
+import catalog.CatalogManager;
 import expressions.compilation.UnaryBoolEval;
-import operators.RowRange;
 
 import java.util.ArrayList;
 import java.util.List;
 
 public class BudgetedFilter {
+    private final int cardinality;
     private int lastCompletedRow;
     private List<Integer> result;
     private List<UnaryBoolEval> compiled;
-    private RowRange range;
 
-    public BudgetedFilter(List<UnaryBoolEval> compiled,
-                          RowRange range) {
+    public BudgetedFilter(String tableName,
+                          List<UnaryBoolEval> compiled) {
         this.result = new ArrayList<>();
         this.compiled = compiled;
-        this.lastCompletedRow = range.firstTuple - 1;
-        this.range = range;
+        this.cardinality = CatalogManager.getCardinality(tableName);
+        this.lastCompletedRow = -1;
     }
 
     public double executeWithBudget(int remainingRows, int[] order) {
@@ -25,7 +25,7 @@ public class BudgetedFilter {
 
         long startTime = System.nanoTime();
         ROW_LOOP:
-        while (remainingRows > 0 && currentCompletedRow + 1 <= range.lastTuple) {
+        while (remainingRows > 0 && currentCompletedRow + 1 < cardinality) {
             currentCompletedRow++;
             remainingRows--;
 
@@ -46,7 +46,7 @@ public class BudgetedFilter {
     }
 
     public boolean isFinished() {
-        return lastCompletedRow == range.lastTuple;
+        return lastCompletedRow == cardinality - 1;
     }
 
     public List<Integer> getResult() {
