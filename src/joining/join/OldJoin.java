@@ -407,11 +407,24 @@ public class OldJoin extends MultiWayJoin {
             	joinIndexInc = newJoinIndex > joinIndex;
             	joinIndex = newJoinIndex;
             } else {
-                // At least one of applicable predicates evaluates to false -
-                // try next tuple in same table.
+                // At least one of applicable predicates evaluates 
+            	// to false - try next tuple in same table.
                 tupleIndices[nextTable] = proposeNext(
                 		joinIndices.get(joinIndex), 
                 		nextTable, tupleIndices);
+                // If activated: fully resolve anti-joins
+                // by examining whether no tuple matches.
+                if (JoinConfig.SIMPLE_ANTI_JOIN && 
+                		plan.existsFlags[nextTable] < 0) {
+                	while (tupleIndices[nextTable] < nextCardinality &&
+                			!evaluateAll(applicablePreds.get(joinIndex), 
+                			tupleIndices)) {
+                        tupleIndices[nextTable] = proposeNext(
+                        		joinIndices.get(joinIndex), 
+                        		nextTable, tupleIndices);
+                        JoinStats.nrTuples++;
+                	}
+                }
                 indexedTuple[nextTable] = true;
                 int curJoinIdx = joinIndex;
                 int curTable = nextTable;
@@ -421,7 +434,7 @@ public class OldJoin extends MultiWayJoin {
                 // Cannot find matching tuple in current table?
                 if (curNoMatch && (PreConfig.PRE_FILTER || 
                 		unaryPred == null)) {
-                	int maxNextJoinIdx = -1;
+                	int minNextJoinIdx = Integer.MAX_VALUE;
                 	// Is fast backtracking enabled?
                 	if (JoinConfig.FAST_BACKTRACK) {
                 		for (JoinIndexWrapper joinWrap : 
@@ -430,22 +443,23 @@ public class OldJoin extends MultiWayJoin {
                     			for (int i=0; i<nrTables; ++i) {
                     				if (plan.joinOrder.order[i] == 
                     						joinWrap.priorTable) {
-                    					maxNextJoinIdx = Math.max(
-                    							i, maxNextJoinIdx);
+                    					minNextJoinIdx = Math.min(
+                    							i, minNextJoinIdx);
                     				}
                     			}
                 			}
                 		}                		
                 	}
-            		if (maxNextJoinIdx > -1 && 
-            				maxNextJoinIdx < joinIndex-1) {
+            		if (minNextJoinIdx > -1 && 
+            				minNextJoinIdx < Integer.MAX_VALUE && 
+            				minNextJoinIdx < joinIndex-1) {
 	                    // Exploit fast back-tracking
-	                    for (int i=maxNextJoinIdx+1; i<=joinIndex; ++i) {
+	                    for (int i=minNextJoinIdx+1; i<=joinIndex; ++i) {
 	                    	int table = plan.joinOrder.order[i];
 	                    	tupleIndices[table] = 0;
 	                    	indexedTuple[table] = false;
 	                    }
-	                    joinIndex = maxNextJoinIdx;
+	                    joinIndex = minNextJoinIdx;
 	                    nextTable = plan.joinOrder.order[joinIndex];
 	                    nextCardinality = cardinalities[nextTable];
 	                    tupleIndices[nextTable] = proposeNext(

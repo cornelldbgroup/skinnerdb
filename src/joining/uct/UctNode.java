@@ -256,6 +256,19 @@ public class UctNode {
      * @return index of action to try next
      */
     int selectAction(SelectionPolicy policy) {
+    	// Prioritize tables representing sub-queries
+    	// in exists/not exists clauses if activated.
+    	if (JoinConfig.SIMPLE_ANTI_JOIN) {
+    		int offset = random.nextInt(nrActions);
+    		for (int actionCtr=0; actionCtr<nrActions; ++actionCtr) {
+    			int action = (actionCtr + offset) % nrActions;
+    			int table = nextTable[action];
+    			if (query.existsFlags[table] != 0 &&
+    					eligibleExists[action]) {
+    				return action;
+    			}
+    		}
+    	}
         // Are there untried actions?
         if (!priorityActions.isEmpty()) {
             int nrUntried = priorityActions.size();

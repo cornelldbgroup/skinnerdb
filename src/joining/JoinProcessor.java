@@ -7,6 +7,7 @@ import java.util.Collection;
 import catalog.CatalogManager;
 import config.LoggingConfig;
 import config.NamingConfig;
+import config.PreConfig;
 import config.JoinConfig;
 import joining.join.OldJoin;
 import joining.result.ResultTuple;
@@ -57,7 +58,7 @@ public class JoinProcessor {
 		// Initialize logging for new query
 		nrLogEntries = 0;
 		// Can we skip the join phase?
-		if (query.nrJoined == 1) {
+		if (query.nrJoined == 1 && PreConfig.PRE_FILTER) {
 			String alias = query.aliases[0];
 			String table = context.aliasToFiltered.get(alias);
 			context.joinedTable = table;

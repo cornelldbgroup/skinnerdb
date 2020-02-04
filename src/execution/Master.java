@@ -1,10 +1,12 @@
 package execution;
 
+import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import benchmark.BenchUtil;
 import buffer.BufferManager;
 import catalog.CatalogManager;
 import config.LoggingConfig;
@@ -38,11 +40,14 @@ public class Master {
 	 * @param plotAtMost	generate at most that many plots if activated
 	 * @param plotEvery		generate one plot after X samples if activated
 	 * @param plotDir		add plots to this directory if activated
+	 * @param queryName		name of query to use for benchmark output
+	 * @param benchOut		writer to benchmark file, null to deactivate
 	 * @throws Exception
 	 */
 	public static void executeSelect(PlainSelect select, 
 			boolean explain, int plotAtMost, int plotEvery,
-			String plotDir) throws Exception {
+			String plotDir, String queryName, PrintWriter benchOut) 
+					throws Exception {
 		// Determine type of result relation
 		List<Table> intoTbls = select.getIntoTables();
 		boolean finalTempResult = intoTbls == null;
@@ -69,6 +74,7 @@ public class Master {
 		Set<String> subQueryResults = new HashSet<>();
 		int nrSubQueries = unnestor.unnestedQueries.size();
 		for (int subQueryCtr=0; subQueryCtr<nrSubQueries; ++subQueryCtr) {
+			long startMillis = System.currentTimeMillis();
 			// Retrieve next sub-query
 			PlainSelect subQuery = unnestor.unnestedQueries.get(subQueryCtr);
 			// Analyze sub-query
@@ -89,6 +95,11 @@ public class Master {
 			subQueryResults.add(resultRel);
 			BufferManager.unloadTempData(subQueryResults);
 			CatalogManager.removeTempTables(subQueryResults);
+			// Generate benchmark output if activated
+			if (benchOut != null) {
+				long totalMillis = System.currentTimeMillis() - startMillis;
+				BenchUtil.writeStats(queryName, totalMillis, benchOut);
+			}
 		}
 	}
 }

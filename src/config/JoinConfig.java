@@ -25,19 +25,19 @@ public class JoinConfig {
 	 * percentage of input processed when calculating
 	 * reward.
 	 */
-	public static double INPUT_REWARD_WEIGHT = 1.0;
+	public static double INPUT_REWARD_WEIGHT = 0.5;
 	/**
 	 * How to weigh progress calculated based on the
 	 * percentage of output generated when calculating
 	 * reward.
 	 */
-	public static double OUTPUT_REWARD_WEIGHT = 0.0;
+	public static double OUTPUT_REWARD_WEIGHT = 0.5;
 	/**
 	 * Weight for UCT exploration term (used to select
 	 * most interesting action to try next). This
 	 * factor may be dynamically adapted.
 	 */
-	public static double EXPLORATION_WEIGHT = 1E-6;
+	public static double EXPLORATION_WEIGHT = 1E-5;
 	/**
 	 * Determines how the weight for the exploration term
 	 * of the UCT algorithm is updated over time.
@@ -58,16 +58,22 @@ public class JoinConfig {
 	 * non-uniform data which may cause (too) early
 	 * convergence to one specific join order.
 	 */
-	public static final boolean FORGET = false;
+	public static final boolean FORGET = true;
 	/**
 	 * Whether to heuristically restrict join orders to
 	 * avoid Cartesian product joins if possible.
 	 */
-	public static final boolean AVOID_CARTESIANS = true;
+	public static final boolean AVOID_CARTESIANS = false;
 	/**
 	 * Whether to skip tables during backtracking
 	 * for which changes are guaranteed not to lead 
 	 * to valid result tuples.
 	 */
 	public static final boolean FAST_BACKTRACK = false;
+	/**
+	 * Whether to resolve anti-joins immediately (instead
+	 * of interrupting the process once the tuple limit
+	 * is reached).
+	 */
+	public static final boolean SIMPLE_ANTI_JOIN = false;
 }

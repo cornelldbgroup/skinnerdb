@@ -87,10 +87,10 @@ public class SkinnerCmd {
 					PlainSelect query = entry.getValue();
 					System.out.println(queryName);
 					System.out.println(query.toString());
-					long startMillis = System.currentTimeMillis();
-					processSQL(query.toString(), true);
-					long totalMillis = System.currentTimeMillis() - startMillis;
-					BenchUtil.writeStats(queryName, totalMillis, benchOut);
+					//long startMillis = System.currentTimeMillis();
+					processSQL(query.toString(), queryName, benchOut);
+					//long totalMillis = System.currentTimeMillis() - startMillis;
+					//BenchUtil.writeStats(queryName, totalMillis, benchOut);
 				}
 				// Close benchmark result file
 				benchOut.close();				
@@ -172,11 +172,12 @@ public class SkinnerCmd {
 	 * Process input string as SQL statement.
 	 * 
 	 * @param input		input text
-	 * @param benchRun	whether this is a benchmark run (query results
-	 * 					are not printed for benchmark runs)
+	 * @param queryName	used for output to benchmark file
+	 * @param benchOut	writer to benchmark result file
 	 * @throws Exception
 	 */
-	static void processSQL(String input, boolean benchRun) throws Exception {
+	static void processSQL(String input, String queryName, 
+			PrintWriter benchOut) throws Exception {
 		// Try parsing as SQL query
 		Statement sqlStatement = null;
 		try {
@@ -208,11 +209,11 @@ public class SkinnerCmd {
 				PlainSelect plainSelect = (PlainSelect)select.getSelectBody();
 				boolean printResult = plainSelect.getIntoTables() == null;
 				try {
-					Master.executeSelect(plainSelect, 
-							false, -1, -1, null);
+					Master.executeSelect(plainSelect, false, 
+							-1, -1, null, queryName, benchOut);
 					// Display query result if no target tables specified
 					// and if this is not a benchmark run.
-					if (!benchRun && printResult) {
+					if (benchOut == null && printResult) {
 						// Display on console
 						RelationPrinter.print(
 								NamingConfig.FINAL_RESULT_NAME);
@@ -268,7 +269,8 @@ public class SkinnerCmd {
 				PlainSelect plainSelect = (PlainSelect)select.getSelectBody();
 				try {
 					Master.executeSelect(plainSelect, true, 
-							plotAtMost, plotEvery, plotDir);
+							plotAtMost, plotEvery, plotDir, 
+							null, null);
 					// Output final result
 					String resultRel = NamingConfig.FINAL_RESULT_NAME;
 					RelationPrinter.print(resultRel);					
@@ -335,7 +337,7 @@ public class SkinnerCmd {
 			// Nothing to do ...
 		} else {
 			try {
-				processSQL(input, false);				
+				processSQL(input, null, null);				
 			} catch (SQLexception e) {
 				System.out.println(e.getMessage());
 			}
