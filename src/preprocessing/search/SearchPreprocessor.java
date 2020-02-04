@@ -22,6 +22,7 @@ import java.util.Set;
 import static operators.Filter.compilePred;
 import static operators.Filter.loadPredCols;
 import static preprocessing.PreprocessorUtil.*;
+import static preprocessing.search.FilterSearchConfig.FORGET;
 import static preprocessing.search.FilterSearchConfig.ROWS_PER_TIMESTEP;
 
 public class SearchPreprocessor implements Preprocessor {
@@ -169,8 +170,6 @@ public class SearchPreprocessor implements Preprocessor {
         int[] order = new int[nrCompiled];
         FilterUCTNode root = new FilterUCTNode(filterOp, roundCtr, nrCompiled);
         long nextForget = 1;
-
-        boolean FORGET = true;
 
         while (!filterOp.isFinished()) {
             ++roundCtr;
