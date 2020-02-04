@@ -2,7 +2,6 @@ package preprocessing.search;
 
 import catalog.CatalogManager;
 import expressions.compilation.UnaryBoolEval;
-import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -11,10 +10,10 @@ public class BudgetedFilter {
     private final int cardinality;
     private int lastCompletedRow;
     private List<Integer> result;
-    private List<Pair<UnaryBoolEval, Double>> compiled;
+    private List<UnaryBoolEval> compiled;
 
     public BudgetedFilter(String tableName,
-                          List<Pair<UnaryBoolEval, Double>> compiled) {
+                          List<UnaryBoolEval> compiled) {
         this.result = new ArrayList<>();
         this.compiled = compiled;
         this.cardinality = CatalogManager.getCardinality(tableName);
@@ -31,13 +30,12 @@ public class BudgetedFilter {
             remainingRows--;
 
             for (int predIndex : order) {
-                Pair<UnaryBoolEval, Double> expr = compiled.get(predIndex);
-
-                if (expr.getLeft().evaluate(currentCompletedRow) <= 0) {
+                UnaryBoolEval expr = compiled.get(predIndex);
+                if (expr.evaluate(currentCompletedRow) <= 0) {
                     continue ROW_LOOP;
                 }
-
             }
+
             result.add(currentCompletedRow);
         }
         long endTime = System.nanoTime();

@@ -7,7 +7,6 @@ import expressions.ExpressionInfo;
 import expressions.compilation.UnaryBoolEval;
 import net.sf.jsqlparser.expression.Expression;
 import operators.Materialize;
-import org.apache.commons.lang3.tuple.Pair;
 import preprocessing.Context;
 import preprocessing.Preprocessor;
 import print.RelationPrinter;
@@ -133,23 +132,11 @@ public class SearchPreprocessor implements Preprocessor {
 
         // Determine rows satisfying unary predicate
         loadPredCols(unaryPred, preSummary.columnMapping);
-        List<Pair<UnaryBoolEval, Double>> compiled =
-                new ArrayList<>(predicates.size());
+        List<UnaryBoolEval> compiled = new ArrayList<>(predicates.size());
         for (Expression expression : predicates) {
             compiled.add(compilePred(unaryPred,
-                    expression, preSummary.columnMapping));
+                    expression, preSummary.columnMapping).getLeft());
         }
-
-        double maxValue = Double.MIN_VALUE;
-        for (Pair<UnaryBoolEval, Double> pair : compiled) {
-            maxValue = Math.max(pair.getRight(), maxValue);
-        }
-        for (int i = 0; i < compiled.size(); i++) {
-            Pair<UnaryBoolEval, Double> pair = compiled.get(i);
-            compiled.set(i, Pair.of(pair.getLeft(),
-                    pair.getValue() / maxValue * 10));
-        }
-
         List<Integer> satisfyingRows = filterUCT(tableName, compiled);
 
         // Materialize relevant rows and columns
@@ -175,7 +162,7 @@ public class SearchPreprocessor implements Preprocessor {
     }
 
     private List<Integer> filterUCT(String tableName,
-                                    List<Pair<UnaryBoolEval, Double>> compiled) {
+                                    List<UnaryBoolEval> compiled) {
         long roundCtr = 0;
         int nrCompiled = compiled.size();
         BudgetedFilter filterOp = new BudgetedFilter(tableName, compiled);
