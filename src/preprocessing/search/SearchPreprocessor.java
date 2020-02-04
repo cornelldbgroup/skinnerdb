@@ -1,12 +1,15 @@
 package preprocessing.search;
 
+import catalog.CatalogManager;
 import config.LoggingConfig;
 import config.NamingConfig;
+import config.ParallelConfig;
 import config.PreConfig;
 import expressions.ExpressionInfo;
 import expressions.compilation.UnaryBoolEval;
 import net.sf.jsqlparser.expression.Expression;
 import operators.Materialize;
+import operators.RowRange;
 import preprocessing.Context;
 import preprocessing.Preprocessor;
 import print.RelationPrinter;
@@ -18,9 +21,9 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
-import static operators.Filter.compilePred;
-import static operators.Filter.loadPredCols;
+import static operators.Filter.*;
 import static preprocessing.PreprocessorUtil.*;
 import static preprocessing.search.FilterSearchConfig.FORGET;
 import static preprocessing.search.FilterSearchConfig.ROWS_PER_TIMESTEP;
@@ -138,7 +141,19 @@ public class SearchPreprocessor implements Preprocessor {
             compiled.add(compilePred(unaryPred,
                     expression, preSummary.columnMapping).getLeft());
         }
-        List<Integer> satisfyingRows = filterUCT(tableName, compiled);
+        int cardinality = CatalogManager.getCardinality(tableName);
+        List<Integer> satisfyingRows;
+        if (cardinality <= ParallelConfig.PRE_BATCH_SIZE) {
+            RowRange allTuples = new RowRange(0, cardinality - 1);
+            satisfyingRows = filterUCT(compiled, allTuples);
+        } else {
+            // Divide tuples into batches
+            List<RowRange> batches = split(cardinality);
+            // Process batches in parallel
+            satisfyingRows = batches.parallelStream().flatMap(batch ->
+                    filterUCT(compiled, batch).stream()).collect(
+                    Collectors.toList());
+        }
 
         // Materialize relevant rows and columns
         String filteredName = NamingConfig.FILTERED_PRE + alias;
@@ -162,11 +177,11 @@ public class SearchPreprocessor implements Preprocessor {
         }
     }
 
-    private List<Integer> filterUCT(String tableName,
-                                    List<UnaryBoolEval> compiled) {
+    private List<Integer> filterUCT(List<UnaryBoolEval> compiled,
+                                    RowRange range) {
         long roundCtr = 0;
         int nrCompiled = compiled.size();
-        BudgetedFilter filterOp = new BudgetedFilter(tableName, compiled);
+        BudgetedFilter filterOp = new BudgetedFilter(compiled, range);
         int[] order = new int[nrCompiled];
         FilterUCTNode root = new FilterUCTNode(filterOp, roundCtr, nrCompiled);
         long nextForget = 1;
