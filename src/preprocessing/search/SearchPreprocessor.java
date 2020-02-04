@@ -71,7 +71,7 @@ public class SearchPreprocessor implements Preprocessor {
         preSummary.aliasToFiltered.putAll(query.aliasToTable);
         log("Column mapping:\t" + preSummary.columnMapping.toString());
         // Iterate over query aliases
-        query.aliasToTable.keySet().parallelStream().forEach(alias -> {
+        for (String alias : query.aliasToTable.keySet()) {
             // Collect required columns (for joins and post-processing) for
             // this table
             List<ColumnRef> curRequiredCols = new ArrayList<>();
@@ -102,7 +102,8 @@ public class SearchPreprocessor implements Preprocessor {
                 String table = query.aliasToTable.get(alias);
                 preSummary.aliasToFiltered.put(alias, table);
             }
-        });
+        }
+
         // Abort pre-processing if filtering error occurred
         if (hadError) {
             throw new Exception("Error in pre-processor.");
