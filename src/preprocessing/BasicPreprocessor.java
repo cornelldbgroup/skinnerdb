@@ -4,6 +4,7 @@ import config.LoggingConfig;
 import config.NamingConfig;
 import config.PreConfig;
 import expressions.ExpressionInfo;
+import expressions.compilation.UnaryBoolEval;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
 import operators.Filter;
@@ -15,12 +16,10 @@ import query.ColumnRef;
 import query.QueryInfo;
 import statistics.PreStats;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
+import static operators.Filter.compilePred;
 import static preprocessing.PreprocessorUtil.*;
 
 /**
@@ -72,6 +71,9 @@ public class BasicPreprocessor implements Preprocessor {
         // Initialize mapping from query alias to DB tables
         preSummary.aliasToFiltered.putAll(query.aliasToTable);
         log("Column mapping:\t" + preSummary.columnMapping.toString());
+
+        final boolean shouldFilter = shouldFilter(query, preSummary);
+
         // Iterate over query aliases
         query.aliasToTable.keySet().parallelStream().forEach(alias -> {
             // Collect required columns (for joins and post-processing) for
@@ -92,15 +94,20 @@ public class BasicPreprocessor implements Preprocessor {
             // Filter and project if enabled
             if (curUnaryPred != null && PreConfig.PRE_FILTER) {
                 try {
-                    // Apply index to prune rows if possible
-                    //ExpressionInfo remainingPred = applyIndex(
-                    //        query, curUnaryPred, preSummary);
-                    // TODO: reinsert index usage
-                    ExpressionInfo remainingPred = curUnaryPred;
-                    // Filter remaining rows by remaining predicate
-                    if (remainingPred != null) {
-                        filterProject(query, alias, remainingPred,
-                                curRequiredCols, preSummary);
+                    if (shouldFilter) {
+                        // Apply index to prune rows if possible
+                        //ExpressionInfo remainingPred = applyIndex(
+                        //        query, curUnaryPred, preSummary);
+                        // TODO: reinsert index usage
+                        ExpressionInfo remainingPred = curUnaryPred;
+                        // Filter remaining rows by remaining predicate
+                        if (remainingPred != null) {
+                            filterProject(query, alias, remainingPred,
+                                    curRequiredCols, preSummary, true);
+                        }
+                    } else {
+                        filterProject(query, alias, curUnaryPred,
+                                curRequiredCols, preSummary, false);
                     }
                 } catch (Exception e) {
                     System.err.println("Error filtering " + alias);
@@ -231,14 +238,16 @@ public class BasicPreprocessor implements Preprocessor {
     private void filterProject(QueryInfo query, String alias,
                                ExpressionInfo unaryPred,
                                List<ColumnRef> requiredCols,
-                               Context preSummary) throws Exception {
+                               Context preSummary,
+                               boolean shouldFilter) throws Exception {
         long startMillis = System.currentTimeMillis();
         log("Filtering and projection for " + alias + " ...");
         String tableName = preSummary.aliasToFiltered.get(alias);
         log("Table name for " + alias + " is " + tableName);
         // Determine rows satisfying unary predicate
-        List<Integer> satisfyingRows = Filter.executeToList(
-                unaryPred, tableName, preSummary.columnMapping);
+        List<Integer> satisfyingRows = shouldFilter ? Filter.executeToList(
+                unaryPred, tableName, preSummary.columnMapping) :
+                Arrays.asList();
         // Materialize relevant rows and columns
         String filteredName = NamingConfig.FILTERED_PRE + alias;
         List<String> columnNames = new ArrayList<String>();
@@ -261,5 +270,22 @@ public class BasicPreprocessor implements Preprocessor {
         if (LoggingConfig.PRINT_INTERMEDIATES) {
             RelationPrinter.print(filteredName);
         }
+    }
+
+    private boolean shouldFilter(QueryInfo query, Context preSummary)
+            throws Exception {
+        boolean alwaysFalseExpression = false;
+        for (ExpressionInfo exprInfo : query.unaryPredicates) {
+            if (exprInfo.aliasesMentioned.isEmpty()) {
+                UnaryBoolEval eval = compilePred(exprInfo,
+                        exprInfo.finalExpression, preSummary.columnMapping)
+                        .getLeft();
+                if (eval.evaluate(0) <= 0) {
+                    alwaysFalseExpression = true;
+                    break;
+                }
+            }
+        }
+        return !alwaysFalseExpression;
     }
 }
