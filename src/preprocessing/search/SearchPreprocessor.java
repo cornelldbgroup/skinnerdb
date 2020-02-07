@@ -14,10 +14,7 @@ import query.ColumnRef;
 import query.QueryInfo;
 import statistics.PreStats;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 import static operators.Filter.compilePred;
 import static operators.Filter.loadPredCols;
@@ -67,6 +64,9 @@ public class SearchPreprocessor implements Preprocessor {
         // Initialize mapping from query alias to DB tables
         preSummary.aliasToFiltered.putAll(query.aliasToTable);
         log("Column mapping:\t" + preSummary.columnMapping.toString());
+
+        final boolean shouldFilter = shouldFilter(query, preSummary);
+
         // Iterate over query aliases
         query.aliasToTable.keySet().parallelStream().forEach(alias -> {
             // Collect required columns (for joins and post-processing) for
@@ -89,7 +89,7 @@ public class SearchPreprocessor implements Preprocessor {
                 try {
                     List<Expression> conjuncts = curUnaryPred.conjuncts;
                     filterProject(curUnaryPred, conjuncts, alias,
-                            curRequiredCols, preSummary);
+                            curRequiredCols, preSummary, shouldFilter);
                 } catch (Exception e) {
                     System.err.println("Error filtering " + alias);
                     e.printStackTrace();
@@ -100,6 +100,7 @@ public class SearchPreprocessor implements Preprocessor {
                 preSummary.aliasToFiltered.put(alias, table);
             }
         });
+
         // Abort pre-processing if filtering error occurred
         if (hadError) {
             throw new Exception("Error in pre-processor.");
@@ -110,6 +111,23 @@ public class SearchPreprocessor implements Preprocessor {
         // Measure processing time
         PreStats.preMillis = System.currentTimeMillis() - startMillis;
         return preSummary;
+    }
+
+    private boolean shouldFilter(QueryInfo query, Context preSummary)
+            throws Exception {
+        boolean alwaysFalseExpression = false;
+        for (ExpressionInfo exprInfo : query.unaryPredicates) {
+            if (exprInfo.aliasesMentioned.isEmpty()) {
+                UnaryBoolEval eval = compilePred(exprInfo,
+                        exprInfo.finalExpression, preSummary.columnMapping)
+                        .getLeft();
+                if (eval.evaluate(0) <= 0) {
+                    alwaysFalseExpression = true;
+                    break;
+                }
+            }
+        }
+        return !alwaysFalseExpression;
     }
 
     /**
@@ -125,7 +143,8 @@ public class SearchPreprocessor implements Preprocessor {
     private void filterProject(ExpressionInfo unaryPred,
                                List<Expression> predicates, String alias,
                                List<ColumnRef> requiredCols,
-                               Context preSummary) throws Exception {
+                               Context preSummary,
+                               boolean shouldFilter) throws Exception {
         long startMillis = System.currentTimeMillis();
         log("Filtering and projection for " + alias + " ...");
         String tableName = preSummary.aliasToFiltered.get(alias);
@@ -138,7 +157,8 @@ public class SearchPreprocessor implements Preprocessor {
             compiled.add(compilePred(unaryPred,
                     expression, preSummary.columnMapping).getLeft());
         }
-        List<Integer> satisfyingRows = filterUCT(tableName, compiled);
+        List<Integer> satisfyingRows = shouldFilter ? filterUCT(tableName,
+                compiled) : Arrays.asList();
 
         // Materialize relevant rows and columns
         String filteredName = NamingConfig.FILTERED_PRE + alias;
