@@ -219,8 +219,12 @@ public class SkinnerCmd {
                     // and if this is not a benchmark run.
                     if (!benchRun && printResult) {
                         // Display on console
+                        int cardinality =
+                                CatalogManager.getCardinality(
+                                        NamingConfig.FINAL_RESULT_NAME);
                         RelationPrinter.print(
                                 NamingConfig.FINAL_RESULT_NAME);
+                        System.out.println(cardinality + " result tuples.");
                     }
                 } catch (SQLexception e) {
                     System.out.println(e.getMessage());
@@ -299,8 +303,8 @@ public class SkinnerCmd {
      * the input was a termination command.
      *
      * @param input input command to process
-     * @throws Exception
      * @return false iff input was termination command
+     * @throws Exception
      */
     static boolean processInput(String input) throws Exception {
         // Delete semicolons if any
@@ -328,7 +332,8 @@ public class SkinnerCmd {
             System.out.println("'help' for help");
             System.out.println("'index all' to index each column");
             System.out.println("'list' to list database tables");
-            System.out.println("'load <table> <CSV file> <separator> <NULL representation>' "
+            System.out.println("'load <table> <CSV file> <separator> <NULL " +
+                    "representation>' "
                     + "to load table data from .csv file");
             System.out.println("'quit' for quit");
             System.out.println("Write SQL queries in a single line");
