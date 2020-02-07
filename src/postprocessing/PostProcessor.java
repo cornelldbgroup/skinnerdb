@@ -6,8 +6,7 @@ import catalog.info.ColumnInfo;
 import catalog.info.TableInfo;
 import config.LoggingConfig;
 import config.NamingConfig;
-import data.ColumnData;
-import data.IntData;
+import data.*;
 import expressions.ExpressionInfo;
 import expressions.aggregates.AggInfo;
 import net.sf.jsqlparser.schema.Column;
@@ -17,6 +16,8 @@ import print.RelationPrinter;
 import query.ColumnRef;
 import query.QueryInfo;
 import statistics.PostStats;
+import types.JavaType;
+import types.TypeUtil;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -262,7 +263,6 @@ public class PostProcessor {
      * @param query         query to process
      * @param context       query processing context
      * @param resultRelName name of result relation
-     * @param tempResul     whether result relation is temporary
      * @throws Exception
      */
     static void treatAllRowsAggQuery(QueryInfo query,
@@ -273,14 +273,42 @@ public class PostProcessor {
         TableInfo result = new TableInfo(resultTbl, tempResult);
         CatalogManager.currentDB.nameToTable.put(resultTbl, result);
         // Calculate aggregates
+        context.nrGroups = 1;
         aggregate(query, context);
-        // Get name of result relation
-        String resultName = result.name;
+
+        boolean filter = query.havingExpression != null && havingRows(query,
+                context).isEmpty();
+
         // Iterate over expressions in SELECT clause
         for (ExpressionInfo expr : query.selectExpressions) {
             // Update catalog by adding result column
             String colName = query.selectToAlias.get(expr);
-            ColumnRef resultRef = new ColumnRef(resultName, colName);
+            ColumnRef resultRef = new ColumnRef(resultTbl, colName);
+
+            if (filter) {
+                ColumnInfo resultColInfo = new ColumnInfo(colName,
+                        expr.resultType, false, false, false, false);
+                result.addColumn(resultColInfo);
+                JavaType jType = TypeUtil.toJavaType(expr.resultType);
+                ColumnData data = null;
+                switch (jType) {
+                    case INT:
+                        data = new IntData(0);
+                        break;
+                    case LONG:
+                        data = new LongData(0);
+                        break;
+                    case DOUBLE:
+                        data = new DoubleData(0);
+                        break;
+                    case STRING:
+                        data = new StringData(0);
+                        break;
+                }
+                BufferManager.colToData.put(resultRef, data);
+                continue;
+            }
+
             // Is it a previously calculated aggregate?
             String exprSQL = expr.finalExpression.toString();
             if (context.aggToData.containsKey(exprSQL)) {
@@ -288,6 +316,7 @@ public class PostProcessor {
                 ColumnInfo resultColInfo = new ColumnInfo(colName,
                         expr.resultType, false, false, false, false);
                 result.addColumn(resultColInfo);
+
                 // Select item data was previously generated
                 ColumnRef aggRef = context.aggToData.get(exprSQL);
                 ColumnData aggData = BufferManager.getData(aggRef);
@@ -412,9 +441,8 @@ public class PostProcessor {
      * indices of rows containing corresponding results) that
      * satisfy the condition in the HAVING clause.
      *
-     * @param query      query whose HAVING clause to process
-     * @param context    execution context containing column mappings
-     * @param havingExpr condition specified in HAVING clause
+     * @param query   query whose HAVING clause to process
+     * @param context execution context containing column mappings
      * @return indices of rows satisfying HAVING clause
      * @throws Exception
      */
