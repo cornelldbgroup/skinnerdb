@@ -12,11 +12,14 @@ CONTENT=`echo "$CONTENT" | perl -pe 's/[^[:ascii:]]+//g'`
 # Convert to lower case
 CONTENT=`echo "$CONTENT" | perl -pe 's/("[^"]*")/"\L\1"/g'`
 
-# Get rid of quotes
+# Get rid of quotes/question mark
 CONTENT=`echo "$CONTENT" | perl -pe 's/"//g'`
+CONTENT=`echo "$CONTENT" | perl -pe 's/\?//g'`
 
 # Type Change
 CONTENT=`echo "$CONTENT" | perl -pe 's/BIGINT/LONG/g'`
+CONTENT=`echo "$CONTENT" | perl -pe 's/smallint|boolean/int/g'`
+CONTENT=`echo "$CONTENT" | perl -pe 's/decimal\(.*\)/double/g'`
 
 echo "$CONTENT"
 
