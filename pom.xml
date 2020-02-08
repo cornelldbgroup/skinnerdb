@@ -216,5 +216,10 @@
             <version>5.1.0</version>
             <scope>test</scope>
         </dependency>
+	<dependency>
+            <groupId>org.jline</groupId>
+            <artifactId>jline</artifactId>
+            <version>3.13.2</version>
+        </dependency>
     </dependencies>
 </project>
