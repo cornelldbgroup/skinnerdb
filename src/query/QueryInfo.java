@@ -376,7 +376,7 @@ public class QueryInfo {
             }
             // Separate into unary and join predicates
             for (ExpressionInfo exprInfo : wherePredicates) {
-                if (exprInfo.aliasesMentioned.size() == 1) {
+                if (exprInfo.aliasesMentioned.size() <= 1) {
                     unaryPredicates.add(exprInfo);
                 } else {
                     // Join predicate - calculate mentioned alias indexes
@@ -389,9 +389,9 @@ public class QueryInfo {
                     Expression nonEquiPred = null;
                     for (Expression conjunct : exprInfo.conjuncts) {
                         ExpressionInfo curInfo = new ExpressionInfo(this,
-								conjunct);
+                                conjunct);
                         Set<ColumnRef> curEquiJoinCols =
-								extractEquiJoinCols(curInfo);
+                                extractEquiJoinCols(curInfo);
                         if (curEquiJoinCols != null) {
                             equiJoinCols.addAll(curEquiJoinCols);
                             equiJoinPreds.add(curInfo);
@@ -403,7 +403,7 @@ public class QueryInfo {
                     // Add non-equi join predicates if any
                     if (nonEquiPred != null) {
                         nonEquiJoinPreds.add(new ExpressionInfo(this,
-								nonEquiPred));
+                                nonEquiPred));
                     }
                 } // if join predicate
             } // over where conjuncts
@@ -432,7 +432,7 @@ public class QueryInfo {
                         !groupByStrings.contains(selectExpr.finalExpression.toString())) {
                     throw new SQLexception("Error - select item " + selectExpr +
                             " is neither aggregate nor does it appear in " +
-							"group by " +
+                            "group by " +
                             "clause");
                 }
             }
@@ -586,7 +586,8 @@ public class QueryInfo {
      * @param separator   separator to insert between elements
      * @return concatenation string
      */
-    String concatenateExprs(List<ExpressionInfo> expressions, String separator) {
+    String concatenateExprs(List<ExpressionInfo> expressions,
+                            String separator) {
         List<String> toConcat = new ArrayList<String>();
         for (ExpressionInfo expr : expressions) {
             toConcat.add(expr.toString());
@@ -611,8 +612,8 @@ public class QueryInfo {
      * and returns -1 if none specified.
      *
      * @param plainSelect input query
-     * @throws Exception
      * @return result tuple limit or -1 if none specified
+     * @throws Exception
      */
     static int getLimit(PlainSelect plainSelect) throws Exception {
         Limit limitObj = plainSelect.getLimit();
@@ -639,7 +640,8 @@ public class QueryInfo {
      * @param plainSelect a plain select query
      * @param explain     whether this is an explain query
      * @param plotAtMost  plot at most that many plots (in explain mode)
-     * @param plotEvery   generate one plot after that many samples (in explain mode)
+     * @param plotEvery   generate one plot after that many samples (in
+     *                    explain mode)
      * @param plotDir     add plots to this directory (in explain mode)
      */
     public QueryInfo(PlainSelect plainSelect, boolean explain,
@@ -673,7 +675,8 @@ public class QueryInfo {
         log("GROUP BY expressions: " + groupByExpressions);
         // Add expression in HAVING clause
         treatHaving();
-        log("HAVING clause: " + (havingExpression != null ? havingExpression : "none"));
+        log("HAVING clause: " + (havingExpression != null ? havingExpression
+                : "none"));
         // Adds expressions in ORDER BY clause
         treatOrderBy();
         log("ORDER BY expressions: " + orderByExpressions);
