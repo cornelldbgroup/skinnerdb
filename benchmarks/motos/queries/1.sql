@@ -1,0 +1,1 @@
+SELECT motos_1.marca AS datos_copia FROM motos_1 WHERE ((motos_1.categoria IN ('CAMIONES', 'CAMIONES, BUSES Y PANELES', 'MOTOCICLETAS', 'PICK UPS, VANS Y JEEPS', 'PICK-UPS', 'SUV Y JEEPS', 'VEHICULOS NUEVOS')) AND (CAST(EXTRACT(YEAR FROM motos_1.fecha) AS LONG) >= 2010) AND (CAST(EXTRACT(YEAR FROM motos_1.fecha) AS LONG) <= 2015)) GROUP BY motos_1.marca ORDER BY datos_copia ASC ;

@@ -1,0 +1,1 @@
+SELECT SUM(motos_2.inversionus) AS suminversionusok,   CAST(EXTRACT(YEAR FROM motos_2.fecha) AS LONG) AS yrfechaok FROM motos_2 WHERE ((CAST(EXTRACT(YEAR FROM motos_2.fecha) AS LONG) >= 2010) AND (CAST(EXTRACT(YEAR FROM motos_2.fecha) AS LONG) <= 2015) AND (motos_2.categoria = 'MOTOCICLETAS')) GROUP BY yrfechaok;

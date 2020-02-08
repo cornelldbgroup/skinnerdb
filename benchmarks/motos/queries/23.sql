@@ -1,0 +1,1 @@
+SELECT CAST(EXTRACT(MONTH FROM motos_2.fecha) AS LONG) AS mnfechaok,   SUM(motos_2.inversionus) AS sumcalculation_0061002123102817ok,   CAST(EXTRACT(YEAR FROM motos_2.fecha) AS LONG) AS yrfechaok FROM motos_2 WHERE ((CAST(EXTRACT(YEAR FROM motos_2.fecha) AS LONG) = 2015) AND (motos_2.categoria = 'MOTOCICLETAS')) GROUP BY mnfechaok,   yrfechaok;
