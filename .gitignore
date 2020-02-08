@@ -50,14 +50,8 @@ local.properties
 # Locally stored "Eclipse launch configurations"
 *.launch
 
-# Default DB Directory
+# Database
 db-*
 
 # Data
-imdb/data/
-tpch/data/
-uberlandia/data/
-dtpch/data/
-eixo/data/
-generico/data/
-hatred/data/
+benchmarks/*/data/

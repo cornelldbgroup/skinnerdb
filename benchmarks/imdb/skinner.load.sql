@@ -1,0 +1,23 @@
+load cast_info benchmarks/imdb/data/cast_info.csv , NULL;
+load comp_cast_type benchmarks/imdb/data/comp_cast_type.csv , NULL;
+load info_type benchmarks/imdb/data/info_type.csv , NULL;
+load link_type benchmarks/imdb/data/link_type.csv , NULL;
+load company_type benchmarks/imdb/data/company_type.csv , NULL;
+load keyword benchmarks/imdb/data/keyword.csv , NULL;
+load kind_type benchmarks/imdb/data/kind_type.csv , NULL;
+load char_name benchmarks/imdb/data/char_name.csv , NULL;
+load aka_name benchmarks/imdb/data/aka_name.csv , NULL;
+load complete_cast benchmarks/imdb/data/complete_cast.csv , NULL;
+load movie_link benchmarks/imdb/data/movie_link.csv , NULL;
+load movie_keyword benchmarks/imdb/data/movie_keyword.csv , NULL;
+load name benchmarks/imdb/data/name.csv , NULL;
+load role_type benchmarks/imdb/data/role_type.csv , NULL;
+load company_name benchmarks/imdb/data/company_name.csv , NULL;
+load movie_companies benchmarks/imdb/data/movie_companies.csv , NULL;
+load person_info benchmarks/imdb/data/person_info.csv , NULL;
+load aka_title benchmarks/imdb/data/aka_title.csv , NULL;
+load movie_info benchmarks/imdb/data/movie_info.csv , NULL;
+load movie_info_idx benchmarks/imdb/data/movie_info_idx.csv , NULL;
+load title benchmarks/imdb/data/title.csv , NULL;
+compress;
+
