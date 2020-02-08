@@ -51,7 +51,7 @@ local.properties
 *.launch
 
 # Database
-db-*
+db/
 
 # Data
 benchmarks/*/data/
