@@ -7,11 +7,10 @@ import catalog.info.TableInfo;
 import data.ColumnData;
 import data.IntData;
 import data.StringData;
+import org.eclipse.collections.api.list.primitive.MutableIntList;
+import org.eclipse.collections.impl.factory.primitive.IntLists;
 import query.ColumnRef;
 import types.SQLtype;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Copies part of a database into a new repository.
@@ -82,7 +81,7 @@ public class CopyData {
             copyData = stringData;
         } else {
             // Determine indices of rows to copy
-            List<Integer> rowIndices = new ArrayList<Integer>();
+            MutableIntList rowIndices = IntLists.mutable.empty();
             for (int i = 0; i < newCard; ++i) {
                 rowIndices.add(i);
             }

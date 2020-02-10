@@ -10,12 +10,15 @@ import expressions.compilation.ExpressionCompiler;
 import expressions.compilation.UnaryBoolEval;
 import net.sf.jsqlparser.expression.Expression;
 import org.apache.commons.lang3.tuple.Pair;
+import org.eclipse.collections.api.list.primitive.IntList;
+import org.eclipse.collections.api.list.primitive.MutableIntList;
+import org.eclipse.collections.impl.factory.primitive.IntLists;
+import org.eclipse.collections.impl.stream.PrimitiveStreams;
 import query.ColumnRef;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * Filters a table by applying a unary predicate.
@@ -72,7 +75,7 @@ public class Filter {
      *                      assume identity mapping if null is specified.
      * @return list of satisfying row indices
      */
-    public static List<Integer> executeToList(
+    public static IntList executeToList(
             ExpressionInfo unaryPred,
             String tableName,
             Map<ColumnRef, ColumnRef> columnMapping)
@@ -85,7 +88,7 @@ public class Filter {
         // Get cardinality of table referenced in predicate
         int cardinality = CatalogManager.getCardinality(tableName);
         // Initialize filter result
-        List<Integer> result = null;
+        IntList result = null;
         // Choose between sequential and parallel processing
         if (cardinality <= ParallelConfig.PRE_BATCH_SIZE) {
             RowRange allTuples = new RowRange(0, cardinality - 1);
@@ -94,10 +97,12 @@ public class Filter {
             // Divide tuples into batches
             List<RowRange> batches = split(cardinality);
             // Process batches in parallel
-            result = batches.parallelStream().flatMap(batch ->
-                    filterBatch(unaryBoolEval, batch).stream()).collect(
-                    Collectors.toList());
+            result = PrimitiveStreams.iIntList(batches.parallelStream()
+                    .flatMapToInt(batch ->
+                            filterBatch(unaryBoolEval, batch).primitiveStream())
+            );
         }
+
         // Clean up columns loaded for this operation
 		/*
 		if (!GeneralConfig.inMemory) {
@@ -138,9 +143,9 @@ public class Filter {
      * @param rowRange      range of tuple indices of batch
      * @return list of indices satisfying the predicate
      */
-    static List<Integer> filterBatch(UnaryBoolEval unaryBoolEval,
-                                     RowRange rowRange) {
-        List<Integer> result = new ArrayList<>();
+    static IntList filterBatch(UnaryBoolEval unaryBoolEval,
+                               RowRange rowRange) {
+        MutableIntList result = IntLists.mutable.empty();
         // Evaluate predicate for each table row
         for (int rowCtr = rowRange.firstTuple;
              rowCtr <= rowRange.lastTuple; ++rowCtr) {

@@ -11,12 +11,17 @@ import operators.Filter;
 import operators.IndexFilter;
 import operators.IndexTest;
 import operators.Materialize;
+import org.eclipse.collections.api.list.primitive.IntList;
+import org.eclipse.collections.impl.factory.primitive.IntLists;
 import print.RelationPrinter;
 import query.ColumnRef;
 import query.QueryInfo;
 import statistics.PreStats;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static operators.Filter.compilePred;
@@ -191,7 +196,7 @@ public class BasicPreprocessor implements Preprocessor {
             IndexFilter indexFilter = new IndexFilter(query);
             Expression indexedExpr = conjunction(indexedConjuncts);
             indexedExpr.accept(indexFilter);
-            List<Integer> rows = indexFilter.qualifyingRows.pop();
+            IntList rows = indexFilter.qualifyingRows.pop();
             // Create filtered table
             String alias = unaryPred.aliasesMentioned.iterator().next();
             String table = query.aliasToTable.get(alias);
@@ -245,9 +250,9 @@ public class BasicPreprocessor implements Preprocessor {
         String tableName = preSummary.aliasToFiltered.get(alias);
         log("Table name for " + alias + " is " + tableName);
         // Determine rows satisfying unary predicate
-        List<Integer> satisfyingRows = shouldFilter ? Filter.executeToList(
+        IntList satisfyingRows = shouldFilter ? Filter.executeToList(
                 unaryPred, tableName, preSummary.columnMapping) :
-                Arrays.asList();
+                IntLists.immutable.empty();
         // Materialize relevant rows and columns
         String filteredName = NamingConfig.FILTERED_PRE + alias;
         List<String> columnNames = new ArrayList<String>();

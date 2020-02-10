@@ -7,6 +7,9 @@ import expressions.ExpressionInfo;
 import expressions.compilation.UnaryBoolEval;
 import net.sf.jsqlparser.expression.Expression;
 import operators.Materialize;
+import org.eclipse.collections.api.list.primitive.IntList;
+import org.eclipse.collections.api.list.primitive.MutableIntList;
+import org.eclipse.collections.impl.factory.primitive.IntLists;
 import preprocessing.Context;
 import preprocessing.Preprocessor;
 import print.RelationPrinter;
@@ -14,7 +17,10 @@ import query.ColumnRef;
 import query.QueryInfo;
 import statistics.PreStats;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 import static operators.Filter.compilePred;
 import static operators.Filter.loadPredCols;
@@ -157,8 +163,8 @@ public class SearchPreprocessor implements Preprocessor {
             compiled.add(compilePred(unaryPred,
                     expression, preSummary.columnMapping).getLeft());
         }
-        List<Integer> satisfyingRows = shouldFilter ? filterUCT(tableName,
-                compiled) : Arrays.asList();
+        IntList satisfyingRows = shouldFilter ? filterUCT(tableName,
+                compiled) : IntLists.immutable.empty();
 
         // Materialize relevant rows and columns
         String filteredName = NamingConfig.FILTERED_PRE + alias;
@@ -182,18 +188,20 @@ public class SearchPreprocessor implements Preprocessor {
         }
     }
 
-    private List<Integer> filterUCT(String tableName,
-                                    List<UnaryBoolEval> compiled) {
+    private MutableIntList filterUCT(String tableName,
+                                     List<UnaryBoolEval> compiled) {
         long roundCtr = 0;
         int nrCompiled = compiled.size();
         BudgetedFilter filterOp = new BudgetedFilter(tableName, compiled);
-        int[] order = new int[nrCompiled];
+
+        FilterState state = new FilterState(nrCompiled);
+
         FilterUCTNode root = new FilterUCTNode(filterOp, roundCtr, nrCompiled);
         long nextForget = 1;
 
         while (!filterOp.isFinished()) {
             ++roundCtr;
-            double reward = root.sample(roundCtr, order, ROWS_PER_TIMESTEP);
+            double reward = root.sample(roundCtr, state, ROWS_PER_TIMESTEP);
 
             if (FORGET && roundCtr == nextForget) {
                 root = new FilterUCTNode(filterOp, roundCtr, nrCompiled);

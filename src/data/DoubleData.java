@@ -1,6 +1,7 @@
 package data;
 
 import joining.result.ResultTuple;
+import org.eclipse.collections.api.list.primitive.IntList;
 
 import java.io.FileOutputStream;
 import java.io.ObjectOutputStream;
@@ -9,7 +10,6 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.BitSet;
 import java.util.Collection;
-import java.util.List;
 
 /**
  * Represents content of numeric column.
@@ -69,10 +69,11 @@ public class DoubleData extends ColumnData implements Serializable {
     }
 
     @Override
-    public ColumnData copyRows(List<Integer> rowsToCopy) {
+    public ColumnData copyRows(IntList rowsToCopy) {
         DoubleData copyColumn = new DoubleData(rowsToCopy.size());
         int copiedRowCtr = 0;
-        for (int row : rowsToCopy) {
+        for (int i = 0; i < rowsToCopy.size(); i++) {
+            int row = rowsToCopy.get(i);
             // Treat special case: insertion of null values
             if (row == -1) {
                 copyColumn.data[copiedRowCtr] = 0;

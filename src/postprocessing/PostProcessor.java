@@ -11,6 +11,9 @@ import expressions.ExpressionInfo;
 import expressions.aggregates.AggInfo;
 import net.sf.jsqlparser.schema.Column;
 import operators.*;
+import org.eclipse.collections.api.list.primitive.IntList;
+import org.eclipse.collections.api.list.primitive.MutableIntList;
+import org.eclipse.collections.impl.factory.primitive.IntLists;
 import preprocessing.Context;
 import print.RelationPrinter;
 import query.ColumnRef;
@@ -446,8 +449,8 @@ public class PostProcessor {
      * @return indices of rows satisfying HAVING clause
      * @throws Exception
      */
-    static List<Integer> havingRows(QueryInfo query,
-                                    Context context) throws Exception {
+    static IntList havingRows(QueryInfo query,
+                              Context context) throws Exception {
         ExpressionInfo havingExpr = query.havingExpression;
         // Generate table containing result of having expression
         String havingTbl = NamingConfig.HAVING_TBL_NAME;
@@ -459,7 +462,7 @@ public class PostProcessor {
                 NamingConfig.HAVING_COL_NAME);
         // Collect indices of group passing the having predicate
         int[] groupHaving = ((IntData) BufferManager.getData(havingRef)).data;
-        List<Integer> havingGroups = new ArrayList<>();
+        MutableIntList havingGroups = IntLists.mutable.empty();
         for (int groupCtr = 0; groupCtr < context.nrGroups; ++groupCtr) {
             if (groupHaving[groupCtr] > 0) {
                 havingGroups.add(groupCtr);
@@ -495,7 +498,7 @@ public class PostProcessor {
             addPerGroupSelTbl(query, context,
                     NamingConfig.RESULT_NO_HAVING, true);
             // Get groups satisfying HAVING clause
-            List<Integer> havingGroups = havingRows(query, context);
+            IntList havingGroups = havingRows(query, context);
             // Prepare sorting if ORDER BY clause is specified
             if (hasOrder) {
                 addPerGroupOrderTbl(query, context,
@@ -588,12 +591,12 @@ public class PostProcessor {
             CatalogManager.updateStats(preLimitResult);
             int preLimitCard = CatalogManager.getCardinality(preLimitResult);
             // Fill with subset of pre-limit result rows
-            List<Integer> limitRows = new ArrayList<>();
+            MutableIntList limitRows = IntLists.mutable.empty();
             int limit = Math.min(query.limit, preLimitCard);
             for (int rowCtr = 0; rowCtr < limit; ++rowCtr) {
                 limitRows.add(rowCtr);
             }
-            operators.Materialize.execute(preLimitResult,
+            Materialize.execute(preLimitResult,
                     preLimitInfo.columnNames, limitRows, null,
                     resultRel, true);
         }
