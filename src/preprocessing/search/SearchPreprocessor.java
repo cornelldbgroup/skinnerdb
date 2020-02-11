@@ -5,7 +5,9 @@ import config.NamingConfig;
 import config.PreConfig;
 import expressions.ExpressionInfo;
 import expressions.compilation.UnaryBoolEval;
+import indexing.HashIndex;
 import net.sf.jsqlparser.expression.Expression;
+import operators.IndexTest;
 import operators.Materialize;
 import org.eclipse.collections.api.list.primitive.IntList;
 import org.eclipse.collections.api.list.primitive.MutableIntList;
@@ -94,7 +96,7 @@ public class SearchPreprocessor implements Preprocessor {
             if (curUnaryPred != null && PreConfig.PRE_FILTER) {
                 try {
                     List<Expression> conjuncts = curUnaryPred.conjuncts;
-                    filterProject(curUnaryPred, conjuncts, alias,
+                    filterProject(query, curUnaryPred, conjuncts, alias,
                             curRequiredCols, preSummary, shouldFilter);
                 } catch (Exception e) {
                     System.err.println("Error filtering " + alias);
@@ -146,12 +148,11 @@ public class SearchPreprocessor implements Preprocessor {
      * @param requiredCols project on those columns
      * @param preSummary   summary of pre-processing steps
      */
-    private void filterProject(ExpressionInfo unaryPred,
+    private void filterProject(QueryInfo queryInfo, ExpressionInfo unaryPred,
                                List<Expression> predicates, String alias,
                                List<ColumnRef> requiredCols,
                                Context preSummary,
                                boolean shouldFilter) throws Exception {
-        long startMillis = System.currentTimeMillis();
         log("Filtering and projection for " + alias + " ...");
         String tableName = preSummary.aliasToFiltered.get(alias);
         log("Table name for " + alias + " is " + tableName);
@@ -163,8 +164,23 @@ public class SearchPreprocessor implements Preprocessor {
             compiled.add(compilePred(unaryPred,
                     expression, preSummary.columnMapping).getLeft());
         }
-        IntList satisfyingRows = shouldFilter ? filterUCT(tableName,
-                compiled) : IntLists.immutable.empty();
+        List<HashIndex> indices = new ArrayList<>(predicates.size());
+        List<Number> values = new ArrayList<>(predicates.size());
+        for (Expression expression : predicates) {
+            IndexTest test = new IndexTest(queryInfo);
+            expression.accept(test);
+            if (test.canUseIndex) {
+                indices.add(test.index);
+                values.add(test.constant);
+            } else {
+                indices.add(null);
+                values.add(null);
+            }
+        }
+        IntList satisfyingRows =
+                shouldFilter ?
+                        filterUCT(tableName, predicates, compiled, indices,
+                                values) : IntLists.immutable.empty();
 
         // Materialize relevant rows and columns
         String filteredName = NamingConfig.FILTERED_PRE + alias;
@@ -182,17 +198,20 @@ public class SearchPreprocessor implements Preprocessor {
             preSummary.columnMapping.put(srcRef, resRef);
         }
         preSummary.aliasToFiltered.put(alias, filteredName);
-        long totalMillis = System.currentTimeMillis() - startMillis;
         if (LoggingConfig.PRINT_INTERMEDIATES) {
             RelationPrinter.print(filteredName);
         }
     }
 
     private MutableIntList filterUCT(String tableName,
-                                     List<UnaryBoolEval> compiled) {
+                                     List<Expression> predicates,
+                                     List<UnaryBoolEval> compiled,
+                                     List<HashIndex> indices,
+                                     List<Number> values) {
         long roundCtr = 0;
         int nrCompiled = compiled.size();
-        BudgetedFilter filterOp = new BudgetedFilter(tableName, compiled);
+        BudgetedFilter filterOp = new BudgetedFilter(tableName, predicates,
+                compiled, indices, values);
 
         FilterState state = new FilterState(nrCompiled);
 

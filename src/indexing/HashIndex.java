@@ -7,7 +7,7 @@ import config.LoggingConfig;
  *
  * @author immanueltrummer
  */
-public abstract class HashIndex<T> {
+public abstract class HashIndex<T extends Number> {
     /**
      * Cardinality of indexed table.
      */

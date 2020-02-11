@@ -3,6 +3,7 @@ package preprocessing.search;
 import catalog.CatalogManager;
 import expressions.compilation.UnaryBoolEval;
 import indexing.HashIndex;
+import net.sf.jsqlparser.expression.Expression;
 import org.apache.commons.lang3.tuple.Pair;
 import org.eclipse.collections.api.list.primitive.MutableIntList;
 import org.eclipse.collections.impl.factory.primitive.IntLists;
@@ -13,27 +14,34 @@ public class BudgetedFilter {
     private final int cardinality;
     private int lastCompletedRow;
     private MutableIntList result;
+    private List<Expression> predicates;
     private List<UnaryBoolEval> compiled;
+    private List<HashIndex> indices;
+    private List<Number> values;
 
     public BudgetedFilter(String tableName,
-                          List<UnaryBoolEval> compiled) {
+                          List<Expression> predicates,
+                          List<UnaryBoolEval> compiled,
+                          List<HashIndex> indices,
+                          List<Number> values) {
         this.result = IntLists.mutable.empty();
         this.compiled = compiled;
         this.cardinality = CatalogManager.getCardinality(tableName);
         this.lastCompletedRow = -1;
+        this.indices = indices;
+        this.predicates = predicates;
+        this.values = values;
     }
 
 
     private Pair<Long, Integer> indexScanWithOnePredicate(int remainingRows,
                                                           FilterState state) {
-
         int currentCompletedRow = lastCompletedRow;
 
         long startTime = System.nanoTime();
-        int constant = 0; //TODO: replace this
-        HashIndex index = null; //TODO: replace this
-
-        int dataLocation = index.getDataLocation(constant);
+        HashIndex index = indices.get(state.order[0]);
+        int dataLocation =
+                index.getDataLocation(values.get(state.order[0]));
         if (dataLocation < 0) {
             return Pair.of(0l, this.cardinality - 1);
         }
@@ -93,7 +101,7 @@ public class BudgetedFilter {
     public double executeWithBudget(int remainingRows, FilterState state) {
         Pair<Long, Integer> result;
 
-        if (state.useIndexScan()) { // Use index to filter rows.
+        if (state.useIndexScan) { // Use index to filter rows.
             result = indexScanWithOnePredicate(remainingRows, state);
         } else if (state.avoidBranching) { // TODO Use Bitmaps to avoid
             // branching
