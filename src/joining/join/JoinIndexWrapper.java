@@ -6,7 +6,7 @@ import java.util.Set;
 import buffer.BufferManager;
 import config.LoggingConfig;
 import data.ColumnData;
-import indexing.Index;
+import indexing.HashIndex;
 import preprocessing.Context;
 import query.ColumnRef;
 import query.QueryInfo;
@@ -15,7 +15,7 @@ import query.QueryInfo;
  * Uses index on join column to identify next
  * tuple to satisfy binary equality condition
  * on two columns.
- * 
+ *
  * @author immanueltrummer
  *
  */
@@ -37,19 +37,19 @@ public abstract class JoinIndexWrapper {
 	/**
 	 * Index on join column to use.
 	 */
-	final Index nextIndex;
+	final HashIndex nextIndex;
 	/**
 	 * Initialize index wrapper for
 	 * given query and join order.
-	 * 
+	 *
 	 * @param queryInfo		query meta-data
 	 * @param preSummary	maps query columns to intermediate result columns
 	 * @param joinCols		pair of columns in equi-join predicate
 	 * @param order			join order
 	 * @throws Exception
 	 */
-	public JoinIndexWrapper(QueryInfo queryInfo, 
-			Context preSummary, Set<ColumnRef> joinCols, 
+	public JoinIndexWrapper(QueryInfo queryInfo,
+			Context preSummary, Set<ColumnRef> joinCols,
 			int[] order) throws Exception {
 		// Get table indices of join columns
 		Iterator<ColumnRef> colIter = joinCols.iterator();
@@ -84,7 +84,7 @@ public abstract class JoinIndexWrapper {
 	}
 	/**
 	 * Extracts index of table in query column reference.
-	 * 
+	 *
 	 * @param query		query to process
 	 * @param queryCol	column that appears in query
 	 * @return			index of query table
@@ -95,7 +95,7 @@ public abstract class JoinIndexWrapper {
 	/**
 	 * Returns position of given table in join order
 	 * or -1 if the table is not found.
-	 * 
+	 *
 	 * @param order		join order
 	 * @param table		index of table
 	 * @return			position of table in join order
@@ -114,7 +114,7 @@ public abstract class JoinIndexWrapper {
 	 * satisfies equi-join condition with
 	 * current tuple in prior table, returns
 	 * cardinality if no such tuple is found.
-	 * 
+	 *
 	 * @param tupleIndices	current tuple indices
 	 * @return	next interesting tuple index or cardinality
 	 */
@@ -122,15 +122,15 @@ public abstract class JoinIndexWrapper {
 	/**
 	 * Returns number of tuples indexed in next
 	 * table for given value in prior table.
-	 * 
+	 *
 	 * @param tupleIndices	current tuple indices
 	 * @return	number of indexed tuples in next table
 	 */
 	public abstract int nrIndexed(int[] tupleIndices);
-	
+
 	@Override
 	public String toString() {
-		return "Prior table:\t" + priorTable + 
+		return "Prior table:\t" + priorTable +
 				"; Next:\t" + nextTable;
 	}
 }

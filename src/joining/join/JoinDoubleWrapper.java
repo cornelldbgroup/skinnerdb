@@ -3,7 +3,7 @@ package joining.join;
 import java.util.Set;
 
 import data.DoubleData;
-import indexing.DoubleIndex;
+import indexing.HashDoubleIndex;
 import preprocessing.Context;
 import query.ColumnRef;
 import query.QueryInfo;
@@ -12,7 +12,7 @@ import query.QueryInfo;
  * Uses index on join column to identify next
  * tuple to satisfy binary equality condition
  * on two double columns.
- * 
+ *
  * @author immanueltrummer
  *
  */
@@ -24,22 +24,22 @@ public class JoinDoubleWrapper extends JoinIndexWrapper {
 	/**
 	 * Reference to next double index.
 	 */
-	final DoubleIndex nextDoubleIndex;
+	final HashDoubleIndex nextDoubleIndex;
 	/**
 	 * Initializes wrapper providing access to double index
 	 * on column that appears in equi-join predicate.
-	 * 
+	 *
 	 * @param queryInfo		query meta-data
 	 * @param preSummary	maps query columns to intermediate result columns
 	 * @param joinCols		pair of columns in equi-join predicate
 	 * @param order			join order
 	 */
-	public JoinDoubleWrapper(QueryInfo queryInfo, 
-			Context preSummary, Set<ColumnRef> joinCols, 
+	public JoinDoubleWrapper(QueryInfo queryInfo,
+			Context preSummary, Set<ColumnRef> joinCols,
 			int[] order) throws Exception {
 		super(queryInfo, preSummary, joinCols, order);
 		priorDoubleData = (DoubleData)priorData;
-		nextDoubleIndex = (DoubleIndex)nextIndex;
+		nextDoubleIndex = (HashDoubleIndex)nextIndex;
 	}
 	@Override
 	public int nextIndex(int[] tupleIndices) {

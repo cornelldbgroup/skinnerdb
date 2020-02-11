@@ -2,6 +2,7 @@ package preprocessing.search;
 
 import catalog.CatalogManager;
 import expressions.compilation.UnaryBoolEval;
+import indexing.HashIndex;
 import org.apache.commons.lang3.tuple.Pair;
 import org.eclipse.collections.api.list.primitive.MutableIntList;
 import org.eclipse.collections.impl.factory.primitive.IntLists;
@@ -22,32 +23,48 @@ public class BudgetedFilter {
         this.lastCompletedRow = -1;
     }
 
-    /*
-    int getIndexEndPosition(IntIndex index, int remainingRows, int startPos) {
-        int nrEntries = index.positions[startPos];
-    }
-    */
 
     private Pair<Long, Integer> indexScanWithOnePredicate(int remainingRows,
                                                           FilterState state) {
-    /*
+
+        int currentCompletedRow = lastCompletedRow;
+
+        long startTime = System.nanoTime();
         int constant = 0; //TODO: replace this
-        IntIndex intIndex = null; //TODO: replace this
-        int startPos = intIndex.keyToPositions.getOrDefault(constant, -1);
-        if (startPos < 0) {
+        HashIndex index = null; //TODO: replace this
+
+        int dataLocation = index.getDataLocation(constant);
+        if (dataLocation < 0) {
             return Pair.of(0l, this.cardinality - 1);
         }
 
-        int nrEntries = getIndexEndPosition(intIndex, remainingRows,
-                startPos);
-        startPos++;
-        for (int pos = startPos; pos < startPos + nrEntries; ++pos) {
-            int rowIdx = intIndex.positions[pos];
-
+        int startPos = index.nextHighestRowInBucket(dataLocation,
+                lastCompletedRow);
+        if (startPos < -1) {
+            return Pair.of(0l, this.cardinality - 1);
         }
-     */
 
-        return Pair.of(0l, this.cardinality - 1);
+        int endPos = index.data[dataLocation] + dataLocation + 1;
+
+        ROW_LOOP:
+        while (remainingRows > 0 && startPos < endPos) {
+            currentCompletedRow = index.data[startPos];
+            remainingRows -= currentCompletedRow - lastCompletedRow;
+            startPos++;
+
+            for (int i = 1; i < state.order.length; i++) {
+                UnaryBoolEval expr = compiled.get(state.order[i]);
+                if (expr.evaluate(currentCompletedRow) <= 0) {
+                    continue ROW_LOOP;
+                }
+            }
+
+            result.add(currentCompletedRow);
+        }
+
+        long endTime = System.nanoTime();
+        long duration = endTime - startTime;
+        return Pair.of(duration, currentCompletedRow);
     }
 
     private Pair<Long, Integer> tableScan(int remainingRows,

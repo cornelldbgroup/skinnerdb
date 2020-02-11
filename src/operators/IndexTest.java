@@ -2,8 +2,8 @@ package operators;
 
 import buffer.BufferManager;
 import data.Dictionary;
-import indexing.Index;
-import indexing.IntIndex;
+import indexing.HashIndex;
+import indexing.HashIntIndex;
 import net.sf.jsqlparser.expression.AllComparisonExpression;
 import net.sf.jsqlparser.expression.AnalyticExpression;
 import net.sf.jsqlparser.expression.AnyComparisonExpression;
@@ -74,7 +74,7 @@ import query.QueryInfo;
  * Verifies whether a unary predicate can be
  * evaluated using indices alone. This class
  * must be kept in sync with IndexFilter.
- * 
+ *
  * @author immanueltrummer
  *
  */
@@ -89,7 +89,7 @@ public class IndexTest implements ExpressionVisitor {
 	public boolean canUseIndex = true;
 	/**
 	 * Initialize index test for given query.
-	 * 
+	 *
 	 * @param query	meta-data about query
 	 */
 	public IndexTest(QueryInfo query) {
@@ -124,7 +124,7 @@ public class IndexTest implements ExpressionVisitor {
 	@Override
 	public void visit(DoubleValue doubleValue) {
 		// No indexes for double values currently
-		canUseIndex = false;		
+		canUseIndex = false;
 	}
 
 	@Override
@@ -210,7 +210,7 @@ public class IndexTest implements ExpressionVisitor {
 		Expression right = equalsTo.getRightExpression();
 		left.accept(this);
 		right.accept(this);
-		boolean haveConstant = left instanceof LongValue || 
+		boolean haveConstant = left instanceof LongValue ||
 				left instanceof StringValue ||
 				right instanceof LongValue ||
 				right instanceof StringValue;
@@ -270,9 +270,9 @@ public class IndexTest implements ExpressionVisitor {
 		String columnName = tableColumn.getColumnName();
 		ColumnRef colRef = new ColumnRef(tableName, columnName);
 		// Check that index of right type is available
-		Index index = BufferManager.colToIndex.get(colRef);
+		HashIndex index = BufferManager.colToIndex.get(colRef);
 		if (index != null) {
-			if (!(index instanceof IntIndex)) {
+			if (!(index instanceof HashIntIndex)) {
 				// Wrong index type
 				canUseIndex = false;
 			}

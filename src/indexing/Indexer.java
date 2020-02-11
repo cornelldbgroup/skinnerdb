@@ -10,14 +10,14 @@ import query.ColumnRef;
 
 /**
  * Features utility functions for creating indexes.
- * 
+ *
  * @author immanueltrummer
  *
  */
 public class Indexer {
 	/**
 	 * Create an index on the specified column.
-	 * 
+	 *
 	 * @param colRef	create index on this column
 	 */
 	public static void index(ColumnRef colRef) throws Exception {
@@ -26,18 +26,18 @@ public class Indexer {
 			ColumnData data = BufferManager.getData(colRef);
 			if (data instanceof IntData) {
 				IntData intData = (IntData)data;
-				IntIndex index = new IntIndex(intData);
+				HashIntIndex index = new HashIntIndex(intData);
 				BufferManager.colToIndex.put(colRef, index);
 			} else if (data instanceof DoubleData) {
 				DoubleData doubleData = (DoubleData)data;
-				DoubleIndex index = new DoubleIndex(doubleData);
+				HashDoubleIndex index = new HashDoubleIndex(doubleData);
 				BufferManager.colToIndex.put(colRef, index);
 			}
 		}
 	}
 	/**
 	 * Creates an index for each key/foreign key column.
-	 * 
+	 *
 	 * @param mode	determines on which columns to create indices
 	 * @throws Exception
 	 */
@@ -56,7 +56,7 @@ public class Indexer {
 								String column = columnInfo.name;
 								ColumnRef colRef = new ColumnRef(table, column);
 								System.out.println("Indexing " + colRef + " ...");
-								index(colRef);								
+								index(colRef);
 							}
 						} catch (Exception e) {
 							System.err.println("Error indexing " + columnInfo);

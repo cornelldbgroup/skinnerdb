@@ -2,8 +2,8 @@ package operators;
 
 import buffer.BufferManager;
 import expressions.normalization.PlainVisitor;
-import indexing.Index;
-import indexing.IntIndex;
+import indexing.HashIndex;
+import indexing.HashIntIndex;
 import net.sf.jsqlparser.expression.LongValue;
 import net.sf.jsqlparser.expression.StringValue;
 import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
@@ -48,7 +48,7 @@ public class IndexFilter extends PlainVisitor {
      * Contains indexes applicable
      * for sub-expressions.
      */
-    final Deque<Index> applicableIndices =
+    final Deque<HashIndex> applicableIndices =
             new ArrayDeque<>();
 
     /**
@@ -144,17 +144,17 @@ public class IndexFilter extends PlainVisitor {
         // We assume predicate passed the index test so
         // there must be one index and one constant.
         int constant = extractedConstants.pop();
-        Index index = applicableIndices.pop();
+        HashIndex index = applicableIndices.pop();
         // Collect indices of satisfying rows via index
         MutableIntList rows = IntLists.mutable.of();
         qualifyingRows.push(rows);
-        IntIndex intIndex = (IntIndex) index;
+        HashIntIndex intIndex = (HashIntIndex) index;
         int startPos = intIndex.keyToPositions.getOrDefault(constant, -1);
         if (startPos >= 0) {
-            int nrEntries = intIndex.positions[startPos];
+            int nrEntries = intIndex.data[startPos];
             for (int i = 0; i < nrEntries; ++i) {
                 int pos = startPos + 1 + i;
-                int rowIdx = intIndex.positions[pos];
+                int rowIdx = intIndex.data[pos];
                 rows.add(rowIdx);
             }
         }
@@ -181,7 +181,7 @@ public class IndexFilter extends PlainVisitor {
         String columnName = column.getColumnName();
         ColumnRef colRef = new ColumnRef(tableName, columnName);
         // Check for available index
-        Index index = BufferManager.colToIndex.get(colRef);
+        HashIndex index = BufferManager.colToIndex.get(colRef);
         if (index != null) {
             applicableIndices.push(index);
         }

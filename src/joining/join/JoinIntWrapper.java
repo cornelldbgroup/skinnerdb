@@ -3,7 +3,7 @@ package joining.join;
 import java.util.Set;
 
 import data.IntData;
-import indexing.IntIndex;
+import indexing.HashIntIndex;
 import preprocessing.Context;
 import query.ColumnRef;
 import query.QueryInfo;
@@ -12,7 +12,7 @@ import query.QueryInfo;
  * Uses index on join column to identify next
  * tuple to satisfy binary equality condition
  * on two integer columns.
- * 
+ *
  * @author immanueltrummer
  *
  */
@@ -24,22 +24,22 @@ public class JoinIntWrapper extends JoinIndexWrapper {
 	/**
 	 * Reference to next integer index.
 	 */
-	final IntIndex nextIntIndex;
+	final HashIntIndex nextIntIndex;
 	/**
 	 * Initializes wrapper providing access to integer index
 	 * on column that appears in equi-join predicate.
-	 * 
+	 *
 	 * @param queryInfo		query meta-data
 	 * @param preSummary	maps query columns to intermediate result columns
 	 * @param joinCols		pair of columns in equi-join predicate
 	 * @param order			join order
 	 */
-	public JoinIntWrapper(QueryInfo queryInfo, 
-			Context preSummary, Set<ColumnRef> joinCols, 
+	public JoinIntWrapper(QueryInfo queryInfo,
+			Context preSummary, Set<ColumnRef> joinCols,
 			int[] order) throws Exception {
 		super(queryInfo, preSummary, joinCols, order);
 		priorIntData = (IntData)priorData;
-		nextIntIndex = (IntIndex)nextIndex;
+		nextIntIndex = (HashIntIndex)nextIndex;
 	}
 	@Override
 	public int nextIndex(int[] tupleIndices) {

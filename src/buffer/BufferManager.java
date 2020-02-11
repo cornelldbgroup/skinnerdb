@@ -19,14 +19,14 @@ import data.LongData;
 import data.StringData;
 import diskio.DiskUtil;
 import diskio.PathUtil;
-import indexing.Index;
+import indexing.HashIndex;
 import query.ColumnRef;
 import types.JavaType;
 import types.TypeUtil;
 
 /**
  * Manages the main memory database buffer.
- * 
+ *
  * @author immanueltrummer
  *
  */
@@ -45,8 +45,8 @@ public class BufferManager {
 	/**
 	 * Maps column references to associated indices.
 	 */
-	public final static Map<ColumnRef, Index> colToIndex =
-			new ConcurrentHashMap<ColumnRef, Index>();
+	public final static Map<ColumnRef, HashIndex> colToIndex =
+			new ConcurrentHashMap<ColumnRef, HashIndex>();
 	/**
 	 * Loads dictionary from hard disk.
 	 */
@@ -59,7 +59,7 @@ public class BufferManager {
 			Object object = DiskUtil.loadObject(dictionaryPath);
 			dictionary = (Dictionary)object;
 			long totalMillis = System.currentTimeMillis() - startMillis;
-			System.out.println("Loaded dictionary in " + totalMillis + " ms.");	
+			System.out.println("Loaded dictionary in " + totalMillis + " ms.");
 			// Generate debugging output
 			log("*** String dictionary sample ***");
 			int sampleSize = Math.min(10, dictionary.strings.length);
@@ -73,7 +73,7 @@ public class BufferManager {
 	}
 	/**
 	 * Loads data for current database into main memory.
-	 * 
+	 *
 	 * @throws Exception
 	 */
 	public static void loadDB() throws Exception {
@@ -94,7 +94,7 @@ public class BufferManager {
 		colsToLoad.stream().parallel().forEach((colRef) -> {
 			try {
 				System.out.println("Loading column " + colRef.toString());
-				loadColumn(colRef);				
+				loadColumn(colRef);
 			} catch (Exception e) {
 				System.err.println("Error loading column " + colRef.toString());
 				e.printStackTrace();
@@ -104,9 +104,9 @@ public class BufferManager {
 	}
 	/**
 	 * Loads data for specified column from hard disk.
-	 * 
+	 *
 	 * @param columnRef	reference to column to load
-	 * 
+	 *
 	 * @throws Exception
 	 */
 	public static void loadColumn(ColumnRef columnRef) throws Exception {
@@ -118,7 +118,7 @@ public class BufferManager {
 			log("Loaded column meta-data: " + column.toString());
 			// Read generic object from file
 			String dataPath = PathUtil.colToPath.get(column);
-			Object object = DiskUtil.loadObject(dataPath);	
+			Object object = DiskUtil.loadObject(dataPath);
 			// Cast object according to column type
 			JavaType javaType = TypeUtil.toJavaType(column.type);
 			log("Column data type:\t" + javaType);
@@ -139,7 +139,7 @@ public class BufferManager {
 			// Generate statistics for output
 			if (LoggingConfig.BUFFER_VERBOSE) {
 				long totalMillis = System.currentTimeMillis() - startMillis;
-				System.out.println("Loaded " + columnRef.toString() + 
+				System.out.println("Loaded " + columnRef.toString() +
 						" in " + totalMillis + " milliseconds");
 			}
 			// Generate debugging output
@@ -160,7 +160,7 @@ public class BufferManager {
 	/**
 	 * Returns data of specified column, loads data from disk if
 	 * currently not loaded.
-	 * 
+	 *
 	 * @param columnRef	request data for this column
 	 * @return			data of requested column
 	 * @throws Exception
@@ -174,7 +174,7 @@ public class BufferManager {
 	}
 	/**
 	 * Remove given column from buffer space.
-	 * 
+	 *
 	 * @param columnRef	reference to column to remove
 	 * @throws Exception
 	 */
@@ -188,7 +188,7 @@ public class BufferManager {
 	/**
 	 * Unload all columns of temporary tables (typically after
 	 * query processing is finished).
-	 * 
+	 *
 	 * @param except	names of tables to keep in each case
 	 * @throws Exception
 	 */
@@ -196,7 +196,7 @@ public class BufferManager {
 		for (TableInfo table : CatalogManager.currentDB.nameToTable.values()) {
 			if (table.tempTable && !except.contains(table.name)) {
 				String tableName = table.name;
-				for (ColumnInfo colInfo : table.nameToCol.values()) {					
+				for (ColumnInfo colInfo : table.nameToCol.values()) {
 					ColumnRef colRef = new ColumnRef(
 							tableName, colInfo.name);
 					unloadColumn(colRef);
@@ -208,7 +208,7 @@ public class BufferManager {
 	/**
 	 * Unload all columns of temporary tables (typically after
 	 * query processing is finished).
-	 * 
+	 *
 	 * @throws Exception
 	 */
 	public static void unloadTempData() throws Exception {
@@ -216,7 +216,7 @@ public class BufferManager {
 	}
 	/**
 	 * Log given text if buffer logging activated.
-	 * 
+	 *
 	 * @param text	text to output
 	 */
 	static void log(String text) {

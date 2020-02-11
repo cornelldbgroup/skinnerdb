@@ -329,7 +329,7 @@ public class UctNode {
             Set<Integer> newlyJoined = new HashSet<Integer>();
             newlyJoined.addAll(joinedTables);
             newlyJoined.add(lastTable);
-            // Iterate over join order positions to fill
+            // Iterate over join order data to fill
             List<Integer> unjoinedTablesShuffled = new ArrayList<Integer>();
             unjoinedTablesShuffled.addAll(unjoinedTables);
             Collections.shuffle(unjoinedTablesShuffled);
@@ -358,7 +358,7 @@ public class UctNode {
             // Shuffle remaining tables
             Collections.shuffle(unjoinedTables);
             Iterator<Integer> unjoinedTablesIter = unjoinedTables.iterator();
-            // Fill in remaining join order positions
+            // Fill in remaining join order data
             for (int posCtr = treeLevel + 1; posCtr < nrTables; ++posCtr) {
                 int nextTable = unjoinedTablesIter.next();
                 while (nextTable == lastTable) {

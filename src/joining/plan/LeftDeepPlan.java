@@ -21,7 +21,7 @@ import types.TypeUtil;
  * Represents a left deep query plan, characterized
  * by a join order and by the time at which predicates
  * are evaluated.
- * 
+ *
  * @author immanueltrummer
  *
  */
@@ -31,28 +31,28 @@ public class LeftDeepPlan {
 	 */
 	public final JoinOrder joinOrder;
 	/**
-	 * Associates join order positions with applicable
+	 * Associates join order data with applicable
 	 * indices (used to skip tuples in the corresponding
 	 * table which do not satisfy equality join predicates).
 	 */
 	public final List<List<JoinIndexWrapper>> joinIndices;
 	/**
-	 * Associates join order positions with applicable
+	 * Associates join order data with applicable
 	 * predicates (null if no new predicate is applicable).
 	 */
 	public final List<List<KnaryBoolEval>> applicablePreds;
 	/**
-	 * Determines the join order positions at which to
+	 * Determines the join order data at which to
 	 * evaluate specific equality and other predicates.
-	 * 
+	 *
 	 * @param query			query to process
 	 * @param preSummary	summarizes pre-processing
 	 * @param evalMap		maps Boolean expressions to evaluators
 	 * @param order			join order
 	 * @throws Exception
 	 */
-	public LeftDeepPlan(QueryInfo query, Context preSummary, 
-			Map<Expression, KnaryBoolEval> evalMap, int[] order) 
+	public LeftDeepPlan(QueryInfo query, Context preSummary,
+			Map<Expression, KnaryBoolEval> evalMap, int[] order)
 					throws Exception {
 		// Count generated plan
 		++JoinStats.nrPlansTried;
@@ -74,7 +74,7 @@ public class LeftDeepPlan {
 			joinIndices.add(new ArrayList<>());
 			applicablePreds.add(new ArrayList<>());
 		}
-		// Iterate over join order positions, adding tables
+		// Iterate over join order data, adding tables
 		Set<Integer> availableTables = new HashSet<Integer>();
 		for (int joinCtr=0; joinCtr<nrTables; ++joinCtr) {
 			int nextTable = order[joinCtr];
@@ -108,7 +108,7 @@ public class LeftDeepPlan {
 				}
 			}
 			// Iterate over remaining other predicates
-			Iterator<ExpressionInfo> generalPredsIter = 
+			Iterator<ExpressionInfo> generalPredsIter =
 					remainingPreds.iterator();
 			while (generalPredsIter.hasNext()) {
 				ExpressionInfo pred = generalPredsIter.next();
@@ -120,7 +120,7 @@ public class LeftDeepPlan {
 					generalPredsIter.remove();
 				}
 			}
-		} // over join positions
+		} // over join data
 	}
 	@Override
 	public String toString() {
