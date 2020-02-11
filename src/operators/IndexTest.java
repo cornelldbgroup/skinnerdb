@@ -76,7 +76,7 @@ public class IndexTest implements ExpressionVisitor {
 
     @Override
     public void visit(LongValue longValue) {
-        constant = longValue.getValue();
+        constant = (int) longValue.getValue();
     }
 
     @Override
