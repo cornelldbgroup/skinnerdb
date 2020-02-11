@@ -221,7 +221,7 @@ public class SearchPreprocessor implements Preprocessor {
 
         while (!filterOp.isFinished()) {
             ++roundCtr;
-            double reward = root.sample(roundCtr, state, ROWS_PER_TIMESTEP);
+            root.sample(roundCtr, state, ROWS_PER_TIMESTEP);
 
             if (FORGET && roundCtr == nextForget) {
                 root = new FilterUCTNode(filterOp, roundCtr, nrCompiled,

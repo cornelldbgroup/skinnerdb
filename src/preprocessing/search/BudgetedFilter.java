@@ -8,6 +8,8 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.eclipse.collections.api.list.primitive.MutableIntList;
 import org.eclipse.collections.impl.factory.primitive.IntLists;
 
+import java.util.ArrayList;
+import java.util.BitSet;
 import java.util.List;
 
 public class BudgetedFilter {
@@ -75,8 +77,8 @@ public class BudgetedFilter {
         return Pair.of(duration, currentCompletedRow);
     }
 
-    private Pair<Long, Integer> tableScan(int remainingRows,
-                                          FilterState state) {
+    private Pair<Long, Integer> tableScanBranching(int remainingRows,
+                                                   FilterState state) {
         int currentCompletedRow = lastCompletedRow;
         long startTime = System.nanoTime();
         ROW_LOOP:
@@ -98,16 +100,52 @@ public class BudgetedFilter {
         return Pair.of(duration, currentCompletedRow);
     }
 
+    private Pair<Long, Integer> tableScanBitset(int nrRows,
+                                                FilterState state) {
+        long startTime = System.nanoTime();
+
+        int begin = lastCompletedRow + 1;
+        int end = Math.min(lastCompletedRow + nrRows, cardinality - 1);
+        nrRows = end - begin + 1;
+
+        List<BitSet> predicateEval = new ArrayList<>(compiled.size());
+        for (int i = 0; i < compiled.size(); i++) {
+            predicateEval.add(new BitSet(nrRows));
+        }
+
+
+        for (int row = begin, i = 0; row <= end; row++, i++) {
+            for (int j = 0; j < compiled.size(); j++) {
+                predicateEval.get(j).set(i, compiled.get(j).evaluate(row) > 0);
+            }
+        }
+
+        BitSet filter = new BitSet(nrRows);
+        filter.set(0, nrRows);
+        for (BitSet pred : predicateEval) {
+            filter.and(pred);
+        }
+
+        for (int row = begin, i = 0; row <= end; row++, i++) {
+            if (filter.get(i)) {
+                result.add(row);
+            }
+        }
+
+        long endTime = System.nanoTime();
+        long duration = endTime - startTime;
+        return Pair.of(duration, end);
+    }
+
     public double executeWithBudget(int remainingRows, FilterState state) {
         Pair<Long, Integer> result;
 
         if (state.useIndexScan) { // Use index to filter rows.
             result = indexScanWithOnePredicate(remainingRows, state);
-        } else if (state.avoidBranching) { // TODO Use Bitmaps to avoid
-            // branching
-            return 0;
+        } else if (state.avoidBranching) {
+            result = tableScanBitset(remainingRows, state);
         } else {
-            result = tableScan(remainingRows, state);
+            result = tableScanBranching(remainingRows, state);
         }
 
 

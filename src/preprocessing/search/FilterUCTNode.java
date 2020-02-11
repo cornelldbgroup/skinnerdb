@@ -23,7 +23,9 @@ public class FilterUCTNode {
     private int nrVisits;
 
     private List<Integer> priorityActions;
-    private final int nrIndexActions;
+
+    private final int indexActions;
+    private final int branchingActions;
 
     public FilterUCTNode(BudgetedFilter filterOp, long roundCtr,
                          int numPredicates, List<HashIndex> indices) {
@@ -34,13 +36,14 @@ public class FilterUCTNode {
                 indexActions++;
             }
         }
-        this.nrIndexActions = indexActions;
+        this.indexActions = indexActions;
+        this.branchingActions = 1;
 
         this.treeLevel = 0;
         this.createdIn = roundCtr;
         this.numPredicates = numPredicates;
-        this.nrActions = numPredicates + nrIndexActions;
-        this.childNodes = new FilterUCTNode[numPredicates];
+        this.nrActions = numPredicates + indexActions + branchingActions;
+        this.childNodes = new FilterUCTNode[nrActions];
         this.chosenPreds = new HashSet<>();
         this.unchosenPreds = new ArrayList<>(numPredicates);
         this.actionToPredicate = new int[nrActions];
@@ -75,12 +78,31 @@ public class FilterUCTNode {
         }
     }
 
+    public FilterUCTNode(FilterUCTNode parent, long roundCtr) {
+        this.nrActions = 0;
+
+        this.createdIn = roundCtr;
+        this.treeLevel = parent.treeLevel + 1;
+        this.numPredicates = parent.numPredicates;
+        this.childNodes = new FilterUCTNode[0];
+        this.chosenPreds = new HashSet<>();
+        this.unchosenPreds = new ArrayList<>();
+        this.actionToPredicate = new int[0];
+        this.filterOp = parent.filterOp;
+        this.nrTries = new int[0];
+        this.accumulatedReward = new double[0];
+        this.branchingActions = 0;
+        this.indexActions = 0;
+    }
+
     public FilterUCTNode(FilterUCTNode parent, long roundCtr, int nextPred) {
-        this.nrIndexActions = 0;
+        this.indexActions = 0;
+        this.branchingActions = 0;
         this.treeLevel = parent.treeLevel + 1;
         this.createdIn = roundCtr;
         this.numPredicates = parent.numPredicates;
-        this.nrActions = parent.nrActions - 1 - parent.nrIndexActions;
+        this.nrActions = parent.nrActions - 1 -
+                parent.branchingActions - parent.indexActions;
         this.childNodes = new FilterUCTNode[nrActions];
 
         this.chosenPreds = new HashSet<>();
@@ -179,14 +201,31 @@ public class FilterUCTNode {
         }
 
         int action = selectAction(SelectionPolicy.UCB1);
-        int predicate = actionToPredicate[action];
-        state.order[treeLevel] = predicate;
-        state.useIndexScan = action >= numPredicates;
+        state.avoidBranching = true;
 
-        boolean canExpand = createdIn != roundCtr;
-        if (childNodes[action] == null && canExpand) {
-            childNodes[action] = new FilterUCTNode(this, roundCtr, predicate);
+        if (action == numPredicates + indexActions) {
+            state.avoidBranching = true;
+            state.useIndexScan = false;
+            if (childNodes[action] == null) {
+                childNodes[action] = new FilterUCTNode(this, roundCtr);
+            }
+        } else {
+            int predicate = actionToPredicate[action];
+            state.order[treeLevel] = predicate;
+            if (treeLevel == 0) {
+                state.avoidBranching = false;
+                state.useIndexScan = this.indexActions > 0 &&
+                        action >= numPredicates && action < numPredicates +
+                        indexActions;
+            }
+
+            boolean canExpand = createdIn != roundCtr;
+            if (childNodes[action] == null && canExpand) {
+                childNodes[action] = new FilterUCTNode(this, roundCtr,
+                        predicate);
+            }
         }
+
 
         FilterUCTNode child = childNodes[action];
         double reward = (child != null) ?
