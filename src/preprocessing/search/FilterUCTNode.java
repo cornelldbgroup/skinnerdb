@@ -1,6 +1,7 @@
 package preprocessing.search;
 
 import config.JoinConfig;
+import indexing.HashIndex;
 import joining.uct.SelectionPolicy;
 
 import java.util.*;
@@ -22,21 +23,40 @@ public class FilterUCTNode {
     private int nrVisits;
 
     private List<Integer> priorityActions;
+    private final int nrIndexActions;
 
     public FilterUCTNode(BudgetedFilter filterOp, long roundCtr,
-                         int numPredicates) {
+                         int numPredicates, List<HashIndex> indices) {
+
+        int indexActions = 0;
+        for (HashIndex index : indices) {
+            if (index != null) {
+                indexActions++;
+            }
+        }
+        this.nrIndexActions = indexActions;
+
         this.treeLevel = 0;
         this.createdIn = roundCtr;
         this.numPredicates = numPredicates;
-        this.nrActions = numPredicates;
-        this.childNodes = new FilterUCTNode[nrActions];
+        this.nrActions = numPredicates + nrIndexActions;
+        this.childNodes = new FilterUCTNode[numPredicates];
         this.chosenPreds = new HashSet<>();
         this.unchosenPreds = new ArrayList<>(numPredicates);
-        this.actionToPredicate = new int[numPredicates];
+        this.actionToPredicate = new int[nrActions];
 
-        for (int pred = 0; pred < numPredicates; ++pred) {
-            unchosenPreds.add(pred);
-            actionToPredicate[pred] = pred;
+        for (int i = 0; i < numPredicates; ++i) {
+            unchosenPreds.add(i);
+            actionToPredicate[i] = i;
+        }
+
+        int pred = 0, action = numPredicates;
+        for (HashIndex index : indices) {
+            if (index != null) {
+                actionToPredicate[action] = pred;
+                action++;
+            }
+            pred++;
         }
 
         this.filterOp = filterOp;
@@ -49,7 +69,6 @@ public class FilterUCTNode {
             accumulatedReward[i] = 0;
         }
 
-        // Sort untried actions by
         priorityActions = new ArrayList<>();
         for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
             priorityActions.add(actionCtr);
@@ -57,10 +76,11 @@ public class FilterUCTNode {
     }
 
     public FilterUCTNode(FilterUCTNode parent, long roundCtr, int nextPred) {
+        this.nrIndexActions = 0;
         this.treeLevel = parent.treeLevel + 1;
         this.createdIn = roundCtr;
         this.numPredicates = parent.numPredicates;
-        this.nrActions = parent.nrActions - 1;
+        this.nrActions = parent.nrActions - 1 - parent.nrIndexActions;
         this.childNodes = new FilterUCTNode[nrActions];
 
         this.chosenPreds = new HashSet<>();
@@ -161,6 +181,8 @@ public class FilterUCTNode {
         int action = selectAction(SelectionPolicy.UCB1);
         int predicate = actionToPredicate[action];
         state.order[treeLevel] = predicate;
+        state.useIndexScan = action >= numPredicates;
+
         boolean canExpand = createdIn != roundCtr;
         if (childNodes[action] == null && canExpand) {
             childNodes[action] = new FilterUCTNode(this, roundCtr, predicate);

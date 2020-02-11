@@ -215,7 +215,8 @@ public class SearchPreprocessor implements Preprocessor {
 
         FilterState state = new FilterState(nrCompiled);
 
-        FilterUCTNode root = new FilterUCTNode(filterOp, roundCtr, nrCompiled);
+        FilterUCTNode root = new FilterUCTNode(filterOp, roundCtr, nrCompiled,
+                indices);
         long nextForget = 1;
 
         while (!filterOp.isFinished()) {
@@ -223,7 +224,8 @@ public class SearchPreprocessor implements Preprocessor {
             double reward = root.sample(roundCtr, state, ROWS_PER_TIMESTEP);
 
             if (FORGET && roundCtr == nextForget) {
-                root = new FilterUCTNode(filterOp, roundCtr, nrCompiled);
+                root = new FilterUCTNode(filterOp, roundCtr, nrCompiled,
+                        indices);
                 nextForget *= 10;
             }
         }
