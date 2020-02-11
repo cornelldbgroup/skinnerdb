@@ -7,7 +7,6 @@ import expressions.ExpressionInfo;
 import expressions.compilation.UnaryBoolEval;
 import indexing.HashIndex;
 import net.sf.jsqlparser.expression.Expression;
-import operators.IndexTest;
 import operators.Materialize;
 import org.eclipse.collections.api.list.primitive.IntList;
 import org.eclipse.collections.api.list.primitive.MutableIntList;
@@ -167,7 +166,8 @@ public class SearchPreprocessor implements Preprocessor {
         List<HashIndex> indices = new ArrayList<>(predicates.size());
         List<Number> values = new ArrayList<>(predicates.size());
         for (Expression expression : predicates) {
-            IndexTest test = new IndexTest(queryInfo);
+            SinglePredicateIndexTest test =
+                    new SinglePredicateIndexTest(queryInfo);
             expression.accept(test);
             if (test.canUseIndex) {
                 indices.add(test.index);
