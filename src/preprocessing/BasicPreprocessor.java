@@ -101,10 +101,8 @@ public class BasicPreprocessor implements Preprocessor {
                 try {
                     if (shouldFilter) {
                         // Apply index to prune rows if possible
-                        //ExpressionInfo remainingPred = applyIndex(
-                        //        query, curUnaryPred, preSummary);
-                        // TODO: reinsert index usage
-                        ExpressionInfo remainingPred = curUnaryPred;
+                        ExpressionInfo remainingPred = applyIndex(
+                                query, curUnaryPred, preSummary);
                         // Filter remaining rows by remaining predicate
                         if (remainingPred != null) {
                             filterProject(query, alias, remainingPred,
