@@ -50,7 +50,7 @@ public class BudgetedFilter {
 
         int startPos = index.nextHighestRowInBucket(dataLocation,
                 lastCompletedRow);
-        if (startPos < -1) {
+        if (startPos < 0) {
             return Pair.of(0l, this.cardinality - 1);
         }
 

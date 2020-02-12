@@ -47,19 +47,22 @@ public class FilterUCTNode {
         this.chosenPreds = new HashSet<>();
         this.unchosenPreds = new ArrayList<>(numPredicates);
         this.actionToPredicate = new int[nrActions];
-
-        for (int i = 0; i < numPredicates; ++i) {
-            unchosenPreds.add(i);
-            actionToPredicate[i] = i;
-        }
+        priorityActions = new ArrayList<>();
 
         int pred = 0, action = numPredicates;
         for (HashIndex index : indices) {
             if (index != null) {
                 actionToPredicate[action] = pred;
+                priorityActions.add(action);
                 action++;
             }
             pred++;
+        }
+
+        for (int i = 0; i < numPredicates; ++i) {
+            unchosenPreds.add(i);
+            actionToPredicate[i] = i;
+            priorityActions.add(action);
         }
 
         this.filterOp = filterOp;
@@ -70,11 +73,6 @@ public class FilterUCTNode {
         for (int i = 0; i < nrActions; i++) {
             nrTries[i] = 0;
             accumulatedReward[i] = 0;
-        }
-
-        priorityActions = new ArrayList<>();
-        for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
-            priorityActions.add(actionCtr);
         }
     }
 

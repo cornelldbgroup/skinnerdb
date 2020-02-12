@@ -109,9 +109,11 @@ public class SinglePredicateIndexTest implements ExpressionVisitor {
         // Can use index if value in dictionary
         String val = stringValue.getValue();
         Dictionary curDic = BufferManager.dictionary;
-        if (curDic != null && curDic.getCode(val) < 0) {
+        int code = curDic.getCode(val);
+        if (curDic != null && code < 0) {
             canUseIndex = false;
         }
+        constant = code;
     }
 
     @Override
