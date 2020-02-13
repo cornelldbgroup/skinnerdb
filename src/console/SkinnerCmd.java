@@ -31,6 +31,7 @@ import java.io.File;
 import java.io.PrintWriter;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.NoSuchElementException;
 import java.util.Scanner;
 import java.util.regex.Pattern;
 
@@ -389,23 +390,40 @@ public class SkinnerCmd {
             BufferManager.loadDictionary();
         }
         CatalogManager.generateStats();
-        // Command line processing
-        System.out.println("Enter 'help' for help and 'quit' to exit");
-        LineReader reader = LineReaderBuilder.builder()
-                .history(new DefaultHistory())
-                .build();
-        boolean continueProcessing = true;
-        while (continueProcessing) {
-            try {
-                String input = reader.readLine("> ");
-                continueProcessing = processInput(input);
-            } catch (UserInterruptException e) {
-                // Ignore
-            } catch (EndOfFileException e) {
-                continueProcessing = false;
-            } catch (Exception e) {
-                System.err.println("Error processing command: ");
-                e.printStackTrace();
+
+        if (System.console() == null) { // Piped input
+            boolean continueProcessing = true;
+            Scanner scanner = new Scanner(System.in);
+            while (continueProcessing) {
+                try {
+                    String input = scanner.nextLine();
+                    continueProcessing = processInput(input);
+                } catch (NoSuchElementException e) {
+                    continueProcessing = false;
+                } catch (Exception e) {
+                    System.err.println("Error processing command: ");
+                    e.printStackTrace();
+                }
+            }
+        } else {
+            // Command line processing
+            System.out.println("Enter 'help' for help and 'quit' to exit");
+            LineReader reader = LineReaderBuilder.builder()
+                    .history(new DefaultHistory())
+                    .build();
+            boolean continueProcessing = true;
+            while (continueProcessing) {
+                try {
+                    String input = reader.readLine("> ");
+                    continueProcessing = processInput(input);
+                } catch (UserInterruptException e) {
+                    // Ignore
+                } catch (EndOfFileException e) {
+                    continueProcessing = false;
+                } catch (Exception e) {
+                    System.err.println("Error processing command: ");
+                    e.printStackTrace();
+                }
             }
         }
     }
