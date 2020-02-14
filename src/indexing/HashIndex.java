@@ -40,7 +40,7 @@ public abstract class HashIndex<T extends Number> {
     }
 
     public int nextHighestRowInBucket(int dataLocation, int target) {
-        int end = this.data[dataLocation] - 1;
+        int end = dataLocation + this.data[dataLocation] - 1;
         int start = dataLocation + 1;
 
         int nextHighest = -1;
