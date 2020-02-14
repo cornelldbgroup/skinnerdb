@@ -31,4 +31,4 @@ SCHEMA="$(dirname $1)/$(basename $1)"
 DEST="$(dirname $2)/$(basename $2)"
 
 java -jar "$DIR/build/CreateDb.jar" "$(basename $SCHEMA)" $DEST
-printf 'exec %s/skinner.schema.sql\nexec %s/skinner.load.sql\nexit\n' $SCHEMA $SCHEMA | $DIR/skinnerdb $DEST 1>/dev/null 2>/dev/null 
+printf 'exec %s/skinner.schema.sql\nexec %s/skinner.load.sql\nquit' $SCHEMA $SCHEMA | $DIR/skinnerdb $DEST

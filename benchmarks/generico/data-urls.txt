@@ -1,5 +1,1 @@
-http://www.cwi.nl/~boncz/PublicBIbenchmark/Generico/Generico_1.csv.bz2
-http://www.cwi.nl/~boncz/PublicBIbenchmark/Generico/Generico_2.csv.bz2
-http://www.cwi.nl/~boncz/PublicBIbenchmark/Generico/Generico_3.csv.bz2
-http://www.cwi.nl/~boncz/PublicBIbenchmark/Generico/Generico_4.csv.bz2
 http://www.cwi.nl/~boncz/PublicBIbenchmark/Generico/Generico_5.csv.bz2

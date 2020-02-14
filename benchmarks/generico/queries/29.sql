@@ -1,1 +1,0 @@
-SELECT CAST(EXTRACT(MONTH FROM generico_4.fecha) AS LONG) AS mnfechaok FROM generico_4 WHERE ((generico_4.anunciante IN ('BANTRAB/TODOTICKET', 'TODOTICKET', 'TODOTICKET.COM')) AND (CAST(EXTRACT(YEAR FROM generico_4.fecha) AS LONG) >= 2010) AND (CAST(EXTRACT(YEAR FROM generico_4.fecha) AS LONG) <= 2015)) GROUP BY mnfechaok ORDER BY mnfechaok ASC ;
