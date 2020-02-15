@@ -23,7 +23,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import static operators.Filter.interpretPred;
+import static operators.Filter.compilePred;
 import static operators.Filter.loadPredCols;
 import static preprocessing.PreprocessorUtil.*;
 import static preprocessing.search.FilterSearchConfig.FORGET;
@@ -125,7 +125,7 @@ public class SearchPreprocessor implements Preprocessor {
         boolean alwaysFalseExpression = false;
         for (ExpressionInfo exprInfo : query.unaryPredicates) {
             if (exprInfo.aliasesMentioned.isEmpty()) {
-                UnaryBoolEval eval = interpretPred(exprInfo,
+                UnaryBoolEval eval = compilePred(exprInfo,
                         exprInfo.finalExpression, preSummary.columnMapping);
                 if (eval.evaluate(0) <= 0) {
                     alwaysFalseExpression = true;
@@ -159,7 +159,7 @@ public class SearchPreprocessor implements Preprocessor {
         loadPredCols(unaryPred, preSummary.columnMapping);
         List<UnaryBoolEval> compiled = new ArrayList<>(predicates.size());
         for (Expression expression : predicates) {
-            compiled.add(interpretPred(unaryPred,
+            compiled.add(compilePred(unaryPred,
                     expression, preSummary.columnMapping));
         }
         List<HashIndex> indices = new ArrayList<>(predicates.size());
