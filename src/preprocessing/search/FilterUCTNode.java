@@ -195,6 +195,8 @@ public class FilterUCTNode {
 
     public double sample(long roundCtr, FilterState state, int budget) {
         if (nrActions == 0) {
+            state.avoidBranching = false;
+            state.useIndexScan = false;
             return filterOp.executeWithBudget(budget, state);
         }
 
