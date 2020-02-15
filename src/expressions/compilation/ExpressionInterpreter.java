@@ -33,6 +33,10 @@ public class ExpressionInterpreter extends SkinnerVisitor implements UnaryBoolEv
     private final List<ColumnData> dataList;
     private final Map<Expression, RunAutomaton> likeToRunAutomaton;
 
+    private final Result interpretResult;
+    private int tupleIdx;
+    private final Expression expression;
+
     private class Result {
         private int RESULT_INT;
         private double RESULT_DOUBLE;
@@ -89,10 +93,6 @@ public class ExpressionInterpreter extends SkinnerVisitor implements UnaryBoolEv
         }
     }
 
-    Result interpretResult;
-    int tupleIdx;
-    Expression expression;
-
     public ExpressionInterpreter(ExpressionInfo expressionInfo,
                                  Map<ColumnRef, ColumnRef> columnMapping,
                                  Map<String, ColumnRef> aggMapping,
@@ -100,6 +100,7 @@ public class ExpressionInterpreter extends SkinnerVisitor implements UnaryBoolEv
         this.expressionInfo = expressionInfo;
         this.columnMapping = columnMapping;
         this.aggMapping = aggMapping;
+        this.expression = expression;
 
         this.columnToID = new HashMap<>();
         this.likeToRunAutomaton = new HashMap<>();
