@@ -219,8 +219,10 @@ public class SkinnerCmd {
                 PlainSelect plainSelect = (PlainSelect) select.getSelectBody();
                 boolean printResult = plainSelect.getIntoTables() == null;
                 try {
+                    long startTime = System.currentTimeMillis();
                     Master.executeSelect(plainSelect,
                             false, -1, -1, null);
+                    long endTime = System.currentTimeMillis();
                     // Display query result if no target tables specified
                     // and if this is not a benchmark run.
                     if (!benchRun && printResult) {
@@ -231,6 +233,7 @@ public class SkinnerCmd {
                         RelationPrinter.print(
                                 NamingConfig.FINAL_RESULT_NAME);
                         System.out.println(cardinality + " result tuples.");
+                        System.out.println((endTime - startTime) + " ms.");
                     }
                 } catch (SQLexception e) {
                     System.out.println(e.getMessage());
