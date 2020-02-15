@@ -54,14 +54,17 @@ public class ExpressionInterpreter extends SkinnerVisitor implements UnaryBoolEv
 
         public void returnInt(int value) {
             RESULT_INT = value;
+            RESULT_NULL = false;
         }
 
         public void returnLong(long value) {
             RESULT_LONG = value;
+            RESULT_NULL = false;
         }
 
         public void returnDouble(double value) {
             RESULT_DOUBLE = value;
+            RESULT_NULL = false;
         }
 
         public void returnNull() {
@@ -70,6 +73,7 @@ public class ExpressionInterpreter extends SkinnerVisitor implements UnaryBoolEv
 
         public void returnString(String value) {
             RESULT_STRING = value;
+            RESULT_NULL = false;
         }
 
         public int getInt() {
@@ -721,7 +725,7 @@ public class ExpressionInterpreter extends SkinnerVisitor implements UnaryBoolEv
             return;
         }
 
-        andExpression.getLeftExpression().accept(this);
+        andExpression.getRightExpression().accept(this);
         if (interpretResult.isNull()) {
             interpretResult.returnNull();
             return;
@@ -748,7 +752,7 @@ public class ExpressionInterpreter extends SkinnerVisitor implements UnaryBoolEv
             return;
         }
 
-        orExpression.getLeftExpression().accept(this);
+        orExpression.getRightExpression().accept(this);
         if (interpretResult.isNull()) {
             interpretResult.returnNull();
             return;
