@@ -281,8 +281,7 @@ public class BasicPreprocessor implements Preprocessor {
         for (ExpressionInfo exprInfo : query.unaryPredicates) {
             if (exprInfo.aliasesMentioned.isEmpty()) {
                 UnaryBoolEval eval = compilePred(exprInfo,
-                        exprInfo.finalExpression, preSummary.columnMapping)
-                        .getLeft();
+                        exprInfo.finalExpression, preSummary.columnMapping);
                 if (eval.evaluate(0) <= 0) {
                     alwaysFalseExpression = true;
                     break;

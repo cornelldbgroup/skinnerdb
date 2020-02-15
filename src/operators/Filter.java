@@ -7,9 +7,9 @@ import config.ParallelConfig;
 import expressions.ExpressionInfo;
 import expressions.compilation.EvaluatorType;
 import expressions.compilation.ExpressionCompiler;
+import expressions.compilation.ExpressionInterpreter;
 import expressions.compilation.UnaryBoolEval;
 import net.sf.jsqlparser.expression.Expression;
-import org.apache.commons.lang3.tuple.Pair;
 import org.eclipse.collections.api.list.primitive.IntList;
 import org.eclipse.collections.api.list.primitive.MutableIntList;
 import org.eclipse.collections.impl.factory.primitive.IntLists;
@@ -53,7 +53,7 @@ public class Filter {
      * @return compiled predicate evaluator
      * @throws Exception
      */
-    public static Pair<UnaryBoolEval, Double> compilePred(
+    public static UnaryBoolEval compilePred(
             ExpressionInfo unaryPred,
             Expression expr,
             Map<ColumnRef, ColumnRef> columnMapping) throws Exception {
@@ -61,8 +61,16 @@ public class Filter {
                 unaryPred, columnMapping, null, null,
                 EvaluatorType.UNARY_BOOLEAN);
         expr.accept(unaryCompiler);
-        return Pair.of((UnaryBoolEval) unaryCompiler.getBoolEval(),
-                (double) unaryCompiler.getCost());
+        return (UnaryBoolEval) unaryCompiler.getBoolEval();
+    }
+
+    public static UnaryBoolEval interpretPred(
+            ExpressionInfo unaryPred,
+            Expression expr,
+            Map<ColumnRef, ColumnRef> columnMapping) {
+        ExpressionInterpreter unaryEval = new ExpressionInterpreter(unaryPred,
+                columnMapping, null, expr);
+        return unaryEval;
     }
 
     /**
@@ -84,7 +92,7 @@ public class Filter {
         loadPredCols(unaryPred, columnMapping);
         // Compile unary predicate for fast evaluation
         UnaryBoolEval unaryBoolEval = compilePred(unaryPred,
-                unaryPred.finalExpression, columnMapping).getLeft();
+                unaryPred.finalExpression, columnMapping);
         // Get cardinality of table referenced in predicate
         int cardinality = CatalogManager.getCardinality(tableName);
         // Initialize filter result
