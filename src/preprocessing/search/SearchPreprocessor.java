@@ -221,13 +221,13 @@ public class SearchPreprocessor implements Preprocessor {
         FilterUCTNode root = new FilterUCTNode(filterOp, roundCtr, nrCompiled,
                 indices);
         long nextForget = 1;
-        long nextMove = 15;
-        int nextSize = 2;
+        long nextCompile = 15;
 
         while (!filterOp.isFinished()) {
             ++roundCtr;
             state.reset();
-            root.sample(roundCtr, state, ROWS_PER_TIMESTEP);
+            root.sample(roundCtr, state, ROWS_PER_TIMESTEP, unaryPred, colMap
+                    , predicates);
 
             if (FORGET && roundCtr == nextForget) {
                 root = new FilterUCTNode(filterOp, roundCtr, nrCompiled,
@@ -235,22 +235,26 @@ public class SearchPreprocessor implements Preprocessor {
                 nextForget *= 10;
             }
 
-            if (roundCtr == nextMove) {
-                nextMove *= 2;
+            if (roundCtr == nextCompile) {
+                nextCompile *= 2;
 
-                if (state.useIndexScan) {
-                    int endPredicate = Math.min(1 + (nextSize - 1),
-                            state.order.length - 1);
-                    int[] compile = Arrays.copyOfRange(state.order, 0,
-                            endPredicate);
-                    System.out.println(Arrays.toString(compile));
-                } else {
-                    int endPredicate = Math.min(nextSize - 1,
-                            state.order.length - 1);
-                    int[] compile = Arrays.copyOfRange(state.order, 0,
-                            endPredicate);
-                    System.out.println(Arrays.toString(compile));
-                }
+                /*List<Pair<FilterUCTNode, int[]>> compile =
+                        root.selectCompilationNodes();
+                for (Pair<FilterUCTNode, int[]> node : compile) {
+                    Expression expression = null;
+                    for (int pred : node.getRight()) {
+                        if (expression == null) {
+                            expression = predicates.get(pred);
+                        } else {
+                            expression = new AndExpression(expression,
+                                    predicates.get(pred));
+                        }
+                    }
+                    UnaryBoolEval eval = compilePred(unaryPred, expression,
+                            colMap);
+                    node.getLeft().setCompiled(eval);
+                }*/
+
             }
         }
 

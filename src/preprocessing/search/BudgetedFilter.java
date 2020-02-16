@@ -56,7 +56,7 @@ public class BudgetedFilter {
 
         int endPos = index.data[dataLocation] + dataLocation + 1;
 
-        if (state.cachedTil > 1) {
+        if (state.cachedEval != null) {
             ROW_LOOP:
             while (remainingRows > 0 && startPos < endPos) {
                 currentCompletedRow = index.data[startPos];

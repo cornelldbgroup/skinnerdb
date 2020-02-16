@@ -1,11 +1,17 @@
 package preprocessing.search;
 
 import config.JoinConfig;
+import expressions.ExpressionInfo;
 import expressions.compilation.UnaryBoolEval;
 import indexing.HashIndex;
 import joining.uct.SelectionPolicy;
+import net.sf.jsqlparser.expression.Expression;
+import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
+import query.ColumnRef;
 
 import java.util.*;
+
+import static operators.Filter.compilePred;
 
 public class FilterUCTNode {
     final Random random = new Random();
@@ -201,7 +207,10 @@ public class FilterUCTNode {
         return bestAction;
     }
 
-    public double sample(long roundCtr, FilterState state, int budget) {
+    public double sample(long roundCtr, FilterState state, int budget,
+                         ExpressionInfo unaryPred,
+                         Map<ColumnRef, ColumnRef> colMap,
+                         List<Expression> predicates) throws Exception {
         if (nrActions == 0) {
             return filterOp.executeWithBudget(budget, state);
         }
@@ -216,9 +225,18 @@ public class FilterUCTNode {
         } else {
             int predicate = actionToPredicate[action];
             state.order[treeLevel] = predicate;
-            if (this.cachedEval != null) {
+            if (this.treeLevel == 1) {
                 state.cachedTil = treeLevel;
-                state.cachedEval = this.cachedEval;
+                Expression expr = null;
+                for (int i = 0; i <= treeLevel; i++) {
+                    if (expr == null) {
+                        expr = predicates.get(state.order[i]);
+                    } else {
+                        expr = new AndExpression(expr,
+                                predicates.get(state.order[i]));
+                    }
+                }
+                state.cachedEval = compilePred(unaryPred, expr, colMap);
             }
 
             if (treeLevel == 0) {
@@ -237,7 +255,8 @@ public class FilterUCTNode {
 
         FilterUCTNode child = childNodes[action];
         double reward = (child != null) ?
-                child.sample(roundCtr, state, budget) :
+                child.sample(roundCtr, state, budget, unaryPred, colMap,
+                        predicates) :
                 playout(state, budget);
 
         updateStatistics(action, reward);
@@ -260,30 +279,13 @@ public class FilterUCTNode {
         return filterOp.executeWithBudget(budget, state);
     }
 
-    public void store(int[] order, int idx, int start) throws Exception {
-        /*if (idx == order.length) {
-            // compile this shit
-        }
-
-        if (start == 1 && this.treeLevel == 0) {
-            for (int a = numPredicates; a < numPredicates + indexActions; a++) {
-                if (actionToPredicate[a] == order[idx]) {
-                    this.childNodes[a].store(order, idx + 1, start);
-                    return;
-                }
-            }
-        }
-
-        if (this.childNodes[order[idx]] == null) {
-
-        } else {
-            this.childNodes[order[idx]].store(order, idx + 1, start);
-        }*/
-    }
-
-    void updateStatistics(int selectedAction, double reward) {
+    private void updateStatistics(int selectedAction, double reward) {
         ++nrVisits;
         ++nrTries[selectedAction];
         accumulatedReward[selectedAction] += reward;
+    }
+
+    public void setCompiled(UnaryBoolEval eval) {
+        this.cachedEval = eval;
     }
 }
