@@ -1,6 +1,7 @@
 package preprocessing.search;
 
 import config.JoinConfig;
+import expressions.compilation.UnaryBoolEval;
 import indexing.HashIndex;
 import joining.uct.SelectionPolicy;
 
@@ -26,6 +27,8 @@ public class FilterUCTNode {
 
     private final int indexActions;
     private final int branchingActions;
+
+    private UnaryBoolEval cachedEval;
 
     public FilterUCTNode(BudgetedFilter filterOp, long roundCtr,
                          int numPredicates, List<HashIndex> indices) {
@@ -75,6 +78,8 @@ public class FilterUCTNode {
             nrTries[i] = 0;
             accumulatedReward[i] = 0;
         }
+
+        cachedEval = null;
     }
 
     public FilterUCTNode(FilterUCTNode parent, long roundCtr) {
@@ -92,6 +97,7 @@ public class FilterUCTNode {
         this.accumulatedReward = new double[0];
         this.branchingActions = 0;
         this.indexActions = 0;
+        cachedEval = null;
     }
 
     public FilterUCTNode(FilterUCTNode parent, long roundCtr, int nextPred) {
@@ -132,6 +138,7 @@ public class FilterUCTNode {
         for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
             priorityActions.add(actionCtr);
         }
+        cachedEval = null;
     }
 
     int selectAction(SelectionPolicy policy) {
@@ -209,6 +216,11 @@ public class FilterUCTNode {
         } else {
             int predicate = actionToPredicate[action];
             state.order[treeLevel] = predicate;
+            if (this.cachedEval != null) {
+                state.cachedTil = treeLevel;
+                state.cachedEval = this.cachedEval;
+            }
+
             if (treeLevel == 0) {
                 state.avoidBranching = false;
                 state.useIndexScan = this.indexActions > 0 &&
@@ -222,7 +234,6 @@ public class FilterUCTNode {
                         predicate);
             }
         }
-
 
         FilterUCTNode child = childNodes[action];
         double reward = (child != null) ?
@@ -247,6 +258,27 @@ public class FilterUCTNode {
         }
 
         return filterOp.executeWithBudget(budget, state);
+    }
+
+    public void store(int[] order, int idx, int start) throws Exception {
+        /*if (idx == order.length) {
+            // compile this shit
+        }
+
+        if (start == 1 && this.treeLevel == 0) {
+            for (int a = numPredicates; a < numPredicates + indexActions; a++) {
+                if (actionToPredicate[a] == order[idx]) {
+                    this.childNodes[a].store(order, idx + 1, start);
+                    return;
+                }
+            }
+        }
+
+        if (this.childNodes[order[idx]] == null) {
+
+        } else {
+            this.childNodes[order[idx]].store(order, idx + 1, start);
+        }*/
     }
 
     void updateStatistics(int selectedAction, double reward) {

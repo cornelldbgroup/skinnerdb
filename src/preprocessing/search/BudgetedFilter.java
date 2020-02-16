@@ -56,20 +56,42 @@ public class BudgetedFilter {
 
         int endPos = index.data[dataLocation] + dataLocation + 1;
 
-        ROW_LOOP:
-        while (remainingRows > 0 && startPos < endPos) {
-            currentCompletedRow = index.data[startPos];
-            remainingRows -= currentCompletedRow - lastCompletedRow;
-            startPos++;
+        if (state.cachedTil > 1) {
+            ROW_LOOP:
+            while (remainingRows > 0 && startPos < endPos) {
+                currentCompletedRow = index.data[startPos];
+                remainingRows -= currentCompletedRow - lastCompletedRow;
+                startPos++;
 
-            for (int i = 1; i < state.order.length; i++) {
-                UnaryBoolEval expr = compiled.get(state.order[i]);
-                if (expr.evaluate(currentCompletedRow) <= 0) {
+                if (state.cachedEval.evaluate(currentCompletedRow) <= 0) {
                     continue ROW_LOOP;
                 }
-            }
 
-            result.add(currentCompletedRow);
+                for (int i = state.cachedTil + 1; i < state.order.length; i++) {
+                    UnaryBoolEval expr = compiled.get(state.order[i]);
+                    if (expr.evaluate(currentCompletedRow) <= 0) {
+                        continue ROW_LOOP;
+                    }
+                }
+
+                result.add(currentCompletedRow);
+            }
+        } else {
+            ROW_LOOP:
+            while (remainingRows > 0 && startPos < endPos) {
+                currentCompletedRow = index.data[startPos];
+                remainingRows -= currentCompletedRow - lastCompletedRow;
+                startPos++;
+
+                for (int i = 1; i < state.order.length; i++) {
+                    UnaryBoolEval expr = compiled.get(state.order[i]);
+                    if (expr.evaluate(currentCompletedRow) <= 0) {
+                        continue ROW_LOOP;
+                    }
+                }
+
+                result.add(currentCompletedRow);
+            }
         }
 
         long endTime = System.nanoTime();
@@ -81,20 +103,43 @@ public class BudgetedFilter {
                                                    FilterState state) {
         int currentCompletedRow = lastCompletedRow;
         long startTime = System.nanoTime();
-        ROW_LOOP:
-        while (remainingRows > 0 && currentCompletedRow + 1 < cardinality) {
-            currentCompletedRow++;
-            remainingRows--;
 
-            for (int predIndex : state.order) {
-                UnaryBoolEval expr = compiled.get(predIndex);
-                if (expr.evaluate(currentCompletedRow) <= 0) {
+        if (state.cachedTil > 0) {
+            ROW_LOOP:
+            while (remainingRows > 0 && currentCompletedRow + 1 < cardinality) {
+                currentCompletedRow++;
+                remainingRows--;
+
+                if (state.cachedEval.evaluate(currentCompletedRow) <= 0) {
                     continue ROW_LOOP;
                 }
-            }
 
-            result.add(currentCompletedRow);
+                for (int i = state.cachedTil + 1; i < state.order.length; i++) {
+                    UnaryBoolEval expr = compiled.get(state.order[i]);
+                    if (expr.evaluate(currentCompletedRow) <= 0) {
+                        continue ROW_LOOP;
+                    }
+                }
+
+                result.add(currentCompletedRow);
+            }
+        } else {
+            ROW_LOOP:
+            while (remainingRows > 0 && currentCompletedRow + 1 < cardinality) {
+                currentCompletedRow++;
+                remainingRows--;
+
+                for (int predIndex : state.order) {
+                    UnaryBoolEval expr = compiled.get(predIndex);
+                    if (expr.evaluate(currentCompletedRow) <= 0) {
+                        continue ROW_LOOP;
+                    }
+                }
+
+                result.add(currentCompletedRow);
+            }
         }
+
         long endTime = System.nanoTime();
         long duration = endTime - startTime;
         return Pair.of(duration, currentCompletedRow);

@@ -1,5 +1,7 @@
 package preprocessing.search;
 
+import expressions.compilation.UnaryBoolEval;
+
 import java.util.Arrays;
 
 public class FilterState {
@@ -7,10 +9,15 @@ public class FilterState {
     public boolean useIndexScan;
     public boolean avoidBranching;
 
+    public UnaryBoolEval cachedEval;
+    public int cachedTil;
+
     public FilterState(int numPredicates) {
         this.order = new int[numPredicates];
         this.avoidBranching = false;
         this.useIndexScan = false;
+        this.cachedEval = null;
+        this.cachedTil = 0;
     }
 
     @Override
@@ -20,5 +27,12 @@ public class FilterState {
                 ", useIndexScan=" + useIndexScan +
                 ", avoidBranching=" + avoidBranching +
                 '}';
+    }
+
+    public void reset() {
+        this.avoidBranching = false;
+        this.useIndexScan = false;
+        this.cachedEval = null;
+        this.cachedTil = -1;
     }
 }

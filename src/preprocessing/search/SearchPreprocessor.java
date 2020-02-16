@@ -18,10 +18,7 @@ import query.ColumnRef;
 import query.QueryInfo;
 import statistics.PreStats;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 import static operators.Filter.*;
 import static preprocessing.PreprocessorUtil.*;
@@ -182,7 +179,8 @@ public class SearchPreprocessor implements Preprocessor {
         IntList satisfyingRows =
                 shouldFilter ?
                         filterUCT(tableName, predicates, compiled, indices,
-                                values) : IntLists.immutable.empty();
+                                values, unaryPred, preSummary.columnMapping) :
+                        IntLists.immutable.empty();
 
         // Materialize relevant rows and columns
         String filteredName = NamingConfig.FILTERED_PRE + alias;
@@ -209,7 +207,10 @@ public class SearchPreprocessor implements Preprocessor {
                                      List<Expression> predicates,
                                      List<UnaryBoolEval> compiled,
                                      List<HashIndex> indices,
-                                     List<Number> values) {
+                                     List<Number> values,
+                                     ExpressionInfo unaryPred,
+                                     Map<ColumnRef, ColumnRef> colMap)
+            throws Exception {
         long roundCtr = 0;
         int nrCompiled = compiled.size();
         BudgetedFilter filterOp = new BudgetedFilter(tableName, predicates,
@@ -220,15 +221,36 @@ public class SearchPreprocessor implements Preprocessor {
         FilterUCTNode root = new FilterUCTNode(filterOp, roundCtr, nrCompiled,
                 indices);
         long nextForget = 1;
+        long nextMove = 15;
+        int nextSize = 2;
 
         while (!filterOp.isFinished()) {
             ++roundCtr;
+            state.reset();
             root.sample(roundCtr, state, ROWS_PER_TIMESTEP);
 
             if (FORGET && roundCtr == nextForget) {
                 root = new FilterUCTNode(filterOp, roundCtr, nrCompiled,
                         indices);
                 nextForget *= 10;
+            }
+
+            if (roundCtr == nextMove) {
+                nextMove *= 2;
+
+                if (state.useIndexScan) {
+                    int endPredicate = Math.min(1 + (nextSize - 1),
+                            state.order.length - 1);
+                    int[] compile = Arrays.copyOfRange(state.order, 0,
+                            endPredicate);
+                    System.out.println(Arrays.toString(compile));
+                } else {
+                    int endPredicate = Math.min(nextSize - 1,
+                            state.order.length - 1);
+                    int[] compile = Arrays.copyOfRange(state.order, 0,
+                            endPredicate);
+                    System.out.println(Arrays.toString(compile));
+                }
             }
         }
 
