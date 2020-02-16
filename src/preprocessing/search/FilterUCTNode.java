@@ -62,9 +62,9 @@ public class FilterUCTNode {
         for (int i = 0; i < numPredicates; ++i) {
             unchosenPreds.add(i);
             actionToPredicate[i] = i;
-            priorityActions.add(action);
+            priorityActions.add(i);
         }
-	priorityActions.add(this.nrActions - 1);
+        priorityActions.add(numPredicates + indexActions);
 
         this.filterOp = filterOp;
 
