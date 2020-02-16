@@ -24,7 +24,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static operators.Filter.compilePred;
+import static operators.Filter.interpretPred;
 import static preprocessing.PreprocessorUtil.*;
 
 /**
@@ -280,7 +280,7 @@ public class BasicPreprocessor implements Preprocessor {
         boolean alwaysFalseExpression = false;
         for (ExpressionInfo exprInfo : query.unaryPredicates) {
             if (exprInfo.aliasesMentioned.isEmpty()) {
-                UnaryBoolEval eval = compilePred(exprInfo,
+                UnaryBoolEval eval = interpretPred(exprInfo,
                         exprInfo.finalExpression, preSummary.columnMapping);
                 if (eval.evaluate(0) <= 0) {
                     alwaysFalseExpression = true;

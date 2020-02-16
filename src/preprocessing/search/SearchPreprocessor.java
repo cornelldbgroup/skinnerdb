@@ -23,8 +23,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import static operators.Filter.compilePred;
-import static operators.Filter.loadPredCols;
+import static operators.Filter.*;
 import static preprocessing.PreprocessorUtil.*;
 import static preprocessing.search.FilterSearchConfig.FORGET;
 import static preprocessing.search.FilterSearchConfig.ROWS_PER_TIMESTEP;
@@ -125,7 +124,7 @@ public class SearchPreprocessor implements Preprocessor {
         boolean alwaysFalseExpression = false;
         for (ExpressionInfo exprInfo : query.unaryPredicates) {
             if (exprInfo.aliasesMentioned.isEmpty()) {
-                UnaryBoolEval eval = compilePred(exprInfo,
+                UnaryBoolEval eval = interpretPred(exprInfo,
                         exprInfo.finalExpression, preSummary.columnMapping);
                 if (eval.evaluate(0) <= 0) {
                     alwaysFalseExpression = true;
@@ -159,8 +158,12 @@ public class SearchPreprocessor implements Preprocessor {
         loadPredCols(unaryPred, preSummary.columnMapping);
         List<UnaryBoolEval> compiled = new ArrayList<>(predicates.size());
         for (Expression expression : predicates) {
-            compiled.add(compilePred(unaryPred,
-                    expression, preSummary.columnMapping));
+            long startTime = System.nanoTime();
+            UnaryBoolEval eval = compilePred(unaryPred,
+                    expression, preSummary.columnMapping);
+            long endTime = System.nanoTime();
+            PreStats.compileNanos += (endTime - startTime);
+            compiled.add(eval);
         }
         List<HashIndex> indices = new ArrayList<>(predicates.size());
         List<Number> values = new ArrayList<>(predicates.size());

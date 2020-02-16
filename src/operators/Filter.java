@@ -15,6 +15,7 @@ import org.eclipse.collections.api.list.primitive.MutableIntList;
 import org.eclipse.collections.impl.factory.primitive.IntLists;
 import org.eclipse.collections.impl.stream.PrimitiveStreams;
 import query.ColumnRef;
+import statistics.PreStats;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -91,8 +92,12 @@ public class Filter {
         // Load required columns for predicate evaluation
         loadPredCols(unaryPred, columnMapping);
         // Compile unary predicate for fast evaluation
+        long startTime = System.nanoTime();
         UnaryBoolEval unaryBoolEval = compilePred(unaryPred,
                 unaryPred.finalExpression, columnMapping);
+        long endTime = System.nanoTime();
+        PreStats.compileNanos += (endTime - startTime);
+
         // Get cardinality of table referenced in predicate
         int cardinality = CatalogManager.getCardinality(tableName);
         // Initialize filter result
