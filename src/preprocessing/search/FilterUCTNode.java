@@ -64,6 +64,7 @@ public class FilterUCTNode {
             actionToPredicate[i] = i;
             priorityActions.add(action);
         }
+	priorityActions.add(this.nrActions - 1);
 
         this.filterOp = filterOp;
 
@@ -199,8 +200,6 @@ public class FilterUCTNode {
         }
 
         int action = selectAction(SelectionPolicy.UCB1);
-        state.avoidBranching = true;
-
         if (action == numPredicates + indexActions) {
             state.avoidBranching = true;
             state.useIndexScan = false;
