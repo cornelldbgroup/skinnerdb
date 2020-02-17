@@ -7,6 +7,7 @@ import expressions.ExpressionInfo;
 import expressions.compilation.UnaryBoolEval;
 import indexing.HashIndex;
 import net.sf.jsqlparser.expression.Expression;
+import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
 import operators.Materialize;
 import org.eclipse.collections.api.list.primitive.IntList;
 import org.eclipse.collections.api.list.primitive.MutableIntList;
@@ -22,8 +23,7 @@ import java.util.*;
 
 import static operators.Filter.*;
 import static preprocessing.PreprocessorUtil.*;
-import static preprocessing.search.FilterSearchConfig.FORGET;
-import static preprocessing.search.FilterSearchConfig.ROWS_PER_TIMESTEP;
+import static preprocessing.search.FilterSearchConfig.*;
 
 public class SearchPreprocessor implements Preprocessor {
     /**
@@ -226,8 +226,7 @@ public class SearchPreprocessor implements Preprocessor {
         while (!filterOp.isFinished()) {
             ++roundCtr;
             state.reset();
-            root.sample(roundCtr, state, ROWS_PER_TIMESTEP, unaryPred, colMap
-                    , predicates);
+            root.sample(roundCtr, state, ROWS_PER_TIMESTEP);
 
             if (FORGET && roundCtr == nextForget) {
                 root = new FilterUCTNode(filterOp, roundCtr, nrCompiled,
@@ -238,23 +237,26 @@ public class SearchPreprocessor implements Preprocessor {
             if (roundCtr == nextCompile) {
                 nextCompile *= 2;
 
-                /*List<Pair<FilterUCTNode, int[]>> compile =
-                        root.selectCompilationNodes();
-                for (Pair<FilterUCTNode, int[]> node : compile) {
-                    Expression expression = null;
-                    for (int pred : node.getRight()) {
-                        if (expression == null) {
-                            expression = predicates.get(pred);
+                PriorityQueue<FilterUCTNode> compile =
+                        new PriorityQueue<>(COMPILE_QUEUE,
+                                Comparator.comparingInt(FilterUCTNode::getNrVisits));
+                root.getPopularNodes(compile);
+                for (FilterUCTNode node : compile) {
+                    Expression expr = null;
+                    for (int i = node.getIndexPrefixLength();
+                         i < node.getPreds().size(); i++) {
+                        if (expr == null) {
+                            expr = predicates.get(node.getPreds().get(i));
                         } else {
-                            expression = new AndExpression(expression,
-                                    predicates.get(pred));
+                            expr = new AndExpression(expr,
+                                    predicates.get(node.getPreds().get(i)));
                         }
                     }
-                    UnaryBoolEval eval = compilePred(unaryPred, expression,
-                            colMap);
-                    node.getLeft().setCompiled(eval);
-                }*/
-
+                    if (node.getCompiledEval() == null) {
+                        node.setCompiledEval(compilePred(unaryPred, expr,
+                                colMap));
+                    }
+                }
             }
         }
 

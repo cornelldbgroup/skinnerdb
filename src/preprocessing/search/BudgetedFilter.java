@@ -104,7 +104,7 @@ public class BudgetedFilter {
         int currentCompletedRow = lastCompletedRow;
         long startTime = System.nanoTime();
 
-        if (state.cachedTil > 0) {
+        if (state.cachedEval != null) {
             ROW_LOOP:
             while (remainingRows > 0 && currentCompletedRow + 1 < cardinality) {
                 currentCompletedRow++;

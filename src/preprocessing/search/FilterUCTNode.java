@@ -1,17 +1,13 @@
 package preprocessing.search;
 
 import config.JoinConfig;
-import expressions.ExpressionInfo;
 import expressions.compilation.UnaryBoolEval;
 import indexing.HashIndex;
 import joining.uct.SelectionPolicy;
-import net.sf.jsqlparser.expression.Expression;
-import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
-import query.ColumnRef;
 
 import java.util.*;
 
-import static operators.Filter.compilePred;
+import static preprocessing.search.FilterSearchConfig.COMPILE_QUEUE;
 
 public class FilterUCTNode {
     final Random random = new Random();
@@ -22,7 +18,7 @@ public class FilterUCTNode {
     private final FilterUCTNode[] childNodes;
     private final BudgetedFilter filterOp;
 
-    private final Set<Integer> chosenPreds;
+    private final List<Integer> chosenPreds;
     private final List<Integer> unchosenPreds;
 
     private final int[] nrTries;
@@ -35,6 +31,7 @@ public class FilterUCTNode {
     private final int branchingActions;
 
     private UnaryBoolEval cachedEval;
+    private final int indexPrefixLength;
 
     public FilterUCTNode(BudgetedFilter filterOp, long roundCtr,
                          int numPredicates, List<HashIndex> indices) {
@@ -53,7 +50,7 @@ public class FilterUCTNode {
         this.numPredicates = numPredicates;
         this.nrActions = numPredicates + indexActions + branchingActions;
         this.childNodes = new FilterUCTNode[nrActions];
-        this.chosenPreds = new HashSet<>();
+        this.chosenPreds = new ArrayList<>();
         this.unchosenPreds = new ArrayList<>(numPredicates);
         this.actionToPredicate = new int[nrActions];
         priorityActions = new ArrayList<>();
@@ -86,6 +83,7 @@ public class FilterUCTNode {
         }
 
         cachedEval = null;
+        indexPrefixLength = 0;
     }
 
     public FilterUCTNode(FilterUCTNode parent, long roundCtr) {
@@ -95,7 +93,7 @@ public class FilterUCTNode {
         this.treeLevel = parent.treeLevel + 1;
         this.numPredicates = parent.numPredicates;
         this.childNodes = new FilterUCTNode[0];
-        this.chosenPreds = new HashSet<>();
+        this.chosenPreds = new ArrayList<>();
         this.unchosenPreds = new ArrayList<>();
         this.actionToPredicate = new int[0];
         this.filterOp = parent.filterOp;
@@ -104,9 +102,11 @@ public class FilterUCTNode {
         this.branchingActions = 0;
         this.indexActions = 0;
         cachedEval = null;
+        indexPrefixLength = 0;
     }
 
-    public FilterUCTNode(FilterUCTNode parent, long roundCtr, int nextPred) {
+    public FilterUCTNode(FilterUCTNode parent, long roundCtr, int nextPred,
+                         int indexPrefixLength) {
         this.indexActions = 0;
         this.branchingActions = 0;
         this.treeLevel = parent.treeLevel + 1;
@@ -116,7 +116,7 @@ public class FilterUCTNode {
                 parent.branchingActions - parent.indexActions;
         this.childNodes = new FilterUCTNode[nrActions];
 
-        this.chosenPreds = new HashSet<>();
+        this.chosenPreds = new ArrayList<>();
         this.chosenPreds.addAll(parent.chosenPreds);
         this.chosenPreds.add(nextPred);
 
@@ -145,6 +145,7 @@ public class FilterUCTNode {
             priorityActions.add(actionCtr);
         }
         cachedEval = null;
+        this.indexPrefixLength = indexPrefixLength;
     }
 
     int selectAction(SelectionPolicy policy) {
@@ -186,7 +187,8 @@ public class FilterUCTNode {
                         quality = random.nextDouble();
                     } else {
                         quality = meanReward +
-                                FilterSearchConfig.EXPLORATION_FACTOR * exploration;
+                                FilterSearchConfig.EXPLORATION_FACTOR *
+                                        exploration;
                     }
                     break;
             }
@@ -207,10 +209,7 @@ public class FilterUCTNode {
         return bestAction;
     }
 
-    public double sample(long roundCtr, FilterState state, int budget,
-                         ExpressionInfo unaryPred,
-                         Map<ColumnRef, ColumnRef> colMap,
-                         List<Expression> predicates) throws Exception {
+    public double sample(long roundCtr, FilterState state, int budget) {
         if (nrActions == 0) {
             return filterOp.executeWithBudget(budget, state);
         }
@@ -225,18 +224,9 @@ public class FilterUCTNode {
         } else {
             int predicate = actionToPredicate[action];
             state.order[treeLevel] = predicate;
-            if (this.treeLevel == 1) {
+            if (this.cachedEval != null) {
                 state.cachedTil = treeLevel;
-                Expression expr = null;
-                for (int i = 0; i <= treeLevel; i++) {
-                    if (expr == null) {
-                        expr = predicates.get(state.order[i]);
-                    } else {
-                        expr = new AndExpression(expr,
-                                predicates.get(state.order[i]));
-                    }
-                }
-                state.cachedEval = compilePred(unaryPred, expr, colMap);
+                state.cachedEval = this.cachedEval;
             }
 
             if (treeLevel == 0) {
@@ -249,14 +239,13 @@ public class FilterUCTNode {
             boolean canExpand = createdIn != roundCtr;
             if (childNodes[action] == null && canExpand) {
                 childNodes[action] = new FilterUCTNode(this, roundCtr,
-                        predicate);
+                        predicate, state.useIndexScan ? 1 : 0);
             }
         }
 
         FilterUCTNode child = childNodes[action];
         double reward = (child != null) ?
-                child.sample(roundCtr, state, budget, unaryPred, colMap,
-                        predicates) :
+                child.sample(roundCtr, state, budget) :
                 playout(state, budget);
 
         updateStatistics(action, reward);
@@ -285,7 +274,39 @@ public class FilterUCTNode {
         accumulatedReward[selectedAction] += reward;
     }
 
-    public void setCompiled(UnaryBoolEval eval) {
+    public void setCompiledEval(UnaryBoolEval eval) {
         this.cachedEval = eval;
+    }
+
+    public UnaryBoolEval getCompiledEval() {
+        return cachedEval;
+    }
+
+    public List<Integer> getPreds() {
+        return chosenPreds;
+    }
+
+    public void getPopularNodes(PriorityQueue<FilterUCTNode> popularNodes) {
+        if (this.treeLevel > 1 &&
+                this.getPreds().size() - this.indexPrefixLength >= 1) {
+            popularNodes.add(this);
+            if (popularNodes.size() > COMPILE_QUEUE) {
+                popularNodes.poll();
+            }
+        }
+
+        for (int a = 0; a < Math.min(nrActions, numPredicates); ++a) {
+            if (this.childNodes[a] != null) {
+                this.childNodes[a].getPopularNodes(popularNodes);
+            }
+        }
+    }
+
+    public int getNrVisits() {
+        return nrVisits;
+    }
+
+    public int getIndexPrefixLength() {
+        return indexPrefixLength;
     }
 }
