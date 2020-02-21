@@ -5,6 +5,7 @@ import expressions.compilation.UnaryBoolEval;
 import indexing.HashIndex;
 import net.sf.jsqlparser.expression.Expression;
 import org.apache.commons.lang3.tuple.Pair;
+import org.eclipse.collections.api.list.ImmutableList;
 import org.eclipse.collections.api.list.primitive.MutableIntList;
 import org.eclipse.collections.impl.factory.primitive.IntLists;
 
@@ -16,14 +17,14 @@ public class BudgetedFilter {
     private final int cardinality;
     private int lastCompletedRow;
     private MutableIntList result;
-    private List<Expression> predicates;
-    private List<UnaryBoolEval> compiled;
+    private ImmutableList<Expression> predicates;
+    private ImmutableList<UnaryBoolEval> compiled;
     private List<HashIndex> indices;
     private List<Number> values;
 
     public BudgetedFilter(String tableName,
-                          List<Expression> predicates,
-                          List<UnaryBoolEval> compiled,
+                          ImmutableList<Expression> predicates,
+                          ImmutableList<UnaryBoolEval> compiled,
                           List<HashIndex> indices,
                           List<Number> values) {
         this.result = IntLists.mutable.empty();

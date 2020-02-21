@@ -11,7 +11,6 @@ import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
 import operators.Materialize;
 import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.ImmutableList;
-import org.eclipse.collections.api.list.MutableList;
 import org.eclipse.collections.api.list.primitive.IntList;
 import org.eclipse.collections.api.list.primitive.MutableIntList;
 import org.eclipse.collections.impl.factory.primitive.IntLists;
@@ -175,7 +174,7 @@ public class SearchPreprocessor implements Preprocessor {
 
         // Determine rows satisfying unary predicate
         loadPredCols(unaryPred, preSummary.columnMapping);
-        MutableList<UnaryBoolEval> compiled =
+        ImmutableList<UnaryBoolEval> compiled =
                 predicates.asParallel(threadPool, 1).collect(expression -> {
                     try {
                         return compilePred(unaryPred,
@@ -183,7 +182,7 @@ public class SearchPreprocessor implements Preprocessor {
                     } catch (Exception e) {}
 
                     return null;
-                }).toList();
+                }).toList().toImmutable();
         List<HashIndex> indices = new ArrayList<>(predicates.size());
         List<Number> values = new ArrayList<>(predicates.size());
         for (Expression expression : predicates) {
@@ -226,8 +225,8 @@ public class SearchPreprocessor implements Preprocessor {
     }
 
     private MutableIntList filterUCT(String tableName,
-                                     List<Expression> predicates,
-                                     List<UnaryBoolEval> compiled,
+                                     ImmutableList<Expression> predicates,
+                                     ImmutableList<UnaryBoolEval> compiled,
                                      List<HashIndex> indices,
                                      List<Number> values,
                                      ExpressionInfo unaryPred,
