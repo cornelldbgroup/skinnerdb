@@ -11,6 +11,7 @@ import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
 import operators.Materialize;
 import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.ImmutableList;
+import org.eclipse.collections.api.list.MutableList;
 import org.eclipse.collections.api.list.primitive.IntList;
 import org.eclipse.collections.api.list.primitive.MutableIntList;
 import org.eclipse.collections.impl.factory.primitive.IntLists;
@@ -174,15 +175,32 @@ public class SearchPreprocessor implements Preprocessor {
 
         // Determine rows satisfying unary predicate
         loadPredCols(unaryPred, preSummary.columnMapping);
-        ImmutableList<UnaryBoolEval> compiled =
-                predicates.asParallel(threadPool, 1).collect(expression -> {
-                    try {
-                        return compilePred(unaryPred,
-                                expression, preSummary.columnMapping);
-                    } catch (Exception e) {}
 
-                    return null;
-                }).toList().toImmutable();
+        ImmutableList<UnaryBoolEval> compiled;
+        if (predicates.size() >= 5) {
+            // parallel compile them bc thread overheads are bad
+            compiled =
+                    predicates.asParallel(threadPool, 1).collect(expression -> {
+                        try {
+                            return compilePred(unaryPred,
+                                    expression, preSummary.columnMapping);
+                        } catch (Exception e) {}
+
+                        return null;
+                    }).toList().toImmutable();
+        } else {
+            MutableList<UnaryBoolEval> compiledBuilder =
+                    Lists.mutable.ofInitialCapacity(predicates.size());
+
+            for (Expression expression : predicates) {
+                compiledBuilder.add(compilePred(unaryPred,
+                        expression, preSummary.columnMapping));
+            }
+
+            compiled = compiledBuilder.toImmutable();
+        }
+
+
         List<HashIndex> indices = new ArrayList<>(predicates.size());
         List<Number> values = new ArrayList<>(predicates.size());
         for (Expression expression : predicates) {
