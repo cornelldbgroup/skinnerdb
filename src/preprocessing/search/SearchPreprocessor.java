@@ -41,6 +41,9 @@ public class SearchPreprocessor implements Preprocessor {
     private boolean hadError = false;
 
     private ExecutorService threadPool = null;
+    private ExecutorService compilePool = null;
+
+    Map<List<Integer>, UnaryBoolEval> compileCache = null;
 
     /**
      * Executes pre-processing.
@@ -79,8 +82,10 @@ public class SearchPreprocessor implements Preprocessor {
 
         final boolean shouldFilter = shouldFilter(query, preSummary);
 
+        int threads = Runtime.getRuntime().availableProcessors();
         threadPool =
-                Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
+                Executors.newFixedThreadPool(threads - 1);
+        compilePool = Executors.newFixedThreadPool(1);
 
         List<Future> futures = new ArrayList<>();
         for (String alias : query.aliasToTable.keySet()) {
@@ -124,6 +129,7 @@ public class SearchPreprocessor implements Preprocessor {
             f.get();
         }
         threadPool.shutdown();
+        compilePool.shutdown();
 
         // Abort pre-processing if filtering error occurred
         if (hadError) {
@@ -256,7 +262,6 @@ public class SearchPreprocessor implements Preprocessor {
                 compiled, indices, values);
 
         FilterState state = new FilterState(nrCompiled);
-
         FilterUCTNode root = new FilterUCTNode(filterOp, roundCtr, nrCompiled,
                 indices);
         long nextForget = 1;
@@ -287,7 +292,7 @@ public class SearchPreprocessor implements Preprocessor {
                     FilterUCTNode node = compile.poll();
 
                     if (node.getCompiledEval() == null) {
-                        threadPool.submit(() -> {
+                        compilePool.submit(() -> {
                             Expression expr = null;
                             for (int i = node.getIndexPrefixLength();
                                  i < node.getPreds().size(); i++) {
