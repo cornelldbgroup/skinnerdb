@@ -177,7 +177,7 @@ public class SearchPreprocessor implements Preprocessor {
         loadPredCols(unaryPred, preSummary.columnMapping);
 
         ImmutableList<UnaryBoolEval> compiled;
-        if (predicates.size() >= 4) {
+        if (predicates.size() >= 5) {
             // parallel compile them bc thread overheads are bad
             compiled =
                     predicates.asParallel(threadPool, 1).collect(expression -> {
