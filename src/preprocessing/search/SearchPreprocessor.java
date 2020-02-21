@@ -273,7 +273,7 @@ public class SearchPreprocessor implements Preprocessor {
                 nextForget *= 10;
             }
 
-            if (false && roundCtr == nextCompile) {
+            if (roundCtr == nextCompile) {
                 nextCompile += nextCompile;
 
                 int compileSetSize = predicates.size();
@@ -281,9 +281,11 @@ public class SearchPreprocessor implements Preprocessor {
                         new PriorityQueue<>(compileSetSize,
                                 Comparator.comparingInt
                                         (FilterUCTNode::getAddedSavedCalls));
+                root.addChildrenToCompile(compile, compileSetSize);
                 for (int j = 0; j < compileSetSize; j++) {
                     if (compile.size() == 0) break;
                     FilterUCTNode node = compile.poll();
+                    System.out.println(node.getPreds().toString());
 
                     if (node.getCompiledEval() == null) {
                         threadPool.submit(() -> {
