@@ -260,7 +260,7 @@ public class SearchPreprocessor implements Preprocessor {
         FilterUCTNode root = new FilterUCTNode(filterOp, roundCtr, nrCompiled,
                 indices);
         long nextForget = 1;
-        long nextCompile = 60;
+        long nextCompile = 15;
 
         while (!filterOp.isFinished()) {
             ++roundCtr;
@@ -274,7 +274,7 @@ public class SearchPreprocessor implements Preprocessor {
             }
 
             if (roundCtr == nextCompile) {
-                nextCompile += nextCompile;
+                nextCompile += 100;
 
                 int compileSetSize = predicates.size();
                 PriorityQueue<FilterUCTNode> compile =
