@@ -20,6 +20,9 @@ import query.QueryInfo;
 import statistics.PreStats;
 
 import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import static operators.Filter.*;
 import static preprocessing.PreprocessorUtil.*;
@@ -33,6 +36,8 @@ public class SearchPreprocessor implements Preprocessor {
      * without an exception being thrown.
      */
     private boolean hadError = false;
+
+    private ExecutorService threadPool = null;
 
     /**
      * Executes pre-processing.
@@ -71,39 +76,50 @@ public class SearchPreprocessor implements Preprocessor {
 
         final boolean shouldFilter = shouldFilter(query, preSummary);
 
-        // Iterate over query aliases
-        query.aliasToTable.keySet().parallelStream().forEach(alias -> {
-            // Collect required columns (for joins and post-processing) for
-            // this table
-            List<ColumnRef> curRequiredCols = new ArrayList<>();
-            for (ColumnRef requiredCol : requiredCols) {
-                if (requiredCol.aliasName.equals(alias)) {
-                    curRequiredCols.add(requiredCol);
+        threadPool =
+                Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
+
+        List<Future> futures = new ArrayList<>();
+        for (String alias : query.aliasToTable.keySet()) {
+            futures.add(threadPool.submit(() -> {
+                // Collect required columns (for joins and
+                // post-processing) for
+                // this table
+                List<ColumnRef> curRequiredCols = new ArrayList<>();
+                for (ColumnRef requiredCol : requiredCols) {
+                    if (requiredCol.aliasName.equals(alias)) {
+                        curRequiredCols.add(requiredCol);
+                    }
                 }
-            }
-            // Get applicable unary predicates
-            ExpressionInfo curUnaryPred = null;
-            for (ExpressionInfo exprInfo : query.unaryPredicates) {
-                if (exprInfo.aliasesMentioned.contains(alias)) {
-                    curUnaryPred = exprInfo;
+                // Get applicable unary predicates
+                ExpressionInfo curUnaryPred = null;
+                for (ExpressionInfo exprInfo : query.unaryPredicates) {
+                    if (exprInfo.aliasesMentioned.contains(alias)) {
+                        curUnaryPred = exprInfo;
+                    }
                 }
-            }
-            // Filter and project if enabled
-            if (curUnaryPred != null && PreConfig.PRE_FILTER) {
-                try {
-                    List<Expression> conjuncts = curUnaryPred.conjuncts;
-                    filterProject(query, curUnaryPred, conjuncts, alias,
-                            curRequiredCols, preSummary, shouldFilter);
-                } catch (Exception e) {
-                    System.err.println("Error filtering " + alias);
-                    e.printStackTrace();
-                    hadError = true;
+                // Filter and project if enabled
+                if (curUnaryPred != null && PreConfig.PRE_FILTER) {
+                    try {
+                        List<Expression> conjuncts = curUnaryPred.conjuncts;
+                        filterProject(query, curUnaryPred, conjuncts, alias,
+                                curRequiredCols, preSummary, shouldFilter);
+                    } catch (Exception e) {
+                        System.err.println("Error filtering " + alias);
+                        e.printStackTrace();
+                        hadError = true;
+                    }
+                } else {
+                    String table = query.aliasToTable.get(alias);
+                    preSummary.aliasToFiltered.put(alias, table);
                 }
-            } else {
-                String table = query.aliasToTable.get(alias);
-                preSummary.aliasToFiltered.put(alias, table);
-            }
-        });
+            }));
+        }
+
+        for (Future f : futures) {
+            f.get();
+        }
+        threadPool.shutdown();
 
         // Abort pre-processing if filtering error occurred
         if (hadError) {
@@ -248,19 +264,23 @@ public class SearchPreprocessor implements Preprocessor {
                     FilterUCTNode node = compile.poll();
 
                     if (node.getCompiledEval() == null) {
-                        Expression expr = null;
-                        for (int i = node.getIndexPrefixLength();
-                             i < node.getPreds().size(); i++) {
-                            if (expr == null) {
-                                expr = predicates.get(node.getPreds().get(i));
-                            } else {
-                                expr = new AndExpression(expr,
-                                        predicates.get(node.getPreds().get(i)));
+                        threadPool.submit(() -> {
+                            Expression expr = null;
+                            for (int i = node.getIndexPrefixLength();
+                                 i < node.getPreds().size(); i++) {
+                                if (expr == null) {
+                                    expr = predicates.get(node.getPreds().get(i));
+                                } else {
+                                    expr = new AndExpression(expr,
+                                            predicates.get(node.getPreds().get(i)));
+                                }
                             }
-                        }
 
-                        node.setCompiledEval(compilePred(unaryPred, expr,
-                                colMap));
+                            try {
+                                node.setCompiledEval(
+                                        compilePred(unaryPred, expr, colMap));
+                            } catch (Exception e) {}
+                        });
                     }
 
                     node.addChildrenToCompile(compile, compileSetSize);
