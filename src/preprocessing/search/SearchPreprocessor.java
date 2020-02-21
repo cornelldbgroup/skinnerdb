@@ -235,7 +235,7 @@ public class SearchPreprocessor implements Preprocessor {
                 nextForget *= 10;
             }
 
-            if (roundCtr == nextCompile) {
+            if (false) {
                 nextCompile += nextCompile;
 
                 int compileSetSize = predicates.size();
@@ -247,17 +247,18 @@ public class SearchPreprocessor implements Preprocessor {
                     if (compile.size() == 0) break;
                     FilterUCTNode node = compile.poll();
 
-                    Expression expr = null;
-                    for (int i = node.getIndexPrefixLength();
-                         i < node.getPreds().size(); i++) {
-                        if (expr == null) {
-                            expr = predicates.get(node.getPreds().get(i));
-                        } else {
-                            expr = new AndExpression(expr,
-                                    predicates.get(node.getPreds().get(i)));
-                        }
-                    }
                     if (node.getCompiledEval() == null) {
+                        Expression expr = null;
+                        for (int i = node.getIndexPrefixLength();
+                             i < node.getPreds().size(); i++) {
+                            if (expr == null) {
+                                expr = predicates.get(node.getPreds().get(i));
+                            } else {
+                                expr = new AndExpression(expr,
+                                        predicates.get(node.getPreds().get(i)));
+                            }
+                        }
+
                         node.setCompiledEval(compilePred(unaryPred, expr,
                                 colMap));
                     }
