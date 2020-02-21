@@ -123,7 +123,7 @@ public class SearchPreprocessor implements Preprocessor {
         for (Future f : futures) {
             f.get();
         }
-        threadPool.shutdown();
+        threadPool.shutdownNow();
 
         // Abort pre-processing if filtering error occurred
         if (hadError) {
