@@ -23,7 +23,8 @@ import java.util.*;
 
 import static operators.Filter.*;
 import static preprocessing.PreprocessorUtil.*;
-import static preprocessing.search.FilterSearchConfig.*;
+import static preprocessing.search.FilterSearchConfig.FORGET;
+import static preprocessing.search.FilterSearchConfig.ROWS_PER_TIMESTEP;
 
 public class SearchPreprocessor implements Preprocessor {
     /**
@@ -221,7 +222,7 @@ public class SearchPreprocessor implements Preprocessor {
         FilterUCTNode root = new FilterUCTNode(filterOp, roundCtr, nrCompiled,
                 indices);
         long nextForget = 1;
-        long nextCompile = 15;
+        long nextCompile = 60;
 
         while (!filterOp.isFinished()) {
             ++roundCtr;
@@ -235,13 +236,17 @@ public class SearchPreprocessor implements Preprocessor {
             }
 
             if (roundCtr == nextCompile) {
-                nextCompile *= 2;
+                nextCompile += nextCompile;
 
+                int compileSetSize = predicates.size();
                 PriorityQueue<FilterUCTNode> compile =
-                        new PriorityQueue<>(COMPILE_QUEUE,
-                                Comparator.comparingInt(FilterUCTNode::getNrVisits));
-                root.getPopularNodes(compile);
-                for (FilterUCTNode node : compile) {
+                        new PriorityQueue<>(compileSetSize,
+                                Comparator.comparingInt
+                                        (FilterUCTNode::getAddedSavedCalls));
+                for (int j = 0; j < compileSetSize; j++) {
+                    if (compile.size() == 0) break;
+                    FilterUCTNode node = compile.poll();
+
                     Expression expr = null;
                     for (int i = node.getIndexPrefixLength();
                          i < node.getPreds().size(); i++) {
@@ -256,6 +261,8 @@ public class SearchPreprocessor implements Preprocessor {
                         node.setCompiledEval(compilePred(unaryPred, expr,
                                 colMap));
                     }
+
+                    node.addChildrenToCompile(compile, compileSetSize);
                 }
             }
         }

@@ -7,8 +7,6 @@ import joining.uct.SelectionPolicy;
 
 import java.util.*;
 
-import static preprocessing.search.FilterSearchConfig.COMPILE_QUEUE;
-
 public class FilterUCTNode {
     final Random random = new Random();
 
@@ -286,27 +284,24 @@ public class FilterUCTNode {
         return chosenPreds;
     }
 
-    public void getPopularNodes(PriorityQueue<FilterUCTNode> popularNodes) {
-        if (this.treeLevel > 1 &&
-                this.getPreds().size() - this.indexPrefixLength >= 1) {
-            popularNodes.add(this);
-            if (popularNodes.size() > COMPILE_QUEUE) {
-                popularNodes.poll();
-            }
-        }
-
+    public void addChildrenToCompile(PriorityQueue<FilterUCTNode> compile,
+                                     int compileSetSize) {
         for (int a = 0; a < Math.min(nrActions, numPredicates); ++a) {
             if (this.childNodes[a] != null) {
-                this.childNodes[a].getPopularNodes(popularNodes);
+                compile.add(this.childNodes[a]);
+                if (compile.size() >= compileSetSize) {
+                    compile.poll();
+                }
             }
         }
-    }
-
-    public int getNrVisits() {
-        return nrVisits;
     }
 
     public int getIndexPrefixLength() {
         return indexPrefixLength;
+    }
+
+    public int getAddedSavedCalls() {
+        // -nrVisits*(chosenPreds.size() - 1) + nrVisits*(chosenPreds.size())
+        return nrVisits;
     }
 }
