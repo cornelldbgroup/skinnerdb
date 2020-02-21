@@ -9,6 +9,9 @@ import indexing.HashIndex;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
 import operators.Materialize;
+import org.eclipse.collections.api.factory.Lists;
+import org.eclipse.collections.api.list.ImmutableList;
+import org.eclipse.collections.api.list.MutableList;
 import org.eclipse.collections.api.list.primitive.IntList;
 import org.eclipse.collections.api.list.primitive.MutableIntList;
 import org.eclipse.collections.impl.factory.primitive.IntLists;
@@ -101,7 +104,8 @@ public class SearchPreprocessor implements Preprocessor {
                 // Filter and project if enabled
                 if (curUnaryPred != null && PreConfig.PRE_FILTER) {
                     try {
-                        List<Expression> conjuncts = curUnaryPred.conjuncts;
+                        ImmutableList<Expression> conjuncts =
+                                Lists.immutable.ofAll(curUnaryPred.conjuncts);
                         filterProject(query, curUnaryPred, conjuncts, alias,
                                 curRequiredCols, preSummary, shouldFilter);
                     } catch (Exception e) {
@@ -160,7 +164,8 @@ public class SearchPreprocessor implements Preprocessor {
      * @param preSummary   summary of pre-processing steps
      */
     private void filterProject(QueryInfo queryInfo, ExpressionInfo unaryPred,
-                               List<Expression> predicates, String alias,
+                               ImmutableList<Expression> predicates,
+                               String alias,
                                List<ColumnRef> requiredCols,
                                Context preSummary,
                                boolean shouldFilter) throws Exception {
@@ -170,15 +175,15 @@ public class SearchPreprocessor implements Preprocessor {
 
         // Determine rows satisfying unary predicate
         loadPredCols(unaryPred, preSummary.columnMapping);
-        List<UnaryBoolEval> compiled = new ArrayList<>(predicates.size());
-        for (Expression expression : predicates) {
-            long startTime = System.nanoTime();
-            UnaryBoolEval eval = compilePred(unaryPred,
-                    expression, preSummary.columnMapping);
-            long endTime = System.nanoTime();
-            PreStats.compileNanos += (endTime - startTime);
-            compiled.add(eval);
-        }
+        MutableList<UnaryBoolEval> compiled =
+                predicates.asParallel(threadPool, 1).collect(expression -> {
+                    try {
+                        return compilePred(unaryPred,
+                                expression, preSummary.columnMapping);
+                    } catch (Exception e) {}
+
+                    return null;
+                }).toList();
         List<HashIndex> indices = new ArrayList<>(predicates.size());
         List<Number> values = new ArrayList<>(predicates.size());
         for (Expression expression : predicates) {
@@ -251,7 +256,7 @@ public class SearchPreprocessor implements Preprocessor {
                 nextForget *= 10;
             }
 
-            if (false) {
+            if (roundCtr == nextCompile) {
                 nextCompile += nextCompile;
 
                 int compileSetSize = predicates.size();
