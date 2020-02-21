@@ -285,7 +285,6 @@ public class SearchPreprocessor implements Preprocessor {
                 for (int j = 0; j < compileSetSize; j++) {
                     if (compile.size() == 0) break;
                     FilterUCTNode node = compile.poll();
-                    System.out.println(node.getPreds().toString());
 
                     if (node.getCompiledEval() == null) {
                         threadPool.submit(() -> {
