@@ -250,7 +250,7 @@ public class SearchPreprocessor implements Preprocessor {
         FilterUCTNode root = new FilterUCTNode(filterOp, roundCtr, nrCompiled,
                 indices);
         long nextForget = 1;
-        long nextCompile = 15;
+        long nextCompile = 50;
 
         while (!filterOp.isFinished()) {
             ++roundCtr;
