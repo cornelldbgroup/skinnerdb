@@ -81,7 +81,8 @@ public class BenchUtil {
         benchOut.print(queryName + "\t");
         benchOut.print(totalMillis + "\t");
         benchOut.print(PreStats.preMillis + "\t");
-        benchOut.print(PreStats.compileNanos / 1e6 + "\t");
+        benchOut.print(String.format("%.6f", PreStats.compileNanos / 1e6) +
+                "\t");
         benchOut.print(PostStats.postMillis + "\t");
         benchOut.print(JoinStats.nrTuples + "\t");
         benchOut.print(JoinStats.nrIterations + "\t");
@@ -91,8 +92,8 @@ public class BenchUtil {
         benchOut.print(JoinStats.nrUctNodes + "\t");
         benchOut.print(JoinStats.nrPlansTried + "\t");
         benchOut.print(skinnerJoinCard + "\t");
-        benchOut.print(JoinStats.nrSamples + "\t");
-        benchOut.print(JoinStats.avgReward + "\t");
+        benchOut.print(String.format("%.6f", (JoinStats.nrSamples) + "\t");
+        benchOut.print(String.format("%.6f", JoinStats.avgReward) + "\t");
         benchOut.print(JoinStats.maxReward + "\t");
         benchOut.println(JoinStats.totalWork);
         benchOut.flush();
