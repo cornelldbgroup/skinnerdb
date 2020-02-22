@@ -51,11 +51,11 @@ public class RootNode extends UCTNode<FilterAction, BudgetedFilter> {
         if (action == 0) {
             state.type = FilterAction.ActionType.AVOID_BRANCHING;
         } else if (action >= 1 && action < 1 + predicates) {
-            state.type = FilterAction.ActionType.INDEX_SCAN;
+            state.type = FilterAction.ActionType.BRANCHING;
             int predicate = actionToPredicate[action];
             state.order[treeLevel] = predicate;
         } else { //action >= 1 + predicates && action < 1 + predicates + indexes
-            state.type = FilterAction.ActionType.BRANCHING;
+            state.type = FilterAction.ActionType.INDEX_SCAN;
             int predicate = actionToPredicate[action];
             state.order[treeLevel] = predicate;
         }
