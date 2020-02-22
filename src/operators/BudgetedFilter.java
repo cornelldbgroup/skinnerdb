@@ -14,6 +14,7 @@ import uct.Environment;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class BudgetedFilter implements Environment<FilterAction> {
     private final int cardinality;
@@ -23,12 +24,14 @@ public class BudgetedFilter implements Environment<FilterAction> {
     private ImmutableList<UnaryBoolEval> compiled;
     private List<HashIndex> indices;
     private List<Number> values;
+    public final ConcurrentHashMap<List<Integer>, UnaryBoolEval> compileCache;
 
     public BudgetedFilter(String tableName,
                           ImmutableList<Expression> predicates,
                           ImmutableList<UnaryBoolEval> compiled,
                           List<HashIndex> indices,
-                          List<Number> values) {
+                          List<Number> values,
+                          ConcurrentHashMap<List<Integer>, UnaryBoolEval> cc) {
         this.result = IntLists.mutable.empty();
         this.compiled = compiled;
         this.cardinality = CatalogManager.getCardinality(tableName);
@@ -36,6 +39,7 @@ public class BudgetedFilter implements Environment<FilterAction> {
         this.indices = indices;
         this.predicates = predicates;
         this.values = values;
+        this.compileCache = cc;
     }
 
 

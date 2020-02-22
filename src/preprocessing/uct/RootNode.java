@@ -4,13 +4,15 @@ import operators.BudgetedFilter;
 import uct.SelectionPolicy;
 import uct.UCTNode;
 
-public class FilterNode extends UCTNode<FilterAction, BudgetedFilter> {
+import java.util.PriorityQueue;
+
+public class RootNode extends UCTNode<FilterAction, BudgetedFilter> {
     private final int indexes;
     private final int predicates;
     private final int[] actionToPredicate;
 
 
-    public FilterNode(BudgetedFilter env) {
+    public RootNode(BudgetedFilter env) {
         super(env, 1 + env.numPredicates() + env.numIndexes(), 0, 0,
                 SelectionPolicy.UCB1);
         this.predicates = env.numPredicates();
@@ -56,6 +58,16 @@ public class FilterNode extends UCTNode<FilterAction, BudgetedFilter> {
             state.type = FilterAction.ActionType.BRANCHING;
             int predicate = actionToPredicate[action];
             state.order[treeLevel] = predicate;
+        }
+    }
+
+    public void populateInitialSet(PriorityQueue<Compilable> compile,
+                                   int compileSetSize) {
+        for (int a = 1; a < 1 + predicates; ++a) {
+            if (this.childNodes[a] != null) {
+                ((Compilable) this.childNodes[a]).addChildrenToCompile(compile,
+                        compileSetSize);
+            }
         }
     }
 }

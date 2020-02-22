@@ -1,20 +1,19 @@
 package preprocessing.uct;
 
+import expressions.compilation.UnaryBoolEval;
 import operators.BudgetedFilter;
 import uct.SelectionPolicy;
 import uct.UCTNode;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 
-public class BranchingNode extends UCTNode<FilterAction, BudgetedFilter> {
+public class BranchingNode extends UCTNode<FilterAction, BudgetedFilter>
+        implements Compilable {
     private final int[] actionToPredicate;
     private final List<Integer> chosenPreds;
     private final List<Integer> unchosenPreds;
 
-    public BranchingNode(FilterNode root, int nextPred, long roundCtr) {
+    public BranchingNode(RootNode root, int nextPred, long roundCtr) {
         super(root.environment, root.environment.numPredicates() - 1,
                 root.treeLevel + 1, roundCtr, SelectionPolicy.UCB1);
         this.chosenPreds = Arrays.asList(nextPred);
@@ -76,5 +75,34 @@ public class BranchingNode extends UCTNode<FilterAction, BudgetedFilter> {
     protected void updateActionState(FilterAction state, int action) {
         int predicate = actionToPredicate[action];
         state.order[treeLevel] = predicate;
+
+        UnaryBoolEval eval = environment.compileCache.get(unchosenPreds);
+        if (eval != null) {
+            state.cachedTil = treeLevel;
+            state.cachedEval = eval;
+        }
+    }
+
+    public void addChildrenToCompile(PriorityQueue<Compilable> compile,
+                                     int compileSetSize) {
+        for (int a = 0; a < nrActions; ++a) {
+            if (this.childNodes[a] != null) {
+                compile.add((Compilable) this.childNodes[a]);
+                if (compile.size() >= compileSetSize) {
+                    compile.poll();
+                }
+            }
+        }
+    }
+
+    @Override
+    public List<Integer> getUnchosenPreds() {
+        return unchosenPreds;
+    }
+
+    @Override
+    public int getAddedUtility() {
+        // -nrVisits*(chosenPreds.size() - 1) + nrVisits*(chosenPreds.size())
+        return nrVisits;
     }
 }
