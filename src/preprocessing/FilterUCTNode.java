@@ -174,7 +174,8 @@ public class FilterUCTNode {
             switch (policy) {
                 case UCB1:
                     quality = meanReward +
-                            SearchPreprocessorConfig.EXPLORATION_FACTOR * exploration;
+                            SearchPreprocessorConfig.EXPLORATION_FACTOR *
+                                    exploration;
                     break;
                 case MAX_REWARD:
                 case EPSILON_GREEDY:

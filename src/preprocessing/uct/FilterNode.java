@@ -7,12 +7,27 @@ import uct.UCTNode;
 public class FilterNode extends UCTNode<FilterAction, BudgetedFilter> {
     private final int indexes;
     private final int predicates;
+    private final int[] actionToPredicate;
+
 
     public FilterNode(BudgetedFilter env) {
         super(env, 1 + env.numPredicates() + env.numIndexes(), 0, 0,
                 SelectionPolicy.UCB1);
         this.predicates = env.numPredicates();
         this.indexes = env.numIndexes();
+        this.actionToPredicate = new int[nrActions];
+
+        int index = 0;
+        for (int action = 1; action < nrActions; action++) {
+            if (action < 1 + predicates) {
+                this.actionToPredicate[action] = action - 1;
+            } else {
+                while (environment.getIndex(index) == null) {
+                    index++;
+                }
+                this.actionToPredicate[action] = index;
+            }
+        }
     }
 
     @Override
@@ -22,22 +37,25 @@ public class FilterNode extends UCTNode<FilterAction, BudgetedFilter> {
         if (action == 0) {
             return new LeafNode(this, roundCtr);
         } else if (action >= 1 && action < 1 + predicates) {
-            return null;
+            return new BranchingNode(this, actionToPredicate[action], roundCtr);
         } else { //action >= 1 + predicates && action < 1 + predicates + indexes
             return null;
         }
     }
 
     @Override
-    protected void updateActionState(FilterAction actionState,
-                                     int action) {
+    protected void updateActionState(FilterAction state, int action) {
 
         if (action == 0) {
-            actionState.type = FilterAction.ActionType.AVOID_BRANCHING;
+            state.type = FilterAction.ActionType.AVOID_BRANCHING;
         } else if (action >= 1 && action < 1 + predicates) {
-            actionState.type = FilterAction.ActionType.INDEX_SCAN;
+            state.type = FilterAction.ActionType.INDEX_SCAN;
+            int predicate = actionToPredicate[action];
+            state.order[treeLevel] = predicate;
         } else { //action >= 1 + predicates && action < 1 + predicates + indexes
-            actionState.type = FilterAction.ActionType.BRANCHING;
+            state.type = FilterAction.ActionType.BRANCHING;
+            int predicate = actionToPredicate[action];
+            state.order[treeLevel] = predicate;
         }
     }
 }

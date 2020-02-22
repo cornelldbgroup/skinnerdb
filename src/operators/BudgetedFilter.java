@@ -226,4 +226,8 @@ public class BudgetedFilter implements Environment<FilterAction> {
         for (HashIndex index : indices) if (index != null) n++;
         return n;
     }
+
+    public HashIndex getIndex(int index) {
+        return indices.get(index);
+    }
 }
