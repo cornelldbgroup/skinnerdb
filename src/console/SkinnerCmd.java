@@ -24,6 +24,7 @@ import org.jline.reader.LineReader;
 import org.jline.reader.LineReaderBuilder;
 import org.jline.reader.UserInterruptException;
 import org.jline.reader.impl.history.DefaultHistory;
+import parallel.ParallelService;
 import print.RelationPrinter;
 import query.SQLexception;
 
@@ -380,6 +381,7 @@ public class SkinnerCmd {
         }
         // Load database schema and initialize path mapping
         dbDir = args[0];
+        ParallelService.init();
         PathUtil.initSchemaPaths(dbDir);
         CatalogManager.loadDB(PathUtil.schemaPath);
         PathUtil.initDataPaths(CatalogManager.currentDB);

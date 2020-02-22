@@ -8,6 +8,8 @@ import config.GeneralConfig;
 import data.ColumnData;
 import joining.result.ResultTuple;
 import org.eclipse.collections.api.list.primitive.IntList;
+import org.eclipse.collections.impl.parallel.ParallelIterate;
+import parallel.ParallelService;
 import query.ColumnRef;
 
 import java.util.*;
@@ -60,7 +62,7 @@ public class Materialize {
             }
         }
         // Generate column data
-        sourceColRefs.parallelStream().forEach(sourceColRef -> {
+        ParallelIterate.forEach(sourceColRefs, sourceColRef -> {
             // Copy relevant rows into result column
             ColumnData srcData = BufferManager.colToData.get(sourceColRef);
             ColumnData resultData = rowList == null ?
@@ -68,7 +70,7 @@ public class Materialize {
             String columnName = sourceColRef.columnName;
             ColumnRef resultColRef = new ColumnRef(targetRelName, columnName);
             BufferManager.colToData.put(resultColRef, resultData);
-        });
+        }, ParallelService.HIGH_POOL);
         // Update statistics in catalog
         CatalogManager.updateStats(targetRelName);
         // Unload source data if necessary
@@ -127,7 +129,7 @@ public class Materialize {
             resultInfo.addColumn(targetInfo);
         }
         // Materialize result columns
-        sourceCols.parallelStream().forEach(srcQueryRef -> {
+        ParallelIterate.forEach(sourceCols, srcQueryRef -> {
             // Generate target column reference
             String targetCol =
                     srcQueryRef.aliasName + "." + srcQueryRef.columnName;
@@ -139,7 +141,7 @@ public class Materialize {
             ColumnData targetData = srcData.copyRows(tuples, tableIdx);
             // Insert into buffer pool
             BufferManager.colToData.put(targetRef, targetData);
-        });
+        }, ParallelService.HIGH_POOL);
         // Update statistics in catalog
         CatalogManager.updateStats(targetRelName);
     }

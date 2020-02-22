@@ -15,6 +15,8 @@ import org.eclipse.collections.api.list.MutableList;
 import org.eclipse.collections.api.list.primitive.IntList;
 import org.eclipse.collections.api.list.primitive.MutableIntList;
 import org.eclipse.collections.impl.factory.primitive.IntLists;
+import org.eclipse.collections.impl.parallel.ParallelIterate;
+import parallel.ParallelService;
 import preprocessing.Context;
 import preprocessing.Preprocessor;
 import print.RelationPrinter;
@@ -23,9 +25,6 @@ import query.QueryInfo;
 import statistics.PreStats;
 
 import java.util.*;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 
 import static operators.Filter.*;
 import static preprocessing.PreprocessorUtil.*;
@@ -39,9 +38,6 @@ public class SearchPreprocessor implements Preprocessor {
      * without an exception being thrown.
      */
     private boolean hadError = false;
-
-    private ExecutorService threadPool = null;
-    private ExecutorService compilePool = null;
 
     Map<List<Integer>, UnaryBoolEval> compileCache = null;
 
@@ -82,61 +78,50 @@ public class SearchPreprocessor implements Preprocessor {
 
         final boolean shouldFilter = shouldFilter(query, preSummary);
 
-        int threads = Runtime.getRuntime().availableProcessors();
-        threadPool =
-                Executors.newFixedThreadPool(threads - 1);
-        compilePool = Executors.newFixedThreadPool(1);
+        ParallelIterate.forEach(query.aliasToTable.keySet(), alias -> {
+            // Collect required columns (for joins and
+            // post-processing) for
+            // this table
+            List<ColumnRef> curRequiredCols = new ArrayList<>();
+            for (ColumnRef requiredCol : requiredCols) {
+                if (requiredCol.aliasName.equals(alias)) {
+                    curRequiredCols.add(requiredCol);
+                }
+            }
+            // Get applicable unary predicates
+            ExpressionInfo curUnaryPred = null;
+            for (ExpressionInfo exprInfo : query.unaryPredicates) {
+                if (exprInfo.aliasesMentioned.contains(alias)) {
+                    curUnaryPred = exprInfo;
+                }
+            }
+            // Filter and project if enabled
+            if (curUnaryPred != null && PreConfig.PRE_FILTER) {
+                try {
+                    ImmutableList<Expression> conjuncts =
+                            Lists.immutable.ofAll(curUnaryPred.conjuncts);
+                    filterProject(query, curUnaryPred, conjuncts, alias,
+                            curRequiredCols, preSummary, shouldFilter);
+                } catch (Exception e) {
+                    System.err.println("Error filtering " + alias);
+                    e.printStackTrace();
+                    hadError = true;
+                }
+            } else {
+                String table = query.aliasToTable.get(alias);
+                preSummary.aliasToFiltered.put(alias, table);
+            }
+        }, ParallelService.HIGH_POOL);
 
-        List<Future> futures = new ArrayList<>();
-        for (String alias : query.aliasToTable.keySet()) {
-            futures.add(threadPool.submit(() -> {
-                // Collect required columns (for joins and
-                // post-processing) for
-                // this table
-                List<ColumnRef> curRequiredCols = new ArrayList<>();
-                for (ColumnRef requiredCol : requiredCols) {
-                    if (requiredCol.aliasName.equals(alias)) {
-                        curRequiredCols.add(requiredCol);
-                    }
-                }
-                // Get applicable unary predicates
-                ExpressionInfo curUnaryPred = null;
-                for (ExpressionInfo exprInfo : query.unaryPredicates) {
-                    if (exprInfo.aliasesMentioned.contains(alias)) {
-                        curUnaryPred = exprInfo;
-                    }
-                }
-                // Filter and project if enabled
-                if (curUnaryPred != null && PreConfig.PRE_FILTER) {
-                    try {
-                        ImmutableList<Expression> conjuncts =
-                                Lists.immutable.ofAll(curUnaryPred.conjuncts);
-                        filterProject(query, curUnaryPred, conjuncts, alias,
-                                curRequiredCols, preSummary, shouldFilter);
-                    } catch (Exception e) {
-                        System.err.println("Error filtering " + alias);
-                        e.printStackTrace();
-                        hadError = true;
-                    }
-                } else {
-                    String table = query.aliasToTable.get(alias);
-                    preSummary.aliasToFiltered.put(alias, table);
-                }
-            }));
-        }
-
-        for (Future f : futures) {
-            f.get();
-        }
-        threadPool.shutdown();
-        compilePool.shutdown();
 
         // Abort pre-processing if filtering error occurred
         if (hadError) {
             throw new Exception("Error in pre-processor.");
         }
+
         // Create missing indices for columns involved in equi-joins.
         log("Creating indices ...");
+
         createJoinIndices(query, preSummary);
         // Measure processing time
         PreStats.preMillis = System.currentTimeMillis() - startMillis;
@@ -186,14 +171,16 @@ public class SearchPreprocessor implements Preprocessor {
         if (predicates.size() >= 5) {
             // parallel compile them bc thread overheads are bad
             compiled =
-                    predicates.asParallel(threadPool, 1).collect(expression -> {
-                        try {
-                            return compilePred(unaryPred,
-                                    expression, preSummary.columnMapping);
-                        } catch (Exception e) {}
+                    predicates.asParallel(ParallelService.HIGH_POOL, 1)
+                            .collect(expression -> {
+                                try {
+                                    return compilePred(unaryPred,
+                                            expression,
+                                            preSummary.columnMapping);
+                                } catch (Exception e) {}
 
-                        return null;
-                    }).toList().toImmutable();
+                                return null;
+                            }).toList().toImmutable();
         } else {
             MutableList<UnaryBoolEval> compiledBuilder =
                     Lists.mutable.ofInitialCapacity(predicates.size());
@@ -292,15 +279,17 @@ public class SearchPreprocessor implements Preprocessor {
                     FilterUCTNode node = compile.poll();
 
                     if (node.getCompiledEval() == null) {
-                        compilePool.submit(() -> {
+                        ParallelService.LOW_POOL.submit(() -> {
                             Expression expr = null;
                             for (int i = node.getIndexPrefixLength();
                                  i < node.getPreds().size(); i++) {
                                 if (expr == null) {
-                                    expr = predicates.get(node.getPreds().get(i));
+                                    expr = predicates.get(
+                                            node.getPreds().get(i));
                                 } else {
                                     expr = new AndExpression(expr,
-                                            predicates.get(node.getPreds().get(i)));
+                                            predicates.get(
+                                                    node.getPreds().get(i)));
                                 }
                             }
 

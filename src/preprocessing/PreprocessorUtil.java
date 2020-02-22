@@ -2,6 +2,8 @@ package preprocessing;
 
 import config.LoggingConfig;
 import indexing.Indexer;
+import org.eclipse.collections.impl.parallel.ParallelIterate;
+import parallel.ParallelService;
 import query.ColumnRef;
 import query.QueryInfo;
 
@@ -31,10 +33,11 @@ public class PreprocessorUtil {
     public static void createJoinIndices(QueryInfo query, Context preSummary) {
         // Iterate over columns in equi-joins
         long startMillis = System.currentTimeMillis();
-        query.equiJoinCols.parallelStream().forEach(queryRef -> {
+        ParallelIterate.forEach(query.equiJoinCols, queryRef -> {
             try {
                 // Resolve query-specific column reference
-                ColumnRef dbRef = preSummary.columnMapping.get(queryRef);
+                ColumnRef dbRef =
+                        preSummary.columnMapping.get(queryRef);
                 log("Creating index for " + queryRef +
                         " (query) - " + dbRef + " (DB)");
                 // Create index (unless it exists already)
@@ -43,7 +46,7 @@ public class PreprocessorUtil {
                 System.err.println("Error creating index for " + queryRef);
                 e.printStackTrace();
             }
-        });
+        }, ParallelService.HIGH_POOL);
         long totalMillis = System.currentTimeMillis() - startMillis;
         log("Created all indices in " + totalMillis + " ms.");
     }

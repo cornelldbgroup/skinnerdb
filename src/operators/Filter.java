@@ -10,15 +10,16 @@ import expressions.compilation.ExpressionCompiler;
 import expressions.compilation.ExpressionInterpreter;
 import expressions.compilation.UnaryBoolEval;
 import net.sf.jsqlparser.expression.Expression;
+import org.eclipse.collections.api.factory.Lists;
+import org.eclipse.collections.api.list.MutableList;
 import org.eclipse.collections.api.list.primitive.IntList;
 import org.eclipse.collections.api.list.primitive.MutableIntList;
 import org.eclipse.collections.impl.factory.primitive.IntLists;
 import org.eclipse.collections.impl.stream.PrimitiveStreams;
+import parallel.ParallelService;
 import query.ColumnRef;
 import statistics.PreStats;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -103,17 +104,22 @@ public class Filter {
         // Initialize filter result
         IntList result = null;
         // Choose between sequential and parallel processing
-        if (true || cardinality <= ParallelConfig.PRE_BATCH_SIZE) {
+        if (cardinality <= ParallelConfig.PRE_BATCH_SIZE) {
             RowRange allTuples = new RowRange(0, cardinality - 1);
             result = filterBatch(unaryBoolEval, allTuples);
         } else {
             // Divide tuples into batches
-            List<RowRange> batches = split(cardinality);
+            MutableList<RowRange> batches = split(cardinality);
+
             // Process batches in parallel
-            result = PrimitiveStreams.iIntList(batches.parallelStream()
-                    .flatMapToInt(batch ->
-                            filterBatch(unaryBoolEval, batch).primitiveStream())
-            );
+            result =
+                    PrimitiveStreams.iIntList(
+                            batches.asParallel(ParallelService.HIGH_POOL, 1)
+                                    .collect(batch -> filterBatch(unaryBoolEval,
+                                            batch))
+                                    .toList()
+                                    .stream()
+                                    .flatMapToInt(l -> l.primitiveStream()));
         }
 
         // Clean up columns loaded for this operation
@@ -134,8 +140,8 @@ public class Filter {
      * @param cardinality cardinality of table to split
      * @return list of row ranges (batches)
      */
-    static List<RowRange> split(int cardinality) {
-        List<RowRange> batches = new ArrayList<RowRange>();
+    static MutableList<RowRange> split(int cardinality) {
+        MutableList<RowRange> batches = Lists.mutable.empty();
         for (int batchCtr = 0; batchCtr * ParallelConfig.PRE_BATCH_SIZE
                 < cardinality; ++batchCtr) {
             int startIdx = batchCtr * ParallelConfig.PRE_BATCH_SIZE;

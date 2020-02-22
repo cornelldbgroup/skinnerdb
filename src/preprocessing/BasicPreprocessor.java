@@ -13,6 +13,8 @@ import operators.IndexTest;
 import operators.Materialize;
 import org.eclipse.collections.api.list.primitive.IntList;
 import org.eclipse.collections.impl.factory.primitive.IntLists;
+import org.eclipse.collections.impl.parallel.ParallelIterate;
+import parallel.ParallelService;
 import print.RelationPrinter;
 import query.ColumnRef;
 import query.QueryInfo;
@@ -80,7 +82,7 @@ public class BasicPreprocessor implements Preprocessor {
         final boolean shouldFilter = shouldFilter(query, preSummary);
 
         // Iterate over query aliases
-        query.aliasToTable.keySet().parallelStream().forEach(alias -> {
+        ParallelIterate.forEach(query.aliasToTable.keySet(), alias -> {
             // Collect required columns (for joins and post-processing) for
             // this table
             List<ColumnRef> curRequiredCols = new ArrayList<ColumnRef>();
@@ -121,7 +123,7 @@ public class BasicPreprocessor implements Preprocessor {
                 String table = query.aliasToTable.get(alias);
                 preSummary.aliasToFiltered.put(alias, table);
             }
-        });
+        }, ParallelService.HIGH_POOL);
         // Abort pre-processing if filtering error occurred
         if (hadError) {
             throw new Exception("Error in pre-processor.");
