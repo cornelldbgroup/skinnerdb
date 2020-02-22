@@ -1,22 +1,23 @@
-package preprocessing;
+package preprocessing.uct;
 
 import expressions.compilation.UnaryBoolEval;
 import uct.Action;
 
 import java.util.Arrays;
 
-public class PreprocessingAction implements Action {
-    public final int[] order;
-    public boolean useIndexScan;
-    public boolean avoidBranching;
+public class FilterAction implements Action {
+    public enum ActionType {
+        BRANCHING, AVOID_BRANCHING, INDEX_SCAN
+    }
 
+    public final int[] order;
+    public ActionType type;
     public UnaryBoolEval cachedEval;
     public int cachedTil;
 
-    public PreprocessingAction(int numPredicates) {
+    public FilterAction(int numPredicates) {
         this.order = new int[numPredicates];
-        this.avoidBranching = false;
-        this.useIndexScan = false;
+        this.type = ActionType.BRANCHING;
         this.cachedEval = null;
         this.cachedTil = 0;
     }
@@ -25,14 +26,12 @@ public class PreprocessingAction implements Action {
     public String toString() {
         return "FilterState{" +
                 "order=" + Arrays.toString(order) +
-                ", useIndexScan=" + useIndexScan +
-                ", avoidBranching=" + avoidBranching +
+                ", type=" + type.name() +
                 '}';
     }
 
     public void reset() {
-        this.avoidBranching = false;
-        this.useIndexScan = false;
+        this.type = ActionType.BRANCHING;
         this.cachedEval = null;
         this.cachedTil = -1;
     }

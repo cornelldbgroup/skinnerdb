@@ -4,6 +4,7 @@ import config.JoinConfig;
 import joining.join.MultiWayJoin;
 import query.QueryInfo;
 import statistics.JoinStats;
+import uct.SelectionPolicy;
 
 import java.util.*;
 
