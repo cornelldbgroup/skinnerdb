@@ -167,32 +167,27 @@ public class SearchPreprocessor implements Preprocessor {
         // Determine rows satisfying unary predicate
         loadPredCols(unaryPred, preSummary.columnMapping);
 
-        ImmutableList<UnaryBoolEval> compiled;
+        MutableList<UnaryBoolEval> compiled =
+                Lists.mutable.ofInitialCapacity(predicates.size());
         long start = System.nanoTime();
         if (predicates.size() >= 5) {
             // parallel compile them bc thread overheads are bad
-            compiled =
-                    predicates.asParallel(ParallelService.HIGH_POOL, 1)
-                            .collect(expression -> {
-                                try {
-                                    return compilePred(unaryPred,
-                                            expression,
-                                            preSummary.columnMapping);
-                                } catch (Exception e) {}
-
-                                return null;
-                            }).toList().toImmutable();
+            Collection<UnaryBoolEval> collection =
+                    ParallelIterate.collect(predicates, expression -> {
+                        try {
+                            return compilePred(unaryPred,
+                                    expression,
+                                    preSummary.columnMapping);
+                        } catch (Exception e) {}
+                        return null;
+                    }, compiled, 2, ParallelService.HIGH_POOL, false);
         } else {
-            MutableList<UnaryBoolEval> compiledBuilder =
-                    Lists.mutable.ofInitialCapacity(predicates.size());
-
             for (Expression expression : predicates) {
-                compiledBuilder.add(compilePred(unaryPred,
+                compiled.add(compilePred(unaryPred,
                         expression, preSummary.columnMapping));
             }
-
-            compiled = compiledBuilder.toImmutable();
         }
+
         long end = System.nanoTime();
         PreStats.compileNanos += end - start;
 
@@ -213,7 +208,8 @@ public class SearchPreprocessor implements Preprocessor {
         }
         IntList satisfyingRows =
                 shouldFilter ?
-                        filterUCT(tableName, predicates, compiled, indices,
+                        filterUCT(tableName, predicates,
+                                compiled.toImmutable(), indices,
                                 values, unaryPred, preSummary.columnMapping) :
                         IntLists.immutable.empty();
 
