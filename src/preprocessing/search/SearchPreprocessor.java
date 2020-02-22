@@ -168,6 +168,7 @@ public class SearchPreprocessor implements Preprocessor {
         loadPredCols(unaryPred, preSummary.columnMapping);
 
         ImmutableList<UnaryBoolEval> compiled;
+        long start = System.nanoTime();
         if (predicates.size() >= 5) {
             // parallel compile them bc thread overheads are bad
             compiled =
@@ -192,6 +193,8 @@ public class SearchPreprocessor implements Preprocessor {
 
             compiled = compiledBuilder.toImmutable();
         }
+        long end = System.nanoTime();
+        PreStats.compileNanos += end - start;
 
 
         List<HashIndex> indices = new ArrayList<>(predicates.size());
