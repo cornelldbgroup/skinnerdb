@@ -8,7 +8,7 @@ import statistics.JoinStats;
 import java.util.*;
 
 /**
- * Represents node in UCT search tree.
+ * Represents node in UCT uct tree.
  *
  * @author immanueltrummer
  */
@@ -95,7 +95,7 @@ public class UctNode {
     final MultiWayJoin joinOp;
 
     /**
-     * Indicates whether the search space is restricted to
+     * Indicates whether the uct space is restricted to
      * join orders that avoid Cartesian products. This
      * flag should only be activated if it is ensured
      * that a given query can be evaluated under that

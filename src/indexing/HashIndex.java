@@ -13,7 +13,7 @@ public abstract class HashIndex<T extends Number> {
      */
     public final int cardinality;
     /**
-     * After indexing: contains for each search key
+     * After indexing: contains for each uct key
      * the number of entries, followed by the row
      * numbers at which those entries are found.
      */

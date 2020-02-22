@@ -4,8 +4,8 @@ import joining.uct.ExplorationWeightPolicy;
 import joining.uct.SelectionPolicy;
 
 /**
- * Configures reinforcement-search based
- * search for optimal join orders.
+ * Configures reinforcement-uct based
+ * uct for optimal join orders.
  *
  * @author immanueltrummer
  *

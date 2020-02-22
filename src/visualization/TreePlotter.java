@@ -10,8 +10,8 @@ import com.itextpdf.text.pdf.PdfWriter;
 import joining.uct.UctNode;
 
 /**
- * Provides functions to visualize the UCT search tree
- * used during join order search.
+ * Provides functions to visualize the UCT uct tree
+ * used during join order uct.
  *
  * @author immanueltrummer
  *

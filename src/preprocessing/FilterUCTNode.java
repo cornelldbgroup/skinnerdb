@@ -1,9 +1,11 @@
-package preprocessing.search;
+package preprocessing;
 
 import config.JoinConfig;
+import config.SearchPreprocessorConfig;
 import expressions.compilation.UnaryBoolEval;
 import indexing.HashIndex;
 import joining.uct.SelectionPolicy;
+import operators.BudgetedFilter;
 
 import java.util.*;
 
@@ -171,7 +173,7 @@ public class FilterUCTNode {
             switch (policy) {
                 case UCB1:
                     quality = meanReward +
-                            FilterSearchConfig.EXPLORATION_FACTOR * exploration;
+                            SearchPreprocessorConfig.EXPLORATION_FACTOR * exploration;
                     break;
                 case MAX_REWARD:
                 case EPSILON_GREEDY:
@@ -185,7 +187,7 @@ public class FilterUCTNode {
                         quality = random.nextDouble();
                     } else {
                         quality = meanReward +
-                                FilterSearchConfig.EXPLORATION_FACTOR *
+                                SearchPreprocessorConfig.EXPLORATION_FACTOR *
                                         exploration;
                     }
                     break;

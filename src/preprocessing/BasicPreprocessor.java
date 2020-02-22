@@ -9,7 +9,7 @@ import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
 import operators.Filter;
 import operators.IndexFilter;
-import operators.IndexTest;
+import operators.BasicIndexTest;
 import operators.Materialize;
 import org.eclipse.collections.api.list.primitive.IntList;
 import org.eclipse.collections.impl.factory.primitive.IntLists;
@@ -172,7 +172,7 @@ public class BasicPreprocessor implements Preprocessor {
         // Divide predicate conjuncts depending on whether they can
         // be evaluated using indices alone.
         log("Conjuncts for " + unaryPred + ": " + unaryPred.conjuncts.toString());
-        IndexTest indexTest = new IndexTest(query);
+        BasicIndexTest indexTest = new BasicIndexTest(query);
         List<Expression> indexedConjuncts = new ArrayList<>();
         List<Expression> nonIndexedConjuncts = new ArrayList<>();
         for (Expression conjunct : unaryPred.conjuncts) {

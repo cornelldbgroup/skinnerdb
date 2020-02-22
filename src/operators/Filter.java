@@ -3,7 +3,7 @@ package operators;
 import buffer.BufferManager;
 import catalog.CatalogManager;
 import config.GeneralConfig;
-import config.ParallelConfig;
+import config.BasicPreprocessorConfig;
 import expressions.ExpressionInfo;
 import expressions.compilation.EvaluatorType;
 import expressions.compilation.ExpressionCompiler;
@@ -104,7 +104,7 @@ public class Filter {
         // Initialize filter result
         IntList result = null;
         // Choose between sequential and parallel processing
-        if (cardinality <= ParallelConfig.PRE_BATCH_SIZE) {
+        if (cardinality <= BasicPreprocessorConfig.PRE_BATCH_SIZE) {
             RowRange allTuples = new RowRange(0, cardinality - 1);
             result = filterBatch(unaryBoolEval, allTuples);
         } else {
@@ -142,10 +142,10 @@ public class Filter {
      */
     static MutableList<RowRange> split(int cardinality) {
         MutableList<RowRange> batches = Lists.mutable.empty();
-        for (int batchCtr = 0; batchCtr * ParallelConfig.PRE_BATCH_SIZE
+        for (int batchCtr = 0; batchCtr * BasicPreprocessorConfig.PRE_BATCH_SIZE
                 < cardinality; ++batchCtr) {
-            int startIdx = batchCtr * ParallelConfig.PRE_BATCH_SIZE;
-            int tentativeEndIdx = startIdx + ParallelConfig.PRE_BATCH_SIZE - 1;
+            int startIdx = batchCtr * BasicPreprocessorConfig.PRE_BATCH_SIZE;
+            int tentativeEndIdx = startIdx + BasicPreprocessorConfig.PRE_BATCH_SIZE - 1;
             int endIdx = Math.min(cardinality - 1, tentativeEndIdx);
             RowRange rowRange = new RowRange(startIdx, endIdx);
             batches.add(rowRange);

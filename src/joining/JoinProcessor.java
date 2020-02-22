@@ -23,7 +23,7 @@ import visualization.TreePlotter;
 
 /**
  * Controls the join phase.
- * 
+ *
  * @author immanueltrummer
  *
  */
@@ -37,11 +37,11 @@ public class JoinProcessor {
 	 * Executes the join phase and stores result in relation.
 	 * Also updates mapping from query column references to
 	 * database columns.
-	 * 
+	 *
 	 * @param query		query to process
 	 * @param context	query execution context
 	 */
-	public static void process(QueryInfo query, 
+	public static void process(QueryInfo query,
 			Context context) throws Exception {
         // Initialize statistics
 		long startMillis = System.currentTimeMillis();
@@ -57,12 +57,12 @@ public class JoinProcessor {
 		nrLogEntries = 0;
 		// Initialize multi-way join operator
 		/*
-		DefaultJoin joinOp = new DefaultJoin(query, preSummary, 
+		DefaultJoin joinOp = new DefaultJoin(query, preSummary,
 				LearningConfig.BUDGET_PER_EPISODE);
 		*/
-		OldJoin joinOp = new OldJoin(query, context, 
+		OldJoin joinOp = new OldJoin(query, context,
 				JoinConfig.BUDGET_PER_EPISODE);
-		// Initialize UCT join order search tree
+		// Initialize UCT join order uct tree
 		UctNode root = new UctNode(0, query, true, joinOp);
 		// Initialize counters and variables
 		int[] joinOrder = new int[query.nrJoined];
@@ -82,8 +82,8 @@ public class JoinProcessor {
 			for (int i=0; i<nrSamples; ++i) {
 				++roundCtr;
 				rewardSample[i] = root.sample(
-						roundCtr, joinOrder, 
-						SelectionPolicy.RANDOM);				
+						roundCtr, joinOrder,
+						SelectionPolicy.RANDOM);
 			}
 			Arrays.sort(rewardSample);
 			double median = rewardSample[nrSamples/2];
@@ -138,7 +138,7 @@ public class JoinProcessor {
 			log("Table offsets:\t" + Arrays.toString(joinOp.tracker.tableOffset));
 			log("Table cardinalities:\t" + Arrays.toString(joinOp.cardinalities));
 			// Generate plots if activated
-			if (query.explain && plotCtr<query.plotAtMost && 
+			if (query.explain && plotCtr<query.plotAtMost &&
 					roundCtr % query.plotEvery==0) {
 				String plotName = "ucttree" + plotCtr + ".pdf";
 				String plotPath = Paths.get(query.plotDir, plotName).toString();
@@ -163,15 +163,15 @@ public class JoinProcessor {
 			} else {
 				JoinStats.totalWork += Math.max(
 						joinOp.tracker.tableOffset[tableCtr],0)/
-						(double)joinOp.cardinalities[tableCtr];				
+						(double)joinOp.cardinalities[tableCtr];
 			}
 		}
 		// Output final stats if join logging enabled
 		if (LoggingConfig.MAX_JOIN_LOGS > 0) {
-			System.out.println("Exploration weight:\t" + 
+			System.out.println("Exploration weight:\t" +
 					JoinConfig.EXPLORATION_WEIGHT);
 			System.out.println("Nr. rounds:\t" + roundCtr);
-			System.out.println("Table offsets:\t" + 
+			System.out.println("Table offsets:\t" +
 					Arrays.toString(joinOp.tracker.tableOffset));
 			System.out.println("Table cards.:\t" +
 					Arrays.toString(joinOp.cardinalities));
@@ -181,8 +181,8 @@ public class JoinProcessor {
 		int nrTuples = tuples.size();
 		log("Materializing join result with " + nrTuples + " tuples ...");
 		String targetRelName = NamingConfig.JOINED_NAME;
-		Materialize.execute(tuples, query.aliasToIndex, 
-				query.colsForPostProcessing, 
+		Materialize.execute(tuples, query.aliasToIndex,
+				query.colsForPostProcessing,
 				context.columnMapping, targetRelName);
 		// Update processing context
 		context.columnMapping.clear();
@@ -200,7 +200,7 @@ public class JoinProcessor {
 	/**
 	 * Print out log entry if the maximal number of log
 	 * entries has not been reached yet.
-	 * 
+	 *
 	 * @param logEntry	log entry to print
 	 */
 	static void log(String logEntry) {

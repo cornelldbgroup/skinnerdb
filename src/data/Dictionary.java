@@ -10,7 +10,7 @@ import java.util.TreeSet;
 
 /**
  * Maps string values to codes (and back).
- * 
+ *
  * @author immanueltrummer
  *
  */
@@ -25,7 +25,7 @@ public class Dictionary implements Serializable {
 	public final int nrStrings;
 	/**
 	 * Initializes dictionary, given sorted strings.
-	 * 
+	 *
 	 * @param stringSet	sorted strings to encode
 	 */
 	public Dictionary(TreeSet<String> stringSet) {
@@ -42,8 +42,8 @@ public class Dictionary implements Serializable {
 	/**
 	 * Returns code value for given string or
 	 * a value below zero if key cannot be found.
-	 * 
-	 * @param string	string to search
+	 *
+	 * @param string	string to uct
 	 * @return			string code or -1
 	 */
 	public int getCode(String string) {
@@ -51,7 +51,7 @@ public class Dictionary implements Serializable {
 	}
 	/**
 	 * Return string for given code value.
-	 * 
+	 *
 	 * @param code	searching string for this code
 	 * @return		string associated with code value
 	 */
@@ -60,7 +60,7 @@ public class Dictionary implements Serializable {
 	}
 	/**
 	 * Stores dictionary at given path.
-	 * 
+	 *
 	 * @param path	path to store dictionary at
 	 * @throws Exception
 	 */
