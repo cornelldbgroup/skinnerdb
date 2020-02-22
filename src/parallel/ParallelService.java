@@ -13,4 +13,9 @@ public class ParallelService {
                 Executors.newFixedThreadPool(threads - 1);
         LOW_POOL = Executors.newFixedThreadPool(1);
     }
+
+    public static void shutdown() {
+        HIGH_POOL.shutdownNow();
+        LOW_POOL.shutdownNow();
+    }
 }

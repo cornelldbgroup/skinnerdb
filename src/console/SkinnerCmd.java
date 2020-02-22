@@ -431,5 +431,7 @@ public class SkinnerCmd {
                 }
             }
         }
+
+        ParallelService.shutdown();
     }
 }
