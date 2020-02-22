@@ -246,7 +246,7 @@ public class SearchPreprocessor implements Preprocessor {
         BudgetedFilter filterOp = new BudgetedFilter(tableName, predicates,
                 compiled, indices, values);
 
-        FilterState state = new FilterState(nrCompiled);
+        PreprocessingAction state = new PreprocessingAction(nrCompiled);
         FilterUCTNode root = new FilterUCTNode(filterOp, roundCtr, nrCompiled,
                 indices);
         long nextForget = 1;

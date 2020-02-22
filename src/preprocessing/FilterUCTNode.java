@@ -209,9 +209,9 @@ public class FilterUCTNode {
         return bestAction;
     }
 
-    public double sample(long roundCtr, FilterState state, int budget) {
+    public double sample(long roundCtr, PreprocessingAction state, int budget) {
         if (nrActions == 0) {
-            return filterOp.executeWithBudget(budget, state);
+            return filterOp.execute(budget, state);
         }
 
         int action = selectAction(SelectionPolicy.UCB1);
@@ -252,7 +252,7 @@ public class FilterUCTNode {
         return reward;
     }
 
-    private double playout(FilterState state, int budget) {
+    private double playout(PreprocessingAction state, int budget) {
         int lastPred = state.order[treeLevel];
 
         Collections.shuffle(unchosenPreds);
@@ -265,7 +265,7 @@ public class FilterUCTNode {
             state.order[posCtr] = nextTable;
         }
 
-        return filterOp.executeWithBudget(budget, state);
+        return filterOp.execute(budget, state);
     }
 
     private void updateStatistics(int selectedAction, double reward) {

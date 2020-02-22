@@ -1,15 +1,16 @@
 package uct;
 
 import config.JoinConfig;
+import config.SearchPreprocessorConfig;
 import joining.uct.SelectionPolicy;
 import org.eclipse.collections.api.list.primitive.MutableIntList;
 import org.eclipse.collections.impl.factory.primitive.IntLists;
-import config.SearchPreprocessorConfig;
 
 import java.util.Random;
 import java.util.stream.IntStream;
 
-public abstract class UCTNode {
+public abstract class UCTNode<T extends Action> {
+    private final Environment<T> environment;
     private final UCTNode[] childNodes;
     private final int[] nrTries;
     private final double[] accumulatedReward;
@@ -17,9 +18,14 @@ public abstract class UCTNode {
     private final int nrActions;
     private final int treeLevel;
     private int nrVisits;
-    final Random random;
+    private final long createdIn;
+    private final Random random;
+    private final SelectionPolicy policy;
 
-    public UCTNode(int nrActions, int treeLevel) {
+    public UCTNode(Environment<T> env, int nrActions, int treeLevel,
+                   long roundCtr, SelectionPolicy policy) {
+        this.policy = policy;
+        this.environment = env;
         this.random = new Random();
         this.treeLevel = treeLevel;
         this.nrActions = nrActions;
@@ -32,11 +38,11 @@ public abstract class UCTNode {
             childNodes[i] = null;
         }
         this.nrVisits = 0;
-
+        this.createdIn = roundCtr;
         priorityActions = IntLists.mutable.ofAll(IntStream.range(0, nrActions));
     }
 
-    protected int selectAction(SelectionPolicy policy) {
+    private int selectAction(SelectionPolicy policy) {
         if (!priorityActions.isEmpty()) {
             int nrUntried = priorityActions.size();
             int actionIndex = random.nextInt(nrUntried);
@@ -61,7 +67,8 @@ public abstract class UCTNode {
             switch (policy) {
                 case UCB1:
                     quality = meanReward +
-                            SearchPreprocessorConfig.EXPLORATION_FACTOR * exploration;
+                            SearchPreprocessorConfig.EXPLORATION_FACTOR *
+                                    exploration;
                     break;
                 case MAX_REWARD:
                 case EPSILON_GREEDY:
@@ -102,4 +109,29 @@ public abstract class UCTNode {
         ++nrTries[selectedAction];
         accumulatedReward[selectedAction] += reward;
     }
+
+    public double sample(long roundCtr, T action, int budget) {
+        if (nrActions == 0) {
+            return environment.execute(budget, action);
+        }
+
+        boolean canExpand = createdIn != roundCtr;
+        int actionIndex = selectAction(SelectionPolicy.UCB1);
+        if (childNodes[actionIndex] == null && canExpand) {
+            childNodes[actionIndex] = createChildNode(actionIndex);
+        }
+
+        updateActionState(action, actionIndex);
+
+        UCTNode child = childNodes[actionIndex];
+        double reward = (child != null) ?
+                child.sample(roundCtr, action, budget) :
+                playout(action, budget);
+        updateStatistics(actionIndex, reward);
+        return reward;
+    }
+
+    protected abstract double playout(T action, int budget);
+    protected abstract UCTNode<T> createChildNode(int action);
+    protected abstract void updateActionState(T actionState, int action);
 }
