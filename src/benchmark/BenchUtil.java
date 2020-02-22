@@ -92,9 +92,9 @@ public class BenchUtil {
         benchOut.print(JoinStats.nrUctNodes + "\t");
         benchOut.print(JoinStats.nrPlansTried + "\t");
         benchOut.print(skinnerJoinCard + "\t");
-        benchOut.print(String.format("%.6f", JoinStats.nrSamples) + "\t");
+        benchOut.print(JoinStats.nrSamples + "\t");
         benchOut.print(String.format("%.6f", JoinStats.avgReward) + "\t");
-        benchOut.print(JoinStats.maxReward + "\t");
+        benchOut.print(String.format("%.6f", JoinStats.maxReward) + "\t");
         benchOut.println(JoinStats.totalWork);
         benchOut.flush();
     }
