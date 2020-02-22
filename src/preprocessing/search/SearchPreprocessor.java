@@ -172,15 +172,14 @@ public class SearchPreprocessor implements Preprocessor {
         long start = System.nanoTime();
         if (predicates.size() >= 5) {
             // parallel compile them bc thread overheads are bad
-            Collection<UnaryBoolEval> collection =
-                    ParallelIterate.collect(predicates, expression -> {
-                        try {
-                            return compilePred(unaryPred,
-                                    expression,
-                                    preSummary.columnMapping);
-                        } catch (Exception e) {}
-                        return null;
-                    }, compiled, 2, ParallelService.HIGH_POOL, false);
+            ParallelIterate.collect(predicates, expression -> {
+                try {
+                    return compilePred(unaryPred,
+                            expression,
+                            preSummary.columnMapping);
+                } catch (Exception e) {}
+                return null;
+            }, compiled, 1, ParallelService.HIGH_POOL, false);
         } else {
             for (Expression expression : predicates) {
                 compiled.add(compilePred(unaryPred,
@@ -189,7 +188,7 @@ public class SearchPreprocessor implements Preprocessor {
         }
 
         long end = System.nanoTime();
-        PreStats.compileNanos += end - start;
+        PreStats.compileNanos = end - start;
 
 
         List<HashIndex> indices = new ArrayList<>(predicates.size());
