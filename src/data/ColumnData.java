@@ -4,6 +4,7 @@ import joining.result.ResultTuple;
 import org.eclipse.collections.api.list.primitive.IntList;
 
 import java.io.Serializable;
+import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collection;
 
@@ -70,6 +71,7 @@ public abstract class ColumnData implements Serializable {
      * @throws Exception
      */
     public abstract void store(String path) throws Exception;
+
     /**
      * Produces new column by copying rows with given indices
      * (the same row may be copied multiple times).
@@ -77,7 +79,19 @@ public abstract class ColumnData implements Serializable {
      * @param rowsToCopy indices of rows to copy
      * @return new column with copied rows
      */
-    public abstract ColumnData copyRows(IntList rowsToCopy);
+    public ColumnData copyRows(IntList rowsToCopy) {
+        return copyRows(Arrays.asList(rowsToCopy));
+    }
+
+    /**
+     * Produces new column by copying rows with given indices
+     * (the same row may be copied multiple times).
+     *
+     * @param rowsToCopy indices of rows to copy
+     * @return new column with copied rows
+     */
+    public abstract ColumnData copyRows(Collection<? extends IntList> rowsToCopy);
+
     /**
      * Produces new column by copying rows with indices
      * given as a bit set.

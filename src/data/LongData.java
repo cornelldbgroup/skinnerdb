@@ -69,21 +69,25 @@ public class LongData extends ColumnData implements Serializable {
     }
 
     @Override
-    public ColumnData copyRows(IntList rowsToCopy) {
+    public ColumnData copyRows(Collection<? extends IntList> rowsToCopy) {
         LongData copyColumn = new LongData(rowsToCopy.size());
         int copiedRowCtr = 0;
-        for (int i = 0; i < rowsToCopy.size(); i++) {
-            int row = rowsToCopy.get(i);
-            // Treat special case: insertion of null values
-            if (row == -1) {
-                copyColumn.data[copiedRowCtr] = 0;
-                copyColumn.isNull.set(copiedRowCtr);
-            } else {
-                copyColumn.data[copiedRowCtr] = data[row];
-                copyColumn.isNull.set(copiedRowCtr, isNull.get(row));
+
+        for (IntList rows : rowsToCopy) {
+            for (int i = 0; i < rows.size(); i++) {
+                int row = rows.get(i);
+                // Treat special case: insertion of null values
+                if (row == -1) {
+                    copyColumn.data[copiedRowCtr] = 0;
+                    copyColumn.isNull.set(copiedRowCtr);
+                } else {
+                    copyColumn.data[copiedRowCtr] = data[row];
+                    copyColumn.isNull.set(copiedRowCtr, isNull.get(row));
+                }
+                ++copiedRowCtr;
             }
-            ++copiedRowCtr;
         }
+
         return copyColumn;
     }
 

@@ -12,9 +12,7 @@ import operators.Materialize;
 import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.ImmutableList;
 import org.eclipse.collections.api.list.MutableList;
-import org.eclipse.collections.api.list.primitive.IntList;
 import org.eclipse.collections.api.list.primitive.MutableIntList;
-import org.eclipse.collections.impl.factory.primitive.IntLists;
 import org.eclipse.collections.impl.parallel.ParallelIterate;
 import parallel.ParallelService;
 import preprocessing.Context;
@@ -205,12 +203,12 @@ public class SearchPreprocessor implements Preprocessor {
                 values.add(null);
             }
         }
-        IntList satisfyingRows =
+        Collection<MutableIntList> satisfyingRows =
                 shouldFilter ?
                         filterUCT(tableName, predicates,
                                 compiled.toImmutable(), indices,
                                 values, unaryPred, preSummary.columnMapping) :
-                        IntLists.immutable.empty();
+                        Arrays.asList();
 
         // Materialize relevant rows and columns
         String filteredName = NamingConfig.FILTERED_PRE + alias;
@@ -233,14 +231,14 @@ public class SearchPreprocessor implements Preprocessor {
         }
     }
 
-    private MutableIntList filterUCT(String tableName,
-                                     ImmutableList<Expression> predicates,
-                                     ImmutableList<UnaryBoolEval> compiled,
-                                     List<HashIndex> indices,
-                                     List<Number> values,
-                                     ExpressionInfo unaryPred,
-                                     Map<ColumnRef, ColumnRef> colMap)
-            throws Exception {
+    private Collection<MutableIntList> filterUCT(
+            String tableName,
+            ImmutableList<Expression> predicates,
+            ImmutableList<UnaryBoolEval> compiled,
+            List<HashIndex> indices,
+            List<Number> values,
+            ExpressionInfo unaryPred,
+            Map<ColumnRef, ColumnRef> colMap) {
         ConcurrentHashMap<List<Integer>, UnaryBoolEval> cache =
                 new ConcurrentHashMap<>();
 

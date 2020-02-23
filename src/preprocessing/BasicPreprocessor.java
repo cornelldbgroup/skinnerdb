@@ -12,7 +12,6 @@ import operators.IndexFilter;
 import operators.IndexTest;
 import operators.Materialize;
 import org.eclipse.collections.api.list.primitive.IntList;
-import org.eclipse.collections.impl.factory.primitive.IntLists;
 import org.eclipse.collections.impl.parallel.ParallelIterate;
 import parallel.ParallelService;
 import print.RelationPrinter;
@@ -20,10 +19,7 @@ import query.ColumnRef;
 import query.QueryInfo;
 import statistics.PreStats;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import static operators.Filter.interpretPred;
@@ -213,7 +209,7 @@ public class BasicPreprocessor implements Preprocessor {
                     filter(c -> c.aliasName.equals(alias)).
                     map(c -> c.columnName).collect(Collectors.toList());
             String targetRelName = NamingConfig.IDX_FILTERED_PRE + alias;
-            Materialize.execute(table, requiredCols, rows,
+            Materialize.execute(table, requiredCols, Arrays.asList(rows),
                     null, targetRelName, true);
             // Update pre-processing summary
             for (String colName : requiredCols) {
@@ -250,9 +246,9 @@ public class BasicPreprocessor implements Preprocessor {
         String tableName = preSummary.aliasToFiltered.get(alias);
         log("Table name for " + alias + " is " + tableName);
         // Determine rows satisfying unary predicate
-        IntList satisfyingRows = shouldFilter ? Filter.executeToList(
+        List<IntList> satisfyingRows = shouldFilter ? Filter.executeToList(
                 unaryPred, tableName, preSummary.columnMapping) :
-                IntLists.immutable.empty();
+                Arrays.asList();
         // Materialize relevant rows and columns
         String filteredName = NamingConfig.FILTERED_PRE + alias;
         List<String> columnNames = new ArrayList<String>();

@@ -35,7 +35,8 @@ public class Materialize {
      * @throws Exception
      */
     public static void execute(String sourceRelName, List<String> columnNames,
-                               IntList rowList, BitSet rowBitSet,
+                               Collection<? extends IntList> rowList,
+                               BitSet rowBitSet,
                                String targetRelName,
                                boolean tempResult) throws Exception {
         // Generate references to source columns

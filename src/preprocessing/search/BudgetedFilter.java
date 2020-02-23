@@ -12,13 +12,14 @@ import parallel.ParallelService;
 
 import java.util.ArrayList;
 import java.util.BitSet;
+import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.Future;
 
 public class BudgetedFilter {
     private final int LAST_TABLE_ROW;
     private int lastCompletedRow;
-    private MutableIntList result;
+    private List<MutableIntList> resultList;
     private ImmutableList<Expression> predicates;
     private ImmutableList<UnaryBoolEval> compiled;
     private List<HashIndex> indices;
@@ -29,7 +30,7 @@ public class BudgetedFilter {
                           ImmutableList<UnaryBoolEval> compiled,
                           List<HashIndex> indices,
                           List<Number> values) {
-        this.result = IntLists.mutable.empty();
+        this.resultList = new ArrayList<>();
         this.compiled = compiled;
         this.LAST_TABLE_ROW = CatalogManager.getCardinality(tableName) - 1;
         this.lastCompletedRow = -1;
@@ -42,6 +43,7 @@ public class BudgetedFilter {
     private Pair<Long, Integer> indexScanWithOnePredicate(int remainingRows,
                                                           FilterState state) {
         int currentCompletedRow = lastCompletedRow;
+        MutableIntList result = IntLists.mutable.empty();
 
         long startTime = System.nanoTime();
         HashIndex index = indices.get(state.order[0]);
@@ -97,6 +99,7 @@ public class BudgetedFilter {
             }
         }
 
+        resultList.add(result);
         long endTime = System.nanoTime();
         long duration = endTime - startTime;
         return Pair.of(duration, currentCompletedRow);
@@ -165,7 +168,7 @@ public class BudgetedFilter {
 
         for (Future<MutableIntList> f : futures) {
             try {
-                result.addAll(f.get());
+                resultList.add(f.get());
             } catch (Exception e) {}
         }
 
@@ -178,6 +181,7 @@ public class BudgetedFilter {
                                                    FilterState state) {
         int currentCompletedRow = lastCompletedRow;
         long startTime = System.nanoTime();
+        MutableIntList result = IntLists.mutable.empty();
 
         if (state.cachedEval != null) {
             ROW_LOOP:
@@ -215,6 +219,7 @@ public class BudgetedFilter {
             }
         }
 
+        resultList.add(result);
         long endTime = System.nanoTime();
         long duration = endTime - startTime;
         return Pair.of(duration, currentCompletedRow);
@@ -223,6 +228,7 @@ public class BudgetedFilter {
     private Pair<Long, Integer> tableScanBitset(int nrRows,
                                                 FilterState state) {
         long startTime = System.nanoTime();
+        MutableIntList result = IntLists.mutable.empty();
 
         int begin = lastCompletedRow + 1;
         int end = Math.min(lastCompletedRow + nrRows, LAST_TABLE_ROW);
@@ -252,6 +258,7 @@ public class BudgetedFilter {
             }
         }
 
+        resultList.add(result);
         long endTime = System.nanoTime();
         long duration = endTime - startTime;
         return Pair.of(duration, end);
@@ -284,7 +291,7 @@ public class BudgetedFilter {
         return lastCompletedRow == LAST_TABLE_ROW;
     }
 
-    public MutableIntList getResult() {
-        return result;
+    public Collection<MutableIntList> getResult() {
+        return resultList;
     }
 }

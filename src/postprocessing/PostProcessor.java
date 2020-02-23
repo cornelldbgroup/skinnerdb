@@ -23,6 +23,7 @@ import types.JavaType;
 import types.TypeUtil;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -508,14 +509,15 @@ public class PostProcessor {
             TableInfo noHavingResInfo = CatalogManager.getTable(
                     NamingConfig.RESULT_NO_HAVING);
             Materialize.execute(NamingConfig.RESULT_NO_HAVING,
-                    noHavingResInfo.columnNames, havingGroups,
+                    noHavingResInfo.columnNames, Arrays.asList(havingGroups),
                     null, resultRelName, tempResult);
             // Filter order table to having groups if applicable
             if (hasOrder) {
                 TableInfo noHavingOrderInfo = CatalogManager.getTable(
                         NamingConfig.ORDER_NO_HAVING);
                 Materialize.execute(NamingConfig.ORDER_NO_HAVING,
-                        noHavingOrderInfo.columnNames, havingGroups,
+                        noHavingOrderInfo.columnNames,
+                        Arrays.asList(havingGroups),
                         null, NamingConfig.ORDER_NAME, true);
             }
         } else {
@@ -597,7 +599,7 @@ public class PostProcessor {
                 limitRows.add(rowCtr);
             }
             Materialize.execute(preLimitResult,
-                    preLimitInfo.columnNames, limitRows, null,
+                    preLimitInfo.columnNames, Arrays.asList(limitRows), null,
                     resultRel, true);
         }
         // Update result table statistics
