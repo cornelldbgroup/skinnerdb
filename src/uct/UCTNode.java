@@ -12,7 +12,7 @@ public abstract class UCTNode<T extends Action, E extends Environment<T>> {
     private final int[] nrTries;
     private final double[] accumulatedReward;
     private final MutableIntList priorityActions;
-    protected final int nrActions;
+    private final int nrActions;
     public final int treeLevel;
     private int nrVisits;
     private final long createdIn;
