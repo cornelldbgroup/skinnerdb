@@ -70,7 +70,9 @@ public class IntData extends ColumnData implements Serializable {
 
     @Override
     public ColumnData copyRows(Collection<? extends IntList> rowsToCopy) {
-        IntData copyColumn = new IntData(rowsToCopy.size());
+        int size = 0;
+        for (IntList l : rowsToCopy) size += l.size();
+        IntData copyColumn = new IntData(size);
         int copiedRowCtr = 0;
 
         for (IntList rows : rowsToCopy) {

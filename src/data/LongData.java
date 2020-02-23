@@ -70,7 +70,10 @@ public class LongData extends ColumnData implements Serializable {
 
     @Override
     public ColumnData copyRows(Collection<? extends IntList> rowsToCopy) {
-        LongData copyColumn = new LongData(rowsToCopy.size());
+        int size = 0;
+        for (IntList l : rowsToCopy) size += l.size();
+
+        LongData copyColumn = new LongData(size);
         int copiedRowCtr = 0;
 
         for (IntList rows : rowsToCopy) {

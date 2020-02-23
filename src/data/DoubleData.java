@@ -71,7 +71,9 @@ public class DoubleData extends ColumnData implements Serializable {
 
     @Override
     public ColumnData copyRows(Collection<? extends IntList> rowsToCopy) {
-        DoubleData copyColumn = new DoubleData(rowsToCopy.size());
+        int size = 0;
+        for (IntList l : rowsToCopy) size += l.size();
+        DoubleData copyColumn = new DoubleData(size);
         int copiedRowCtr = 0;
 
         for (IntList rows : rowsToCopy) {
