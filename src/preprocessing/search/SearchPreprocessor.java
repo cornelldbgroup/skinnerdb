@@ -275,18 +275,16 @@ public class SearchPreprocessor implements Preprocessor {
                 for (int j = 0; j < compileSetSize; j++) {
                     if (compile.size() == 0) break;
                     FilterUCTNode node = compile.poll();
-
+                    final List<Integer> preds = node.getPreds();
                     if (node.getCompiledEval() == null) {
                         ParallelService.LOW_POOL.submit(() -> {
                             Expression expr = null;
-                            for (int i = node.getPreds().size() - 1; i >= 0; i--) {
+                            for (int i = preds.size() - 1; i >= 0; i--) {
                                 if (expr == null) {
-                                    expr = predicates.get(
-                                            node.getPreds().get(i));
+                                    expr = predicates.get(preds.get(i));
                                 } else {
                                     expr = new AndExpression(expr,
-                                            predicates.get(
-                                                    node.getPreds().get(i)));
+                                            predicates.get(preds.get(i)));
                                 }
                             }
 
