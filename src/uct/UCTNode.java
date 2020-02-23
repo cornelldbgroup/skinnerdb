@@ -4,7 +4,6 @@ import org.eclipse.collections.api.list.primitive.MutableIntList;
 import org.eclipse.collections.impl.factory.primitive.IntLists;
 
 import java.util.Random;
-import java.util.stream.IntStream;
 
 public abstract class UCTNode<T extends Action, E extends Environment<T>> {
     public final E environment;
@@ -37,7 +36,10 @@ public abstract class UCTNode<T extends Action, E extends Environment<T>> {
         }
         this.nrVisits = 0;
         this.createdIn = roundCtr;
-        priorityActions = IntLists.mutable.ofAll(IntStream.range(0, nrActions));
+        priorityActions = IntLists.mutable.empty();
+        for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
+            priorityActions.add(actionCtr);
+        }
     }
 
     private int selectAction(SelectionPolicy policy) {

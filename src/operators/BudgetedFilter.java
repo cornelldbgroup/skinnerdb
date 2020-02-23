@@ -208,6 +208,7 @@ public class BudgetedFilter implements Environment<FilterAction> {
         }
 
         double reward = Math.exp(-result.getLeft() * 0.0001);
+        System.out.println(state.toString() + " " + result.getLeft());
         lastCompletedRow = result.getRight();
         return reward;
     }
