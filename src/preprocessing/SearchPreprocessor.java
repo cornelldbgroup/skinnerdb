@@ -19,21 +19,18 @@ import org.eclipse.collections.api.list.primitive.MutableIntList;
 import org.eclipse.collections.impl.factory.primitive.IntLists;
 import org.eclipse.collections.impl.parallel.ParallelIterate;
 import parallel.ParallelService;
-import preprocessing.uct.Compilable;
 import preprocessing.uct.FilterAction;
-import preprocessing.uct.RootNode;
 import print.RelationPrinter;
 import query.ColumnRef;
 import query.QueryInfo;
 import statistics.PreStats;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
-import static config.SearchPreprocessorConfig.FORGET;
-import static config.SearchPreprocessorConfig.ROWS_PER_TIMESTEP;
 import static operators.Filter.*;
 import static preprocessing.PreprocessorUtil.*;
+import static config.SearchPreprocessorConfig.FORGET;
+import static config.SearchPreprocessorConfig.ROWS_PER_TIMESTEP;
 
 public class SearchPreprocessor implements Preprocessor {
     /**
@@ -243,19 +240,16 @@ public class SearchPreprocessor implements Preprocessor {
                                      List<HashIndex> indices,
                                      List<Number> values,
                                      ExpressionInfo unaryPred,
-                                     Map<ColumnRef, ColumnRef> colMap) {
-
-
-        ConcurrentHashMap<List<Integer>, UnaryBoolEval> compileCache =
-                new ConcurrentHashMap<>();
-
+                                     Map<ColumnRef, ColumnRef> colMap)
+            throws Exception {
         long roundCtr = 0;
         int nrCompiled = compiled.size();
         BudgetedFilter filterOp = new BudgetedFilter(tableName, predicates,
-                compiled, indices, values, compileCache);
+                compiled, indices, values);
 
         FilterAction state = new FilterAction(nrCompiled);
-        RootNode root = new RootNode(filterOp);
+        FilterUCTNode root = new FilterUCTNode(filterOp, roundCtr, nrCompiled,
+                indices);
         long nextForget = 1;
         long nextCompile = 50;
 
@@ -265,7 +259,8 @@ public class SearchPreprocessor implements Preprocessor {
             root.sample(roundCtr, state, ROWS_PER_TIMESTEP);
 
             if (FORGET && roundCtr == nextForget) {
-                new RootNode(filterOp);
+                root = new FilterUCTNode(filterOp, roundCtr, nrCompiled,
+                        indices);
                 nextForget *= 10;
             }
 
@@ -273,30 +268,32 @@ public class SearchPreprocessor implements Preprocessor {
                 nextCompile += 100;
 
                 int compileSetSize = predicates.size();
-                PriorityQueue<Compilable> compile =
+                PriorityQueue<FilterUCTNode> compile =
                         new PriorityQueue<>(compileSetSize,
                                 Comparator.comparingInt
-                                        (Compilable::getAddedUtility));
-                root.populateInitialSet(compile, compileSetSize);
+                                        (FilterUCTNode::getAddedSavedCalls));
+                root.addChildrenToCompile(compile, compileSetSize);
                 for (int j = 0; j < compileSetSize; j++) {
                     if (compile.size() == 0) break;
-                    Compilable node = compile.poll();
-                    final List<Integer> preds = node.getUnchosenPreds();
+                    FilterUCTNode node = compile.poll();
 
-                    if (compileCache.get(preds) == null) {
+                    if (node.getCompiledEval() == null) {
                         ParallelService.LOW_POOL.submit(() -> {
                             Expression expr = null;
-                            for (int i = 0; i < preds.size(); i++) {
+                            for (int i = node.getIndexPrefixLength();
+                                 i < node.getPreds().size(); i++) {
                                 if (expr == null) {
-                                    expr = predicates.get(preds.get(i));
+                                    expr = predicates.get(
+                                            node.getPreds().get(i));
                                 } else {
                                     expr = new AndExpression(expr,
-                                            predicates.get(preds.get(i)));
+                                            predicates.get(
+                                                    node.getPreds().get(i)));
                                 }
                             }
 
                             try {
-                                compileCache.put(preds,
+                                node.setCompiledEval(
                                         compilePred(unaryPred, expr, colMap));
                             } catch (Exception e) {}
                         });

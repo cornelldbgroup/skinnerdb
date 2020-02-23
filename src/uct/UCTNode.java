@@ -8,13 +8,13 @@ import java.util.stream.IntStream;
 
 public abstract class UCTNode<T extends Action, E extends Environment<T>> {
     public final E environment;
-    protected final UCTNode[] childNodes;
+    private final UCTNode[] childNodes;
     private final int[] nrTries;
     private final double[] accumulatedReward;
     private final MutableIntList priorityActions;
     protected final int nrActions;
     public final int treeLevel;
-    protected int nrVisits;
+    private int nrVisits;
     private final long createdIn;
     private final Random random;
     private final SelectionPolicy policy;
