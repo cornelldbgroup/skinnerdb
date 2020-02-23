@@ -84,7 +84,7 @@ public class BudgetedFilter {
                 remainingRows -= currentCompletedRow - lastCompletedRow;
                 startPos++;
 
-                for (int i = 1; i < state.order.length; i++) {
+                for (int i = 0; i < state.order.length; i++) {
                     UnaryBoolEval expr = compiled.get(state.order[i]);
                     if (expr.evaluate(currentCompletedRow) <= 0) {
                         continue ROW_LOOP;
