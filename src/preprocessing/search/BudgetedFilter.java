@@ -105,6 +105,7 @@ public class BudgetedFilter {
     private Pair<Long, Integer> tableScanBranchingParallel(int budgetPerThread,
                                                            FilterState state) {
         long startTime = System.nanoTime();
+        int endRow = lastCompletedRow;
 
         List<Future<MutableIntList>> futures = new ArrayList<>();
 
@@ -112,8 +113,8 @@ public class BudgetedFilter {
             final int start = lastCompletedRow + budgetPerThread * j;
             final int end = Math.min(start + budgetPerThread,
                     LAST_TABLE_ROW - 1);
-
             if (start >= end) continue;
+            endRow = end;
 
             if (state.cachedEval != null) {
                 futures.add(ParallelService.HIGH_POOL.submit(() -> {
@@ -170,8 +171,7 @@ public class BudgetedFilter {
 
         long endTime = System.nanoTime();
         long duration = endTime - startTime;
-        return Pair.of(duration,
-                lastCompletedRow + budgetPerThread * state.batches);
+        return Pair.of(duration, endRow);
     }
 
     private Pair<Long, Integer> tableScanBranching(int remainingRows,
