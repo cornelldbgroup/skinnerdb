@@ -37,7 +37,7 @@ public class RootNode extends UCTNode<FilterAction, BudgetedFilter> {
             int action, long roundCtr) {
 
         if (action == 0) {
-            return new AvoidBranchingNode(this, roundCtr);
+            return new LeafNode(this, roundCtr);
         } else if (action >= 1 && action < 1 + predicates) {
             return new BranchingNode(this, actionToPredicate[action], roundCtr);
         } else { //action >= 1 + predicates && action < 1 + predicates + indexes

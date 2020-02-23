@@ -10,7 +10,7 @@ import java.util.*;
 public class BranchingNode extends UCTNode<FilterAction, BudgetedFilter>
         implements Compilable {
     private final int[] actionToPredicate;
-    public final List<Integer> chosenPreds;
+    private final List<Integer> chosenPreds;
     private final List<Integer> unchosenPreds;
 
     public BranchingNode(RootNode root, int nextPred, long roundCtr) {
@@ -50,8 +50,7 @@ public class BranchingNode extends UCTNode<FilterAction, BudgetedFilter>
     protected UCTNode<FilterAction, BudgetedFilter> createChildNode(
             int action, long roundCtr) {
         if (nrActions == 1) {
-            return new BranchingLeafNode(this, actionToPredicate[action],
-                    roundCtr);
+            return new LeafNode(this, roundCtr);
         }
 
         return new BranchingNode(this, actionToPredicate[action], roundCtr);
@@ -97,8 +96,8 @@ public class BranchingNode extends UCTNode<FilterAction, BudgetedFilter>
     }
 
     @Override
-    public List<Integer> getPredicates() {
-        return chosenPreds;
+    public List<Integer> getUnchosenPreds() {
+        return unchosenPreds;
     }
 
     @Override

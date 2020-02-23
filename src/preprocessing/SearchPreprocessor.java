@@ -281,7 +281,7 @@ public class SearchPreprocessor implements Preprocessor {
                 for (int j = 0; j < compileSetSize; j++) {
                     if (compile.size() == 0) break;
                     Compilable node = compile.poll();
-                    final List<Integer> preds = node.getPredicates();
+                    final List<Integer> preds = node.getUnchosenPreds();
 
                     if (compileCache.get(preds) == null) {
                         ParallelService.LOW_POOL.submit(() -> {
