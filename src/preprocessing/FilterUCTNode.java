@@ -4,9 +4,8 @@ import config.JoinConfig;
 import config.SearchPreprocessorConfig;
 import expressions.compilation.UnaryBoolEval;
 import indexing.HashIndex;
-import uct.SelectionPolicy;
+import joining.uct.SelectionPolicy;
 import operators.BudgetedFilter;
-import preprocessing.uct.FilterAction;
 
 import java.util.*;
 
@@ -210,14 +209,15 @@ public class FilterUCTNode {
         return bestAction;
     }
 
-    public double sample(long roundCtr, FilterAction state, int budget) {
+    public double sample(long roundCtr, PreprocessingAction state, int budget) {
         if (nrActions == 0) {
             return filterOp.execute(budget, state);
         }
 
         int action = selectAction(SelectionPolicy.UCB1);
         if (action == numPredicates + indexActions) {
-            state.type = FilterAction.ActionType.AVOID_BRANCHING;
+            state.avoidBranching = true;
+            state.useIndexScan = false;
             if (childNodes[action] == null) {
                 childNodes[action] = new FilterUCTNode(this, roundCtr);
             }
@@ -230,19 +230,16 @@ public class FilterUCTNode {
             }
 
             if (treeLevel == 0) {
-                if (this.indexActions > 0 &&
+                state.avoidBranching = false;
+                state.useIndexScan = this.indexActions > 0 &&
                         action >= numPredicates && action < numPredicates +
-                        indexActions) {
-                    state.type = FilterAction.ActionType.INDEX_SCAN;
-                }
+                        indexActions;
             }
 
             boolean canExpand = createdIn != roundCtr;
             if (childNodes[action] == null && canExpand) {
                 childNodes[action] = new FilterUCTNode(this, roundCtr,
-                        predicate,
-                        state.type == FilterAction.ActionType.INDEX_SCAN ? 1
-                                : 0);
+                        predicate, state.useIndexScan ? 1 : 0);
             }
         }
 
@@ -255,7 +252,7 @@ public class FilterUCTNode {
         return reward;
     }
 
-    private double playout(FilterAction state, int budget) {
+    private double playout(PreprocessingAction state, int budget) {
         int lastPred = state.order[treeLevel];
 
         Collections.shuffle(unchosenPreds);

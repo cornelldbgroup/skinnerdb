@@ -19,7 +19,6 @@ import org.eclipse.collections.api.list.primitive.MutableIntList;
 import org.eclipse.collections.impl.factory.primitive.IntLists;
 import org.eclipse.collections.impl.parallel.ParallelIterate;
 import parallel.ParallelService;
-import preprocessing.uct.FilterAction;
 import print.RelationPrinter;
 import query.ColumnRef;
 import query.QueryInfo;
@@ -247,7 +246,7 @@ public class SearchPreprocessor implements Preprocessor {
         BudgetedFilter filterOp = new BudgetedFilter(tableName, predicates,
                 compiled, indices, values);
 
-        FilterAction state = new FilterAction(nrCompiled);
+        PreprocessingAction state = new PreprocessingAction(nrCompiled);
         FilterUCTNode root = new FilterUCTNode(filterOp, roundCtr, nrCompiled,
                 indices);
         long nextForget = 1;

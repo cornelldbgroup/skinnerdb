@@ -1,26 +1,28 @@
 package uct;
 
+import config.JoinConfig;
+import config.SearchPreprocessorConfig;
+import joining.uct.SelectionPolicy;
 import org.eclipse.collections.api.list.primitive.MutableIntList;
 import org.eclipse.collections.impl.factory.primitive.IntLists;
 
 import java.util.Random;
 import java.util.stream.IntStream;
 
-public abstract class UCTNode<T extends Action, E extends Environment<T>> {
-    public final E environment;
+public abstract class UCTNode<T extends Action> {
+    private final Environment<T> environment;
     private final UCTNode[] childNodes;
     private final int[] nrTries;
     private final double[] accumulatedReward;
     private final MutableIntList priorityActions;
     private final int nrActions;
-    public final int treeLevel;
+    private final int treeLevel;
     private int nrVisits;
     private final long createdIn;
     private final Random random;
     private final SelectionPolicy policy;
-    private double EXPLORATION_FACTOR = 1e-5;
 
-    public UCTNode(E env, int nrActions, int treeLevel,
+    public UCTNode(Environment<T> env, int nrActions, int treeLevel,
                    long roundCtr, SelectionPolicy policy) {
         this.policy = policy;
         this.environment = env;
@@ -64,7 +66,9 @@ public abstract class UCTNode<T extends Action, E extends Environment<T>> {
             double quality = -1;
             switch (policy) {
                 case UCB1:
-                    quality = meanReward + EXPLORATION_FACTOR * exploration;
+                    quality = meanReward +
+                            SearchPreprocessorConfig.EXPLORATION_FACTOR *
+                                    exploration;
                     break;
                 case MAX_REWARD:
                 case EPSILON_GREEDY:
@@ -77,7 +81,9 @@ public abstract class UCTNode<T extends Action, E extends Environment<T>> {
                     if (treeLevel == 0) {
                         quality = random.nextDouble();
                     } else {
-                        quality = meanReward + EXPLORATION_FACTOR * exploration;
+                        quality = meanReward +
+                                SearchPreprocessorConfig.EXPLORATION_FACTOR *
+                                        exploration;
                     }
                     break;
             }
@@ -90,7 +96,7 @@ public abstract class UCTNode<T extends Action, E extends Environment<T>> {
         // For epsilon greedy, return random action with
         // probability epsilon.
         if (policy.equals(SelectionPolicy.EPSILON_GREEDY)) {
-            if (random.nextDouble() <= SelectionPolicy.EPSILON) {
+            if (random.nextDouble() <= JoinConfig.EPSILON) {
                 return random.nextInt(nrActions);
             }
         }
@@ -110,9 +116,9 @@ public abstract class UCTNode<T extends Action, E extends Environment<T>> {
         }
 
         boolean canExpand = createdIn != roundCtr;
-        int actionIndex = selectAction(policy);
+        int actionIndex = selectAction(SelectionPolicy.UCB1);
         if (childNodes[actionIndex] == null && canExpand) {
-            childNodes[actionIndex] = createChildNode(actionIndex, roundCtr);
+            childNodes[actionIndex] = createChildNode(actionIndex);
         }
 
         updateActionState(action, actionIndex);
@@ -125,13 +131,7 @@ public abstract class UCTNode<T extends Action, E extends Environment<T>> {
         return reward;
     }
 
-    protected double playout(T action, int budget) {
-        return environment.execute(budget, action);
-    }
-
-    protected UCTNode<T, E> createChildNode(int action, long roundCtr) {
-        return null;
-    }
-
-    protected void updateActionState(T actionState, int action) {}
+    protected abstract double playout(T action, int budget);
+    protected abstract UCTNode<T> createChildNode(int action);
+    protected abstract void updateActionState(T actionState, int action);
 }

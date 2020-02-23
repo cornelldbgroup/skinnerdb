@@ -1,7 +1,7 @@
 package config;
 
 import joining.uct.ExplorationWeightPolicy;
-import uct.SelectionPolicy;
+import joining.uct.SelectionPolicy;
 
 /**
  * Configures reinforcement-uct based
