@@ -29,6 +29,8 @@ public class FilterState {
                 "order=" + Arrays.toString(order) +
                 ", useIndexScan=" + useIndexScan +
                 ", avoidBranching=" + avoidBranching +
+                ", cachedTil=" + cachedTil +
+                ", batches=" + batches +
                 '}';
     }
 
