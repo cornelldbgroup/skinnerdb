@@ -28,10 +28,13 @@ public class FilterUCTNode {
     private final int indexActions;
     private final int branchingActions;
 
-    private UnaryBoolEval cachedEval;
+    private final Map<List<Integer>, UnaryBoolEval> cache;
 
-    public FilterUCTNode(BudgetedFilter filterOp, long roundCtr,
+    public FilterUCTNode(BudgetedFilter filterOp,
+                         Map<List<Integer>, UnaryBoolEval> cache,
+                         long roundCtr,
                          int numPredicates, List<HashIndex> indices) {
+        this.cache = cache;
 
         int indexActions = 0;
         for (HashIndex index : indices) {
@@ -78,8 +81,6 @@ public class FilterUCTNode {
             nrTries[i] = 0;
             accumulatedReward[i] = 0;
         }
-
-        cachedEval = null;
     }
 
     public FilterUCTNode(FilterUCTNode parent, long roundCtr) {
@@ -97,10 +98,11 @@ public class FilterUCTNode {
         this.accumulatedReward = new double[0];
         this.branchingActions = 0;
         this.indexActions = 0;
-        cachedEval = null;
+        this.cache = parent.cache;
     }
 
     public FilterUCTNode(FilterUCTNode parent, long roundCtr, int nextPred) {
+        this.cache = parent.cache;
         this.indexActions = 0;
         this.branchingActions = 0;
         this.treeLevel = parent.treeLevel + 1;
@@ -138,7 +140,6 @@ public class FilterUCTNode {
         for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
             priorityActions.add(actionCtr);
         }
-        cachedEval = null;
     }
 
     int selectAction(SelectionPolicy policy) {
@@ -202,7 +203,8 @@ public class FilterUCTNode {
         return bestAction;
     }
 
-    public double sample(long roundCtr, FilterState state, int budget) {
+    public double sample(long roundCtr, FilterState state, int budget,
+                         List<Integer> order) {
         if (nrActions == 0) {
             return filterOp.executeWithBudget(budget, state);
         }
@@ -217,9 +219,10 @@ public class FilterUCTNode {
         } else {
             int predicate = actionToPredicate[action];
             state.order[treeLevel] = predicate;
-            if (this.cachedEval != null) {
+            order.add(predicate);
+            if (cache.get(order) != null) {
                 state.cachedTil = treeLevel;
-                state.cachedEval = this.cachedEval;
+                state.cachedEval = cache.get(order);
             }
 
             if (treeLevel == 0) {
@@ -238,7 +241,7 @@ public class FilterUCTNode {
 
         FilterUCTNode child = childNodes[action];
         double reward = (child != null) ?
-                child.sample(roundCtr, state, budget) :
+                child.sample(roundCtr, state, budget, order) :
                 playout(state, budget);
 
         updateStatistics(action, reward);
@@ -265,14 +268,6 @@ public class FilterUCTNode {
         ++nrVisits;
         ++nrTries[selectedAction];
         accumulatedReward[selectedAction] += reward;
-    }
-
-    public void setCompiledEval(UnaryBoolEval eval) {
-        this.cachedEval = eval;
-    }
-
-    public UnaryBoolEval getCompiledEval() {
-        return cachedEval;
     }
 
     public List<Integer> getPreds() {

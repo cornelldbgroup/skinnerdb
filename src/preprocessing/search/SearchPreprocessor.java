@@ -25,6 +25,7 @@ import query.QueryInfo;
 import statistics.PreStats;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static operators.Filter.*;
 import static preprocessing.PreprocessorUtil.*;
@@ -241,13 +242,18 @@ public class SearchPreprocessor implements Preprocessor {
                                      ExpressionInfo unaryPred,
                                      Map<ColumnRef, ColumnRef> colMap)
             throws Exception {
+        ConcurrentHashMap<List<Integer>, UnaryBoolEval> cache =
+                new ConcurrentHashMap<>();
+
+
         long roundCtr = 0;
         int nrCompiled = compiled.size();
         BudgetedFilter filterOp = new BudgetedFilter(tableName, predicates,
                 compiled, indices, values);
 
         FilterState state = new FilterState(nrCompiled);
-        FilterUCTNode root = new FilterUCTNode(filterOp, roundCtr, nrCompiled,
+        FilterUCTNode root = new FilterUCTNode(filterOp, cache, roundCtr,
+                nrCompiled,
                 indices);
         long nextForget = 1;
         long nextCompile = 50;
@@ -255,10 +261,10 @@ public class SearchPreprocessor implements Preprocessor {
         while (!filterOp.isFinished()) {
             ++roundCtr;
             state.reset();
-            root.sample(roundCtr, state, ROWS_PER_TIMESTEP);
+            root.sample(roundCtr, state, ROWS_PER_TIMESTEP, new ArrayList<>());
 
             if (FORGET && roundCtr == nextForget) {
-                root = new FilterUCTNode(filterOp, roundCtr, nrCompiled,
+                root = new FilterUCTNode(filterOp, cache, roundCtr, nrCompiled,
                         indices);
                 nextForget *= 10;
             }
@@ -276,7 +282,7 @@ public class SearchPreprocessor implements Preprocessor {
                     if (compile.size() == 0) break;
                     FilterUCTNode node = compile.poll();
                     final List<Integer> preds = node.getPreds();
-                    if (node.getCompiledEval() == null) {
+                    if (cache.get(preds) == null) {
                         ParallelService.LOW_POOL.submit(() -> {
                             Expression expr = null;
                             for (int i = preds.size() - 1; i >= 0; i--) {
@@ -289,8 +295,8 @@ public class SearchPreprocessor implements Preprocessor {
                             }
 
                             try {
-                                node.setCompiledEval(
-                                        compilePred(unaryPred, expr, colMap));
+                                cache.put(preds, compilePred(unaryPred, expr,
+                                        colMap));
                             } catch (Exception e) {}
                         });
                     }
