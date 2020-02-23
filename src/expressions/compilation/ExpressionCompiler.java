@@ -1814,7 +1814,7 @@ public class ExpressionCompiler extends SkinnerVisitor {
     public static int extractFromDate(int dateSecs, int partID) {
         Calendar calendar = Calendar.getInstance();
         calendar.setTimeInMillis((long) dateSecs * (long) 1000);
-        return calendar.get(partID);
+        return calendar.get(partID) - (partID == Calendar.MONTH ? 1 : 0);
     }
 
     @Override
