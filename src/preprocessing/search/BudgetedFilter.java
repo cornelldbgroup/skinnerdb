@@ -102,26 +102,25 @@ public class BudgetedFilter {
         return Pair.of(duration, currentCompletedRow);
     }
 
-    private Pair<Long, Integer> tableScanBranchingParallel(int budget,
+    private Pair<Long, Integer> tableScanBranchingParallel(int budgetPerThread,
                                                            FilterState state) {
-        final int perThreadBudget = budget / state.batches;
-        final int lastRow = lastCompletedRow + budget;
         long startTime = System.nanoTime();
 
         List<Future<MutableIntList>> futures = new ArrayList<>();
 
         for (int j = 0; j < state.batches; j++) {
-            final int start = lastCompletedRow + perThreadBudget * j;
-            final int end = j == state.batches - 1 ? lastRow :
-                    start + perThreadBudget;
+            final int start = lastCompletedRow + budgetPerThread * j;
+            final int end = Math.min(start + budgetPerThread,
+                    LAST_TABLE_ROW - 1);
+
+            if (start >= end) continue;
 
             if (state.cachedEval != null) {
                 futures.add(ParallelService.HIGH_POOL.submit(() -> {
                     MutableIntList tempResult = IntLists.mutable.empty();
                     int currentCompletedRow = start;
                     ROW_LOOP:
-                    while (currentCompletedRow < end &&
-                            currentCompletedRow < LAST_TABLE_ROW) {
+                    while (currentCompletedRow <= end) {
                         currentCompletedRow++;
 
                         if (state.cachedEval.evaluate(currentCompletedRow)
@@ -146,8 +145,7 @@ public class BudgetedFilter {
                     MutableIntList tempResult = IntLists.mutable.empty();
                     int currentCompletedRow = start;
                     ROW_LOOP:
-                    while (currentCompletedRow < end &&
-                            currentCompletedRow < LAST_TABLE_ROW) {
+                    while (currentCompletedRow <= end) {
                         currentCompletedRow++;
 
                         for (int predIndex : state.order) {
@@ -172,7 +170,8 @@ public class BudgetedFilter {
 
         long endTime = System.nanoTime();
         long duration = endTime - startTime;
-        return Pair.of(duration, lastCompletedRow + budget);
+        return Pair.of(duration,
+                lastCompletedRow + budgetPerThread * state.batches);
     }
 
     private Pair<Long, Integer> tableScanBranching(int remainingRows,
@@ -267,6 +266,7 @@ public class BudgetedFilter {
             result = tableScanBitset(budget, state);
         } else if (state.batches > 0) {
             result = tableScanBranchingParallel(budget, state);
+            budget *= state.batches;
         } else {
             result = tableScanBranching(budget, state);
         }
