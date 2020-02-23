@@ -269,7 +269,7 @@ public class SearchPreprocessor implements Preprocessor {
                 nextForget *= 10;
             }
 
-            if (false && roundCtr == nextCompile) {
+            if (roundCtr == nextCompile) {
                 nextCompile += 100;
 
                 int compileSetSize = predicates.size();
