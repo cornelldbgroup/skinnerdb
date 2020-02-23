@@ -29,8 +29,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import static operators.Filter.*;
 import static preprocessing.PreprocessorUtil.*;
-import static preprocessing.search.FilterSearchConfig.FORGET;
-import static preprocessing.search.FilterSearchConfig.ROWS_PER_TIMESTEP;
+import static preprocessing.search.FilterSearchConfig.*;
 
 public class SearchPreprocessor implements Preprocessor {
     /**
@@ -261,7 +260,8 @@ public class SearchPreprocessor implements Preprocessor {
         while (!filterOp.isFinished()) {
             ++roundCtr;
             state.reset();
-            root.sample(roundCtr, state, ROWS_PER_TIMESTEP, new ArrayList<>());
+            root.sample(roundCtr, state, ROWS_PER_TIMESTEP,
+                    PARALLEL_ROWS_PER_TIMESTEP, new ArrayList<>());
 
             if (FORGET && roundCtr == nextForget) {
                 root = new FilterUCTNode(filterOp, cache, roundCtr, nrCompiled,

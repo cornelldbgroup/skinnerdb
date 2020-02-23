@@ -8,13 +8,15 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.eclipse.collections.api.list.ImmutableList;
 import org.eclipse.collections.api.list.primitive.MutableIntList;
 import org.eclipse.collections.impl.factory.primitive.IntLists;
+import parallel.ParallelService;
 
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.List;
+import java.util.concurrent.Future;
 
 public class BudgetedFilter {
-    private final int cardinality;
+    private final int LAST_TABLE_ROW;
     private int lastCompletedRow;
     private MutableIntList result;
     private ImmutableList<Expression> predicates;
@@ -29,7 +31,7 @@ public class BudgetedFilter {
                           List<Number> values) {
         this.result = IntLists.mutable.empty();
         this.compiled = compiled;
-        this.cardinality = CatalogManager.getCardinality(tableName);
+        this.LAST_TABLE_ROW = CatalogManager.getCardinality(tableName) - 1;
         this.lastCompletedRow = -1;
         this.indices = indices;
         this.predicates = predicates;
@@ -46,13 +48,13 @@ public class BudgetedFilter {
         int dataLocation =
                 index.getDataLocation(values.get(state.order[0]));
         if (dataLocation < 0) {
-            return Pair.of(0l, this.cardinality - 1);
+            return Pair.of(0l, LAST_TABLE_ROW);
         }
 
         int startPos = index.nextHighestRowInBucket(dataLocation,
                 lastCompletedRow);
         if (startPos < 0) {
-            return Pair.of(0l, this.cardinality - 1);
+            return Pair.of(0l, LAST_TABLE_ROW);
         }
 
         int endPos = index.data[dataLocation] + dataLocation + 1;
@@ -100,6 +102,78 @@ public class BudgetedFilter {
         return Pair.of(duration, currentCompletedRow);
     }
 
+    private Pair<Long, Integer> tableScanBranchingParallel(int budget,
+                                                           FilterState state) {
+        final int delta = state.batches;
+        final int lastRow = lastCompletedRow + budget;
+        long startTime = System.nanoTime();
+
+        List<Future<MutableIntList>> futures = new ArrayList<>();
+        if (state.cachedEval != null) {
+            for (int j = 1; j <= state.batches; j++) {
+                final int start = j;
+                futures.add(ParallelService.HIGH_POOL.submit(() -> {
+                    MutableIntList tempResult = IntLists.mutable.empty();
+                    int currentCompletedRow = lastCompletedRow + start - delta;
+                    ROW_LOOP:
+                    while (currentCompletedRow < lastRow &&
+                            currentCompletedRow < LAST_TABLE_ROW) {
+                        currentCompletedRow += delta;
+
+                        if (state.cachedEval.evaluate(currentCompletedRow) <= 0) {
+                            continue ROW_LOOP;
+                        }
+
+                        for (int i = state.cachedTil + 1; i <
+                                state.order.length; i++) {
+                            UnaryBoolEval expr = compiled.get(state.order[i]);
+                            if (expr.evaluate(currentCompletedRow) <= 0) {
+                                continue ROW_LOOP;
+                            }
+                        }
+
+                        tempResult.add(currentCompletedRow);
+                    }
+
+                    return tempResult;
+                }));
+            }
+        } else {
+            for (int j = 1; j <= state.batches; j++) {
+                final int start = j;
+                futures.add(ParallelService.HIGH_POOL.submit(() -> {
+                    MutableIntList tempResult = IntLists.mutable.empty();
+                    int currentCompletedRow = lastCompletedRow + start - delta;
+                    ROW_LOOP:
+                    while (currentCompletedRow < lastRow &&
+                            currentCompletedRow < LAST_TABLE_ROW) {
+                        currentCompletedRow += delta;
+
+                        for (int predIndex : state.order) {
+                            UnaryBoolEval expr = compiled.get(predIndex);
+                            if (expr.evaluate(currentCompletedRow) <= 0) {
+                                continue ROW_LOOP;
+                            }
+                        }
+
+                        tempResult.add(currentCompletedRow);
+                    }
+                    return tempResult;
+                }));
+            }
+        }
+
+        for (Future<MutableIntList> f : futures) {
+            try {
+                result.addAll(f.get());
+            } catch (Exception e) {}
+        }
+
+        long endTime = System.nanoTime();
+        long duration = endTime - startTime;
+        return Pair.of(duration, lastCompletedRow + budget);
+    }
+
     private Pair<Long, Integer> tableScanBranching(int remainingRows,
                                                    FilterState state) {
         int currentCompletedRow = lastCompletedRow;
@@ -107,7 +181,7 @@ public class BudgetedFilter {
 
         if (state.cachedEval != null) {
             ROW_LOOP:
-            while (remainingRows > 0 && currentCompletedRow + 1 < cardinality) {
+            while (remainingRows > 0 && currentCompletedRow < LAST_TABLE_ROW) {
                 currentCompletedRow++;
                 remainingRows--;
 
@@ -126,7 +200,7 @@ public class BudgetedFilter {
             }
         } else {
             ROW_LOOP:
-            while (remainingRows > 0 && currentCompletedRow + 1 < cardinality) {
+            while (remainingRows > 0 && currentCompletedRow < LAST_TABLE_ROW) {
                 currentCompletedRow++;
                 remainingRows--;
 
@@ -151,7 +225,7 @@ public class BudgetedFilter {
         long startTime = System.nanoTime();
 
         int begin = lastCompletedRow + 1;
-        int end = Math.min(lastCompletedRow + nrRows, cardinality - 1);
+        int end = Math.min(lastCompletedRow + nrRows, LAST_TABLE_ROW);
         nrRows = end - begin + 1;
 
         List<BitSet> predicateEval = new ArrayList<>(compiled.size());
@@ -183,26 +257,27 @@ public class BudgetedFilter {
         return Pair.of(duration, end);
     }
 
-    public double executeWithBudget(int remainingRows, FilterState state) {
+    public double executeWithBudget(int budget, FilterState state) {
         Pair<Long, Integer> result;
 
         if (state.useIndexScan) { // Use index to filter rows.
-            result = indexScanWithOnePredicate(remainingRows, state);
+            result = indexScanWithOnePredicate(budget, state);
         } else if (state.avoidBranching) {
-            result = tableScanBitset(remainingRows, state);
+            result = tableScanBitset(budget, state);
+        } else if (state.batches > 0) {
+            result = tableScanBranching(budget, state);
         } else {
-            result = tableScanBranching(remainingRows, state);
+            result = tableScanBranching(budget, state);
         }
 
 
-        double reward = Math.exp(-result.getLeft() * 0.0001);
+        double reward = Math.exp(-result.getLeft() / (double) budget);
         lastCompletedRow = result.getRight();
-
         return reward;
     }
 
     public boolean isFinished() {
-        return lastCompletedRow == cardinality - 1;
+        return lastCompletedRow == LAST_TABLE_ROW;
     }
 
     public MutableIntList getResult() {

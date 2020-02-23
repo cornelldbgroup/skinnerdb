@@ -12,12 +12,15 @@ public class FilterState {
     public UnaryBoolEval cachedEval;
     public int cachedTil;
 
+    public int batches;
+
     public FilterState(int numPredicates) {
         this.order = new int[numPredicates];
         this.avoidBranching = false;
         this.useIndexScan = false;
         this.cachedEval = null;
-        this.cachedTil = 0;
+        this.cachedTil = -1;
+        this.batches = 0;
     }
 
     @Override
@@ -34,5 +37,6 @@ public class FilterState {
         this.useIndexScan = false;
         this.cachedEval = null;
         this.cachedTil = -1;
+        this.batches = 0;
     }
 }
