@@ -35,20 +35,4 @@ public class BranchingLeafNode extends UCTNode<FilterAction, BudgetedFilter>
     @Override
     public void addChildrenToCompile(PriorityQueue<Compilable> queue,
                                      int setSize) {}
-
-    @Override
-    protected double playout(FilterAction action, int budget) {
-        throw new RuntimeException("0 Actions at this node");
-    }
-
-    @Override
-    protected UCTNode<FilterAction, BudgetedFilter> createChildNode(
-            int action, long roundCtr) {
-        throw new RuntimeException("0 Actions at this node");
-    }
-
-    @Override
-    protected void updateActionState(FilterAction actionState, int action) {
-        throw new RuntimeException("0 Actions at this node");
-    }
 }

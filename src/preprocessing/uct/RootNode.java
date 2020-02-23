@@ -4,20 +4,16 @@ import operators.BudgetedFilter;
 import uct.SelectionPolicy;
 import uct.UCTNode;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 import java.util.PriorityQueue;
 
 public class RootNode extends UCTNode<FilterAction, BudgetedFilter> {
     private final int indexes;
     private final int predicates;
     private final int[] actionToPredicate;
-    private final List<Integer> unchosenPreds;
 
 
-    public RootNode(BudgetedFilter env, long roundCtr) {
-        super(env, 1 + env.numPredicates() + env.numIndexes(), 0, roundCtr,
+    public RootNode(BudgetedFilter env) {
+        super(env, 1 + env.numPredicates() + env.numIndexes(), 0, 0,
                 SelectionPolicy.UCB1);
         this.predicates = env.numPredicates();
         this.indexes = env.numIndexes();
@@ -33,11 +29,6 @@ public class RootNode extends UCTNode<FilterAction, BudgetedFilter> {
                 }
                 this.actionToPredicate[action] = index;
             }
-        }
-
-        this.unchosenPreds = new ArrayList<>();
-        for (int i = 0, j = 0; i < predicates; i++) {
-            unchosenPreds.add(i);
         }
     }
 
@@ -77,30 +68,6 @@ public class RootNode extends UCTNode<FilterAction, BudgetedFilter> {
                 ((Compilable) this.childNodes[a]).addChildrenToCompile(compile,
                         compileSetSize);
             }
-        }
-    }
-
-    @Override
-    protected double playout(FilterAction state, int budget) {
-        int rand = random.nextInt(nrActions);
-        updateActionState(state, rand);
-
-        if (state.type == FilterAction.ActionType.AVOID_BRANCHING) {
-            return environment.execute(budget, state);
-        } else if (state.type == FilterAction.ActionType.BRANCHING) {
-            int lastPred = state.order[treeLevel];
-
-            int posCtr = treeLevel + 1;
-            Collections.shuffle(unchosenPreds);
-            for (int pred : unchosenPreds) {
-                if (pred == lastPred) continue;
-
-                state.order[posCtr++] = pred;
-            }
-
-            return environment.execute(budget, state);
-        } else { // state.type == FilterAction.ActionType.INDEX_SCAN
-            return 0;
         }
     }
 }

@@ -16,7 +16,7 @@ public abstract class UCTNode<T extends Action, E extends Environment<T>> {
     public final int treeLevel;
     protected int nrVisits;
     private final long createdIn;
-    protected final Random random;
+    private final Random random;
     private final SelectionPolicy policy;
     private double EXPLORATION_FACTOR = 1e-5;
 
@@ -125,9 +125,13 @@ public abstract class UCTNode<T extends Action, E extends Environment<T>> {
         return reward;
     }
 
-    protected abstract double playout(T action, int budget);
+    protected double playout(T action, int budget) {
+        return environment.execute(budget, action);
+    }
 
-    protected abstract UCTNode<T, E> createChildNode(int action, long roundCtr);
+    protected UCTNode<T, E> createChildNode(int action, long roundCtr) {
+        return null;
+    }
 
-    protected abstract void updateActionState(T actionState, int action);
+    protected void updateActionState(T actionState, int action) {}
 }

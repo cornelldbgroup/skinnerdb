@@ -255,7 +255,7 @@ public class SearchPreprocessor implements Preprocessor {
                 compiled, indices, values, compileCache);
 
         FilterAction state = new FilterAction(nrCompiled);
-        RootNode root = new RootNode(filterOp, roundCtr);
+        RootNode root = new RootNode(filterOp);
         long nextForget = 1;
         long nextCompile = 50;
 
@@ -265,7 +265,7 @@ public class SearchPreprocessor implements Preprocessor {
             root.sample(roundCtr, state, ROWS_PER_TIMESTEP);
 
             if (FORGET && roundCtr == nextForget) {
-                root = new RootNode(filterOp, roundCtr);
+                new RootNode(filterOp);
                 nextForget *= 10;
             }
 
