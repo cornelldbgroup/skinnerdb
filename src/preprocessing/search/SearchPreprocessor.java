@@ -277,25 +277,25 @@ public class SearchPreprocessor implements Preprocessor {
                     FilterUCTNode node = compile.poll();
 
                     if (node.getCompiledEval() == null) {
-                        ParallelService.LOW_POOL.submit(() -> {
-                            Expression expr = null;
-                            for (int i = node.getIndexPrefixLength();
-                                 i < node.getPreds().size(); i++) {
-                                if (expr == null) {
-                                    expr = predicates.get(
-                                            node.getPreds().get(i));
-                                } else {
-                                    expr = new AndExpression(expr,
-                                            predicates.get(
-                                                    node.getPreds().get(i)));
-                                }
+                        System.out.println(node.getPreds().toString());
+                        //ParallelService.LOW_POOL.submit(() -> {
+                        Expression expr = null;
+                        for (int i = node.getPreds().size() - 1; i >= 0; i--) {
+                            if (expr == null) {
+                                expr = predicates.get(
+                                        node.getPreds().get(i));
+                            } else {
+                                expr = new AndExpression(expr,
+                                        predicates.get(
+                                                node.getPreds().get(i)));
                             }
+                        }
 
-                            try {
-                                node.setCompiledEval(
-                                        compilePred(unaryPred, expr, colMap));
-                            } catch (Exception e) {}
-                        });
+                        try {
+                            node.setCompiledEval(
+                                    compilePred(unaryPred, expr, colMap));
+                        } catch (Exception e) {}
+                        //});
                     }
 
                     node.addChildrenToCompile(compile, compileSetSize);

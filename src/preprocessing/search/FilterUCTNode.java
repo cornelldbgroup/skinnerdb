@@ -29,7 +29,6 @@ public class FilterUCTNode {
     private final int branchingActions;
 
     private UnaryBoolEval cachedEval;
-    private final int indexPrefixLength;
 
     public FilterUCTNode(BudgetedFilter filterOp, long roundCtr,
                          int numPredicates, List<HashIndex> indices) {
@@ -81,7 +80,6 @@ public class FilterUCTNode {
         }
 
         cachedEval = null;
-        indexPrefixLength = 0;
     }
 
     public FilterUCTNode(FilterUCTNode parent, long roundCtr) {
@@ -100,11 +98,9 @@ public class FilterUCTNode {
         this.branchingActions = 0;
         this.indexActions = 0;
         cachedEval = null;
-        indexPrefixLength = 0;
     }
 
-    public FilterUCTNode(FilterUCTNode parent, long roundCtr, int nextPred,
-                         int indexPrefixLength) {
+    public FilterUCTNode(FilterUCTNode parent, long roundCtr, int nextPred) {
         this.indexActions = 0;
         this.branchingActions = 0;
         this.treeLevel = parent.treeLevel + 1;
@@ -143,7 +139,6 @@ public class FilterUCTNode {
             priorityActions.add(actionCtr);
         }
         cachedEval = null;
-        this.indexPrefixLength = indexPrefixLength;
     }
 
     int selectAction(SelectionPolicy policy) {
@@ -237,7 +232,7 @@ public class FilterUCTNode {
             boolean canExpand = createdIn != roundCtr;
             if (childNodes[action] == null && canExpand) {
                 childNodes[action] = new FilterUCTNode(this, roundCtr,
-                        predicate, state.useIndexScan ? 1 : 0);
+                        predicate);
             }
         }
 
@@ -286,18 +281,26 @@ public class FilterUCTNode {
 
     public void addChildrenToCompile(PriorityQueue<FilterUCTNode> compile,
                                      int compileSetSize) {
-        for (int a = 0; a < Math.min(nrActions, numPredicates); ++a) {
+        if (this.treeLevel == 0) {
+            for (int a = 0; a < Math.min(nrActions, numPredicates); ++a) {
+                if (this.childNodes[a] != null) {
+                    this.childNodes[a].addChildrenToCompile(compile,
+                            compileSetSize);
+                }
+            }
+            return;
+        }
+
+
+        for (int a = 0; a < nrActions; ++a) {
             if (this.childNodes[a] != null) {
-                compile.add(this.childNodes[a]);
+                this.childNodes[a].addChildrenToCompile(compile,
+                        compileSetSize);
                 if (compile.size() >= compileSetSize) {
                     compile.poll();
                 }
             }
         }
-    }
-
-    public int getIndexPrefixLength() {
-        return indexPrefixLength;
     }
 
     public int getAddedSavedCalls() {
