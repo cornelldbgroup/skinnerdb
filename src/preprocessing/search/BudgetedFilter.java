@@ -208,14 +208,4 @@ public class BudgetedFilter {
     public MutableIntList getResult() {
         return result;
     }
-
-    public int nrIndexes() {
-        int indexActions = 0;
-        for (HashIndex index : indices) {
-            if (index != null) {
-                indexActions++;
-            }
-        }
-        return indexActions;
-    }
 }
