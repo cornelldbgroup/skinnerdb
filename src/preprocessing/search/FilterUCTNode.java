@@ -123,7 +123,6 @@ public class FilterUCTNode {
             this.chosenPreds = new ArrayList<>();
             this.unchosenPreds = new ArrayList<>();
             this.actionToPredicate = new int[0];
-
         } else {
             this.parallelActions = 0;
             this.nrActions = actionCount;
@@ -285,19 +284,22 @@ public class FilterUCTNode {
     }
 
     private double playout(FilterState state, int budget) {
-        int lastPred = state.order[treeLevel];
+        if (this.parallelActions == 0) {
+            int lastPred = state.order[treeLevel];
 
-        Collections.shuffle(unchosenPreds);
-        Iterator<Integer> unchosenPredsIter = unchosenPreds.iterator();
-        for (int posCtr = treeLevel + 1; posCtr < numPredicates; ++posCtr) {
-            int nextTable = unchosenPredsIter.next();
-            while (nextTable == lastPred) {
-                nextTable = unchosenPredsIter.next();
+            Collections.shuffle(unchosenPreds);
+            Iterator<Integer> unchosenPredsIter = unchosenPreds.iterator();
+            for (int posCtr = treeLevel + 1; posCtr < numPredicates; ++posCtr) {
+                int nextTable = unchosenPredsIter.next();
+                while (nextTable == lastPred) {
+                    nextTable = unchosenPredsIter.next();
+                }
+                state.order[posCtr] = nextTable;
             }
-            state.order[posCtr] = nextTable;
+
+            state.batches = 0;
         }
 
-        state.batches = 0;
         return filterOp.executeWithBudget(budget, state);
     }
 
