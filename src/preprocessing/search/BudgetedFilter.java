@@ -274,6 +274,7 @@ public class BudgetedFilter {
 
         double reward = Math.exp(-result.getLeft() / (double) budget);
         lastCompletedRow = result.getRight();
+        System.out.println(lastCompletedRow + " " + budget + " " + result.getLeft() + " " + reward);
         return reward;
     }
 
