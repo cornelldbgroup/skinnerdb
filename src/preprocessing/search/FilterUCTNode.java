@@ -119,28 +119,31 @@ public class FilterUCTNode {
         if (actionCount == 0) {
             this.parallelActions = PARALLEL_ACTIONS;
             this.nrActions = PARALLEL_ACTIONS;
+            this.childNodes = new FilterUCTNode[nrActions];
+            this.chosenPreds = new ArrayList<>();
+            this.unchosenPreds = new ArrayList<>();
+            this.actionToPredicate = new int[0];
+
         } else {
             this.parallelActions = 0;
             this.nrActions = actionCount;
+
+            this.childNodes = new FilterUCTNode[nrActions];
+
+            this.chosenPreds = new ArrayList<>();
+            this.chosenPreds.addAll(parent.chosenPreds);
+            this.chosenPreds.add(nextPred);
+
+            this.unchosenPreds = new ArrayList<>();
+            this.unchosenPreds.addAll(parent.unchosenPreds);
+            int indexToRemove = unchosenPreds.indexOf(nextPred);
+            this.unchosenPreds.remove(indexToRemove);
+
+            this.actionToPredicate = new int[nrActions];
+            for (int action = 0; action < nrActions; ++action) {
+                actionToPredicate[action] = unchosenPreds.get(action);
+            }
         }
-
-        this.childNodes = new FilterUCTNode[nrActions];
-
-        this.chosenPreds = new ArrayList<>();
-        this.chosenPreds.addAll(parent.chosenPreds);
-        this.chosenPreds.add(nextPred);
-
-        this.unchosenPreds = new ArrayList<>();
-        this.unchosenPreds.addAll(parent.unchosenPreds);
-        int indexToRemove = unchosenPreds.indexOf(nextPred);
-        this.unchosenPreds.remove(indexToRemove);
-
-        this.actionToPredicate = new int[nrActions];
-        for (int action = 0; action < nrActions; ++action) {
-            actionToPredicate[action] = unchosenPreds.get(action);
-        }
-
-        this.filterOp = parent.filterOp;
 
         this.nrVisits = 0;
         this.nrTries = new int[nrActions];
@@ -154,6 +157,8 @@ public class FilterUCTNode {
         for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
             priorityActions.add(actionCtr);
         }
+
+        this.filterOp = parent.filterOp;
     }
 
     int selectAction(SelectionPolicy policy) {
