@@ -18,7 +18,7 @@ public abstract class UCTNode<T extends Action, E extends Environment<T>> {
     private final long createdIn;
     protected final Random random;
     private final SelectionPolicy policy;
-    private double EXPLORATION_FACTOR = 1e-5;
+    private static double EXPLORATION_FACTOR = 1e-5;
 
     public UCTNode(E env, int nrActions, int treeLevel,
                    long roundCtr, SelectionPolicy policy) {
@@ -109,13 +109,13 @@ public abstract class UCTNode<T extends Action, E extends Environment<T>> {
             return environment.execute(budget, action);
         }
 
-        boolean canExpand = createdIn != roundCtr;
         int actionIndex = selectAction(policy);
+        updateActionState(action, actionIndex);
+
+        boolean canExpand = createdIn != roundCtr;
         if (childNodes[actionIndex] == null && canExpand) {
             childNodes[actionIndex] = createChildNode(actionIndex, roundCtr);
         }
-
-        updateActionState(action, actionIndex);
 
         UCTNode child = childNodes[actionIndex];
         double reward = (child != null) ?

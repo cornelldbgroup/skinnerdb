@@ -49,11 +49,6 @@ public class BranchingNode extends UCTNode<FilterAction, BudgetedFilter>
     @Override
     protected UCTNode<FilterAction, BudgetedFilter> createChildNode(
             int action, long roundCtr) {
-        if (nrActions == 1) {
-            return new BranchingLeafNode(this, actionToPredicate[action],
-                    roundCtr);
-        }
-
         return new BranchingNode(this, actionToPredicate[action], roundCtr);
     }
 

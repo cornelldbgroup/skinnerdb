@@ -23,20 +23,21 @@ public class RootNode extends UCTNode<FilterAction, BudgetedFilter> {
         this.indexes = env.numIndexes();
         this.actionToPredicate = new int[nrActions];
 
-        int index = 0;
-        for (int action = 1; action < nrActions; action++) {
-            if (action < 1 + predicates) {
-                this.actionToPredicate[action] = action - 1;
-            } else {
-                while (environment.getIndex(index) == null) {
-                    index++;
-                }
-                this.actionToPredicate[action] = index;
+        for (int action = 1; action < 1 + predicates; action++) {
+            this.actionToPredicate[action] = action - 1;
+        }
+
+        int pred = 0, action = predicates + 1;
+        for (int i = 0; i < env.numIndexes(); i++) {
+            if (env.getIndex(i) != null) {
+                actionToPredicate[action] = pred;
+                action++;
             }
+            pred++;
         }
 
         this.unchosenPreds = new ArrayList<>();
-        for (int i = 0, j = 0; i < predicates; i++) {
+        for (int i = 0; i < predicates; i++) {
             unchosenPreds.add(i);
         }
     }
@@ -82,9 +83,6 @@ public class RootNode extends UCTNode<FilterAction, BudgetedFilter> {
 
     @Override
     protected double playout(FilterAction state, int budget) {
-        int rand = random.nextInt(nrActions);
-        updateActionState(state, rand);
-
         if (state.type == FilterAction.ActionType.AVOID_BRANCHING) {
             return environment.execute(budget, state);
         } else if (state.type == FilterAction.ActionType.BRANCHING) {
