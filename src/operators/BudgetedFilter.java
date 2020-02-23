@@ -8,14 +8,13 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.eclipse.collections.api.list.ImmutableList;
 import org.eclipse.collections.api.list.primitive.MutableIntList;
 import org.eclipse.collections.impl.factory.primitive.IntLists;
-import preprocessing.PreprocessingAction;
-import uct.Environment;
+import preprocessing.FilterState;
 
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.List;
 
-public class BudgetedFilter implements Environment<PreprocessingAction> {
+public class BudgetedFilter {
     private final int cardinality;
     private int lastCompletedRow;
     private MutableIntList result;
@@ -39,9 +38,8 @@ public class BudgetedFilter implements Environment<PreprocessingAction> {
     }
 
 
-    private Pair<Long, Integer> indexScanWithOnePredicate(
-            int remainingRows,
-            PreprocessingAction state) {
+    private Pair<Long, Integer> indexScanWithOnePredicate(int remainingRows,
+                                                          FilterState state) {
         int currentCompletedRow = lastCompletedRow;
 
         long startTime = System.nanoTime();
@@ -104,7 +102,7 @@ public class BudgetedFilter implements Environment<PreprocessingAction> {
     }
 
     private Pair<Long, Integer> tableScanBranching(int remainingRows,
-                                                   PreprocessingAction state) {
+                                                   FilterState state) {
         int currentCompletedRow = lastCompletedRow;
         long startTime = System.nanoTime();
 
@@ -150,7 +148,7 @@ public class BudgetedFilter implements Environment<PreprocessingAction> {
     }
 
     private Pair<Long, Integer> tableScanBitset(int nrRows,
-                                                PreprocessingAction state) {
+                                                FilterState state) {
         long startTime = System.nanoTime();
 
         int begin = lastCompletedRow + 1;
@@ -186,16 +184,15 @@ public class BudgetedFilter implements Environment<PreprocessingAction> {
         return Pair.of(duration, end);
     }
 
-    @Override
-    public double execute(int budget, PreprocessingAction state) {
+    public double executeWithBudget(int remainingRows, FilterState state) {
         Pair<Long, Integer> result;
 
         if (state.useIndexScan) { // Use index to filter rows.
-            result = indexScanWithOnePredicate(budget, state);
+            result = indexScanWithOnePredicate(remainingRows, state);
         } else if (state.avoidBranching) {
-            result = tableScanBitset(budget, state);
+            result = tableScanBitset(remainingRows, state);
         } else {
-            result = tableScanBranching(budget, state);
+            result = tableScanBranching(remainingRows, state);
         }
 
 
@@ -204,7 +201,6 @@ public class BudgetedFilter implements Environment<PreprocessingAction> {
         return reward;
     }
 
-    @Override
     public boolean isFinished() {
         return lastCompletedRow == cardinality - 1;
     }

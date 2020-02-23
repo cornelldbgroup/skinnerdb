@@ -1,11 +1,10 @@
 package preprocessing;
 
 import expressions.compilation.UnaryBoolEval;
-import uct.Action;
 
 import java.util.Arrays;
 
-public class PreprocessingAction implements Action {
+public class FilterState {
     public final int[] order;
     public boolean useIndexScan;
     public boolean avoidBranching;
@@ -13,7 +12,7 @@ public class PreprocessingAction implements Action {
     public UnaryBoolEval cachedEval;
     public int cachedTil;
 
-    public PreprocessingAction(int numPredicates) {
+    public FilterState(int numPredicates) {
         this.order = new int[numPredicates];
         this.avoidBranching = false;
         this.useIndexScan = false;
