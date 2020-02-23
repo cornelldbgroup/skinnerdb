@@ -1,4 +1,4 @@
-package preprocessing;
+package preprocessing.search;
 
 import expressions.compilation.UnaryBoolEval;
 

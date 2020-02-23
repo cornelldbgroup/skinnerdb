@@ -21,7 +21,7 @@ import query.QueryInfo;
  *
  * @author immanueltrummer
  */
-public class SearchIndexTest implements ExpressionVisitor {
+public class IndexTest implements ExpressionVisitor {
     /**
      * Meta-data about the query containing test predicate.
      */
@@ -31,16 +31,12 @@ public class SearchIndexTest implements ExpressionVisitor {
      */
     public boolean canUseIndex = true;
 
-    public HashIndex index = null;
-
-    public Number constant = null;
-
     /**
      * Initialize index test for given query.
      *
      * @param query meta-data about query
      */
-    public SearchIndexTest(QueryInfo query) {
+    public IndexTest(QueryInfo query) {
         this.query = query;
     }
 
@@ -71,12 +67,13 @@ public class SearchIndexTest implements ExpressionVisitor {
 
     @Override
     public void visit(DoubleValue doubleValue) {
-        constant = doubleValue.getValue();
+        // No indexes for double values currently
+        canUseIndex = false;
     }
 
     @Override
     public void visit(LongValue longValue) {
-        constant = (int) longValue.getValue();
+        // Can use index
     }
 
     @Override
@@ -109,11 +106,9 @@ public class SearchIndexTest implements ExpressionVisitor {
         // Can use index if value in dictionary
         String val = stringValue.getValue();
         Dictionary curDic = BufferManager.dictionary;
-        int code = curDic.getCode(val);
-        if (curDic != null && code < 0) {
+        if (curDic != null && curDic.getCode(val) < 0) {
             canUseIndex = false;
         }
-        constant = code;
     }
 
     @Override
@@ -138,12 +133,14 @@ public class SearchIndexTest implements ExpressionVisitor {
 
     @Override
     public void visit(AndExpression andExpression) {
-        canUseIndex = false;
+        andExpression.getLeftExpression().accept(this);
+        andExpression.getRightExpression().accept(this);
     }
 
     @Override
     public void visit(OrExpression orExpression) {
-        canUseIndex = false;
+        orExpression.getLeftExpression().accept(this);
+        orExpression.getRightExpression().accept(this);
     }
 
     @Override
@@ -217,7 +214,7 @@ public class SearchIndexTest implements ExpressionVisitor {
         String columnName = tableColumn.getColumnName();
         ColumnRef colRef = new ColumnRef(tableName, columnName);
         // Check that index of right type is available
-        this.index = BufferManager.colToIndex.get(colRef);
+        HashIndex index = BufferManager.colToIndex.get(colRef);
         if (index != null) {
             if (!(index instanceof HashIntIndex)) {
                 // Wrong index type

@@ -1,5 +1,7 @@
 package preprocessing;
 
+import preprocessing.search.SearchPreprocessor;
+
 public class PreprocessorManager {
     private static final Preprocessor INSTANCE;
 

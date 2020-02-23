@@ -4,7 +4,7 @@ package statistics;
  * Statistics about the join phase - most statistics
  * refer to counts achieved during the last query
  * evaluation.
- *
+ * 
  * @author immanueltrummer
  *
  */
@@ -25,7 +25,7 @@ public class JoinStats {
     /**
      * Sum of index entries for the values used in index lookups
      * (e.g., useful for determining the benefit of faster
-     * uct methods on index entries for the same value).
+     * search methods on index entries for the same value).
      */
     public static long nrIndexEntries = 0;
     /**

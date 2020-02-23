@@ -1,4 +1,4 @@
-package operators;
+package preprocessing.search;
 
 import catalog.CatalogManager;
 import expressions.compilation.UnaryBoolEval;
@@ -8,7 +8,6 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.eclipse.collections.api.list.ImmutableList;
 import org.eclipse.collections.api.list.primitive.MutableIntList;
 import org.eclipse.collections.impl.factory.primitive.IntLists;
-import preprocessing.FilterState;
 
 import java.util.ArrayList;
 import java.util.BitSet;

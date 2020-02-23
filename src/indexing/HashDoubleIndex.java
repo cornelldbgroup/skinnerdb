@@ -18,7 +18,7 @@ public class HashDoubleIndex extends HashIndex<Double> {
      */
     public final DoubleData doubleData;
     /**
-     * After indexing: maps uct key to index
+     * After indexing: maps search key to index
      * of first position at which associated
      * information is stored.
      */
@@ -110,7 +110,7 @@ public class HashDoubleIndex extends HashIndex<Double> {
         if (nrVals == 1) {
             JoinStats.nrUniqueIndexLookups += 1;
         }
-        // Restrict uct range via binary uct
+        // Restrict search range via binary search
         int lowerBound = firstPos + 1;
         int upperBound = firstPos + nrVals;
         while (upperBound - lowerBound > 1) {

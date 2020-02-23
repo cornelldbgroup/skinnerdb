@@ -1,4 +1,4 @@
-package preprocessing;
+package preprocessing.search;
 
 import config.LoggingConfig;
 import config.NamingConfig;
@@ -8,9 +8,7 @@ import expressions.compilation.UnaryBoolEval;
 import indexing.HashIndex;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
-import operators.BudgetedFilter;
 import operators.Materialize;
-import operators.SearchIndexTest;
 import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.ImmutableList;
 import org.eclipse.collections.api.list.MutableList;
@@ -19,6 +17,8 @@ import org.eclipse.collections.api.list.primitive.MutableIntList;
 import org.eclipse.collections.impl.factory.primitive.IntLists;
 import org.eclipse.collections.impl.parallel.ParallelIterate;
 import parallel.ParallelService;
+import preprocessing.Context;
+import preprocessing.Preprocessor;
 import print.RelationPrinter;
 import query.ColumnRef;
 import query.QueryInfo;
@@ -28,8 +28,8 @@ import java.util.*;
 
 import static operators.Filter.*;
 import static preprocessing.PreprocessorUtil.*;
-import static config.SearchPreprocessorConfig.FORGET;
-import static config.SearchPreprocessorConfig.ROWS_PER_TIMESTEP;
+import static preprocessing.search.FilterSearchConfig.FORGET;
+import static preprocessing.search.FilterSearchConfig.ROWS_PER_TIMESTEP;
 
 public class SearchPreprocessor implements Preprocessor {
     /**
@@ -194,8 +194,8 @@ public class SearchPreprocessor implements Preprocessor {
         List<HashIndex> indices = new ArrayList<>(predicates.size());
         List<Number> values = new ArrayList<>(predicates.size());
         for (Expression expression : predicates) {
-            SearchIndexTest test =
-                    new SearchIndexTest(queryInfo);
+            SinglePredicateIndexTest test =
+                    new SinglePredicateIndexTest(queryInfo);
             expression.accept(test);
             if (test.canUseIndex) {
                 indices.add(test.index);
