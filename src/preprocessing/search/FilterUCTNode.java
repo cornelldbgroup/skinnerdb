@@ -300,8 +300,7 @@ public class FilterUCTNode {
             }
 
             case BRANCHING_PARALLEL: {
-                return filterOp.executeWithBudget(PARALLEL_ROWS_PER_TIMESTEP,
-                        state);
+                return filterOp.executeWithBudget(ROWS_PER_TIMESTEP, state);
             }
 
             case LEAF:
