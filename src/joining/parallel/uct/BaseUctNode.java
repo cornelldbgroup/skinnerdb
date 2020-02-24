@@ -1,5 +1,7 @@
 package joining.parallel.uct;
 
+import java.util.Arrays;
+
 /**
  * Sequential UCT Node
  * it is used for experiments among different joining.parallel versions
@@ -12,7 +14,7 @@ public abstract class BaseUctNode {
     /**
      * Number of times this node was visited.
      */
-    public int nrVisits = 0;
+    public int[] nrVisits;
     /**
      * Parent node in UCT search tree.
      */
@@ -20,7 +22,7 @@ public abstract class BaseUctNode {
     /**
      * Accumulated reward over all visits so far.
      */
-    public double accumulatedReward = 0;
+    public double[] accumulatedReward;
     /**
      * Split Table label
      */
@@ -31,9 +33,11 @@ public abstract class BaseUctNode {
      * Initialize concurrent UCT root node.
      *
      */
-    public BaseUctNode(BaseUctNode parent, int label, int nrTables) {
+    public BaseUctNode(BaseUctNode parent, int label, int nrTables, int nrThreads) {
         this.parent = parent;
         this.label = label;
+        this.accumulatedReward = new double[nrThreads];
+        this.nrVisits = new int[nrThreads];
         if (nrTables > 0)
             this.children = new BaseUctNode[nrTables];
         else
@@ -61,7 +65,9 @@ public abstract class BaseUctNode {
      * @return reward
      */
     public double getReward() {
-        return accumulatedReward / nrVisits;
+        int nr = Arrays.stream(nrVisits).sum();
+
+        return nr == 0 ? 0 : Arrays.stream(accumulatedReward).sum() / 0;
     }
 
     public int getLabel() {
@@ -69,8 +75,8 @@ public abstract class BaseUctNode {
     }
 
 
-    public void updataStatistics(double reward) {
-        this.accumulatedReward += reward;
-        this.nrVisits++;
+    public void updataStatistics(double reward, int tid) {
+        this.accumulatedReward[tid] += reward;
+        this.nrVisits[tid]++;
     }
 }

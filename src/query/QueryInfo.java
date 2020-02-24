@@ -33,6 +33,8 @@ import net.sf.jsqlparser.statement.select.PlainSelect;
 import net.sf.jsqlparser.statement.select.SelectExpressionItem;
 import net.sf.jsqlparser.statement.select.SelectItem;
 import net.sf.jsqlparser.util.cnfexpression.CNFConverter;
+import org.apache.commons.lang3.tuple.ImmutablePair;
+import org.apache.commons.lang3.tuple.Pair;
 import predicate.NonEquiCols;
 import predicate.NonEquiNode;
 import predicate.NonEquiNodesTest;
@@ -216,6 +218,14 @@ public class QueryInfo {
 	 */
 	public final Set<Integer> temporaryTables = new HashSet<>();
 	/**
+	 * For each table, initialize a set of tables that connect to the key.
+	 */
+	public final Map<Integer, Set<Integer>> joinConnection = new HashMap<>();
+	/**
+	 * A set of potential constraints of join order.
+	 */
+	public final Set<Pair<Integer, Integer>> constraints = new HashSet<>();
+	/**
 	 * Extract information from the FROM clause (e.g.,
 	 * all tables referenced with their aliases, the
 	 * number of items in the from clause etc.).
@@ -365,6 +375,12 @@ public class QueryInfo {
 				ColumnRef rightRef = new ColumnRef(
 						rightCol.getTable().getName(),
 						rightCol.getColumnName());
+
+				int leftIndex = aliasToIndex.get(leftRef.aliasName);
+				int rightIndex = aliasToIndex.get(rightRef.aliasName);
+				joinConnection.get(leftIndex).add(rightIndex);
+				joinConnection.get(rightIndex).add(leftIndex);
+
 				// Do those columns belong to different tables?
 				if (!leftRef.aliasName.equals(rightRef.aliasName)) {
 					Set<ColumnRef> colPair = new HashSet<>();
@@ -389,6 +405,10 @@ public class QueryInfo {
 	 * predicates by the tables they refer to.
 	 */
 	void extractPredicates() throws Exception {
+		// initialize join connection
+		for (int i = 0; i < nrJoined; i++) {
+			joinConnection.put(i, new HashSet<>());
+		}
 		Expression where = plainSelect.getWhere();
 		if (where != null) {
 			// Normalize WHERE clause and transform into CNF
@@ -457,6 +477,22 @@ public class QueryInfo {
 					}
 				} // if join predicate
 			} // over where conjuncts
+//			joinConnection.forEach((leftIndex, set) -> {
+//				if (set.size() > 1) {
+//					for (Integer rightIndex: set) {
+//						if (rightIndex > leftIndex && joinConnection.get(rightIndex).size() > 1) {
+//							constraints.add(new ImmutablePair<>(leftIndex, rightIndex));
+//						}
+//					}
+//				}
+//			});
+			joinConnection.forEach((leftIndex, set) -> {
+				for (Integer rightIndex: set) {
+					if (rightIndex > leftIndex) {
+						constraints.add(new ImmutablePair<>(leftIndex, rightIndex));
+					}
+				}
+			});
 		} // if where clause
 	}
 

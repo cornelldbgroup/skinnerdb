@@ -1,7 +1,10 @@
 package joining.parallel.join;
 
 import catalog.CatalogManager;
+import com.koloboke.collect.set.IntSet;
+import com.koloboke.collect.set.hash.HashIntSets;
 import config.LoggingConfig;
+import config.ParallelConfig;
 import config.PreConfig;
 import expressions.ExpressionInfo;
 import expressions.compilation.EvaluatorType;
@@ -70,7 +73,7 @@ public abstract class DPJoin {
     /**
      * Instance of statistics records.
      */
-    public StatsInstance statsInstance;
+    public final StatsInstance statsInstance;
     /**
      * Last state after a episode.
      */
@@ -98,15 +101,15 @@ public abstract class DPJoin {
     /**
      * A list of logs.
      */
-    public List<String> logs;
+    public final List<String> logs;
     /**
      * Number of episode.
      */
     public long roundCtr;
     /**
-     * Slowest threads for each split table.
+     * A set of finished tables
      */
-    public int[] slowThreads;
+    public final IntSet[] finishedTables;
 
     ExpressionCompiler compiler;
     KnaryBoolEval boolEval;
@@ -140,15 +143,14 @@ public abstract class DPJoin {
 //            System.out.println(table + " " + index + " " + cardinality);
             cardinalities[index] = cardinality;
         }
+        this.finishedTables = new IntSet[nrJoined];
+        for (int i = 0; i < nrJoined; i++) {
+            if (cardinalities[i] >= ParallelConfig.PARTITION_SIZE) {
+                this.finishedTables[i] = HashIntSets.newMutableSet();
+            }
+        }
         this.result = new JoinResult(nrJoined);
         this.predToEval = predToEval;
-
-//        ExpressionInfo predInfo = query.nonEquiJoinPreds.get(0);
-//        compiler = new ExpressionCompiler(predInfo,
-//                preSummary.columnMapping, query.aliasToIndex, null,
-//                EvaluatorType.KARY_BOOLEAN);
-//        predInfo.finalExpression.accept(compiler);
-//        boolEval = (KnaryBoolEval)compiler.getBoolEval();
 
         if (!PreConfig.FILTER) {
             for (ExpressionInfo predInfo : query.wherePredicates) {
@@ -174,6 +176,8 @@ public abstract class DPJoin {
      * @return reward (higher reward means faster progress)
      */
     public abstract double execute(int[] order, int splitTable, int roundCtr) throws Exception;
+    public abstract double execute(int[] order, int splitTable, int roundCtr,
+                                   boolean[][] finishedFlags, State slowState) throws Exception;
 
     /**
      * Returns true iff a complete join result was generated.

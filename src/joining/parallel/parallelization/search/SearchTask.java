@@ -107,6 +107,7 @@ public class SearchTask implements Callable<SearchResult> {
             else {
                 if (!finish.get()) {
                     finish.set(true);
+                    spJoin.roundCtr = roundCtr;
                     System.out.println("Finish id: " + tid + "\t" + Arrays.toString(joinOrder));
                 }
                 break;
@@ -115,7 +116,6 @@ public class SearchTask implements Callable<SearchResult> {
         }
         // Materialize result table
         long timer2 = System.currentTimeMillis();
-        spJoin.roundCtr = roundCtr;
         System.out.println("Thread " + tid + " " + (timer2 - timer1) + "\t Round: " + roundCtr);
         Collection<ResultTuple> tuples = spJoin.result.getTuples();
         return new SearchResult(tuples, spJoin.logs, tid);

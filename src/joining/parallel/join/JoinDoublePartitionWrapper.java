@@ -1,5 +1,6 @@
 package joining.parallel.join;
 
+import com.koloboke.collect.set.IntSet;
 import data.DoubleData;
 import expressions.ExpressionInfo;
 import joining.parallel.indexing.DoublePartitionIndex;
@@ -31,7 +32,7 @@ public class JoinDoublePartitionWrapper extends JoinPartitionIndexWrapper {
         int priorTuple = tupleIndices[priorTable];
         double priorVal = priorDoubleData.data[priorTuple];
         int curTuple = tupleIndices[nextTable];
-        return nextDoubleIndex.nextTuple(priorVal, curTuple, nextSize);
+        return nextDoubleIndex.nextTuple(priorVal, curTuple, nextTable, nextSize);
     }
 
     @Override
@@ -39,7 +40,15 @@ public class JoinDoublePartitionWrapper extends JoinPartitionIndexWrapper {
         int priorTuple = tupleIndices[priorTable];
         double priorVal = priorDoubleData.data[priorTuple];
         int curTuple = tupleIndices[nextTable];
-        return nextDoubleIndex.nextTupleInScope(priorVal, priorTuple, curTuple, tid, nextSize);
+        return nextDoubleIndex.nextTupleInScope(priorVal, priorTuple, curTuple, tid, nextTable, nextSize);
+    }
+
+    @Override
+    public int nextIndexInScope(int[] tupleIndices, int tid, int[] nextSize, IntSet finishedThreads) {
+        int priorTuple = tupleIndices[priorTable];
+        double priorVal = priorDoubleData.data[priorTuple];
+        int curTuple = tupleIndices[nextTable];
+        return nextDoubleIndex.nextTupleInScope(priorVal, priorTuple, curTuple, tid, nextTable, nextSize, finishedThreads);
     }
 
     @Override
@@ -56,5 +65,20 @@ public class JoinDoublePartitionWrapper extends JoinPartitionIndexWrapper {
         double priorVal = priorDoubleData.data[priorTuple];
         int curTuple = tupleIndices[nextTable];
         return nextDoubleIndex.evaluateInScope(priorVal, priorTuple, curTuple, tid);
+    }
+
+    @Override
+    public boolean evaluateInScope(int[] tupleIndices, int tid, IntSet finishedThreads) {
+        int priorTuple = tupleIndices[priorTable];
+        double priorVal = priorDoubleData.data[priorTuple];
+        int curTuple = tupleIndices[nextTable];
+        return nextDoubleIndex.evaluateInScope(priorVal, priorTuple, curTuple, tid, finishedThreads);
+    }
+
+    @Override
+    public int nrIndexed(int[] tupleIndices) {
+        int priorTuple = tupleIndices[priorTable];
+        double priorVal = priorDoubleData.data[priorTuple];
+        return nextDoubleIndex.nrIndexed(priorVal);
     }
 }

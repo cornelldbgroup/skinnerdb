@@ -3,8 +3,12 @@ package joining.parallel.parallelization;
 import config.ParallelConfig;
 import joining.parallel.uct.BaseUctInner;
 import joining.parallel.uct.SimpleUctNode;
+import joining.progress.State;
 
 import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.UnaryOperator;
 
 /**
  * The plan information of the first terminated thread.
@@ -15,23 +19,25 @@ public class EndPlan {
     /**
      * Finished join order.
      */
-    private int[] joinOrder;
+    private volatile int[] joinOrder;
     /**
      * Finished split table.
      */
-    private int splitTable;
+    private volatile int splitTable;
     /**
      * finish flags for different tables
      */
     public final boolean[][] finishFlags;
     /**
-     * UCT extension of split tables
+     * Array of slowest state for different thread
      */
-    public SimpleUctNode tableRoot;
+    public final AtomicReference<State> slowestState;
     /**
      * the slowest thread id for each split table
      */
     public int[] slowThreads;
+
+    public final ReentrantLock lock;
 
     public EndPlan(int nrThreads, int nrTables, int[] cardinalities) {
         joinOrder = new int[nrTables];
@@ -39,6 +45,8 @@ public class EndPlan {
         splitTable = -1;
         this.slowThreads = new int[nrTables];
         Arrays.fill(slowThreads, -1);
+        this.slowestState = new AtomicReference<>(new State(nrTables));
+        this.lock = new ReentrantLock();
     }
 
     public int[] getJoinOrder() {
@@ -55,6 +63,19 @@ public class EndPlan {
 
     public void setSplitTable(int splitTable) {
         this.splitTable = splitTable;
+    }
+
+    public State setSplitTable(int largeTable, State state) {
+        int nrTables = joinOrder.length;
+        return slowestState.updateAndGet(previousState -> {
+            if (previousState.isAhead(joinOrder, state, nrTables)) {
+                this.splitTable = largeTable;
+                return state;
+            }
+            else {
+                return previousState;
+            }
+        });
     }
 
     public boolean setFinished(int tid, int splitTable) {
@@ -74,22 +95,6 @@ public class EndPlan {
 
         if (number == 1 && tid == firstFinish) {
             slowThreads[splitTable] = slowID;
-//            tableRoot.updateStatistics(splitTable, 0);
-            int selectedAction = -1;
-            for (int i = 0; i < tableRoot.nextTable.length; i++) {
-                if (tableRoot.nextTable[i] == splitTable) {
-                    selectedAction = i;
-                    break;
-                }
-            }
-            tableRoot.accumulatedReward[selectedAction] = 0;
-//            Arrays.fill(tableRoot.accumulatedReward, 0);
-//            Arrays.fill(tableRoot.nrTries, 0);
-//            tableRoot.nrVisits = 0;
-        }
-
-        if (number == 1) {
-            tableRoot.updateStatistics(splitTable, 0);
         }
 
         return number == 0;

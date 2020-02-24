@@ -78,7 +78,8 @@ public class SimpleUctNode {
             else {
                 double childReward = accumulatedReward[i] / childVisits;
                 int nrVisits = this.nrVisits;
-                double uctValue = childReward + 10E-20 * Math.sqrt(Math.log(nrVisits) / childVisits);
+                double uctValue = childReward +
+                        JoinConfig.PARALLEL_WEIGHT * Math.sqrt(Math.log(nrVisits) / childVisits);
 //                    double uctValue = childReward;
                 if (uctValue > maxUCT) {
                     maxUCT = uctValue;

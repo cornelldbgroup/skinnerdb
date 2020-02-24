@@ -129,11 +129,11 @@ public class Indexer {
 
 	public static IndexPolicy indexPolicy(boolean isPrimary, boolean isSeq, int keySize, int cardinality) {
 		IndexPolicy policy;
-		if (cardinality <= ParallelConfig.PARALLEL_SIZE || isSeq) {
-			policy = IndexPolicy.Sequential;
-		}
-		else if (isPrimary) {
+		if (isPrimary) {
 			policy = IndexPolicy.Key;
+		}
+		else if (cardinality <= ParallelConfig.PARALLEL_SIZE || isSeq) {
+			policy = IndexPolicy.Sequential;
 		}
 		else if (keySize >= ParallelConfig.SPARSE_KEY_SIZE) {
 			policy = IndexPolicy.Sparse;

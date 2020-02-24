@@ -14,7 +14,7 @@ import java.util.List;
  */
 public class PreStats {
 	/**
-	 * Preprocessing time in milliseconds.
+	 * Pre-processing time in milliseconds.
 	 */
 	public static long preMillis = 0;
 	/**
@@ -29,4 +29,8 @@ public class PreStats {
 	 * A list of Preprocessing time in milliseconds for sub-queries.
 	 */
 	public static List<Long> subPreMillis;
+	/**
+	 * A list of filtering time in milliseconds for sub-queries.
+	 */
+    public static List<Long> subFilterMillis;
 }

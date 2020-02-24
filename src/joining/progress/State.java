@@ -29,6 +29,7 @@ public class State {
 	 * Time version of the state.
 	 */
 	public int roundCtr;
+	public int tid;
 	/**
 	 * Initializes tuple indices to appropriate size.
 	 * 
@@ -58,7 +59,7 @@ public class State {
 	 * @param prefixLength	length of shared prefix
 	 * @return				true iff the other state is ahead
 	 */
-	boolean isAhead(int[] order, State otherState, int prefixLength) {
+	public boolean isAhead(int[] order, State otherState, int prefixLength) {
 		// Determine up to which join order index we compare
 		int nrCompared = prefixLength;
 		//int nrCompared = Math.min(prefixLength, lastIndex);
@@ -112,6 +113,6 @@ public class State {
 	}
 	@Override
 	public String toString() {
-		return "Last index " + lastIndex + " on " + Arrays.toString(tupleIndices);
+		return "Last index " + lastIndex + " on " + Arrays.toString(tupleIndices) + " from thread " + tid;
 	}
 }

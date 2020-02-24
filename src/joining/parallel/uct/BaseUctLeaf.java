@@ -7,8 +7,8 @@ public class BaseUctLeaf extends BaseUctNode {
      * @param parent
      * @param label
      */
-    public BaseUctLeaf(BaseUctNode parent, int label) {
-        super(parent, label, 0);
+    public BaseUctLeaf(BaseUctNode parent, int label, int nrThreads) {
+        super(parent, label, 0, nrThreads);
     }
 
     @Override

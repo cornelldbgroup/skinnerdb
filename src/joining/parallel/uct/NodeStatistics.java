@@ -15,20 +15,26 @@ public class NodeStatistics {
     /**
      * Number of times each action was tried out.
      */
-    public int[] nrTries;
+    public final int[] nrTries;
     /**
      * Reward accumulated for specific actions.
      */
-    public double[] accumulatedReward;
+    public final double[] accumulatedReward;
     /**
-     * encode number of visits
+     * Number of update for each table.
      */
-    public long statsEncode;
+    public final int[] nrVisited;
+    /**
+     * Number of indexed size for each table
+     */
+    public final int[] nrIndexed;
 
     public NodeStatistics(int nrActions) {
         this.nrVisits = 1;
         this.nrTries = new int[nrActions];
         this.accumulatedReward = new double[nrActions];
+        this.nrVisited = new int[nrActions];
+        this.nrIndexed = new int[nrActions];
     }
 
     /**
@@ -41,6 +47,14 @@ public class NodeStatistics {
         this.nrTries[action]++;
         this.nrVisits++;
         this.accumulatedReward[action] += reward;
+    }
+
+    public void updateStatistics(double reward, int nrVisited, int nrIndexed, int action) {
+        this.nrTries[action]++;
+        this.nrVisits++;
+        this.accumulatedReward[action] += reward;
+        this.nrVisited[action] += nrVisited;
+        this.nrIndexed[action] += nrIndexed;
     }
 
     /**

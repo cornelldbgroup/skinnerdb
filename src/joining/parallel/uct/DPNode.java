@@ -1,11 +1,14 @@
 package joining.parallel.uct;
 
+import config.JoinConfig;
 import config.ParallelConfig;
 import joining.uct.SelectionPolicy;
 import joining.parallel.join.DPJoin;
 import query.QueryInfo;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -99,9 +102,10 @@ public class DPNode {
     /**
      * concurrent priority set
      */
-    private LinkedList<Integer>[] prioritySet;
+//    private LinkedList<Integer>[] prioritySet;
+    private ConcurrentLinkedDeque<Integer> prioritySet;
     /**
-     * Numbre of threads.
+     * Number of threads.
      */
     final int nrThreads;
     /**
@@ -153,16 +157,25 @@ public class DPNode {
             this.nodeStatistics[i] = new NodeStatistics(nrActions);
         }
 
-        this.prioritySet = new LinkedList[nrThreads];
-        for (int i = 0; i < nrThreads; i++) {
-            prioritySet[i] = new LinkedList<>();
-            for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
-                int table = nextTable[actionCtr];
-                if (!query.temporaryTables.contains(table)) {
-                    prioritySet[i].add(actionCtr);
-                }
+//        this.prioritySet = new LinkedList[nrThreads];
+//        for (int i = 0; i < nrThreads; i++) {
+//            prioritySet[i] = new LinkedList<>();
+//            for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
+//                int table = nextTable[actionCtr];
+//                if (!query.temporaryTables.contains(table)) {
+//                    prioritySet[i].add(actionCtr);
+//                }
+//            }
+//        }
+
+        this.prioritySet = new ConcurrentLinkedDeque<>();
+        for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
+            int table = nextTable[actionCtr];
+            if (!query.temporaryTables.contains(table)) {
+                prioritySet.add(actionCtr);
             }
         }
+
         // initialize read-write lock for DPDsync
         if (ParallelConfig.PARALLEL_SPEC == 1) {
             nrTries = new int[nrActions];
@@ -248,19 +261,23 @@ public class DPNode {
                 priorityActions.add(actionCtr);
             }
         }
-        this.prioritySet = new LinkedList[nrThreads];
-        for (int i = 0; i < nrThreads; i++) {
-            prioritySet[i] = new LinkedList<>(priorityActions);
-        }
+
+//        this.prioritySet = new LinkedList[nrThreads];
+//        for (int i = 0; i < nrThreads; i++) {
+//            prioritySet[i] = new LinkedList<>(priorityActions);
+//        }
+
+        this.prioritySet = new ConcurrentLinkedDeque<>(priorityActions);
+
 
         if (nrActions == 0) {
             // initialize tree node
-            tableRoot =  new BaseUctInner(null, -1, nrTables);
+            tableRoot =  new BaseUctInner(null, -1, nrTables, nrThreads);
             int end = Math.min(5, joinOrder.length);
             for (int i = 0; i < end; i++) {
                 int table = joinOrder[i];
-                if (cardinalities[table] >= ParallelConfig.PARTITION_SIZE) {
-                    tableRoot.expand(table, true);
+                if (cardinalities[table] >= ParallelConfig.PARTITION_SIZE && !query.temporaryTables.contains(table)) {
+                    tableRoot.expand(table, true, nrThreads);
                 }
             }
 //            DPNode node = parent;
@@ -268,8 +285,9 @@ public class DPNode {
 //            DPNode firstNode = null;
 //            while (node.parent != null) {
 //                int table = joinOrder[node.treeLevel - 1];
-//                if (cardinalities[table] >= ParallelConfig.PARTITION_SIZE && node.treeLevel <= 5 && node.treeLevel > 1) {
-//                    child = tableRoot.expandFirst(table, true);
+//                if (cardinalities[table] >= ParallelConfig.PARTITION_SIZE
+//                        && node.treeLevel <= 5 && node.treeLevel > 1 && !query.temporaryTables.contains(table)) {
+//                    child = tableRoot.expandFirst(table, true, nrThreads);
 //                    firstNode = node;
 //                }
 //                node = node.parent;
@@ -326,8 +344,8 @@ public class DPNode {
          * action among the ones with maximal UCT value.
          */
         Integer priorAction = null;
-        if (!prioritySet[tid].isEmpty()) {
-            priorAction = prioritySet[tid].pollFirst();
+        if (!prioritySet.isEmpty()) {
+            priorAction = prioritySet.pollFirst();
         }
         if (priorAction != null) {
             return priorAction;
@@ -367,10 +385,6 @@ public class DPNode {
         double bestQuality = -1;
         for (Integer action : recommendedActions) {
             // Calculate index of current action
-//            int action = (offset + actionCtr) % nrActions;
-//            if (useHeuristic && !recommendedActions.contains(action))
-//                continue;
-
             int nrTry = nrTries[action];
             if (nrTry == 0) {
                 return action;
@@ -378,7 +392,8 @@ public class DPNode {
             double meanReward = accumulatedReward[action] / nrTry;
             double exploration = Math.sqrt(Math.log(nrVisits) / nrTry);
             // Assess the quality of the action according to policy
-            double quality = meanReward + 1E-10 * exploration;
+            double quality = meanReward + JoinConfig.PARALLEL_WEIGHT * exploration;
+//            double quality = meanReward + JoinConfig.EXPLORATION_WEIGHT * exploration;
             if (quality > bestQuality) {
                 bestAction = action;
                 bestQuality = quality;
@@ -392,9 +407,6 @@ public class DPNode {
 //            }
 //        }
         // Otherwise: return best action.
-        if (bestAction == -1) {
-            System.out.println("here");
-        }
         return bestAction;
     }
     /**
@@ -489,24 +501,38 @@ public class DPNode {
         int tid = joinOp.tid;
         // Check if this is a (non-extendible) leaf node
         if (nrActions == 0) {
-            int end = Math.min(5, joinOrder.length);
-            // Initialize table nodes
-            int splitTable = getSplitTableByCard(joinOrder, joinOp.cardinalities);
-            double reward = joinOp.execute(joinOrder, splitTable, (int) roundCtr);
-            return reward;
-//            BaseUctInner root = tableRoot;
-//            BaseUctNode splitNode = root.getMaxOrderedUCTChildOrder(joinOrder, end);
-//            if (splitNode != null) {
-//                double reward = joinOp.execute(joinOrder, splitNode.label, (int) roundCtr);
-//                splitNode.updataStatistics(reward);
-//                splitNode.parent.updataStatistics(reward);
-//                return reward;
-//            }
-//            else {
-//                System.out.println(Arrays.toString(joinOrder));
-//                System.out.println(root);
-//                throw new RuntimeException("not found table");
-//            }
+            if (ParallelConfig.HEURISTIC_SHARING) {
+                // Initialize table nodes
+                int splitTable = getSplitTableByCard(joinOrder, joinOp.cardinalities);
+                double reward = joinOp.execute(joinOrder, splitTable, (int) roundCtr);
+                return reward;
+            }
+            else {
+                if (nrTables < 4) {
+                    // Initialize table nodes
+                    int splitTable = getSplitTableByCard(joinOrder, joinOp.cardinalities);
+                    double reward = joinOp.execute(joinOrder, splitTable, (int) roundCtr);
+                    return reward;
+                }
+                else {
+                    int end = Math.min(5, joinOrder.length);
+                    BaseUctInner root = tableRoot;
+                    BaseUctNode splitNode = root.getMaxOrderedUCTChildOrder(joinOrder, end, tid);
+                    if (splitNode != null) {
+                        double reward = joinOp.execute(joinOrder, splitNode.label, (int) roundCtr);
+                        if (!joinOp.isFinished()) {
+                            splitNode.updataStatistics(reward, tid);
+                            splitNode.parent.updataStatistics(reward, tid);
+                        }
+                        return reward;
+                    }
+                    else {
+                        int splitTable = getSplitTableByCard(joinOrder, joinOp.cardinalities);
+                        double reward = joinOp.execute(joinOrder, splitTable, (int) roundCtr);
+                        return reward;
+                    }
+                }
+            }
         } else {
             // inner node - select next action and expand tree if necessary
             int action = selectAction(policy, tid, joinOp);
@@ -532,6 +558,7 @@ public class DPNode {
                     child.sample(roundCtr, joinOrder, joinOp, policy):
                     playout(roundCtr, joinOrder, joinOp);
             // update UCT statistics and return reward
+//            reward = 0.01;
             if (ParallelConfig.PARALLEL_SPEC == 0) {
                 nodeStatistics[tid].updateStatistics(reward, action);
             }
@@ -543,65 +570,44 @@ public class DPNode {
     }
 
     public double sampleFinal(long roundCtr, int[] joinOrder, DPJoin joinOp,
-                         SelectionPolicy policy) throws Exception {
+                         Set<Integer> finishedTables, boolean[][] finishFlags) throws Exception {
+        DPNode node = this;
         int tid = joinOp.tid;
-        // Check if this is a (non-extendible) leaf node
-        if (nrActions == 0) {
-            int end = Math.min(5, joinOrder.length);
-            // Initialize table nodes
-            BaseUctInner root = tableRoot;
-            BaseUctNode splitNode = root.getMaxOrderedUCTChildOrder(joinOrder, end);
-            if (splitNode != null) {
-                double reward = joinOp.execute(joinOrder, splitNode.label, (int) roundCtr);
-                if (joinOp.isFinished()) {
-                    reward = 0;
-                }
-                splitNode.updataStatistics(reward);
-                splitNode.parent.updataStatistics(reward);
-                return reward;
-            }
-            else {
-                int splitTable = getSplitTableByCard(joinOrder, joinOp.cardinalities);
-                double reward = joinOp.execute(joinOrder, splitTable, (int) roundCtr);
-                return reward;
-            }
-        } else {
-            // inner node - select next action and expand tree if necessary
-            int table = joinOrder[treeLevel];
+        for (int i = 0; i < joinOrder.length; i++) {
+            int table = joinOrder[i];
             int action = -1;
-            for (int i = 0; i < nextTable.length; i++) {
-                if (nextTable[i] == table) {
-                    action = i;
+            for (int actionCtr = 0; actionCtr < node.nrActions; actionCtr++) {
+                if (node.nextTable[actionCtr] == table) {
+                    action = actionCtr;
                     break;
                 }
             }
-            // grow tree if possible
-            boolean canExpand = createdIn != roundCtr;
-            DPNode child = childNodes[action];
-            if (canExpand && child == null) {
-                if (ParallelConfig.PARALLEL_SPEC == 1) {
-                    nodeLock.lock();
+            if (action >= 0) {
+                if (node.childNodes[action] == null) {
+                    node.childNodes[action] = new DPNode(roundCtr, node, table, joinOrder, joinOp.cardinalities);
                 }
-                if (childNodes[action] == null) {
-                    childNodes[action] = new DPNode(roundCtr, this, table, joinOrder, joinOp.cardinalities);
-                }
-                if (ParallelConfig.PARALLEL_SPEC == 1) {
-                    nodeLock.unlock();
-                }
+                node = node.childNodes[action];
             }
-            // evaluate via recursive invocation or via playout
-            boolean isSample = child != null;
-            double reward = isSample ?
-                    child.sampleFinal(roundCtr, joinOrder, joinOp, policy):
-                    playout(roundCtr, joinOrder, joinOp);
-            // update UCT statistics and return reward
-            if (ParallelConfig.PARALLEL_SPEC == 0) {
-                nodeStatistics[tid].updateStatistics(reward, action);
+        }
+        BaseUctInner root = node.tableRoot;
+        int end = Math.min(5, joinOrder.length);
+        if (nrTables < 4) {
+            int table = getSplitTableByCard(joinOrder, joinOp.cardinalities, finishedTables);
+            double reward = joinOp.execute(joinOrder, table, (int) roundCtr, finishFlags, null);
+            return reward;
+        }
+        else {
+            BaseUctNode splitNode = root.getMaxOrderedUCTChildOrder(joinOrder, end, finishedTables, tid);
+            if (splitNode != null) {
+//            double reward = joinOp.execute(joinOrder, splitNode.label, (int) roundCtr);
+                double reward = joinOp.execute(joinOrder, splitNode.label, (int) roundCtr, finishFlags, null);
+                splitNode.updataStatistics(reward, tid);
+                splitNode.parent.updataStatistics(reward, tid);
+                return reward;
             }
             else {
-                updateStatistics(action, reward);
+                return -1;
             }
-            return reward;
         }
     }
 
@@ -614,7 +620,7 @@ public class DPNode {
      * @param cardinalities     cardinalities of tables
      * @return
      */
-    int getSplitTableByCard(int[] joinOrder, int[] cardinalities) {
+    public int getSplitTableByCard(int[] joinOrder, int[] cardinalities) {
         if (nrThreads == 1) {
             return 0;
         }
@@ -625,11 +631,31 @@ public class DPNode {
         for (int i = 0; i < end; i++) {
             int table = joinOrder[i];
             int cardinality = cardinalities[table];
-            if (cardinality >= splitSize) {
+            if (cardinality >= splitSize && !query.temporaryTables.contains(table)) {
                 splitTable = table;
                 break;
             }
         }
         return splitTable;
     }
+
+    public int getSplitTableByCard(int[] joinOrder, int[] cardinalities, Set<Integer> finishedTables) {
+        if (nrThreads == 1) {
+            return 0;
+        }
+        int splitLen = 5;
+        int splitSize = ParallelConfig.PARTITION_SIZE;
+        int splitTable = -1;
+        int end = Math.min(splitLen, joinOrder.length);
+        for (int i = 0; i < nrTables; i++) {
+            int table = joinOrder[i];
+            int cardinality = cardinalities[table];
+            if (cardinality >= splitSize && !finishedTables.contains(table) && !query.temporaryTables.contains(table)) {
+                splitTable = table;
+                break;
+            }
+        }
+        return splitTable;
+    }
+
 }

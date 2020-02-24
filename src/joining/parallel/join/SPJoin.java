@@ -8,14 +8,17 @@ import expressions.compilation.ExpressionCompiler;
 import expressions.compilation.KnaryBoolEval;
 import joining.parallel.statistics.StatsInstance;
 import joining.parallel.uct.SPNode;
+import joining.plan.HotSet;
 import joining.progress.State;
 import joining.result.JoinResult;
 import net.sf.jsqlparser.expression.Expression;
+import org.apache.commons.lang3.tuple.Pair;
 import predicate.NonEquiNode;
 import preprocessing.Context;
 import query.QueryInfo;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -86,6 +89,38 @@ public abstract class SPJoin {
      * Partial actions assigned to a thread.
      */
     public Map<Integer, Set<Integer>> nextActions;
+    /**
+     * Number of update for each table.
+     */
+    public final int[] nrVisited;
+    /**
+     * Number of indexed size for each table
+     */
+    public final int[] nrIndexed;
+    /**
+     * Progress in the left most table.
+     */
+    public double progress;
+    /**
+     * The statistics of constraints.
+     */
+    public final Map<Pair<Integer, Integer>, int[]> constraintsStats;
+    /**
+     * The statistics of constraints.
+     */
+    public final Map<HotSet, Integer> joinStats;
+    /**
+     * A list of constraints of partitioned search space.
+     */
+    public List<Pair<Integer, Integer>> constraints = new ArrayList<>();
+    /**
+     * The overall counts for statistics.
+     */
+    public int statsCount;
+    /**
+     * The flag whether the space is re-partitioned.
+     */
+    public int nextDetect;
 
     ExpressionCompiler compiler;
     KnaryBoolEval boolEval;
@@ -119,6 +154,11 @@ public abstract class SPJoin {
         }
         this.result = new JoinResult(nrJoined);
         this.predToEval = predToEval;
+        this.nrVisited = new int[nrJoined];
+        this.nrIndexed = new int[nrJoined];
+        this.constraintsStats = new HashMap<>();
+        query.constraints.forEach(pair -> constraintsStats.put(pair, new int[2]));
+        joinStats = new ConcurrentHashMap<>();
 
 //        if (query.nonEquiJoinPreds.size() > 0) {
 //            ExpressionInfo predInfo = query.nonEquiJoinPreds.get(0);

@@ -4,6 +4,7 @@ import com.koloboke.collect.IntCollection;
 import com.koloboke.collect.map.IntIntCursor;
 import com.koloboke.collect.map.IntIntMap;
 import com.koloboke.collect.map.hash.HashIntIntMaps;
+import com.koloboke.collect.set.IntSet;
 import config.ParallelConfig;
 import data.DoubleData;
 import data.IntData;
@@ -26,15 +27,15 @@ public class IntPartitionIndex extends PartitionIndex {
      * of first position at which associated
      * information is stored.
      */
-    public IntIntMap keyToPositions;
+    public final IntIntMap keyToPositions;
     /**
      * Number of threads.
      */
-    public int nrThreads;
+    public final int nrThreads;
     /**
      * Data is distributed to different scopes of threads.
      */
-    public byte[] scopes;
+    public final byte[] scopes;
     /**
      * The associated column reference mentioned in the query.
      */
@@ -58,34 +59,122 @@ public class IntPartitionIndex extends PartitionIndex {
         this.scopes = new byte[this.cardinality];
         this.queryRef = queryRef;
 
+
         if (policy == IndexPolicy.Key || (origin != null && origin.unique)) {
+            this.unique = true;
+            keyToPositions = HashIntIntMaps.newMutableMap(this.cardinality);
+            positions = null;
             keyColumnIndex(origin);
         }
         else if (policy == IndexPolicy.Sequential) {
-            sequentialIndex(colRef);
-            groupIds = new int[keyToPositions.size()];
-            int id = 0;
-            for (Integer pos: keyToPositions.values()) {
-                groupIds[id] = pos;
-                id++;
+            boolean unique = true;
+            int[] data = intData.data;
+            IntIntMap keyToNr = HashIntIntMaps.newMutableMap(this.cardinality);
+            for (int i = 0; i < cardinality; ++i) {
+                // Don't index null values
+                int value = data[i];
+                if (!intData.isNull.get(i) && value != Integer.MIN_VALUE) {
+                    int nr = keyToNr.getOrDefault(value, 0);
+                    keyToNr.put(value, nr + 1);
+                    if (nr > 0 && data[i - 1] != value) {
+                        sorted = false;
+                    }
+                    if (nr > 0) {
+                        unique = false;
+                    }
+                }
             }
-            if (keyToPositions.size() == intData.cardinality) {
-                unique = true;
+            this.unique = unique;
+            if (unique) {
+                keyToPositions = HashIntIntMaps.newMutableMap(this.cardinality);
             }
+            else {
+                // Assign each key to the appropriate position offset
+                int nrKeys = keyToNr.size();
+                keyToPositions = HashIntIntMaps.newMutableMap(nrKeys);
+            }
+            sequentialIndex(colRef, keyToNr);
+//            groupIds = new int[keyToPositions.size()];
+//            int id = 0;
+//            for (Integer pos: keyToPositions.values()) {
+//                groupIds[id] = pos;
+//                id++;
+//            }
         }
         else if (policy == IndexPolicy.Sparse) {
+            keyToPositions = origin.keyToPositions;
+            positions = new int[origin.positions.length];
             parallelSparseIndex(origin);
         }
         else {
-            parallelDenseIndex(colRef);
-        }
-    }
+            int[] data = intData.data;
+            // Divide tuples into batches
+            List<IntIndexRange> batches = this.split();
+            IntIntMap keyToNr = HashIntIntMaps.newMutableMap(this.cardinality);
+            batches.parallelStream().forEach(batch -> {
+                // Evaluate predicate for each table row
+                for (int rowCtr = batch.firstTuple; rowCtr <= batch.lastTuple; ++rowCtr) {
+                    if (!intData.isNull.get(rowCtr)) {
+                        int value = data[rowCtr];
+                        batch.add(value);
+                    }
+                }
+            });
+            for (IntIndexRange batch : batches) {
+                IntIntCursor keyToNrCursor = batch.valuesMap.cursor();
+                while (keyToNrCursor.moveNext()) {
+                    int key = keyToNrCursor.key();
+                    int value = keyToNrCursor.value();
+                    keyToNr.computeIfPresent(key, (k, v) -> v + value);
+                    keyToNr.putIfAbsent(key, value);
+                }
+            }
 
-    public IntPartitionIndex(int cardinality, ColumnRef queryRef) {
-        super(cardinality);
-        this.scopes = new byte[cardinality];
-        this.queryRef = queryRef;
-        this.intData = new IntData(cardinality);
+            int nrKeys = keyToNr.size();
+            keyToPositions = HashIntIntMaps.newMutableMap(nrKeys);
+            IntIntCursor keyToNrCursor = keyToNr.cursor();
+            int prefixSum = 0;
+            int len = cardinality + nrKeys;
+            positions = new int[len];
+            while (keyToNrCursor.moveNext()) {
+                int key = keyToNrCursor.key();
+                int nr = keyToNrCursor.value();
+                keyToPositions.put(key, prefixSum);
+                positions[prefixSum] = nr;
+                // Advance offset taking into account
+                // space for row indices and one field
+                // storing the number of following indices.
+                int nrFields = nr + 1;
+                prefixSum += nrFields;
+            }
+            int nrBatches = batches.size();
+            // calculate prefix sum for each bath in joining.parallel
+            IntStream.range(0, nrBatches).parallel().forEach(bid -> {
+                IntIndexRange batch = batches.get(bid);
+                IntIntCursor batchCursor = batch.valuesMap.cursor();
+                batch.prefixMap = HashIntIntMaps.newMutableMap(batch.valuesMap.size());
+                while (batchCursor.moveNext()) {
+                    int key = batchCursor.key();
+                    int prefix = 1;
+                    int startPos = keyToPositions.getOrDefault(key, 0);
+                    for (int i = 0; i < bid; i++) {
+                        prefix += batches.get(i).valuesMap.getOrDefault(key, 0);
+                    }
+                    batch.prefixMap.put(key, prefix + startPos);
+                }
+                // Evaluate predicate for each table row
+                for (int rowCtr = batch.firstTuple; rowCtr <= batch.lastTuple; ++rowCtr) {
+                    if (!intData.isNull.get(rowCtr)) {
+                        int value = data[rowCtr];
+                        int firstPos = keyToPositions.getOrDefault(value, 0);
+                        int pos = batch.prefixMap.computeIfPresent(value, (k, v) -> v + 1) - 1;
+                        positions[pos] = rowCtr;
+                        int startThread = (pos - firstPos - 1) % nrThreads;
+                        scopes[rowCtr] = (byte) startThread;
+                    }
+                }
+            });
+        }
     }
 
     /**
@@ -96,39 +185,11 @@ public class IntPartitionIndex extends PartitionIndex {
      */
     private void keyColumnIndex(IntPartitionIndex intIndex) {
         int[] data = intData.data;
-        int MAX = ParallelConfig.PRE_BATCH_SIZE;
-        // if the cardinality is too small
-        if (cardinality <= MAX) {
-            keyToPositions = HashIntIntMaps.newMutableMap(this.cardinality);
-            positions = new int[2 * cardinality];
-            for (int i = 0; i < cardinality; ++i) {
-                int key = data[i];
-                if (!intData.isNull.get(i) && key != Integer.MIN_VALUE) {
-                    int newPos = i * 2;
-                    keyToPositions.put(key, newPos);
-                    positions[newPos] = 1;
-                    int pos = newPos + 1;
-                    positions[pos] = i;
-                    scopes[i] = 0;
-                }
+        for (int row = 0; row < cardinality; ++row) {
+            int key = data[row];
+            if (!intData.isNull.get(row) && key != Integer.MIN_VALUE) {
+                keyToPositions.put(key, row);
             }
-        } else {
-            keyToPositions = intIndex.keyToPositions;
-            positions = new int[intIndex.positions.length];
-            List<IntIndexRange> batches = this.split();
-            batches.parallelStream().forEach(batch -> {
-                // Evaluate predicate for each table row
-                for (int rowCtr = batch.firstTuple; rowCtr <= batch.lastTuple; ++rowCtr) {
-                    int key = data[rowCtr];
-                    if (!intData.isNull.get(rowCtr) && key != Integer.MIN_VALUE) {
-                        int newPos = keyToPositions.getOrDefault(key, 0);
-                        positions[newPos] = 1;
-                        int pos = newPos + 1;
-                        positions[pos] = rowCtr;
-                        scopes[rowCtr] = 0;
-                    }
-                }
-            });
         }
     }
 
@@ -141,8 +202,6 @@ public class IntPartitionIndex extends PartitionIndex {
      */
     private void parallelSparseIndex(IntPartitionIndex index) {
         int[] data = intData.data;
-        keyToPositions = index.keyToPositions;
-        positions = new int[index.positions.length];
         boolean sorted = index.sorted;
         // Count number of occurrences for each batch.
 //        long t1 = System.currentTimeMillis();
@@ -179,7 +238,6 @@ public class IntPartitionIndex extends PartitionIndex {
                 }
             });
 
-            Arrays.parallelSort(intData.data, 0, 1);
             // joining.parallel fill prefix and indices value into positions array.
             long t2 = System.currentTimeMillis();
             IntStream.range(0, nrBatches).parallel().forEach(bid -> {
@@ -191,9 +249,9 @@ public class IntPartitionIndex extends PartitionIndex {
                     int prefix = 1;
                     int localNr = batchCursor.value();
                     int startPos = keyToPositions.getOrDefault(key, -1);
-                    if (startPos == -1) {
-                        System.out.println("wrong key: " + key);
-                    }
+//                    if (startPos == -1) {
+//                        System.out.println("wrong key: " + key);
+//                    }
                     for (int i = 0; i < bid; i++) {
                         prefix += batches.get(i).valuesMap.getOrDefault(key, 0);
                     }
@@ -240,127 +298,43 @@ public class IntPartitionIndex extends PartitionIndex {
      *
      * @param colRef
      */
-    private void sequentialIndex(ColumnRef colRef) {
+    private void sequentialIndex(ColumnRef colRef, IntIntMap keyToNr) {
         int[] data = intData.data;
-        // Count number of occurrences for each value
-        IntIntMap keyToNr = HashIntIntMaps.newMutableMap(this.cardinality);
-        for (int i = 0; i < cardinality; ++i) {
-            // Don't index null values
-            int value = data[i];
-            if (!intData.isNull.get(i) && value != Integer.MIN_VALUE) {
-                int nr = keyToNr.getOrDefault(value, 0);
-                keyToNr.put(value, nr + 1);
-                if (nr > 0 && data[i - 1] != value) {
-                    sorted = false;
+        if (unique) {
+            for (int row = 0; row < cardinality; ++row) {
+                int key = data[row];
+                if (!intData.isNull.get(row) && key != Integer.MIN_VALUE) {
+                    keyToPositions.put(key, row);
                 }
             }
         }
-        // Assign each key to the appropriate position offset
-        int nrKeys = keyToNr.size();
-        keyToPositions = HashIntIntMaps.newMutableMap(nrKeys);
-        log(colRef + ": Number of keys:\t" + nrKeys);
-        int prefixSum = 0;
-        IntIntCursor keyToNrCursor = keyToNr.cursor();
-        while (keyToNrCursor.moveNext()) {
-            int key = keyToNrCursor.key();
-            keyToPositions.put(key, prefixSum);
-            // Advance offset taking into account
-            // space for row indices and one field
-            // storing the number of following indices.
-            int nrFields = keyToNrCursor.value() + 1;
-            prefixSum += nrFields;
-        }
-        log(colRef + "Prefix sum:\t" + prefixSum);
-        // Generate position information
-        positions = new int[prefixSum];
-        for (int i = 0; i < cardinality; ++i) {
-            int key = data[i];
-            if (!intData.isNull.get(i) && key != Integer.MIN_VALUE) {
-                int startPos = keyToPositions.get(key);
-                positions[startPos] += 1;
-                int offset = positions[startPos];
-                int pos = startPos + offset;
-                positions[pos] = i;
-                scopes[i] = (byte) ((offset - 1) % nrThreads);
-            }
-        }
-    }
-
-    /**
-     * Parallel method optimized for dense column.
-     * A dense column is defined as large cardinality
-     * but small number of distinct values.
-     *
-     * @param colRef
-     */
-    private void parallelDenseIndex(ColumnRef colRef) {
-        int[] data = intData.data;
-        // Divide tuples into batches
-        List<IntIndexRange> batches = this.split();
-        IntIntMap keyToNr = HashIntIntMaps.newMutableMap(this.cardinality);
-        batches.parallelStream().forEach(batch -> {
-            // Evaluate predicate for each table row
-            for (int rowCtr = batch.firstTuple; rowCtr <= batch.lastTuple; ++rowCtr) {
-                if (!intData.isNull.get(rowCtr)) {
-                    int value = data[rowCtr];
-                    batch.add(value);
-                }
-            }
-        });
-        for (IntIndexRange batch : batches) {
-            IntIntCursor keyToNrCursor = batch.valuesMap.cursor();
+        else {
+            int prefixSum = 0;
+            IntIntCursor keyToNrCursor = keyToNr.cursor();
             while (keyToNrCursor.moveNext()) {
                 int key = keyToNrCursor.key();
-                int value = keyToNrCursor.value();
-                keyToNr.computeIfPresent(key, (k, v) -> v + value);
-                keyToNr.putIfAbsent(key, value);
+                keyToPositions.put(key, prefixSum);
+                // Advance offset taking into account
+                // space for row indices and one field
+                // storing the number of following indices.
+                int nrFields = keyToNrCursor.value() + 1;
+                prefixSum += nrFields;
             }
-        }
-
-        int nrKeys = keyToNr.size();
-        keyToPositions = HashIntIntMaps.newMutableMap(nrKeys);
-        IntIntCursor keyToNrCursor = keyToNr.cursor();
-        int prefixSum = 0;
-        int len = cardinality + nrKeys;
-        positions = new int[len];
-        while (keyToNrCursor.moveNext()) {
-            int key = keyToNrCursor.key();
-            int nr = keyToNrCursor.value();
-            keyToPositions.put(key, prefixSum);
-            positions[prefixSum] = nr;
-            // Advance offset taking into account
-            // space for row indices and one field
-            // storing the number of following indices.
-            int nrFields = nr + 1;
-            prefixSum += nrFields;
-        }
-        int nrBatches = batches.size();
-        // calculate prefix sum for each bath in joining.parallel
-        IntStream.range(0, nrBatches).parallel().forEach(bid -> {
-            IntIndexRange batch = batches.get(bid);
-            IntIntCursor batchCursor = batch.valuesMap.cursor();
-            batch.prefixMap = HashIntIntMaps.newMutableMap(batch.valuesMap.size());
-            while (batchCursor.moveNext()) {
-                int key = batchCursor.key();
-                int prefix = 1;
-                int startPos = keyToPositions.getOrDefault(key, 0);
-                for (int i = 0; i < bid; i++) {
-                    prefix += batches.get(i).valuesMap.getOrDefault(key, 0);
-                }
-                batch.prefixMap.put(key, prefix + startPos);
-            }
-            // Evaluate predicate for each table row
-            for (int rowCtr = batch.firstTuple; rowCtr <= batch.lastTuple; ++rowCtr) {
-                if (!intData.isNull.get(rowCtr)) {
-                    int value = data[rowCtr];
-                    int firstPos = keyToPositions.getOrDefault(value, 0);
-                    int pos = batch.prefixMap.computeIfPresent(value, (k, v) -> v + 1) - 1;
-                    positions[pos] = rowCtr;
-                    int startThread = (pos - firstPos - 1) % nrThreads;
-                    scopes[rowCtr] = (byte) startThread;
+            log(colRef + "Prefix sum:\t" + prefixSum);
+            // Generate position information
+            positions = new int[prefixSum];
+            for (int i = 0; i < cardinality; ++i) {
+                int key = data[i];
+                if (!intData.isNull.get(i) && key != Integer.MIN_VALUE) {
+                    int startPos = keyToPositions.get(key);
+                    positions[startPos] += 1;
+                    int offset = positions[startPos];
+                    int pos = startPos + offset;
+                    positions[pos] = i;
+                    scopes[i] = (byte) ((offset - 1) % nrThreads);
                 }
             }
-        });
+        }
     }
 
     /**
@@ -426,41 +400,47 @@ public class IntPartitionIndex extends PartitionIndex {
      * @param prevTuple		index of last tuple
      * @return 	index of next tuple or cardinality
      */
-    public int nextTuple(int value, int prevTuple, int[] nextSize) {
-        // Get start position for indexed values
-        int firstPos = keyToPositions.getOrDefault(value, -1);
-        // No indexed values?
-        if (firstPos < 0) {
+    public int nextTuple(int value, int prevTuple, int nextTable, int[] nextSize) {
+        if (unique) {
+            int onlyRow = keyToPositions.getOrDefault(value, cardinality);
+            return onlyRow > prevTuple ? onlyRow : cardinality;
+        }
+        else {
+            // Get start position for indexed values
+            int firstPos = keyToPositions.getOrDefault(value, -1);
+            // No indexed values?
+            if (firstPos < 0) {
+                return cardinality;
+            }
+            // Can we return first indexed value?
+            int firstTuple = positions[firstPos + 1];
+            if (firstTuple > prevTuple) {
+                return firstTuple;
+            }
+            // Get number of indexed values
+            int nrVals = positions[firstPos];
+            if (nextSize != null)
+                nextSize[nextTable] = nrVals;
+            // Restrict search range via binary search
+            int lowerBound = firstPos + 1;
+            int upperBound = firstPos + nrVals;
+            while (upperBound - lowerBound > 1) {
+                int middle = lowerBound + (upperBound - lowerBound) / 2;
+                if (positions[middle] > prevTuple) {
+                    upperBound = middle;
+                } else {
+                    lowerBound = middle;
+                }
+            }
+            // Get next tuple
+            for (int pos = lowerBound; pos <= upperBound; ++pos) {
+                if (positions[pos] > prevTuple) {
+                    return positions[pos];
+                }
+            }
+            // No suitable tuple found
             return cardinality;
         }
-        // Can we return first indexed value?
-        int firstTuple = positions[firstPos + 1];
-        if (firstTuple > prevTuple) {
-            return firstTuple;
-        }
-        // Get number of indexed values
-        int nrVals = positions[firstPos];
-        if (nextSize != null)
-            nextSize[0] = nrVals;
-        // Restrict search range via binary search
-        int lowerBound = firstPos + 1;
-        int upperBound = firstPos + nrVals;
-        while (upperBound - lowerBound > 1) {
-            int middle = lowerBound + (upperBound - lowerBound) / 2;
-            if (positions[middle] > prevTuple) {
-                upperBound = middle;
-            } else {
-                lowerBound = middle;
-            }
-        }
-        // Get next tuple
-        for (int pos = lowerBound; pos <= upperBound; ++pos) {
-            if (positions[pos] > prevTuple) {
-                return positions[pos];
-            }
-        }
-        // No suitable tuple found
-        return cardinality;
     }
 
     /**
@@ -473,56 +453,122 @@ public class IntPartitionIndex extends PartitionIndex {
      * @param tid       thread id
      * @return index of next tuple or cardinality
      */
-    public int nextTupleInScope(int value, int priorIndex, int prevTuple, int tid, int[] nextSize) {
+    public int nextTupleInScope(int value, int priorIndex, int prevTuple, int tid, int nextTable, int[] nextSize) {
         tid = (priorIndex + tid) % nrThreads;
-        // Get start position for indexed values
-        int firstPos = keyToPositions.getOrDefault(value, -1);
-        // No indexed values?
-        if (firstPos < 0) {
-            return cardinality;
-        }
-        // Can we return first indexed value?
-        int nrVals = positions[firstPos];
-        if (nextSize != null)
-            nextSize[0] = nrVals;
-        int firstOffset = tid + 1;
-        if (firstOffset > nrVals) {
-            return cardinality;
-        }
-        int firstTuple = positions[firstPos + firstOffset];
-        if (firstTuple > prevTuple) {
-            return firstTuple;
-        }
-        // Get number of indexed values
-        int lastOffset = (nrVals - 1) / nrThreads * nrThreads + tid + 1;
-        // if the offset is beyond the array?
-        if (lastOffset > nrVals) {
-            lastOffset -= nrThreads;
-        }
-        int threadVals = (lastOffset - firstOffset) / nrThreads + 1;
-        // Update index-related statistics
-        // Restrict search range via binary search
-        int lowerBound = 0;
-        int upperBound = threadVals - 1;
-        while (upperBound - lowerBound > 1) {
-            int middle = lowerBound + (upperBound - lowerBound) / 2;
-            int middleOffset = firstPos + middle * nrThreads + tid + 1;
-            if (positions[middleOffset] > prevTuple) {
-                upperBound = middle;
-            } else {
-                lowerBound = middle;
+        if (unique) {
+            if (tid != 0) {
+                return cardinality;
+            }
+            else {
+                int onlyRow = keyToPositions.getOrDefault(value, cardinality);
+                return onlyRow > prevTuple ? onlyRow : cardinality;
             }
         }
-        // Get next tuple
-        for (int pos = lowerBound; pos <= upperBound; ++pos) {
-            int offset = firstPos + pos * nrThreads + tid + 1;
-            int nextTuple = positions[offset];
-            if (nextTuple > prevTuple) {
-                return nextTuple;
+        else {
+            // Get start position for indexed values
+            int firstPos = keyToPositions.getOrDefault(value, -1);
+            // No indexed values?
+            if (firstPos < 0) {
+                return cardinality;
+            }
+            // Can we return first indexed value?
+            int nrVals = positions[firstPos];
+            if (nextSize != null)
+                nextSize[nextTable] = nrVals;
+            int firstOffset = tid + 1;
+            if (firstOffset > nrVals) {
+                return cardinality;
+            }
+            int firstTuple = positions[firstPos + firstOffset];
+            if (firstTuple > prevTuple) {
+                return firstTuple;
+            }
+            // Get number of indexed values
+            int lastOffset = (nrVals - 1) / nrThreads * nrThreads + tid + 1;
+            // if the offset is beyond the array?
+            if (lastOffset > nrVals) {
+                lastOffset -= nrThreads;
+            }
+            int threadVals = (lastOffset - firstOffset) / nrThreads + 1;
+            // Update index-related statistics
+            // Restrict search range via binary search
+            int lowerBound = 0;
+            int upperBound = threadVals - 1;
+            while (upperBound - lowerBound > 1) {
+                int middle = lowerBound + (upperBound - lowerBound) / 2;
+                int middleOffset = firstPos + middle * nrThreads + tid + 1;
+                if (positions[middleOffset] > prevTuple) {
+                    upperBound = middle;
+                } else {
+                    lowerBound = middle;
+                }
+            }
+            // Get next tuple
+            for (int pos = lowerBound; pos <= upperBound; ++pos) {
+                int offset = firstPos + pos * nrThreads + tid + 1;
+                int nextTuple = positions[offset];
+                if (nextTuple > prevTuple) {
+                    return nextTuple;
+                }
+            }
+            // No suitable tuple found
+            return cardinality;
+        }
+    }
+
+    public int nextTupleInScope(int value, int priorIndex, int prevTuple, int tid, int nextTable,
+                                int[] nextSize, IntSet finishedThreads) {
+        int extra = priorIndex % nrThreads;
+        if (unique) {
+            if (finishedThreads.contains(nrThreads - priorIndex % nrThreads)) {
+                return cardinality;
+            }
+            else {
+                int onlyRow = keyToPositions.getOrDefault(value, cardinality);
+                return onlyRow > prevTuple ? onlyRow : cardinality;
             }
         }
-        // No suitable tuple found
-        return cardinality;
+        else {
+            // Get start position for indexed values
+            int firstPos = keyToPositions.getOrDefault(value, -1);
+            // No indexed values?
+            if (firstPos < 0) {
+                return cardinality;
+            }
+            // Can we return first indexed value?
+            int firstTuple = positions[firstPos + 1];
+            if (firstTuple > prevTuple) {
+                return firstTuple;
+            }
+            // Get number of indexed values
+            int nrVals = positions[firstPos];
+            if (nextSize != null)
+                nextSize[nextTable] = nrVals;
+            // Restrict search range via binary search
+            int lowerBound = firstPos + 1;
+            int upperBound = firstPos + nrVals;
+            while (upperBound - lowerBound > 1) {
+                int middle = lowerBound + (upperBound - lowerBound) / 2;
+                if (positions[middle] > prevTuple) {
+                    upperBound = middle;
+                } else {
+                    lowerBound = middle;
+                }
+            }
+
+            int nextBound = lowerBound;
+            int nextTuple = positions[nextBound];
+            int nextID = (scopes[nextTuple] + nrThreads - extra) % nrThreads;
+            while (finishedThreads.contains(nextID) || nextTuple <= prevTuple) {
+                nextBound++;
+                if (nextBound - firstPos > nrVals) {
+                    return cardinality;
+                }
+                nextTuple = positions[nextBound];
+                nextID = (nextID + 1) % nrThreads;
+            }
+            return nextTuple;
+        }
     }
 
     /**
@@ -535,10 +581,6 @@ public class IntPartitionIndex extends PartitionIndex {
      * @return              binary result of evaluation.
      */
     public boolean evaluate(int priorVal, int curIndex) {
-        if (curIndex >= intData.data.length) {
-            System.out.println(queryRef + " " + curIndex + " " + intData.data.length);
-            System.exit(0);
-        }
         return priorVal == intData.data[curIndex];
     }
 
@@ -558,6 +600,11 @@ public class IntPartitionIndex extends PartitionIndex {
         return priorVal == intData.data[curIndex] && scopes[curIndex] == tid;
     }
 
+    public boolean evaluateInScope(int priorVal, int priorIndex, int curIndex, int tid, IntSet finishedThreads) {
+        int fid = (scopes[curIndex] + nrThreads - priorIndex % nrThreads) % nrThreads;
+        return priorVal == intData.data[curIndex] && !finishedThreads.contains(fid);
+    }
+
     /**
      * Returns the number of entries indexed
      * for the given value.
@@ -566,14 +613,18 @@ public class IntPartitionIndex extends PartitionIndex {
      * @return		number of indexed values
      */
     public int nrIndexed(int value) {
-        int firstPos = keyToPositions.getOrDefault(value, -1);
-        if (firstPos<0) {
-            return 0;
-        } else {
-            return positions[firstPos];
+        if (unique) {
+            return keyToPositions.containsKey(value) ? 1 : 0;
+        }
+        else {
+            int firstPos = keyToPositions.getOrDefault(value, -1);
+            if (firstPos < 0) {
+                return 0;
+            } else {
+                return positions[firstPos];
+            }
         }
     }
-
     @Override
     public boolean evaluate(int curTuple, Number constant, Operator operator) {
         int target = constant.intValue();
@@ -599,20 +650,24 @@ public class IntPartitionIndex extends PartitionIndex {
         else if (operator == Operator.NotEqualsAll) {
             return !keyToPositions.containsKey(target);
         }
-        System.out.println("Wrong");
         return false;
     }
 
     @Override
     public boolean exist(Number constant, Operator operator) {
         int target = constant.intValue();
+        int startPos = keyToPositions.getOrDefault(target, -1);
         if (operator == Operator.EqualsTo) {
-            return keyToPositions.containsKey(target);
+            if (unique) {
+                return startPos >= 0;
+            }
+            else {
+                return startPos >= 0 && positions[startPos] >= 0;
+            }
         }
         else if (operator == Operator.NotEqualsTo) {
             return keyToPositions.size() > 1 || !keyToPositions.containsKey(target);
         }
-        System.out.println("Wrong");
         return false;
     }
 

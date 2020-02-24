@@ -1,9 +1,12 @@
 package joining.parallel.join;
 
+import config.JoinConfig;
+import config.ParallelConfig;
 import config.PreConfig;
 import expressions.compilation.KnaryBoolEval;
 import joining.parallel.plan.LeftDeepPartitionPlan;
 import joining.parallel.progress.ParallelProgressTracker;
+import joining.plan.HotSet;
 import joining.plan.JoinOrder;
 import joining.progress.State;
 import net.sf.jsqlparser.expression.Expression;
@@ -11,10 +14,7 @@ import predicate.NonEquiNode;
 import preprocessing.Context;
 import query.QueryInfo;
 
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class SubJoin extends SPJoin {
     /**
@@ -48,6 +48,14 @@ public class SubJoin extends SPJoin {
      */
     public boolean isFinished = false;
     /**
+     * The deepest join index after one episode of execution .
+     */
+    public int lastIndex = 0;
+    /**
+     * Map table to index in the order.
+     */
+    public int[] tableIndex;
+    /**
      * Initializes join algorithm for given input query.
      *
      * @param query			query to process
@@ -61,6 +69,7 @@ public class SubJoin extends SPJoin {
         // Collect unary predicates
         this.unaryPreds = new KnaryBoolEval[nrJoined];
         this.tupleIndexDelta = new int[nrJoined];
+        this.tableIndex = new int[nrJoined];
     }
     /**
      * Calculates reward for progress during one invocation.
@@ -70,18 +79,23 @@ public class SubJoin extends SPJoin {
      * @param tableOffsets		table offsets (number of tuples fully processed)
      * @return					reward between 0 and 1, proportional to progress
      */
-    double reward(int[] joinOrder, int[] tupleIndexDelta, int[] tableOffsets) {
+    double reward(int[] joinOrder, int[] tupleIndexDelta, int[] tableOffsets, int[] tupleIndices) {
         double progress = 0;
         double weight = 1;
+        this.progress = 0;
+        double pWeight = 1;
         for (int pos=0; pos<nrJoined; ++pos) {
             // Scale down weight by cardinality of current table
             int curTable = joinOrder[pos];
-            int remainingCard = cardinalities[curTable] -
+            int curCard = cardinalities[curTable];
+            int remainingCard = curCard -
                     (tableOffsets[curTable]);
             //int remainingCard = cardinalities[curTable];
             weight *= 1.0 / remainingCard;
             // Fully processed tuples from this table
             progress += tupleIndexDelta[curTable] * weight;
+            this.progress += pWeight * (tupleIndices[curTable] + 0.0) / curCard;
+            pWeight *= 1.0 / curCard;
         }
         return 0.5*progress + 0.5*nrResultTuples/(double)budget;
 //        return progress;
@@ -96,10 +110,8 @@ public class SubJoin extends SPJoin {
      */
     @Override
     public double execute(int[] order, int roundCtr) throws Exception {
-//        long timer0 = System.currentTimeMillis();
+        long timer0 = System.currentTimeMillis();
         // Treat special case: at least one input relation is empty
-
-//        order = new int[]{7, 11, 8, 0, 2, 1, 5, 4, 3, 9, 6, 10};
         for (int tableCtr=0; tableCtr<nrJoined; ++tableCtr) {
             if (cardinalities[tableCtr]==0) {
                 isFinished = true;
@@ -108,6 +120,12 @@ public class SubJoin extends SPJoin {
         }
         // Lookup or generate left-deep query plan
         JoinOrder joinOrder = new JoinOrder(order);
+        for (int i = 0; i < nrJoined; i++) {
+            tableIndex[order[i]] = i;
+        }
+        lastIndex = 0;
+        Arrays.fill(nrIndexed, 0);
+        Arrays.fill(nrVisited, 0);
         int joinHash = joinOrder.splitHashCode(-1);
         LeftDeepPartitionPlan plan = planCache.get(joinHash);
         if (plan == null) {
@@ -116,14 +134,20 @@ public class SubJoin extends SPJoin {
         }
 //        long timer1 = System.currentTimeMillis();
         // Execute from ing state, save progress, return progress
-        State state = tracker.continueFromSP(joinOrder, tid);
-//        state.tupleIndices = new int[]{8411, 0, 0, 0, 35318091, 0, 0, 0, 636895, 0, 0, 1014245};
+        int leftTable = order[0];
+//        int firstTable = getFirstLargeTable(order);
+        int firstTable = leftTable;
+        State state = tracker.continueFromSP(joinOrder, tid, firstTable);
 //        writeLog("Round: " + roundCtr + "\t" + "Join: " + Arrays.toString(order));
-        int[] offsets = Arrays.copyOf(tracker.tableOffset, nrJoined);
-//        offsets = new int[]{4, 0, 0, 4, 328, 0, 0, 0, 1552, 993, 96, 1014541};
-//        int[] offsets = new int[nrJoined];
+        int[] offsets;
+        if (JoinConfig.OFFSETS_SHARING) {
+            offsets = Arrays.copyOf(tracker.tableOffset, nrJoined);
+        }
+        else {
+            offsets = tracker.tableOffsetMaps[tid][0];
+        }
 //        writeLog("Start: " + state.toString());
-//        writeLog("Offset: " + Arrays.toString(offsets) + "\tFirst: " + getFirstLargeTable(order));
+//        writeLog("Offset: " + Arrays.toString(offsets));
 //        long timer2 = System.currentTimeMillis();
         // move the indices into correct position
         boolean forward = false;
@@ -131,28 +155,56 @@ public class SubJoin extends SPJoin {
             int table = order[i];
             if (!forward) {
                 if (state.tupleIndices[table] < offsets[table]) {
-                    state.tupleIndices[table] = offsets[table];
                     forward = true;
                 }
             }
             else {
-                state.tupleIndices[table] = Math.max(0, offsets[table]);
+                state.tupleIndices[table] = 0;
             }
         }
-//        writeLog("Normalized Start: " + state.toString());
         executeWithBudget(plan, state, offsets);
 //        long timer3 = System.currentTimeMillis();
-
-        double reward = reward(joinOrder.order, tupleIndexDelta, offsets);
-//        writeLog("Delta: "  + Arrays.toString(tupleIndexDelta) + "\tOffsets: " + Arrays.toString(offsets));
-//        writeLog("End: "  + state.toString() + "\tReward: " + reward);
-        // Get the first table whose cardinality is larger than 1.
-        int firstTable = getFirstLargeTable(order);
-        tracker.updateProgressSP(joinOrder, state, tid, roundCtr, firstTable);
+        // update stats for the constraints
+        if (ParallelConfig.CONSTRAINTS && ParallelConfig.PARALLEL_SPEC == 8) {
+//            constraintsStats.forEach((pair, stats) -> {
+//                int table1 = pair.getLeft();
+//                int table2 = pair.getRight();
+//                int index1 = tableIndex[table1];
+//                int index2 = tableIndex[table2];
+//                if (index1 > lastIndex && index2 <= lastIndex) {
+//                    stats[1]++;
+//                    statsCount++;
+//                }
+//                else if (index2 > lastIndex && index1 <= lastIndex) {
+//                    stats[0]++;
+//                    statsCount++;
+//                }
+//            });
+            Set<Integer> joinedTable = new HashSet<>(nrJoined);
+            boolean single = query.joinConnection.get(leftTable).size() == 1;
+            for (int i = 0; i < nrJoined - 1; i++) {
+                joinedTable.add(order[i]);
+                if (!(i == 1 && single)) {
+                    HotSet hotSet = new HotSet(joinedTable, nrJoined);
+                    joinStats.merge(hotSet, 1, Integer::sum);
+                    statsCount++;
+                }
+            }
+        }
 //        long timer4 = System.currentTimeMillis();
-//        writeLog("time: " + (timer1 - timer0) + " " + (timer2 - timer1) + " " + (timer3 - timer2) + " " + + (timer4 - timer3));
+
+        // progress in the left table.
+        double reward = reward(joinOrder.order, tupleIndexDelta, offsets, state.tupleIndices);
+//        writeLog("Delta: "  + Arrays.toString(tupleIndexDelta) + "\tOffsets: " + Arrays.toString(offsets));
+
+//        writeLog("End: "  + state.toString() + "\tReward: " + reward + "\tProgress: " + this.progress);
+        // Get the first table whose cardinality is larger than 1.
+        state.roundCtr = 0;
+        tracker.updateProgressSP(joinOrder, state, tid, roundCtr, firstTable);
         lastState = state;
-//        state.lastIndex = -1;
+//        long timer5 = System.currentTimeMillis();
+//        writeLog((timer5 - timer1) + "\t" + (timer2 - timer1) + "\t" + (timer3 - timer2)
+//                + "\t" + (timer4 - timer3) + "\t" + (timer5 - timer4));
         return reward;
     }
     /**
@@ -215,42 +267,80 @@ public class SubJoin extends SPJoin {
         return true;
     }
 
+    private int nrIndexed(int[] joinOrder, List<JoinPartitionIndexWrapper> indexWrappers,
+                          int curIndex, int[] tupleIndices) {
+        int nextTable = joinOrder[curIndex];
+        if (indexWrappers.isEmpty()) {
+            return cardinalities[nextTable];
+        }
+        else {
+            int size = Integer.MAX_VALUE;
+            for (JoinPartitionIndexWrapper wrapper : indexWrappers) {
+                size = Math.min(wrapper.nrIndexed(tupleIndices), size);
+            }
+            return size;
+        }
+    }
+
     /**
      * Propose next tuple index to consider, based on a set of
      * indices on the join column.
      *
-     * @param indexWrappers	list of join index wrappers
+     * @param indexWrappersList	list of join index wrappers
      * @param tupleIndices	current tuple indices
      * @return				next join index
      */
-    int proposeNextInScope(int[] joinOrder, List<JoinPartitionIndexWrapper> indexWrappers,
+    int proposeNextInScope(int[] joinOrder, List<List<JoinPartitionIndexWrapper>> indexWrappersList,
                            int curIndex, int[] tupleIndices) {
         int nextTable = joinOrder[curIndex];
         int nextCardinality = cardinalities[nextTable];
+        List<JoinPartitionIndexWrapper> indexWrappers = indexWrappersList.get(curIndex);
         // If there is no equi-predicates.
+        List<String> time = new ArrayList<>();
         if (indexWrappers.isEmpty()) {
             tupleIndices[nextTable]++;
         }
         else {
             boolean first = true;
+//            long timer0 = System.currentTimeMillis();
             for (JoinPartitionIndexWrapper wrapper : indexWrappers) {
+//                long timer10 = System.currentTimeMillis();
                 if (!first) {
                     if (wrapper.evaluate(tupleIndices)) {
+//                        long timer11 = System.currentTimeMillis();
+//                        time.add("" + (timer11 - timer10));
                         continue;
                     }
                 }
+//                long timer11 = System.currentTimeMillis();
                 int nextRaw = wrapper.nextIndex(tupleIndices, null);
+//                long timer12 = System.currentTimeMillis();
                 if (nextRaw < 0 || nextRaw == nextCardinality) {
                     tupleIndices[nextTable] = nextCardinality;
+//                    long timer13 = System.currentTimeMillis();
+//                    time.add((timer11 - timer10) + "\t" + (timer12 - timer11) + "\t: " + (timer13 - timer12));
                     break;
                 }
                 else {
                     tupleIndices[nextTable] = nextRaw;
                 }
                 first = false;
+//                long timer13 = System.currentTimeMillis();
+//                time.add((timer11 - timer10) + "\t" + (timer12 - timer11) + "\t" + (timer13 - timer12));
             }
+//            long timer1 = System.currentTimeMillis();
+//            if (timer1 - timer0 > 100) {
+//                StringBuilder wrapperStr = new StringBuilder();
+//                for (JoinPartitionIndexWrapper wrapper: indexWrappers) {
+//                    wrapperStr.append(wrapper.toString());
+//                }
+//                for (JoinPartitionIndexWrapper wrapper : indexWrappers) {
+//                    writeLog("Index Size: " + wrapper.nrIndexed(tupleIndices));
+//                }
+//                writeLog(Arrays.toString(time.toArray()) + "\t" + (timer1 - timer0));
+//                writeLog(wrapperStr.toString());
+//            }
         }
-
         // Have reached end of current table? -> we backtrack.
         while (tupleIndices[nextTable] >= nextCardinality) {
             tupleIndices[nextTable] = 0;
@@ -283,7 +373,7 @@ public class SubJoin extends SPJoin {
         List<List<NonEquiNode>> applicablePreds = plan.nonEquiNodes;
         // Initialize state and flags to prepare budgeted execution
 //        int joinIndex = state.lastIndex;
-        int joinIndex = 0;
+        int joinIndex = 1;
         System.arraycopy(state.tupleIndices, 0, tupleIndices, 0, nrTables);
         int remainingBudget = budget;
         // Number of completed tuples added
@@ -296,17 +386,23 @@ public class SubJoin extends SPJoin {
             //log("Indices:\t" + Arrays.toString(tupleIndices));
             // Get next table in join order
             int nextTable = plan.joinOrder.order[joinIndex];
-//            writeLog("Indices: " + Arrays.toString(tupleIndices));
+//            if (tupleIndices[nextTable] == 0) {
+//                int size = nrIndexed(plan.joinOrder.order, joinIndices.get(joinIndex), joinIndex, tupleIndices);
+//                nrIndexed[nextTable] = size;
+//                nrVisited[nextTable]++;
+//            }
             // Integrate table offset
             tupleIndices[nextTable] = Math.max(
                     offsets[nextTable], tupleIndices[nextTable]);
             // Evaluate all applicable predicates on joined tuples
             KnaryBoolEval unaryPred = unaryPreds[nextTable];
+            lastIndex = Math.max(lastIndex, joinIndex);
             if ((PreConfig.PRE_FILTER || unaryPred == null ||
                     unaryPred.evaluate(tupleIndices)>0) &&
 //                    evaluateAll(applicablePreds.get(joinIndex), tupleIndices)
                     evaluateInScope(joinIndices.get(joinIndex), applicablePreds.get(joinIndex), tupleIndices, nextTable)
             ) {
+                ++statsInstance.nrTuples;
                 // Do we have a complete result row?
                 if(joinIndex == plan.joinOrder.order.length - 1) {
                     // Complete result row -> add to result
@@ -314,7 +410,7 @@ public class SubJoin extends SPJoin {
                     result.add(tupleIndices);
 //                    writeLog("INFO:Bingo: " + Arrays.toString(tupleIndices));
                     joinIndex = proposeNextInScope(
-                            plan.joinOrder.order, joinIndices.get(joinIndex), joinIndex, tupleIndices);
+                            plan.joinOrder.order, joinIndices, joinIndex, tupleIndices);
                 } else {
                     // No complete result row -> complete further
                     joinIndex++;
@@ -324,7 +420,7 @@ public class SubJoin extends SPJoin {
                 // At least one of applicable predicates evaluates to false -
                 // try next tuple in same table.
                 joinIndex = proposeNextInScope(
-                        plan.joinOrder.order, joinIndices.get(joinIndex), joinIndex, tupleIndices);
+                        plan.joinOrder.order, joinIndices, joinIndex, tupleIndices);
 
             }
             --remainingBudget;
@@ -343,6 +439,8 @@ public class SubJoin extends SPJoin {
         state.lastIndex = joinIndex;
         System.arraycopy(tupleIndices, 0, state.tupleIndices, 0, nrTables);
     }
+
+
     @Override
     public boolean isFinished() {
         return isFinished || (lastState != null && lastState.isFinished());

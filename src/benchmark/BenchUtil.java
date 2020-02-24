@@ -5,6 +5,7 @@ import java.io.PrintWriter;
 import java.nio.file.Files;
 import java.util.*;
 import java.util.regex.Pattern;
+import java.util.stream.IntStream;
 
 import catalog.CatalogManager;
 import config.NamingConfig;
@@ -77,10 +78,11 @@ public class BenchUtil {
 	 * @param benchOut	channel to benchmark file
 	 */
 	public static void writeBenchHeader(PrintWriter benchOut) {
-		benchOut.println("Query\tMillis\tPreMillis\tJoinMillis\tExeMillis\tPostMillis\tTuples\t"
+		benchOut.println("Query\tTuples\t"
 				+ "Iterations\tLookups\tNrIndexEntries\tnrUniqueLookups\t"
 				+ "NrUctNodes\tNrPlans\tJoinCard\tNrSamples\tAvgReward\t"
-				+ "MaxReward\tTotalWork\tFilterMillis\tIndexMillis\tSubPre\tSubJoin\tSubMaterial\tSubPost\tAllCases");
+				+ "MaxReward\tTotalWork\tResultCard\tSubFilter\tSubIndex\t"
+				+ "SubPre\tSubJoin\tSubMaterial\tSubPost\tAllSamples\tAllTuples\tAllCases");
 	}
 	/**
 	 * Writes out statistics concerning last query execution
@@ -95,11 +97,6 @@ public class BenchUtil {
 			PrintWriter benchOut) throws Exception {
 		// Generate output
 		benchOut.print(queryName + "\t");
-		benchOut.print(totalMillis + "\t");
-		benchOut.print(PreStats.preMillis + "\t");
-		benchOut.print(JoinStats.joinMillis + "\t");
-		benchOut.print(JoinStats.exeTime + "\t");
-		benchOut.print(PostStats.postMillis + "\t");
 		benchOut.print(JoinStats.nrTuples + "\t");
 		benchOut.print(JoinStats.nrIterations + "\t");
 		benchOut.print(JoinStats.nrIndexLookups + "\t");
@@ -112,13 +109,18 @@ public class BenchUtil {
 		benchOut.print(JoinStats.avgReward + "\t");
 		benchOut.print(JoinStats.maxReward + "\t");
 		benchOut.print(JoinStats.totalWork + "\t");
-		benchOut.print(PreStats.filterTime + "\t");
-		benchOut.print(PreStats.indexTime + "\t");
 		benchOut.print(JoinStats.skinnerJoinCards + "\t");
+		benchOut.print(Arrays.toString(PreStats.subFilterMillis.toArray()) + "\t");
+		long[] subIndex = PreStats.subFilterMillis.size() == 0 ? new long[]{} :
+				IntStream.range(0, PreStats.subFilterMillis.size()).mapToLong(idx ->
+				PreStats.subPreMillis.get(idx) - PreStats.subFilterMillis.get(idx)).toArray();
+		benchOut.print(Arrays.toString(subIndex) + "\t");
 		benchOut.print(Arrays.toString(PreStats.subPreMillis.toArray()) + "\t");
 		benchOut.print(Arrays.toString(JoinStats.subExeTime.toArray()) + "\t");
 		benchOut.print(Arrays.toString(JoinStats.subMateriazed.toArray()) + "\t");
 		benchOut.print(Arrays.toString(PostStats.subPostMillis.toArray()) + "\t");
+		benchOut.print(Arrays.toString(JoinStats.subAllSamples.toArray()) + "\t");
+		benchOut.print(Arrays.toString(JoinStats.subAllTuples.toArray()) + "\t");
 		benchOut.println(Arrays.toString(JoinStats.subAllExeTime.toArray()));
 		benchOut.flush();
 	}

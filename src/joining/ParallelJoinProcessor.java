@@ -5,7 +5,9 @@ import config.*;
 import joining.parallel.parallelization.dpdsync.DPDSync;
 import joining.parallel.parallelization.leaf.LeafParallelization;
 import joining.parallel.parallelization.root.RootParallelization;
+import joining.parallel.parallelization.search.AdaptiveSearchParallelization;
 import joining.parallel.parallelization.search.SearchParallelization;
+import joining.parallel.parallelization.task.TaskParallelization;
 import joining.parallel.parallelization.tree.TreeParallelization;
 import joining.result.ResultTuple;
 import operators.Materialize;
@@ -76,67 +78,81 @@ public class ParallelJoinProcessor {
         else {
             Set<ResultTuple> resultTuples = new HashSet<>();
             List<Long> subExes = new ArrayList<>();
-            int nrCases = GeneralConfig.ISTESTCASE ? GeneralConfig.TEST_CASE : 1;
-            for (int i = 0; i < nrCases; i++) {
-                System.out.println("Case " + i);
-                // DPD async
-                if (ParallelConfig.PARALLEL_SPEC == 0) {
-                    Parallelization parallelization = new LockFreeParallelization(ParallelConfig.EXE_THREADS,
-                            JoinConfig.BUDGET_PER_EPISODE, query, context);
-                    parallelization.execute(resultTuples);
-                }
-                // DPD sync
-                else if (ParallelConfig.PARALLEL_SPEC == 1) {
-                    Parallelization parallelization = new DPDSync(ParallelConfig.EXE_THREADS,
-                            JoinConfig.BUDGET_PER_EPISODE, query, context);
-                    parallelization.execute(resultTuples);
-                }
-                // PPS
-                else if (ParallelConfig.PARALLEL_SPEC == 2) {
-                    Parallelization parallelization = new SearchParallelization(ParallelConfig.EXE_THREADS,
-                            JoinConfig.BUDGET_PER_EPISODE, query, context);
-                    parallelization.execute(resultTuples);
-                }
-                // PPA
-                else if (ParallelConfig.PARALLEL_SPEC == 3) {
-                    Parallelization parallelization = new SearchParallelization(ParallelConfig.EXE_THREADS,
-                            JoinConfig.BUDGET_PER_EPISODE, query, context);
-                    parallelization.execute(resultTuples);
-                }
-                // Root parallelization
-                else if (ParallelConfig.PARALLEL_SPEC == 4) {
-                    Parallelization parallelization = new RootParallelization(ParallelConfig.EXE_THREADS,
-                            JoinConfig.BUDGET_PER_EPISODE, query, context);
-                    parallelization.execute(resultTuples);
-                }
-                // Leaf parallelization
-                else if (ParallelConfig.PARALLEL_SPEC == 5) {
-                    Parallelization parallelization = new LeafParallelization(ParallelConfig.EXE_THREADS,
-                            JoinConfig.BUDGET_PER_EPISODE, query, context);
-                    parallelization.execute(resultTuples);
-                }
-                // Tree parallelization
-                else if (ParallelConfig.PARALLEL_SPEC == 6) {
-                    Parallelization parallelization = new TreeParallelization(ParallelConfig.EXE_THREADS,
-                            JoinConfig.BUDGET_PER_EPISODE, query, context);
-                    parallelization.execute(resultTuples);
-                }
-                // Search parallelization fixing one join order
-                else if (ParallelConfig.PARALLEL_SPEC == 7) {
-                    Parallelization parallelization = new SearchParallelization(ParallelConfig.EXE_THREADS,
-                            JoinConfig.BUDGET_PER_EPISODE, query, context);
-                    parallelization.execute(resultTuples);
-                }
-                subExes.add(JoinStats.subExeTime.remove(JoinStats.subExeTime.size() - 1));
-                if (i < nrCases - 1)
-                    resultTuples = new HashSet<>();
+            List<Long> subSamples = new ArrayList<>();
+            List<Long> subTuples = new ArrayList<>();
+//            int nrCases = GeneralConfig.ISTESTCASE ? GeneralConfig.TEST_CASE : 1;
+            // DPD async
+            if (ParallelConfig.PARALLEL_SPEC == 0) {
+                Parallelization parallelization = new LockFreeParallelization(ParallelConfig.EXE_THREADS,
+                        JoinConfig.BUDGET_PER_EPISODE, query, context);
+                parallelization.execute(resultTuples);
             }
+            // DPD sync
+            else if (ParallelConfig.PARALLEL_SPEC == 1) {
+                Parallelization parallelization = new DPDSync(ParallelConfig.EXE_THREADS,
+                        JoinConfig.BUDGET_PER_EPISODE, query, context);
+                parallelization.execute(resultTuples);
+            }
+            // PPS
+            else if (ParallelConfig.PARALLEL_SPEC == 2) {
+                Parallelization parallelization = new SearchParallelization(ParallelConfig.EXE_THREADS,
+                        JoinConfig.BUDGET_PER_EPISODE, query, context);
+                parallelization.execute(resultTuples);
+            }
+            // PPA
+            else if (ParallelConfig.PARALLEL_SPEC == 3) {
+                Parallelization parallelization = new SearchParallelization(ParallelConfig.EXE_THREADS,
+                        JoinConfig.BUDGET_PER_EPISODE, query, context);
+                parallelization.execute(resultTuples);
+            }
+            // Root parallelization
+            else if (ParallelConfig.PARALLEL_SPEC == 4) {
+                Parallelization parallelization = new RootParallelization(ParallelConfig.EXE_THREADS,
+                        JoinConfig.BUDGET_PER_EPISODE, query, context);
+                parallelization.execute(resultTuples);
+            }
+            // Leaf parallelization
+            else if (ParallelConfig.PARALLEL_SPEC == 5) {
+                Parallelization parallelization = new LeafParallelization(ParallelConfig.EXE_THREADS,
+                        JoinConfig.BUDGET_PER_EPISODE, query, context);
+                parallelization.execute(resultTuples);
+            }
+            // Tree parallelization
+            else if (ParallelConfig.PARALLEL_SPEC == 6) {
+                Parallelization parallelization = new TreeParallelization(ParallelConfig.EXE_THREADS,
+                        JoinConfig.BUDGET_PER_EPISODE, query, context);
+                parallelization.execute(resultTuples);
+            }
+            // Search parallelization fixing one join order
+            else if (ParallelConfig.PARALLEL_SPEC == 7) {
+                Parallelization parallelization = new SearchParallelization(ParallelConfig.EXE_THREADS,
+                        JoinConfig.BUDGET_PER_EPISODE, query, context);
+                parallelization.execute(resultTuples);
+            }
+            // Search parallelization fixing one join order
+            else if (ParallelConfig.PARALLEL_SPEC == 8) {
+                Parallelization parallelization = new AdaptiveSearchParallelization(ParallelConfig.EXE_THREADS,
+                        JoinConfig.BUDGET_PER_EPISODE, query, context);
+                parallelization.execute(resultTuples);
+            }
+            // one search thread and multiple executor threads
+            else if (ParallelConfig.PARALLEL_SPEC == 9) {
+                Parallelization parallelization = new TaskParallelization(ParallelConfig.EXE_THREADS,
+                        JoinConfig.BUDGET_PER_EPISODE, query, context);
+                parallelization.execute(resultTuples);
+            }
+            subExes.add(JoinStats.subExeTime.remove(JoinStats.subExeTime.size() - 1));
+            subSamples.add(JoinStats.nrSamples);
+            subTuples.add(JoinStats.nrTuples);
+
             System.out.println("Finish Parallel Join!");
-            int median = nrCases / 2;
+            int median = 0;
             long[] subExe = subExes.stream().mapToLong(exe->exe).toArray();
             Arrays.sort(subExe);
             JoinStats.subExeTime.add(subExe[median]);
             JoinStats.subAllExeTime.add(Arrays.toString(subExe));
+            JoinStats.subAllSamples.add(Arrays.toString(subSamples.toArray()));
+            JoinStats.subAllTuples.add(Arrays.toString(subTuples.toArray()));
 
 
             long materializeStart = System.currentTimeMillis();

@@ -2,10 +2,7 @@ package console;
 
 import java.io.File;
 import java.io.PrintWriter;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Scanner;
+import java.util.*;
 import java.util.Map.Entry;
 import java.util.regex.Pattern;
 
@@ -306,8 +303,8 @@ public class SkinnerCmd {
                     // and if this is not a benchmark run.
                     if (!benchRun && printResult) {
                         // Display on console
-                        RelationPrinter.print(
-                                NamingConfig.FINAL_RESULT_NAME);
+//                        RelationPrinter.print(
+//                                NamingConfig.FINAL_RESULT_NAME);
                     }
                 } catch (SQLexception e) {
                     System.out.println(e.getMessage());
@@ -403,25 +400,32 @@ public class SkinnerCmd {
             String queries = Configuration.getProperty(benchmark, "../imdb/queries");
             String newInput = "bench " + queries + " ";
             String output = "./" + benchmark.toLowerCase() + "/";
+            String caseName = GeneralConfig.TEST_CASE > 0 ? "_" + GeneralConfig.TEST_CASE : "";
             if (GeneralConfig.isParallel) {
                 int spec = ParallelConfig.PARALLEL_SPEC;
                 if (spec == 0) {
-                    output += "DPDasync_" + ParallelConfig.EXE_THREADS + ".txt";
+                    output += "DPDasync_" + ParallelConfig.EXE_THREADS + caseName + ".txt";
                 } else if (spec == 1) {
-                    output += "DPDsync_" + ParallelConfig.EXE_THREADS + ".txt";
+                    output += "DPDsync_" + ParallelConfig.EXE_THREADS + caseName + ".txt";
                 } else if (spec == 2) {
-                    output += "PSS_" + ParallelConfig.EXE_THREADS + ".txt";
+                    output += "PSS_" + ParallelConfig.EXE_THREADS + caseName + ".txt";
                 } else if (spec == 3) {
-                    output += "PSA_" + ParallelConfig.EXE_THREADS + ".txt";
+                    output += "PSA_" + ParallelConfig.EXE_THREADS + caseName + ".txt";
                 } else if (spec == 4) {
-                    output += "Root_" + ParallelConfig.EXE_THREADS + ".txt";
+                    output += "Root_" + ParallelConfig.EXE_THREADS + caseName + ".txt";
                 } else if (spec == 5) {
-                    output += "Leaf_" + ParallelConfig.EXE_THREADS + ".txt";
+                    output += "Leaf_" + ParallelConfig.EXE_THREADS + caseName + ".txt";
                 } else if (spec == 6) {
-                    output += "Tree_" + ParallelConfig.EXE_THREADS + ".txt";
+                    output += "Tree_" + ParallelConfig.EXE_THREADS + caseName + ".txt";
                 }
                 else if (spec == 7) {
-                    output += "PSJ_" + ParallelConfig.EXE_THREADS + ".txt";
+                    output += "PSJ_" + ParallelConfig.EXE_THREADS + caseName + ".txt";
+                }
+                else if (spec == 8) {
+                    output += "APS_" + ParallelConfig.EXE_THREADS + caseName + ".txt";
+                }
+                else if (spec == 9) {
+                    output += "PT_" + ParallelConfig.EXE_THREADS + caseName + ".txt";
                 }
             } else {
                 output += "Seq_1.txt";
@@ -480,12 +484,14 @@ public class SkinnerCmd {
                     + " to database directory!");
             return;
         }
-        if (args.length == 2) {
+        if (args.length > 1) {
             ParallelConfig.EXE_THREADS = Integer.parseInt(args[1]);
             System.out.println("Threads: " + ParallelConfig.EXE_THREADS + " " + ParallelConfig.PARALLEL_SPEC);
         }
         // whether to use parallel strategy
 		GeneralConfig.isParallel = Integer.parseInt(Configuration.getProperty("ISPARALLEL", "0")) == 1;
+        // the number of test case
+        GeneralConfig.TEST_CASE = Integer.parseInt(Configuration.getProperty("TEST_CASE", "1"));
         if (GeneralConfig.isParallel) {
 			ParallelConfig.PARALLEL_SPEC = Integer.parseInt(Configuration.getProperty("PARALLEL_SPEC", "0"));
         }
@@ -508,25 +514,54 @@ public class SkinnerCmd {
             BufferManager.loadDictionary();
         }
         Indexer.indexAll(StartupConfig.INDEX_CRITERIA);
-
-		ThreadPool.initThreadsPool(ParallelConfig.EXE_THREADS, ParallelConfig.PRE_THREADS);
-		System.out.println("SkinnerDB is using " + 
-				ParallelConfig.EXE_THREADS + " threads.");
-        // Command line processing
-        System.out.println("Enter 'help' for help and 'quit' to exit");
-        Scanner scanner = new Scanner(System.in);
-        boolean continueProcessing = true;
-        while (continueProcessing) {
-            System.out.print("> ");
-            String input = scanner.nextLine();
-            try {
-                continueProcessing = processInput(input);
-            } catch (Exception e) {
-                System.err.println("Error processing command: ");
-                e.printStackTrace();
+        // q18, q01
+        if (args.length > 1) {
+            // initialize a thread pool
+            String command = Configuration.getProperty("COMMAND");
+            ThreadPool.initThreadsPool(ParallelConfig.EXE_THREADS, ParallelConfig.PRE_THREADS);
+            GeneralConfig.TEST_CASE = args.length == 3 ? Integer.parseInt(args[2]) : 0;
+//            processInput("exec ./tpch/skinnerqueries/q03.sql");
+//            processInput("exec ./jcch/queries/q02.sql");
+//            processInput("exec ./jcch/queries/q17.sql");
+//            processInput("exec ../imdb/queries/33c.sql");
+//            processInput("exec /Users/tracy/Documents/Research/skinnerdb/imdb/queries/33c.sql");
+//            processInput("exp");
+            processInput(command);
+        } else {
+			ThreadPool.initThreadsPool(ParallelConfig.EXE_THREADS, ParallelConfig.PRE_THREADS);
+            // Command line processing
+            System.out.println("Enter 'help' for help and 'quit' to exit");
+            Scanner scanner = new Scanner(System.in);
+            boolean continueProcessing = true;
+            while (continueProcessing) {
+                System.out.print("> ");
+                String input = scanner.nextLine();
+                try {
+                    continueProcessing = processInput(input);
+                } catch (Exception e) {
+                    System.err.println("Error processing command: ");
+                    e.printStackTrace();
+                }
+//=======
+//		ThreadPool.initThreadsPool(ParallelConfig.EXE_THREADS, ParallelConfig.PRE_THREADS);
+//		System.out.println("SkinnerDB is using " +
+//				ParallelConfig.EXE_THREADS + " threads.");
+//        // Command line processing
+//        System.out.println("Enter 'help' for help and 'quit' to exit");
+//        Scanner scanner = new Scanner(System.in);
+//        boolean continueProcessing = true;
+//        while (continueProcessing) {
+//            System.out.print("> ");
+//            String input = scanner.nextLine();
+//            try {
+//                continueProcessing = processInput(input);
+//            } catch (Exception e) {
+//                System.err.println("Error processing command: ");
+//                e.printStackTrace();
+//>>>>>>> 604a4d132c566f654fbc204a2e78848c15938c9a
             }
+            scanner.close();
         }
-        scanner.close();
         ThreadPool.close();
     }
 }

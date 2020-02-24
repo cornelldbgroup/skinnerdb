@@ -3,6 +3,7 @@ package joining.parallel.parallelization.lockfree;
 import config.JoinConfig;
 import config.ParallelConfig;
 import joining.parallel.uct.SimpleUctNode;
+import joining.progress.State;
 import joining.result.ResultTuple;
 import joining.uct.SelectionPolicy;
 import joining.parallel.join.DPJoin;
@@ -15,10 +16,7 @@ import query.QueryInfo;
 import statistics.JoinStats;
 import statistics.QueryStats;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
@@ -75,43 +73,47 @@ public class LockFreeTask implements Callable<LockFreeResult>{
         long timer1 = System.currentTimeMillis();
         // Initialize counters and variables
         int tid = joinOp.tid;
-        int[] joinOrder = new int[query.nrJoined];
+        int nrJoined = query.nrJoined;
+        int[] joinOrder = new int[nrJoined];
         long roundCtr = 0;
         // Get default action selection policy
         SelectionPolicy policy = SelectionPolicy.UCB1;
-        // Initialize counter until scale down
-        long nextScaleDown = 1;
         // Initialize counter until memory loss
         long nextForget = 1;
         // Initialize plot counter
         int plotCtr = 0;
         // Iterate until join result was generated
         double accReward = 0;
-        joinOp.slowThreads = new int[query.nrJoined];
-        Arrays.fill(joinOp.slowThreads, -1);
+        Set<Integer> finishedTables = new HashSet<>();
         while (!terminated.get()) {
             ++roundCtr;
-            double reward;
+            double reward = 0;
             int finalTable = endPlan.getSplitTable();
             if (finalTable != -1) {
                 joinOrder = endPlan.getJoinOrder();
                 joinOp.isShared = true;
 
                 if (ParallelConfig.HEURISTIC_SHARING) {
-                    int largeTable = joinOp.largeTable;
-                    if (joinOp.slowest && largeTable != finalTable && joinOp.noProgressOnSplit) {
-                        endPlan.setSplitTable(largeTable);
-                    }
-                    boolean isFinished  = false;
-                    if (joinOp.isFinished()) {
-                        isFinished = endPlan.setFinished(tid, joinOp.lastTable);
-                    }
-                    if (isFinished) {
-                        terminated.set(true);
-                        break;
+                    int lastTable = joinOp.lastTable;
+                    if (finishedTables.contains(finalTable)) {
+                        int table = root.getSplitTableByCard(joinOrder, joinOp.cardinalities, finishedTables);
+                        if (table == -1) {
+                            break;
+                        }
+//                        State slowState = table != lastTable ? endPlan.slowestState.get() : null;
+                        State slowState = endPlan.slowestState.get();
+                        reward = joinOp.execute(joinOrder, table, (int) roundCtr, endPlan.finishFlags, slowState);
                     }
                     else {
-                        continue;
+//                        State slowState = finalTable != lastTable ? endPlan.slowestState.get() : null;
+                        State slowState = endPlan.slowestState.get();
+                        reward = joinOp.execute(joinOrder, finalTable, (int) roundCtr, endPlan.finishFlags, slowState);
+                        int largeTable = joinOp.largeTable;
+                        lastTable = joinOp.lastTable;
+                        if (joinOp.slowest && largeTable != lastTable) {
+                            State curSlow = endPlan.setSplitTable(largeTable, joinOp.lastState);
+//                            joinOp.writeLog("Set split Table to: " + largeTable + "\tSlow: " + curSlow.toString());
+                        }
                     }
                 }
                 else if (ParallelConfig.HEURISTIC_STOP) {
@@ -121,34 +123,9 @@ public class LockFreeTask implements Callable<LockFreeResult>{
                     }
                 }
                 else {
-                    System.arraycopy(endPlan.slowThreads, 0, joinOp.slowThreads, 0, query.nrJoined);
-                    if (query.nrJoined < 5 || ParallelConfig.EXE_THREADS <= 10) {
-                        reward = joinOp.execute(joinOrder, finalTable, (int) roundCtr);
-                        if (joinOp.isFinished()) {
-                            break;
-                        }
-                        else {
-                            continue;
-                        }
-                    }
-                    else {
-                        int uctTable = endPlan.tableRoot.getMaxOrderedUCTTable();
-                        reward = joinOp.execute(joinOrder, uctTable, (int) roundCtr);
-                        boolean isFinished  = false;
-
-                        if (joinOp.isFinished()) {
-                            isFinished = endPlan.setFinished(tid, joinOp.lastTable);
-                        }
-                        else {
-                            endPlan.tableRoot.updateStatistics(uctTable, reward);
-                        }
-                        if (isFinished) {
-                            terminated.set(true);
-                            break;
-                        }
-                        else {
-                            continue;
-                        }
+                    reward = root.sampleFinal((int) roundCtr, joinOrder, joinOp, finishedTables, endPlan.finishFlags);
+                    if (reward < 0) {
+                        break;
                     }
                 }
             }
@@ -162,21 +139,14 @@ public class LockFreeTask implements Callable<LockFreeResult>{
             // broadcasting the finished plan.
             else {
                 int splitTable = joinOp.lastTable;
-                if (!finish.get()) {
-                    lock.lock();
-                    if (!finish.get()) {
-                        System.out.println(tid + " shared: " + Arrays.toString(joinOrder) + " splitting " + splitTable);
-                        endPlan.tableRoot = new SimpleUctNode(joinOrder, joinOp.cardinalities);
-                        endPlan.setJoinOrder(joinOrder);
-                        endPlan.setSplitTable(splitTable);
-                        finish.set(true);
-                    }
-                    lock.unlock();
+                if (finish.compareAndSet(false, true)) {
+                    System.out.println(tid + " shared: " + Arrays.toString(joinOrder) + " splitting " + splitTable);
+                    endPlan.setJoinOrder(joinOrder);
+                    endPlan.setSplitTable(splitTable);
                 }
-                if (query.nrJoined < 5 || ParallelConfig.EXE_THREADS <= 10) {
-                    break;
-                }
+
                 boolean isFinished = endPlan.setFinished(tid, joinOp.lastTable);
+                finishedTables.add(splitTable);
                 if (isFinished) {
                     terminated.set(true);
                     break;
@@ -184,53 +154,24 @@ public class LockFreeTask implements Callable<LockFreeResult>{
                 if (ParallelConfig.HEURISTIC_STOP) {
                     if (splitTable == endPlan.getSplitTable()) {
                         break;
-                    } else {
-                        System.out.println(tid + ": bad restart");
                     }
                 }
             }
-            // Consider memory loss
-            if (JoinConfig.FORGET && ParallelConfig.EXE_THREADS == 1 && roundCtr==nextForget) {
-                root = new DPNode(roundCtr, query, true, 1);
-                nextForget *= 10;
-//                System.out.println("forget");
-            }
-
-//            if (roundCtr == 20000) {
+//            if (roundCtr == 10000) {
 //                List<String>[] logs = new List[1];
 //                for (int i = 0; i < 1; i++) {
 //                    logs[i] = joinOp.logs;
 //                }
-//                LogUtils.writeLogs(logs, "verbose/seq/" + QueryStats.queryName);
+//                LogUtils.writeLogs(logs, "verbose/lockFree/" + QueryStats.queryName);
 //                System.out.println("Write to logs!");
 //                System.exit(0);
 //            }
+            // Consider memory loss
+            if (JoinConfig.FORGET && ParallelConfig.EXE_THREADS == 1 && roundCtr==nextForget) {
+                root = new DPNode(roundCtr, query, true, 1);
+                nextForget *= 10;
+            }
         }
-
-        // Update statistics
-//        JoinStats.nrSamples = roundCtr;
-//        JoinStats.avgReward = accReward/roundCtr;
-//        JoinStats.maxReward = maxReward;
-//        JoinStats.totalWork = 0;
-//        for (int tableCtr=0; tableCtr<query.nrJoined; ++tableCtr) {
-//            if (tableCtr == joinOrder[0]) {
-//                JoinStats.totalWork += 1;
-//            } else {
-//                JoinStats.totalWork += Math.max(
-//                        joinOp.tracker.tableOffset[tableCtr],0)/
-//                        (double)joinOp.cardinalities[tableCtr];
-//            }
-//        }
-//        // Output final stats if join logging enabled
-//        if (LoggingConfig.MAX_JOIN_LOGS > 0) {
-//            System.out.println("Exploration weight:\t" +
-//                    JoinConfig.EXPLORATION_WEIGHT);
-//            System.out.println("Nr. rounds:\t" + roundCtr);
-//            System.out.println("Table offsets:\t" +
-//                    Arrays.toString(joinOp.tracker.tableOffset));
-//            System.out.println("Table cards.:\t" +
-//                    Arrays.toString(joinOp.cardinalities));
-//        }
         // Materialize result table
         long timer2 = System.currentTimeMillis();
         joinOp.roundCtr = roundCtr;

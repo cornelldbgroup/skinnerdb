@@ -157,7 +157,6 @@ public class IndexFilter extends PlainVisitor {
 		} else if (rows2.isEmpty()) {
 			qualifyingRows.push(rows1);
 		} else {
-
 			Iterator<Integer> row1iter = rows1.iterator();
 			Iterator<Integer> row2iter = rows2.iterator();
 			int row1 = row1iter.next();
@@ -205,9 +204,8 @@ public class IndexFilter extends PlainVisitor {
 		// We assume predicate passed the index test so
 		// there must be one index and one constant.
 		int constant = extractedConstants.pop();
-		Index index = applicableIndices.pop();
-		int startPos;
-		startPos = ((IntPartitionIndex)index).keyToPositions.getOrDefault(constant, -1);
+		IntPartitionIndex index = (IntPartitionIndex) applicableIndices.pop();
+		int startPos = index.keyToPositions.getOrDefault(constant, -1);
 //		if (!equalFull) {
 //			// Collect indices of satisfying rows via index
 //			List<Integer> rows = new ArrayList<>();
@@ -234,11 +232,18 @@ public class IndexFilter extends PlainVisitor {
 //			resultType = 0;
 //		}
 		if (startPos >= 0) {
-			int nrEntries = index.positions[startPos];
-			// Collect indices of satisfying rows via index
-			int[] newArray = Arrays.copyOfRange(index.positions, startPos + 1, startPos + 1 + nrEntries);
-			List<Integer> rows = Ints.asList(newArray);
-			qualifyingRows.push(rows);
+			if (index.unique) {
+				List<Integer> rows = new ArrayList<>();
+				rows.add(startPos);
+				qualifyingRows.push(rows);
+			}
+			else {
+				int nrEntries = index.positions[startPos];
+				// Collect indices of satisfying rows via index
+				int[] newArray = Arrays.copyOfRange(index.positions, startPos + 1, startPos + 1 + nrEntries);
+				List<Integer> rows = Ints.asList(newArray);
+				qualifyingRows.push(rows);
+			}
 		}
 		else {
 			qualifyingRows.push(new ArrayList<>());

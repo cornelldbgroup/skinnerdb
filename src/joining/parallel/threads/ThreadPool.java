@@ -28,14 +28,18 @@ public class ThreadPool {
      * @param nrThreads	    Number of threads.
      */
     public static void initThreadsPool(int nrThreads, int preThreads) {
-//        executorService = Executors.newFixedThreadPool(nrThreads,
-//                new AffinityThreadFactory("bg", SAME_CORE, DIFFERENT_SOCKET, ANY));
-        executorService = Executors.newFixedThreadPool(nrThreads);
-        preprocessingService = Executors.newFixedThreadPool(preThreads);
+        if (nrThreads > 0) {
+            executorService = Executors.newFixedThreadPool(nrThreads);
+        }
+        if (preThreads > 0) {
+            preprocessingService = Executors.newFixedThreadPool(preThreads);
+        }
     }
 
     public static void close() {
-        executorService.shutdown();
-        preprocessingService.shutdown();
+        if (executorService != null)
+            executorService.shutdown();
+        if (preprocessingService != null)
+            preprocessingService.shutdown();
     }
 }

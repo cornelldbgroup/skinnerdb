@@ -7,6 +7,7 @@ import joining.parallel.join.DPJoin;
 import joining.parallel.join.ModJoin;
 import joining.parallel.join.SPJoin;
 import joining.parallel.parallelization.Parallelization;
+import joining.parallel.plan.LeftDeepPartitionPlan;
 import joining.parallel.progress.ParallelProgressTracker;
 import joining.parallel.threads.ThreadPool;
 import joining.parallel.uct.DPNode;
@@ -25,6 +26,7 @@ import visualization.TreePlotter;
 
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 
 public class DPDSync extends Parallelization {
@@ -54,10 +56,10 @@ public class DPDSync extends Parallelization {
         // Initialize multi-way join operator
         int nrTables = query.nrJoined;
         int nrSplits = query.equiJoinPreds.size();
-
+        Map<Integer, LeftDeepPartitionPlan> planCache = new ConcurrentHashMap<>();
         ParallelProgressTracker tracker = new ParallelProgressTracker(nrTables, nrThreads, nrSplits);
         for (int i = 0; i < nrThreads; i++) {
-            ModJoin modJoin = new ModJoin(query, context, budget, nrThreads, i, predToEval, predToComp);
+            ModJoin modJoin = new ModJoin(query, context, budget, nrThreads, i, predToEval, predToComp, planCache);
             modJoin.tracker = tracker;
             dpJoins.add(modJoin);
         }

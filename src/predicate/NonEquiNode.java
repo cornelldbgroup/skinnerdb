@@ -23,33 +23,89 @@ import java.util.Map;
  * @author  Ziyun Wei
  */
 public class NonEquiNode {
-    NonEquiNode left;
-    NonEquiNode right;
-    Expression expression;
-    public PartitionIndex nonEquiIndex;
-    public PartitionIndex leftIndex;
-    public PartitionIndex rightIndex;
-    public Number constant;
-    public Operator operator;
-    public int table;
-    public int leftTable;
-    public int rightTable;
+    /**
+     * The node translated from left expression.
+     */
+    final NonEquiNode left;
+    /**
+     * The node translated from right expression.
+     */
+    final NonEquiNode right;
+    /**
+     * The index corresponding to left expression.
+     */
+    public final PartitionIndex leftIndex;
+    /**
+     * The index corresponding to right expression.
+     */
+    public final PartitionIndex rightIndex;
+    /**
+     * Whether the predicate has a constant at one side.
+     */
+    public final Number constant;
+    /**
+     * The operator of this predicate.
+     * It could be AND, OR, ADDITION, ...
+     */
+    public final Operator operator;
+    /**
+     * The index of table.
+     */
+    public final int table;
+    /**
+     * The index of left table
+     */
+    public final int leftTable;
+    /**
+     * The index of right table
+     */
+    public final int rightTable;
 
     public NonEquiNode(NonEquiNode left, NonEquiNode right, Expression expression,
                        Index index, Number constant, Operator operator, int table) {
         this.left = left;
         this.right = right;
-        this.expression = expression;
-        this.nonEquiIndex = (PartitionIndex) index;
+        this.leftIndex = (PartitionIndex) index;
+        this.rightIndex = null;
         this.constant = constant;
         this.operator = operator;
         this.table = table;
+        this.leftTable = -1;
+        this.rightTable = -1;
     }
 
     // equi-indices
-    public NonEquiNode(Expression expression, Operator operator) {
-        this.expression = expression;
+    public NonEquiNode(Operator operator, List<EqualsTo> equiJoinPreds,
+                       QueryInfo query) {
         this.operator = operator;
+        this.left = null;
+        this.right = null;
+        this.constant = null;
+        this.table = -1;
+        this.leftIndex = null;
+        this.rightIndex = null;
+        if (equiJoinPreds.size() > 0) {
+            EqualsTo join = equiJoinPreds.get(0);
+            Column left = (Column) join.getLeftExpression();
+            String leftName = left.getTable().getName();
+            Column column = (Column) join.getRightExpression();
+            String aliasName = column.getTable().getName();
+            int leftTable = query.aliasToIndex.get(leftName);
+            int rightTable = query.aliasToIndex.get(aliasName);
+            if (rightTable < leftTable) {
+                this.leftTable = rightTable;
+                this.rightTable = leftTable;
+            }
+            else {
+                this.leftTable = leftTable;
+                this.rightTable = rightTable;
+            }
+
+        }
+        else {
+            leftTable = -1;
+            rightTable = -1;
+        }
     }
 
     public NonEquiNode(NonEquiNode left, NonEquiNode right, Expression expression,
@@ -57,25 +113,29 @@ public class NonEquiNode {
                        int leftTable, int rightTable) {
         this.left = left;
         this.right = right;
-        this.expression = expression;
-        this.leftIndex = (PartitionIndex) leftIndex;
-        this.rightIndex = (PartitionIndex) rightIndex;
+
+        PartitionIndex orderedLeftIndex = (PartitionIndex) leftIndex;
+        PartitionIndex orderedRightIndex = (PartitionIndex) rightIndex;
+
         this.operator = operator;
-        this.leftTable = leftTable;
-        this.rightTable = rightTable;
-        if (operator == Operator.EqualsExist) {
-            if (rightTable < leftTable) {
-                int table = this.rightTable;
-                this.rightTable = this.leftTable;
-                this.leftTable = table;
-                PartitionIndex index = this.rightIndex;
-                this.rightIndex = this.leftIndex;
-                this.leftIndex = index;
-            }
+
+        if ((operator == Operator.EqualsExist
+                || operator == Operator.NotEqualsAll)
+                && rightTable < leftTable) {
+            this.leftTable = rightTable;
+            this.rightTable = leftTable;
+            this.leftIndex = orderedRightIndex;
+            this.rightIndex = orderedLeftIndex;
         }
-        if (operator == Operator.Variable) {
+        else {
+            this.leftTable = leftTable;
+            this.rightTable = rightTable;
+            this.leftIndex = orderedLeftIndex;
+            this.rightIndex = orderedRightIndex;
 
         }
+        this.constant = null;
+        this.table = -1;
     }
 
     public boolean evaluate(int[] tupleIndices) {
@@ -90,18 +150,9 @@ public class NonEquiNode {
         }
         else if (operator == Operator.NotAll) {
             boolean evaluation = !left.evaluate(tupleIndices);
-
             return evaluation;
         }
         else if (operator == Operator.NotEqualsAll) {
-            if (rightTable < leftTable) {
-                int table = rightTable;
-                rightTable = leftTable;
-                leftTable = table;
-                PartitionIndex index = rightIndex;
-                rightIndex = leftIndex;
-                leftIndex = index;
-            }
             Number constant = leftIndex.getNumber(leftTable);
             int rightTuple = tupleIndices[rightTable];
             boolean evaluation = rightIndex.evaluate(rightTuple, constant, operator);
@@ -111,7 +162,7 @@ public class NonEquiNode {
         else {
             if (constant != null) {
                 int curTuple = tupleIndices[table];
-                return nonEquiIndex.evaluate(curTuple, constant, operator);
+                return leftIndex.evaluate(curTuple, constant, operator);
             }
             else {
                 int leftTuple = tupleIndices[leftTable];
@@ -196,19 +247,13 @@ public class NonEquiNode {
             return false;
         }
         else if (operator == Operator.EqualsExist) {
-            boolean evaluation = exist(tupleIndices);
+            int leftTuple = tupleIndices[leftTable];
+            Number constant = leftIndex.getNumber(leftTuple);
+            boolean evaluation = rightIndex.exist(constant, Operator.EqualsTo);
             tupleIndices[nextTable] = cardinality - 1;
             return evaluation;
         }
         else if (operator == Operator.NotEqualsAll) {
-            if (rightTable < leftTable) {
-                int table = rightTable;
-                rightTable = leftTable;
-                leftTable = table;
-                PartitionIndex index = rightIndex;
-                rightIndex = leftIndex;
-                leftIndex = index;
-            }
             int leftTuple = tupleIndices[leftTable];
             int rightTuple = tupleIndices[rightTable];
             Number constant = leftIndex.getNumber(leftTuple);
@@ -219,7 +264,7 @@ public class NonEquiNode {
         else {
             if (constant != null) {
                 int curTuple = tupleIndices[table];
-                return nonEquiIndex.evaluate(curTuple, constant, operator);
+                return leftIndex.evaluate(curTuple, constant, operator);
             }
             else {
                 int leftTuple = tupleIndices[leftTable];
@@ -231,85 +276,7 @@ public class NonEquiNode {
         }
     }
 
-    public boolean exist(int[] tupleIndices) {
-        if (operator == Operator.OR) {
-            return left.exist(tupleIndices) || right.exist(tupleIndices);
-        }
-        // TODO
-        else if (operator == Operator.AND) {
-            if (left.operator != Operator.EqualsTo) {
-                NonEquiNode node = right;
-                right = left;
-                left = node;
-            }
-            if (left.rightTable < left.leftTable) {
-                int table = left.rightTable;
-                left.rightTable = left.leftTable;
-                left.leftTable = table;
-                PartitionIndex index = left.rightIndex;
-                left.rightIndex = left.leftIndex;
-                left.leftIndex = index;
-            }
-            if (left.leftIndex instanceof IntPartitionIndex) {
-                IntPartitionIndex partition = (IntPartitionIndex) left.rightIndex;
-                int target = ((IntPartitionIndex) left.leftIndex).intData.data[tupleIndices[left.leftTable]];
-                int pos = partition.keyToPositions.getOrDefault(target, -1);
-                if (pos < 0) {
-                    return false;
-                }
-                else {
-                    int nrs = partition.positions[pos];
-                    for (int i = 1; i <= nrs; i++) {
-                        int index = partition.positions[i + pos];
-                        tupleIndices[left.rightTable] = index;
-                        if (right.evaluate(tupleIndices)) {
-                            return true;
-                        }
-                    }
-                }
-            }
-            else if (left.leftIndex instanceof DoublePartitionIndex) {
-                DoublePartitionIndex partition = (DoublePartitionIndex) left.rightIndex;
-                double target = ((DoublePartitionIndex) left.leftIndex).doubleData.data[tupleIndices[left.leftTable]];
-                int pos = partition.keyToPositions.getOrDefault(target, -1);
-                if (pos < 0) {
-                    return false;
-                }
-                else {
-                    int nrs = partition.positions[pos];
-                    for (int i = 1; i <= nrs; i++) {
-                        int index = partition.positions[i];
-                        tupleIndices[left.rightTable] = index;
-                        if (right.evaluate(tupleIndices)) {
-                            return true;
-                        }
-                    }
-                }
-            }
-        }
-        else if (operator == Operator.EqualsExist) {
-            int leftTuple = tupleIndices[leftTable];
-            Number constant = leftIndex.getNumber(leftTuple);
-            return rightIndex.exist(constant, Operator.EqualsTo);
-        }
-        else if (operator == Operator.EqualsTo || operator == Operator.NotEqualsTo) {
-            if (rightTable < leftTable) {
-                int table = rightTable;
-                rightTable = leftTable;
-                leftTable = table;
-                PartitionIndex index = rightIndex;
-                rightIndex = leftIndex;
-                leftIndex = index;
-            }
 
-            int leftTuple = tupleIndices[leftTable];
-            Number constant = leftIndex.getNumber(leftTuple);
-            boolean evaluation = rightIndex.exist(constant, operator);
-            return evaluation;
-        }
-
-        return false;
-    }
 
     public boolean evaluateUnary(int curTuple) {
         if (operator == Operator.OR) {
@@ -320,7 +287,7 @@ public class NonEquiNode {
         }
         else {
             if (constant != null) {
-                return nonEquiIndex.evaluate(curTuple, constant, operator);
+                return leftIndex.evaluate(curTuple, constant, operator);
             }
         }
         return false;

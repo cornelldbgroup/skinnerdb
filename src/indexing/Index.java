@@ -19,17 +19,17 @@ public abstract class Index {
 	 * the number of entries, followed by the row
 	 * numbers at which those entries are found.
 	 */
-	public int[] positions;
+	public volatile int[] positions;
 	/**
 	 * After indexing: contains row id where the element
 	 * is sorted in an increasing way.
 	 */
-	public int[] sortedRow;
+	public volatile int[] sortedRow;
 	/**
 	 * After indexing: contains group id that the element
 	 * belongs to.
 	 */
-	public int[] groupIds;
+	public volatile int[] groupIds;
 	/**
 	 * Whether it is unique key.
 	 */

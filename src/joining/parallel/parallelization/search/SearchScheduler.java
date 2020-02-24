@@ -1,6 +1,5 @@
 package joining.parallel.parallelization.search;
 
-import config.GeneralConfig;
 import joining.parallel.join.SPJoin;
 import joining.parallel.uct.SPNode;
 import query.QueryInfo;
@@ -77,7 +76,7 @@ public class SearchScheduler {
     public SearchScheduler(QueryInfo query, SPNode root, List<SPJoin> spJoins, int nrThreads) {
         // initialize nodes for the first level.
         int sid = -2;
-        int MAX_SIZE = 20;
+        int MAX_SIZE = nrThreads;
         this.nrJoined = query.nrJoined;
         List<SPNode> preNodes = new ArrayList<>();
         for (int i = 0 ; i < root.prioritySet.size(); i++) {

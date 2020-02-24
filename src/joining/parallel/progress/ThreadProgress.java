@@ -9,7 +9,7 @@ public class ThreadProgress {
      * Latest state reached by any join order sharing
      * a certain table prefix.
      */
-    public ThreadState[] latestStates;
+    public final ThreadState[] latestStates;
     /**
      * the slowest progress state that is only useful for pure progress
      */
@@ -21,6 +21,9 @@ public class ThreadProgress {
         childNodes = new ThreadProgress[nrTables];
         if (!slow) {
             latestStates = new ThreadState[nrThreads];
+        }
+        else {
+            latestStates = null;
         }
     }
 

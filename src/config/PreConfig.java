@@ -22,7 +22,7 @@ public class PreConfig {
 	/**
 	 * Whether to write filtered rows in the cache.
 	 */
-	public static boolean IN_CACHE = true;
+	public static boolean IN_CACHE = false;
 	/**
 	 * Whether to write filtered rows in the cache.
 	 */

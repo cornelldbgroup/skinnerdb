@@ -4,6 +4,7 @@ import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
+import java.util.stream.Stream;
 
 import buffer.BufferManager;
 import catalog.CatalogManager;
@@ -76,30 +77,19 @@ public class Materialize {
 		}
 
 
-		if (GeneralConfig.isParallel) {
-			// Generate column data
-			sourceColRefs.parallelStream().forEach(sourceColRef -> {
-				// Copy relevant rows into result column
-				ColumnData srcData = BufferManager.colToData.get(sourceColRef);
-				ColumnData resultData = rowList==null?
-						srcData.copyRows(rowBitSet):srcData.copyRows(rowList);
-				String columnName = sourceColRef.columnName;
-				ColumnRef resultColRef = new ColumnRef(targetRelName, columnName);
-				BufferManager.colToData.put(resultColRef, resultData);
-			});
-		}
-		else {
-			// Generate column data
-			for (ColumnRef sourceColRef: sourceColRefs) {
-				// Copy relevant rows into result column
-				ColumnData srcData = BufferManager.colToData.get(sourceColRef);
-				ColumnData resultData = rowList==null?
-						srcData.copyRows(rowBitSet):srcData.copyRows(rowList);
-				String columnName = sourceColRef.columnName;
-				ColumnRef resultColRef = new ColumnRef(targetRelName, columnName);
-				BufferManager.colToData.put(resultColRef, resultData);
-			}
-		}
+		// Generate column data
+		Stream<ColumnRef> sourceColStream = GeneralConfig.isParallel?
+				sourceColRefs.parallelStream():sourceColRefs.stream();
+		sourceColStream.forEach(sourceColRef -> {
+			// Copy relevant rows into result column
+			ColumnData srcData = BufferManager.colToData.get(sourceColRef);
+			ColumnData resultData = rowList==null?
+					srcData.copyRows(rowBitSet):srcData.copyRows(rowList);
+			String columnName = sourceColRef.columnName;
+			ColumnRef resultColRef = new ColumnRef(targetRelName, columnName);
+			BufferManager.colToData.put(resultColRef, resultData);
+		});
+
 		// Update statistics in catalog
 		CatalogManager.updateStats(targetRelName);
 		// Unload source data if necessary

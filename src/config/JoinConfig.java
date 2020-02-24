@@ -21,11 +21,29 @@ public class JoinConfig {
 	 */
 	public static int BUDGET_PER_EPISODE = 500;
 	/**
+	 * How to weigh progress calculated based on the
+	 * percentage of input processed when calculating
+	 * reward.
+	 */
+	public static double INPUT_REWARD_WEIGHT = 0.5;
+	/**
+	 * How to weigh progress calculated based on the
+	 * percentage of output generated when calculating
+	 * reward.
+	 */
+	public static double OUTPUT_REWARD_WEIGHT = 0.5;
+	/**
 	 * Weight for UCT exploration term (used to select
 	 * most interesting action to try next). This
 	 * factor may be dynamically adapted.
 	 */
 	public static double EXPLORATION_WEIGHT = 1E-5;
+	/**
+	 * Weight for UCT exploration term (used to select
+	 * most interesting action to try next). This
+	 * factor may be dynamically adapted.
+	 */
+	public static double PARALLEL_WEIGHT = 1E-10;
 	/**
 	 * Determines how the weight for the exploration term
 	 * of the UCT algorithm is updated over time.
@@ -53,4 +71,14 @@ public class JoinConfig {
 	 * in each node. It is better in terms of complexity.
 	 */
 	public static final boolean NEWTRACKER = true;
+	/**
+	 * Whether to share progress among different thread.
+	 * If this flag is activated. There is only one thread
+	 * can update to a left-most table.
+	 */
+	public static boolean PROGRESS_SHARING = false;
+	/**
+	 * Whether to share offsets among different thread.
+	 */
+	public static boolean OFFSETS_SHARING = false;
 }

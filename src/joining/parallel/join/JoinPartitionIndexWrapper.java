@@ -1,4 +1,5 @@
 package joining.parallel.join;
+import com.koloboke.collect.set.IntSet;
 import data.ColumnData;
 import data.IntData;
 import expressions.ExpressionInfo;
@@ -107,6 +108,7 @@ public abstract class JoinPartitionIndexWrapper {
      * @return              next interesting tuple index or cardinality
      */
     public abstract int nextIndexInScope(int[] tupleIndices, int tid, int[] nextSize);
+    public abstract int nextIndexInScope(int[] tupleIndices, int tid, int[] nextSize, IntSet finishedThreads);
     /**
      * Propose next index in next table that
      * satisfies equi-join condition with
@@ -127,9 +129,19 @@ public abstract class JoinPartitionIndexWrapper {
      * @return	next interesting tuple index or cardinality
      */
     public abstract boolean evaluateInScope(int[] tupleIndices, int tid);
+    public abstract boolean evaluateInScope(int[] tupleIndices, int tid, IntSet finishedThreads);
 
     @Override
     public String toString() {
-        return "Prior table:\t" + priorTable + "; Next:\t" + nextTable;
+        return "[Prior table: " + priorTable + "; Next: " + nextTable + "]";
     }
+
+    /**
+     * Returns the number of entries indexed
+     * for the given value.
+     *
+     * @param tupleIndices	current tuple indices
+     * @return		number of indexed values
+     */
+    public abstract int nrIndexed(int[] tupleIndices);
 }

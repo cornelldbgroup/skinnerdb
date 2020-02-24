@@ -2,6 +2,7 @@ package joining.parallel.parallelization.search;
 
 import config.LoggingConfig;
 import config.ParallelConfig;
+import joining.parallel.join.DPJoin;
 import joining.parallel.join.SPJoin;
 import joining.parallel.join.SubJoin;
 import joining.parallel.parallelization.Parallelization;
@@ -97,10 +98,14 @@ public class SearchParallelization extends Parallelization {
             }
 
         });
-        JoinStats.nrSamples = 0;
+
+        long nrSamples = 0;
         for (SPJoin joinOp: spJoins) {
-            JoinStats.nrSamples = Math.max(joinOp.roundCtr, JoinStats.nrSamples);
+            nrSamples = Math.max(joinOp.roundCtr, nrSamples);
+            JoinStats.nrTuples += joinOp.statsInstance.nrTuples;
         }
+        JoinStats.nrSamples = nrSamples;
+
         // Write log to the local file.
         if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
             if (ParallelConfig.PARALLEL_SPEC == 2) {

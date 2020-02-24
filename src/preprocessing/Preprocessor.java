@@ -4,6 +4,7 @@ import java.io.PrintWriter;
 import java.nio.Buffer;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
 
@@ -106,7 +107,11 @@ public class Preprocessor {
 		boolean inCached = GeneralConfig.ISTESTCASE && PreConfig.IN_CACHE;
 		log("Column mapping:\t" + preSummary.columnMapping.toString());
 		// Iterate over query aliases
-		query.aliasToTable.keySet().stream().forEach(alias -> {
+		Stream<String> aliasStream = GeneralConfig.isParallel?
+				query.aliasToTable.keySet().parallelStream():
+				query.aliasToTable.keySet().stream();
+		// Iterate over query aliases
+		aliasStream.forEach(alias -> {
 			long s1 = System.currentTimeMillis();
 			// Collect required columns (for joins and post-processing) for this table
 			List<ColumnRef> curRequiredCols = new ArrayList<>();
@@ -122,6 +127,7 @@ public class Preprocessor {
 					curUnaryPred = exprInfo;
 				}
 			}
+			int size = 0;
 			// Filter and project if enabled
 			if (curUnaryPred != null && PreConfig.FILTER) {
 				try {
@@ -144,12 +150,11 @@ public class Preprocessor {
 							if (inCached && rows.size() > 0 && rows.get(0) >= 0 && filter.qualifyingRows.size() == 0) {
 								BufferManager.indexCache.putIfAbsent(curUnaryPred.pid, rows);
 							}
-//							String filteredName = NamingConfig.FILTERED_PRE + alias;
-//							int cardinality = CatalogManager.getCardinality(filteredName);
-//							if (cardinality == 0) {
-//								terminated = true;
-////								break;
-//							}
+							String filteredName = NamingConfig.FILTERED_PRE + alias;
+							size = CatalogManager.getCardinality(filteredName);
+							if (size == 0) {
+								terminated = true;
+							}
 						}
 						else {
 							if (inCached && filter.resultType == 0 && filter.qualifyingRows.size() > 0) {
@@ -158,18 +163,15 @@ public class Preprocessor {
 									BufferManager.indexCache.putIfAbsent(curUnaryPred.pid, rows);
 								}
 							}
-//							String filteredName = NamingConfig.IDX_FILTERED_PRE + alias;
-//							int cardinality = CatalogManager.getCardinality(filteredName);
-//							if (cardinality == 0) {
-//								terminated = true;
-////								break;
-//							}
+							String filteredName = NamingConfig.IDX_FILTERED_PRE + alias;
+							size = CatalogManager.getCardinality(filteredName);
+							if (size == 0) {
+								terminated = true;
+//								break;
+							}
 						}
 					}
 					else {
-//						if (inCacheRows.size() < 10) {
-//							System.out.println("Cache Index " + curUnaryPred + " " + Arrays.toString(inCacheRows.toArray()));
-//						}
 						// Materialize relevant rows and columns
 						String tableName = preSummary.aliasToFiltered.get(alias);
 						String filteredName = NamingConfig.FILTERED_PRE + alias;
@@ -206,7 +208,7 @@ public class Preprocessor {
 			}
 			long s2 = System.currentTimeMillis();
 			if (curUnaryPred != null) {
-				System.out.println("Predicate: " + curUnaryPred.toString() + "\tTime: " + (s2 - s1));
+				System.out.println("Predicate: " + curUnaryPred.toString() + "\tSize: " + size + "\tTime: " + (s2 - s1));
 			}
 		});
 
@@ -218,10 +220,15 @@ public class Preprocessor {
 		if (hadError) {
 			throw new Exception("Error in pre-processor.");
 		}
+		// Measure filtering time
+		if (performance) {
+			PreStats.subFilterMillis.add(System.currentTimeMillis() - startMillis);
+		}
 
 		// Create missing indices for columns involved in equi-joins.
 		log("Creating indices ...");
 		if (terminated) {
+			PreStats.subPreMillis.add(System.currentTimeMillis() - startMillis);
 			return preSummary;
 		}
 		createJoinIndices(query, preSummary);
@@ -456,60 +463,35 @@ public class Preprocessor {
 			throws Exception {
 		// Iterate over columns in equi-joins
 		long startMillis = System.currentTimeMillis();
-		if (LoggingConfig.PREPROCESSING_VERBOSE) {
-			startMillis = System.currentTimeMillis();
-		}
-		if (GeneralConfig.isParallel) {
-			query.indexCols.parallelStream().forEach(queryRef -> {
-				try {
-					// Resolve query-specific column reference
-					ColumnRef dbRef = preSummary.columnMapping.get(queryRef);
-					if (LoggingConfig.PREPROCESSING_VERBOSE) {
-						log("Creating index for " + queryRef +
-								" (query) - " + dbRef + " (DB)");
-					}
+		Stream<ColumnRef> joinColStream = GeneralConfig.isParallel?
+				query.indexCols.parallelStream():
+				query.indexCols.stream();
+
+		joinColStream.forEach(queryRef -> {
+			try {
+				// Resolve query-specific column reference
+				ColumnRef dbRef = preSummary.columnMapping.get(queryRef);
+				if (LoggingConfig.PREPROCESSING_VERBOSE) {
+					log("Creating index for " + queryRef +
+							" (query) - " + dbRef + " (DB)");
+				}
 //					long timer1 = System.currentTimeMillis();
-					ColumnInfo columnInfo = query.colRefToInfo.get(queryRef);
-					String tableName = query.aliasToTable.get(queryRef.aliasName);
-					String columnName = queryRef.columnName;
-					ColumnRef columnRef = new ColumnRef(tableName, columnName);
-					Index index = BufferManager.colToIndex.getOrDefault(columnRef, null);
-					PartitionIndex partitionIndex = index == null ? null : (PartitionIndex) index;
-					// Get index generation policy according to statistics.
-					// Create index (unless it exists already)
-					Indexer.partitionIndex(dbRef, queryRef, partitionIndex, columnInfo.isPrimary, false, false);
+				ColumnInfo columnInfo = query.colRefToInfo.get(queryRef);
+				String tableName = query.aliasToTable.get(queryRef.aliasName);
+				String columnName = queryRef.columnName;
+				ColumnRef columnRef = new ColumnRef(tableName, columnName);
+				Index index = BufferManager.colToIndex.getOrDefault(columnRef, null);
+				PartitionIndex partitionIndex = index == null ? null : (PartitionIndex) index;
+				// Get index generation policy according to statistics.
+				// Create index (unless it exists already)
+				Indexer.partitionIndex(dbRef, queryRef, partitionIndex, columnInfo.isPrimary, !GeneralConfig.isParallel, false);
 //					long timer2 = System.currentTimeMillis();
 //					System.out.println("Indexing " + queryRef + " " + (timer2 - timer1));
-				} catch (Exception e) {
-					System.err.println("Error creating index for " + queryRef);
-					e.printStackTrace();
-				}
-			});
-		}
-		else {
-			query.indexCols.forEach(queryRef -> {
-				try {
-					// Resolve query-specific column reference
-					ColumnRef dbRef = preSummary.columnMapping.get(queryRef);
-					if (LoggingConfig.PREPROCESSING_VERBOSE) {
-						log("Creating index for " + queryRef +
-								" (query) - " + dbRef + " (DB)");
-					}
-					ColumnInfo columnInfo = query.colRefToInfo.get(queryRef);
-					String tableName = query.aliasToTable.get(queryRef.aliasName);
-					String columnName = queryRef.columnName;
-					ColumnRef columnRef = new ColumnRef(tableName, columnName);
-					Index index = BufferManager.colToIndex.getOrDefault(columnRef, null);
-					PartitionIndex partitionIndex = index == null ? null : (PartitionIndex) index;
-					// Get index generation policy according to statistics.
-					// Create index (unless it exists already)
-					Indexer.partitionIndex(dbRef, queryRef, partitionIndex, columnInfo.isPrimary, true, false);
-				} catch (Exception e) {
-					System.err.println("Error creating index for " + queryRef);
-					e.printStackTrace();
-				}
-			});
-		}
+			} catch (Exception e) {
+				System.err.println("Error creating index for " + queryRef);
+				e.printStackTrace();
+			}
+		});
 		long totalMillis = System.currentTimeMillis() - startMillis;
 		System.out.println("Created all indices in " + totalMillis + " ms.");
 		log("Created all indices in " + totalMillis + " ms.");

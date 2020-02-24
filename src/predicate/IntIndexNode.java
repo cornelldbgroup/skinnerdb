@@ -14,12 +14,16 @@ import java.util.List;
 import java.util.Map;
 
 public class IntIndexNode extends NonEquiNode {
-    IntPartitionIndex priorIndex;
-    IntPartitionIndex nextIndex;
+    final IntPartitionIndex priorIndex;
+    final IntPartitionIndex nextIndex;
 
-    public IntIndexNode(Expression expression, List<EqualsTo> equiJoinPreds, Map<ColumnRef, ColumnRef> columnMappings, QueryInfo query) {
-        super(expression, Operator.EquiIndices);
-        for (EqualsTo join : equiJoinPreds) {
+    public IntIndexNode(Expression expression,
+                        List<EqualsTo> equiJoinPreds,
+                        Map<ColumnRef, ColumnRef> columnMappings,
+                        QueryInfo query) {
+        super(Operator.EquiIndices, equiJoinPreds, query);
+        if (equiJoinPreds.size() > 0) {
+            EqualsTo join = equiJoinPreds.get(0);
             Column left = (Column) join.getLeftExpression();
             String leftName = left.getTable().getName();
             String leftColumn = left.getColumnName();
@@ -31,10 +35,22 @@ public class IntIndexNode extends NonEquiNode {
             ColumnRef colRef = new ColumnRef(aliasName, columnName);
             ColumnRef dbRef = columnMappings.get(colRef);
             // Check for available index
-            priorIndex = (IntPartitionIndex) BufferManager.colToIndex.get(leftRef);
-            nextIndex = (IntPartitionIndex) BufferManager.colToIndex.get(dbRef);
-            leftTable = query.aliasToIndex.get(leftName);
-            rightTable = query.aliasToIndex.get(aliasName);
+            IntPartitionIndex priorIndex = (IntPartitionIndex) BufferManager.colToIndex.get(leftRef);
+            IntPartitionIndex nextIndex = (IntPartitionIndex) BufferManager.colToIndex.get(dbRef);
+            int leftTable = query.aliasToIndex.get(leftName);
+            int rightTable = query.aliasToIndex.get(aliasName);
+            if (rightTable < leftTable) {
+                this.priorIndex = nextIndex;
+                this.nextIndex = priorIndex;
+            }
+            else {
+                this.priorIndex = priorIndex;
+                this.nextIndex = nextIndex;
+            }
+        }
+        else {
+            priorIndex = null;
+            nextIndex = null;
         }
     }
 
@@ -42,7 +58,7 @@ public class IntIndexNode extends NonEquiNode {
         int priorTuple = tupleIndices[leftTable];
         int priorVal = priorIndex.intData.data[priorTuple];
         int curTuple = tupleIndices[rightTable];
-        return nextIndex.nextTuple(priorVal, curTuple, nextSize);
+        return nextIndex.nextTuple(priorVal, curTuple, 0, nextSize);
     }
 
     public boolean curIndex(int[] tupleIndices) {

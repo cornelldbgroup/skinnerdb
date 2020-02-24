@@ -125,14 +125,16 @@ public class Master {
 			boolean tempResult = lastSubQuery?finalTempResult:true;
 			String resultRel = subQuery.getIntoTables().get(0).getName();
 			// Aggregation, grouping, and sorting if required
-			if (GeneralConfig.isParallel) {
-				ParallelPostProcessor.process(subQueryInfo, context,
-						resultRel, tempResult);
-			}
-			else {
-				PostProcessor.process(subQueryInfo, context,
-						resultRel, tempResult);
-			}
+			PostProcessor.process(subQueryInfo, context,
+					resultRel, tempResult);
+//			if (GeneralConfig.isParallel) {
+//				ParallelPostProcessor.process(subQueryInfo, context,
+//						resultRel, tempResult);
+//			}
+//			else {
+//				PostProcessor.process(subQueryInfo, context,
+//						resultRel, tempResult);
+//			}
 			System.out.println(Arrays.toString(PostStats.subPostMillis.toArray()));
 //			RelationPrinter.print(resultRel);
 			// Clean up intermediate results except result table
@@ -144,11 +146,14 @@ public class Master {
 
 	private static void initializeStats() {
 		PreStats.subPreMillis = new ArrayList<>();
+		PreStats.subFilterMillis = new ArrayList<>();
 		JoinStats.skinnerJoinCards = new ArrayList<>();
 		JoinStats.subJoinTime = new ArrayList<>();
 		JoinStats.subMateriazed = new ArrayList<>();
 		JoinStats.subExeTime = new ArrayList<>();
 		JoinStats.subAllExeTime = new ArrayList<>();
+		JoinStats.subAllSamples = new ArrayList<>();
+		JoinStats.subAllTuples = new ArrayList<>();
 		PostStats.subPostMillis = new ArrayList<>();
 		JoinStats.nrTuples = 0;
 		JoinStats.nrSamples = 0;

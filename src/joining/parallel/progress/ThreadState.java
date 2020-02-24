@@ -68,6 +68,39 @@ public class ThreadState {
         }
     }
 
+    public int updateProgress(State finalState, int newIndex, int roundCtr) {
+        int round = tableTupleIndexEpoch[0][1];
+        int progress = tableTupleIndexEpoch[0][0];
+
+        if (round > 0) {
+            if (progress < newIndex || (progress > newIndex && finalState.roundCtr > round)) {
+                tableTupleIndexEpoch[0][0] = newIndex;
+                tableTupleIndexEpoch[0][1] = roundCtr;
+                tableTupleIndexEpoch[0][2] = 0;
+                finalState.roundCtr = roundCtr;
+                return 1;
+            }
+            else if (progress > newIndex) {
+                return -1;
+            }
+            else if (finalState.roundCtr > round) {
+                tableTupleIndexEpoch[0][1] = roundCtr;
+                finalState.roundCtr = roundCtr;
+            }
+            else {
+                finalState.roundCtr = round;
+            }
+        }
+        else {
+            tableTupleIndexEpoch[0][0] = newIndex;
+            tableTupleIndexEpoch[0][1] = roundCtr;
+            tableTupleIndexEpoch[0][2] = 0;
+            finalState.roundCtr = roundCtr;
+            return 1;
+        }
+        return 0;
+    }
+
     /**
      * Considers another state achieved for a join order
      * sharing the same prefix in the table ordering.

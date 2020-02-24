@@ -93,4 +93,12 @@ public class JoinStats {
      * A list of all execution time for sub queries.
      */
     public static List<String> subAllExeTime;
+    /**
+     * A list of all iterations for sub queries.
+     */
+    public static List<String> subAllSamples;
+    /**
+     * A list of all generated tuples for sub queries.
+     */
+    public static List<String> subAllTuples;
 }

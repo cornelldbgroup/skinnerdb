@@ -314,15 +314,12 @@ public class Filter {
 		List<Integer> result = new ArrayList<>(rowRange.lastTuple - rowRange.firstTuple);
 //		List<Integer> result = new SimpleLinkedList<>();
 		// Evaluate predicate for each table row
-//		long s1 = System.currentTimeMillis();
-		for (int rowCtr=rowRange.firstTuple; 
+		for (int rowCtr=rowRange.firstTuple;
 				rowCtr<=rowRange.lastTuple; ++rowCtr) {
 			if (unaryBoolEval.evaluate(rowCtr) > 0) {
 				result.add(rowCtr);
 			}
 		}
-//		long s2 = System.currentTimeMillis();
-//		System.out.println("Start: " + rowRange.firstTuple + "\tTime: " + (s2 - s1));
 		return result;
 	}
 
