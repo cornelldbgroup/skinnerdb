@@ -45,6 +45,7 @@ public class FilterUCTNode {
                          Map<List<Integer>, UnaryBoolEval> cache,
                          long roundCtr,
                          int numPredicates, List<HashIndex> indices) {
+        System.out.println("Creating root at " + roundCtr);
         this.type = NodeType.ROOT;
         this.treeLevel = 0;
         this.createdIn = roundCtr;
@@ -177,6 +178,7 @@ public class FilterUCTNode {
     }
 
     public double sample(long roundCtr, FilterState state) {
+        System.out.println("Sampling at " + roundCtr);
         if (type == NodeType.LEAF) {
             if (state.parallelBatches > 0) {
                 return filterOp.executeWithBudget(PARALLEL_ROWS_PER_TIMESTEP,

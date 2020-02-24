@@ -250,8 +250,7 @@ public class SearchPreprocessor implements Preprocessor {
 
         FilterState state = new FilterState(nrCompiled);
         FilterUCTNode root = new FilterUCTNode(filterOp, cache, roundCtr,
-                nrCompiled,
-                indices);
+                nrCompiled, indices);
         long nextForget = 1;
         long nextCompile = 50;
 
