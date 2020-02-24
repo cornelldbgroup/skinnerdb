@@ -131,7 +131,7 @@ public class FilterUCTNode {
 
         if (type == NodeType.BRANCHING || type == NodeType.INDEX) {
             if (type == NodeType.BRANCHING && parent.type == NodeType.ROOT) {
-                this.nrActions = numPredicates;
+                this.nrActions = numPredicates - 1;
             } else {
                 this.nrActions = parent.nrActions - 1;
             }
@@ -304,10 +304,8 @@ public class FilterUCTNode {
                         state);
             }
 
-            case LEAF: {
-                return filterOp.executeWithBudget(ROWS_PER_TIMESTEP,
-                        state);
-            }
+            case LEAF:
+                throw new RuntimeException("Not possible to playout from leaf");
 
             case ROOT:
                 throw new RuntimeException("Not possible to playout from root");
