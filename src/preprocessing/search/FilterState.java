@@ -12,7 +12,7 @@ public class FilterState {
     public UnaryBoolEval cachedEval;
     public int cachedTil;
 
-    public int batches;
+    public int parallelBatches;
 
     public FilterState(int numPredicates) {
         this.order = new int[numPredicates];
@@ -20,7 +20,7 @@ public class FilterState {
         this.useIndexScan = false;
         this.cachedEval = null;
         this.cachedTil = -1;
-        this.batches = 0;
+        this.parallelBatches = 0;
     }
 
     @Override
@@ -30,7 +30,7 @@ public class FilterState {
                 ", useIndexScan=" + useIndexScan +
                 ", avoidBranching=" + avoidBranching +
                 ", cachedTil=" + cachedTil +
-                ", batches=" + batches +
+                ", parallelBatches=" + parallelBatches +
                 '}';
     }
 
@@ -39,6 +39,6 @@ public class FilterState {
         this.useIndexScan = false;
         this.cachedEval = null;
         this.cachedTil = -1;
-        this.batches = 0;
+        this.parallelBatches = 0;
     }
 }

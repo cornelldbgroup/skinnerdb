@@ -27,7 +27,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import static operators.Filter.*;
 import static preprocessing.PreprocessorUtil.*;
-import static preprocessing.search.FilterSearchConfig.*;
+import static preprocessing.search.FilterSearchConfig.FORGET;
 
 public class SearchPreprocessor implements Preprocessor {
     /**
@@ -258,8 +258,7 @@ public class SearchPreprocessor implements Preprocessor {
         while (!filterOp.isFinished()) {
             ++roundCtr;
             state.reset();
-            root.sample(roundCtr, state, ROWS_PER_TIMESTEP,
-                    PARALLEL_ROWS_PER_TIMESTEP, new ArrayList<>());
+            root.sample(roundCtr, state);
 
             if (FORGET && roundCtr == nextForget) {
                 root = new FilterUCTNode(filterOp, cache, roundCtr, nrCompiled,
@@ -274,12 +273,12 @@ public class SearchPreprocessor implements Preprocessor {
                 PriorityQueue<FilterUCTNode> compile =
                         new PriorityQueue<>(compileSetSize,
                                 Comparator.comparingInt
-                                        (FilterUCTNode::getAddedSavedCalls));
-                root.addChildrenToCompile(compile, compileSetSize);
+                                        (FilterUCTNode::getNumVisits));
+                root.getTopNodesForCompilation(compile, compileSetSize);
                 for (int j = 0; j < compileSetSize; j++) {
                     if (compile.size() == 0) break;
                     FilterUCTNode node = compile.poll();
-                    final List<Integer> preds = node.getPreds();
+                    final List<Integer> preds = node.getChosenPreds();
                     if (cache.get(preds) == null) {
                         ParallelService.LOW_POOL.submit(() -> {
                             Expression expr = null;
@@ -299,7 +298,7 @@ public class SearchPreprocessor implements Preprocessor {
                         });
                     }
 
-                    node.addChildrenToCompile(compile, compileSetSize);
+                    node.getTopNodesForCompilation(compile, compileSetSize);
                 }
             }
         }

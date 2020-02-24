@@ -109,10 +109,10 @@ public class Filter {
             RowRange allTuples = new RowRange(0, cardinality - 1);
             result = Arrays.asList(filterBatch(unaryBoolEval, allTuples));
         } else {
-            // Divide tuples into batches
+            // Divide tuples into parallelBatches
             MutableList<RowRange> batches = split(cardinality);
 
-            // Process batches in parallel
+            // Process parallelBatches in parallel
             result =
                     batches.asParallel(ParallelService.HIGH_POOL, 1)
                             .collect(batch -> filterBatch(unaryBoolEval,
@@ -132,11 +132,11 @@ public class Filter {
     }
 
     /**
-     * Splits table with given cardinality into tuple batches
+     * Splits table with given cardinality into tuple parallelBatches
      * according to the configuration for parallel processing.
      *
      * @param cardinality cardinality of table to split
-     * @return list of row ranges (batches)
+     * @return list of row ranges (parallelBatches)
      */
     static MutableList<RowRange> split(int cardinality) {
         MutableList<RowRange> batches = Lists.mutable.empty();

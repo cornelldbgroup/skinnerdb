@@ -113,7 +113,7 @@ public class BudgetedFilter {
 
         List<Future<MutableIntList>> futures = new ArrayList<>();
 
-        for (int j = 0; j < state.batches; j++) {
+        for (int j = 0; j < state.parallelBatches; j++) {
             final int start = lastCompletedRow + budgetPerThread * j;
             final int end = Math.min(start + budgetPerThread,
                     LAST_TABLE_ROW - 1);
@@ -272,9 +272,9 @@ public class BudgetedFilter {
             result = indexScanWithOnePredicate(budget, state);
         } else if (state.avoidBranching) {
             result = tableScanBitset(budget, state);
-        } else if (state.batches > 0) {
+        } else if (state.parallelBatches > 0) {
             result = tableScanBranchingParallel(budget, state);
-            budget *= state.batches;
+            budget *= state.parallelBatches;
         } else {
             result = tableScanBranching(budget, state);
         }
