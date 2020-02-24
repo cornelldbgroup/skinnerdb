@@ -289,10 +289,13 @@ public class FilterUCTNode {
                         state);
             }
 
-            case LEAF:
+            case LEAF: {
+                return filterOp.executeWithBudget(ROWS_PER_TIMESTEP,
+                        state);
+            }
+
             case ROOT:
-                throw new RuntimeException("Not possible to playout from " +
-                        "root/leaf");
+                throw new RuntimeException("Not possible to playout from root");
         }
         return 0;
     }
