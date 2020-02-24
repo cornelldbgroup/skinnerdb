@@ -18,7 +18,7 @@ public class FilterUCTNode {
     private static final Random random = new Random();
     private static int numPredicates;
     private static Map<List<Integer>, UnaryBoolEval> cache;
-    private static List<Integer> order = new ArrayList<>();
+    private static List<Integer> order = null;
     private static BudgetedFilter filterOp;
 
     // Node common members
@@ -206,6 +206,7 @@ public class FilterUCTNode {
                             indexActions;
                     int predicate = actionToPredicate[action];
                     state.order[treeLevel] = predicate;
+                    order = new ArrayList<>();
                     order.add(predicate);
 
                     if (childNodes[action] == null && canExpand) {
