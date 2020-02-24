@@ -45,7 +45,6 @@ public class FilterUCTNode {
                          Map<List<Integer>, UnaryBoolEval> cache,
                          long roundCtr,
                          int numPredicates, List<HashIndex> indices) {
-        System.out.println("Creating root at " + roundCtr);
         this.type = NodeType.ROOT;
         this.treeLevel = 0;
         this.createdIn = roundCtr;
@@ -178,7 +177,6 @@ public class FilterUCTNode {
     }
 
     public double sample(long roundCtr, FilterState state) {
-        System.out.println("Sampling at " + roundCtr);
         if (type == NodeType.LEAF) {
             if (state.parallelBatches > 0) {
                 return filterOp.executeWithBudget(PARALLEL_ROWS_PER_TIMESTEP,
@@ -201,14 +199,29 @@ public class FilterUCTNode {
                         childNodes[action] = new FilterUCTNode(this, roundCtr,
                                 NodeType.LEAF);
                     }
+                } else {
+                    state.avoidBranching = false;
+                    state.useIndexScan = this.indexActions > 0 &&
+                            action >= numPredicates && action < numPredicates +
+                            indexActions;
+                    int predicate = actionToPredicate[action];
+                    state.order[treeLevel] = predicate;
+                    order.add(predicate);
+
+                    if (childNodes[action] == null && canExpand) {
+                        if (numPredicates == 1) {
+                            childNodes[action] = new FilterUCTNode(this,
+                                    roundCtr, NodeType.BRANCHING_PARALLEL);
+                        } else if (state.useIndexScan) {
+                            childNodes[action] = new FilterUCTNode(this,
+                                    roundCtr, predicate, NodeType.INDEX);
+                        } else {
+                            childNodes[action] = new FilterUCTNode(this,
+                                    roundCtr, predicate, NodeType.BRANCHING);
+                        }
+                    }
                 }
-                state.avoidBranching = false;
-                state.useIndexScan = this.indexActions > 0 &&
-                        action >= numPredicates && action < numPredicates +
-                        indexActions;
-                int predicate = actionToPredicate[action];
-                state.order[treeLevel] = predicate;
-                order.add(predicate);
+
                 break;
             }
 
