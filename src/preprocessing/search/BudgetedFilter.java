@@ -47,6 +47,7 @@ public class BudgetedFilter {
 
         long startTime = System.nanoTime();
         HashIndex index = indices.get(state.order[0]);
+        @SuppressWarnings("unchecked")
         int dataLocation =
                 index.getDataLocation(values.get(state.order[0]));
         if (dataLocation < 0) {

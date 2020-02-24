@@ -111,14 +111,6 @@ public class ExpressionCompiler extends SkinnerVisitor {
      * Used for generating local variables in evaluation method.
      */
     public final LocalVariablesSorter evaluationLocals;
-    /**
-     * Used for evaluating arithmetic expressions that
-     * involve adding a given number of months to a
-     * date or timestamp expression.
-     */
-    //static Calendar calendar = Calendar.getInstance();
-
-    private int cost;
 
     /**
      * Initializes fields and writes expression evaluator boilerplate code.
@@ -135,7 +127,6 @@ public class ExpressionCompiler extends SkinnerVisitor {
                               Map<String, Integer> tableMapping,
                               Map<String, ColumnRef> aggMapping,
                               EvaluatorType evaluatorType) {
-        cost = 0;
         // Increment expression ID (used in class name)
         ++expressionID;
         // Initialize final fields
@@ -669,6 +660,7 @@ public class ExpressionCompiler extends SkinnerVisitor {
      * @return newly generated evaluator instance
      * @throws Exception
      */
+    @SuppressWarnings("deprecation")
     public Object getBoolEval() throws Exception {
         if (!sqlExceptions.isEmpty()) {
             throw sqlExceptions.get(0);
@@ -694,18 +686,12 @@ public class ExpressionCompiler extends SkinnerVisitor {
             outputBytecode(classWriter);
         }
 
-        cost = getNumberOfInstructions(classWriter);
-
         // Create instance of freshly generated class
         DynamicClassLoader loader = new DynamicClassLoader();
         Class<?> expressionClass = loader.defineClass(
                 "expressions.compilation." + className,
                 classWriter.toByteArray());
         return expressionClass.newInstance();
-    }
-
-    public int getCost() {
-        return cost;
     }
 
     /**
@@ -768,6 +754,7 @@ public class ExpressionCompiler extends SkinnerVisitor {
      * @return newly generated evaluator object
      * @throws Exception
      */
+    @SuppressWarnings("deprecation")
     public UnaryIntEval getUnaryIntEval() throws Exception {
         // Finalize code for unary evaluator of integer result
         finalizeUnaryEval();
@@ -786,6 +773,7 @@ public class ExpressionCompiler extends SkinnerVisitor {
      * @return newly generated evaluator object
      * @throws Exception
      */
+    @SuppressWarnings("deprecation")
     public UnaryLongEval getUnaryLongEval() throws Exception {
         // Finalize code for unary evaluator of integer result
         finalizeUnaryEval();
@@ -804,6 +792,7 @@ public class ExpressionCompiler extends SkinnerVisitor {
      * @return newly generated evaluator object
      * @throws Exception
      */
+    @SuppressWarnings("deprecation")
     public UnaryDoubleEval getUnaryDoubleEval() throws Exception {
         // Finalize code for unary evaluator of integer result
         finalizeUnaryEval();
@@ -822,6 +811,7 @@ public class ExpressionCompiler extends SkinnerVisitor {
      * @return newly generated evaluator object
      * @throws Exception
      */
+    @SuppressWarnings("deprecation")
     public UnaryStringEval getUnaryStringEval() throws Exception {
         // Finalize code for unary evaluator of string result
         finalizeUnaryEval();
