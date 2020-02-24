@@ -4,7 +4,6 @@ import config.JoinConfig;
 import expressions.compilation.UnaryBoolEval;
 import indexing.HashIndex;
 import joining.uct.SelectionPolicy;
-import parallel.ParallelService;
 
 import java.util.*;
 
@@ -12,7 +11,7 @@ import static preprocessing.search.FilterSearchConfig.*;
 
 public class FilterUCTNode {
     private enum NodeType {
-        ROOT, LEAF, INDEX, BRANCHING, BRANCHING_PARALLEL
+        ROOT, LEAF, INDEX, BRANCHING, ROW_PARALLEL
     }
 
     private static final Random random = new Random();
@@ -40,6 +39,8 @@ public class FilterUCTNode {
 
     private final int indexActions;
     private final int branchingActions;
+
+    private int minBatches = 0;
 
     public FilterUCTNode(BudgetedFilter filterOp,
                          Map<List<Integer>, UnaryBoolEval> cache,
@@ -122,7 +123,7 @@ public class FilterUCTNode {
         }
     }
 
-    private FilterUCTNode(FilterUCTNode parent, long roundCtr, int nextPred,
+    private FilterUCTNode(FilterUCTNode parent, long roundCtr, int arg,
                           NodeType type) {
         this.type = type;
         this.treeLevel = parent.treeLevel + 1;
@@ -130,6 +131,7 @@ public class FilterUCTNode {
         // PREAMBLE - DO NOT CHANGE
 
         if (type == NodeType.BRANCHING || type == NodeType.INDEX) {
+            int nextPred = arg;
             if (type == NodeType.BRANCHING && parent.type == NodeType.ROOT) {
                 this.nrActions = numPredicates - 1;
             } else {
@@ -153,7 +155,8 @@ public class FilterUCTNode {
             }
 
         } else {
-            assert type == NodeType.BRANCHING_PARALLEL : type.name();
+            assert type == NodeType.ROW_PARALLEL : type.name();
+            this.minBatches = arg;
             this.nrActions = BRANCHING_PARALLEL_ACTIONS;
             this.childNodes = new FilterUCTNode[nrActions];
             this.chosenPreds = new ArrayList<>();
@@ -212,7 +215,8 @@ public class FilterUCTNode {
                     if (childNodes[action] == null && canExpand) {
                         if (numPredicates == 1) {
                             childNodes[action] = new FilterUCTNode(this,
-                                    roundCtr, NodeType.BRANCHING_PARALLEL);
+                                    roundCtr, 0,
+                                    NodeType.ROW_PARALLEL);
                         } else if (state.useIndexScan) {
                             childNodes[action] = new FilterUCTNode(this,
                                     roundCtr, predicate, NodeType.INDEX);
@@ -238,32 +242,35 @@ public class FilterUCTNode {
 
                 if (childNodes[action] == null && canExpand) {
                     if (type == NodeType.INDEX) {
-                        if (nrActions == 1) {
-                            childNodes[action] = new FilterUCTNode(this,
-                                    roundCtr, NodeType.LEAF);
-                        } else {
-                            childNodes[action] = new FilterUCTNode(this,
-                                    roundCtr, predicate, NodeType.INDEX);
-                        }
+                        childNodes[action] = new FilterUCTNode(this,
+                                roundCtr, (nrActions == 1) ? 0 : predicate,
+                                (nrActions == 1) ?
+                                        NodeType.ROW_PARALLEL :
+                                        NodeType.INDEX);
                     } else {
                         childNodes[action] = new FilterUCTNode(this,
-                                roundCtr, predicate,
+                                roundCtr, (nrActions == 1) ? 0 : predicate,
                                 (nrActions == 1) ?
-                                        NodeType.BRANCHING_PARALLEL :
+                                        NodeType.ROW_PARALLEL :
                                         NodeType.BRANCHING);
                     }
                 }
                 break;
             }
 
-            case BRANCHING_PARALLEL: {
-                double percent = action / ((double) nrActions - 1);
-                state.parallelBatches =
-                        (int) Math.floor(ParallelService.HIGH_POOL_THREADS *
-                                percent);
-                if (childNodes[action] == null && canExpand) {
-                    childNodes[action] = new FilterUCTNode(this, roundCtr,
-                            NodeType.LEAF);
+            case ROW_PARALLEL: {
+                if (action != nrActions - 1) {
+                    state.parallelBatches =
+                            minBatches + action * BRANCHING_PARALLEL_DELTA;
+                    if (childNodes[action] == null && canExpand) {
+                        childNodes[action] = new FilterUCTNode(this, roundCtr,
+                                NodeType.LEAF);
+                    }
+                } else {
+                    if (childNodes[action] == null && canExpand) {
+                        childNodes[action] = new FilterUCTNode(this, roundCtr,
+                                state.parallelBatches, NodeType.ROW_PARALLEL);
+                    }
                 }
                 break;
             }
@@ -300,8 +307,9 @@ public class FilterUCTNode {
                 return filterOp.executeWithBudget(ROWS_PER_TIMESTEP, state);
             }
 
-            case BRANCHING_PARALLEL: {
-                return filterOp.executeWithBudget(ROWS_PER_TIMESTEP, state);
+            case ROW_PARALLEL: {
+                return filterOp.executeWithBudget(PARALLEL_ROWS_PER_TIMESTEP,
+                        state);
             }
 
             case LEAF:
