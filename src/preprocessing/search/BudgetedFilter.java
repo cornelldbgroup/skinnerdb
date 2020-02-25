@@ -184,11 +184,13 @@ public class BudgetedFilter {
         long startTime = System.nanoTime();
         MutableIntList result = IntLists.mutable.empty();
 
+        final int end = Math.min(lastCompletedRow + remainingRows,
+                LAST_TABLE_ROW - 1);
+
         if (state.cachedEval != null) {
             ROW_LOOP:
-            while (remainingRows > 0 && currentCompletedRow < LAST_TABLE_ROW) {
+            while (currentCompletedRow < end) {
                 currentCompletedRow++;
-                remainingRows--;
 
                 if (state.cachedEval.evaluate(currentCompletedRow) <= 0) {
                     continue ROW_LOOP;
@@ -205,9 +207,8 @@ public class BudgetedFilter {
             }
         } else {
             ROW_LOOP:
-            while (remainingRows > 0 && currentCompletedRow < LAST_TABLE_ROW) {
+            while (currentCompletedRow < end) {
                 currentCompletedRow++;
-                remainingRows--;
 
                 for (int predIndex : state.order) {
                     UnaryBoolEval expr = compiled.get(predIndex);
