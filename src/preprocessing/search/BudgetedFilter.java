@@ -147,10 +147,6 @@ public class BudgetedFilter {
 
                     ROW_LOOP:
                     for (int row = start + 1; row <= end; row++) {
-                        if (state.cachedEval.evaluate(row) <= 0) {
-                            continue ROW_LOOP;
-                        }
-
                         for (int predIndex : state.order) {
                             UnaryBoolEval expr = compiled.get(predIndex);
                             if (expr.evaluate(row) <= 0) {
@@ -205,10 +201,6 @@ public class BudgetedFilter {
         } else {
             ROW_LOOP:
             for (int row = start + 1; row <= end; row++) {
-                if (state.cachedEval.evaluate(row) <= 0) {
-                    continue ROW_LOOP;
-                }
-
                 for (int predIndex : state.order) {
                     UnaryBoolEval expr = compiled.get(predIndex);
                     if (expr.evaluate(row) <= 0) {
