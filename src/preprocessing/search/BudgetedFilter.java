@@ -112,6 +112,7 @@ public class BudgetedFilter {
         int endRow = lastCompletedRow;
 
         List<Future<MutableIntList>> futures = new ArrayList<>();
+        System.out.println("START: " + lastCompletedRow);
 
         for (int j = 0; j < state.parallelBatches; j++) {
             final int start = lastCompletedRow + budgetPerThread * j;
@@ -168,7 +169,7 @@ public class BudgetedFilter {
             }
         }
 
-        System.out.println(endRow);
+        System.out.println("END: " + endRow);
 
         for (Future<MutableIntList> f : futures) {
             try {
