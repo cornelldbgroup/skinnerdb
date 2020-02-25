@@ -110,9 +110,7 @@ public class BudgetedFilter {
                                                            FilterState state) {
         long startTime = System.nanoTime();
         int endRow = lastCompletedRow;
-
         List<Future<MutableIntList>> futures = new ArrayList<>();
-        System.out.println("START: " + lastCompletedRow);
 
         for (int j = 0; j < state.parallelBatches; j++) {
             final int start = lastCompletedRow + budgetPerThread * j;
@@ -120,56 +118,53 @@ public class BudgetedFilter {
             final int end = Math.min(start + budgetPerThread, LAST_TABLE_ROW);
             endRow = end;
 
-            System.out.println(start + " " + end);
-
             if (state.cachedEval != null) {
                 futures.add(ParallelService.HIGH_POOL.submit(() -> {
                     MutableIntList tempResult = IntLists.mutable.empty();
-                    int currentCompletedRow = start;
-                    ROW_LOOP:
-                    while (currentCompletedRow < end) {
-                        currentCompletedRow++;
 
-                        if (state.cachedEval.evaluate(currentCompletedRow)
-                                <= 0) {
+                    ROW_LOOP:
+                    for (int row = start + 1; row <= end; row++) {
+                        if (state.cachedEval.evaluate(row) <= 0) {
                             continue ROW_LOOP;
                         }
 
                         for (int i = state.cachedTil + 1;
                              i < state.order.length; i++) {
                             UnaryBoolEval expr = compiled.get(state.order[i]);
-                            if (expr.evaluate(currentCompletedRow) <= 0) {
+                            if (expr.evaluate(row) <= 0) {
                                 continue ROW_LOOP;
                             }
                         }
 
-                        tempResult.add(currentCompletedRow);
+                        tempResult.add(row);
                     }
+
                     return tempResult;
                 }));
             } else {
                 futures.add(ParallelService.HIGH_POOL.submit(() -> {
                     MutableIntList tempResult = IntLists.mutable.empty();
-                    int currentCompletedRow = start;
+
                     ROW_LOOP:
-                    while (currentCompletedRow < end) {
-                        currentCompletedRow++;
+                    for (int row = start + 1; row <= end; row++) {
+                        if (state.cachedEval.evaluate(row) <= 0) {
+                            continue ROW_LOOP;
+                        }
 
                         for (int predIndex : state.order) {
                             UnaryBoolEval expr = compiled.get(predIndex);
-                            if (expr.evaluate(currentCompletedRow) <= 0) {
+                            if (expr.evaluate(row) <= 0) {
                                 continue ROW_LOOP;
                             }
                         }
 
-                        tempResult.add(currentCompletedRow);
+                        tempResult.add(row);
                     }
+
                     return tempResult;
                 }));
             }
         }
-
-        System.out.println("END: " + endRow);
 
         for (Future<MutableIntList> f : futures) {
             try {
@@ -182,53 +177,53 @@ public class BudgetedFilter {
         return Pair.of(duration, endRow);
     }
 
-    private Pair<Long, Integer> tableScanBranching(int remainingRows,
+    private Pair<Long, Integer> tableScanBranching(int budget,
                                                    FilterState state) {
-        int currentCompletedRow = lastCompletedRow;
         long startTime = System.nanoTime();
         MutableIntList result = IntLists.mutable.empty();
 
-        final int end = Math.min(lastCompletedRow + remainingRows,
-                LAST_TABLE_ROW);
+        final int start = lastCompletedRow;
+        final int end = Math.min(lastCompletedRow + budget, LAST_TABLE_ROW);
 
         if (state.cachedEval != null) {
             ROW_LOOP:
-            while (currentCompletedRow < end) {
-                currentCompletedRow++;
-
-                if (state.cachedEval.evaluate(currentCompletedRow) <= 0) {
+            for (int row = start + 1; row <= end; row++) {
+                if (state.cachedEval.evaluate(row) <= 0) {
                     continue ROW_LOOP;
                 }
 
-                for (int i = state.cachedTil + 1; i < state.order.length; i++) {
+                for (int i = state.cachedTil + 1;
+                     i < state.order.length; i++) {
                     UnaryBoolEval expr = compiled.get(state.order[i]);
-                    if (expr.evaluate(currentCompletedRow) <= 0) {
+                    if (expr.evaluate(row) <= 0) {
                         continue ROW_LOOP;
                     }
                 }
 
-                result.add(currentCompletedRow);
+                result.add(row);
             }
         } else {
             ROW_LOOP:
-            while (currentCompletedRow < end) {
-                currentCompletedRow++;
+            for (int row = start + 1; row <= end; row++) {
+                if (state.cachedEval.evaluate(row) <= 0) {
+                    continue ROW_LOOP;
+                }
 
                 for (int predIndex : state.order) {
                     UnaryBoolEval expr = compiled.get(predIndex);
-                    if (expr.evaluate(currentCompletedRow) <= 0) {
+                    if (expr.evaluate(row) <= 0) {
                         continue ROW_LOOP;
                     }
                 }
 
-                result.add(currentCompletedRow);
+                result.add(row);
             }
         }
 
         resultList.add(result);
         long endTime = System.nanoTime();
         long duration = endTime - startTime;
-        return Pair.of(duration, currentCompletedRow);
+        return Pair.of(duration, end);
     }
 
     private Pair<Long, Integer> tableScanBitset(int nrRows,
