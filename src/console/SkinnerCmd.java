@@ -97,8 +97,6 @@ public class SkinnerCmd {
                     processSQL(query.toString(), true);
                     long totalMillis = System.currentTimeMillis() - startMillis;
                     BenchUtil.writeStats(queryName, totalMillis, benchOut);
-                    System.gc();
-                    Thread.sleep(1000);
                 }
                 // Close benchmark result file
                 benchOut.close();
