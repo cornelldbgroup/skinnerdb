@@ -31,7 +31,6 @@ import query.SQLexception;
 import java.io.File;
 import java.io.PrintWriter;
 import java.util.*;
-import java.util.Map.Entry;
 import java.util.regex.Pattern;
 
 /**
@@ -90,13 +89,11 @@ public class SkinnerCmd {
                 List<String> keys = new ArrayList<>(nameToQuery.keySet());
                 Collections.shuffle(keys);
                 // Iterate over queries
-                for (Entry<String, PlainSelect> entry :
-                        nameToQuery.entrySet()) {
-                    System.gc();
-                    String queryName = entry.getKey();
-                    PlainSelect query = entry.getValue();
+                for (String queryName : keys) {
+                    PlainSelect query = nameToQuery.get(keys);
                     System.out.println(queryName);
                     System.out.println(query.toString());
+                    System.gc();
                     long startMillis = System.currentTimeMillis();
                     processSQL(query.toString(), true);
                     long totalMillis = System.currentTimeMillis() - startMillis;
