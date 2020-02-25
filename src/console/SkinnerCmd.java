@@ -90,7 +90,7 @@ public class SkinnerCmd {
                 Collections.shuffle(keys);
                 // Iterate over queries
                 for (String queryName : keys) {
-                    PlainSelect query = nameToQuery.get(keys);
+                    PlainSelect query = nameToQuery.get(queryName);
                     System.out.println(queryName);
                     System.out.println(query.toString());
                     System.gc();
