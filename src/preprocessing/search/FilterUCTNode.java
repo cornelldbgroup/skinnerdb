@@ -282,8 +282,6 @@ public class FilterUCTNode {
                     }
 
                 }
-
-                System.out.println(action + " " + state.parallelBatches);
                 break;
             }
         }
