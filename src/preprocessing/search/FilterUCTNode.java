@@ -273,14 +273,8 @@ public class FilterUCTNode {
                         minBatches + action * ROW_PARALLEL_DELTA;
 
                 if (childNodes[action] == null && canExpand) {
-                    if (action != nrActions - 1) {
-                        childNodes[action] = new FilterUCTNode(this, roundCtr,
-                                NodeType.LEAF);
-                    } else {
-                        childNodes[action] = new FilterUCTNode(this, roundCtr,
-                                state.parallelBatches, NodeType.ROW_PARALLEL);
-                    }
-
+                    childNodes[action] = new FilterUCTNode(this, roundCtr,
+                            NodeType.LEAF);
                 }
                 break;
             }
