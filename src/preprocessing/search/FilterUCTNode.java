@@ -269,19 +269,21 @@ public class FilterUCTNode {
             }
 
             case ROW_PARALLEL: {
-                if (action != nrActions - 1) {
-                    state.parallelBatches =
-                            minBatches + action * ROW_PARALLEL_DELTA;
-                    if (childNodes[action] == null && canExpand) {
+                state.parallelBatches =
+                        minBatches + action * ROW_PARALLEL_DELTA;
+
+                if (childNodes[action] == null && canExpand) {
+                    if (action != nrActions - 1) {
                         childNodes[action] = new FilterUCTNode(this, roundCtr,
                                 NodeType.LEAF);
-                    }
-                } else {
-                    if (childNodes[action] == null && canExpand) {
+                    } else {
                         childNodes[action] = new FilterUCTNode(this, roundCtr,
                                 state.parallelBatches, NodeType.ROW_PARALLEL);
                     }
+
                 }
+
+                System.out.println(action + " " + state.parallelBatches);
                 break;
             }
         }
