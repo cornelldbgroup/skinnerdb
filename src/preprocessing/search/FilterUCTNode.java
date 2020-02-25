@@ -63,7 +63,7 @@ public class FilterUCTNode {
             }
         }
         this.indexActions = indexActions;
-        this.branchingActions = 1;
+        this.branchingActions = 0;
         this.nrActions = numPredicates + indexActions + branchingActions;
         this.childNodes = new FilterUCTNode[nrActions];
         this.chosenPreds = new ArrayList<>();

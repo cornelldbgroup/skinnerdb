@@ -115,8 +115,7 @@ public class BudgetedFilter {
 
         for (int j = 0; j < state.parallelBatches; j++) {
             final int start = lastCompletedRow + budgetPerThread * j;
-            final int end = Math.min(start + budgetPerThread,
-                    LAST_TABLE_ROW - 1);
+            final int end = Math.min(start + budgetPerThread, LAST_TABLE_ROW);
             if (start >= end) continue;
             endRow = end;
 
@@ -185,7 +184,7 @@ public class BudgetedFilter {
         MutableIntList result = IntLists.mutable.empty();
 
         final int end = Math.min(lastCompletedRow + remainingRows,
-                LAST_TABLE_ROW - 1);
+                LAST_TABLE_ROW);
 
         if (state.cachedEval != null) {
             ROW_LOOP:
