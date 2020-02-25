@@ -127,7 +127,7 @@ public class BudgetedFilter {
                     MutableIntList tempResult = IntLists.mutable.empty();
                     int currentCompletedRow = start;
                     ROW_LOOP:
-                    while (currentCompletedRow <= end) {
+                    while (currentCompletedRow < end) {
                         currentCompletedRow++;
 
                         if (state.cachedEval.evaluate(currentCompletedRow)
@@ -152,7 +152,7 @@ public class BudgetedFilter {
                     MutableIntList tempResult = IntLists.mutable.empty();
                     int currentCompletedRow = start;
                     ROW_LOOP:
-                    while (currentCompletedRow <= end) {
+                    while (currentCompletedRow < end) {
                         currentCompletedRow++;
 
                         for (int predIndex : state.order) {
