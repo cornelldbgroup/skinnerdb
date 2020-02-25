@@ -275,8 +275,7 @@ public class SearchPreprocessor implements Preprocessor {
                                 Comparator.comparingInt
                                         (FilterUCTNode::getNumVisits));
                 root.getTopNodesForCompilation(compile, compileSetSize);
-                for (int j = 0; j < compileSetSize; j++) {
-                    if (compile.size() == 0) break;
+                while (!compile.isEmpty()) {
                     FilterUCTNode node = compile.poll();
                     final List<Integer> preds = node.getChosenPreds();
                     if (cache.get(preds) == null) {
