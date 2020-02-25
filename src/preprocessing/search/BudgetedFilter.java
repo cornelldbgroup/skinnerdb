@@ -116,8 +116,10 @@ public class BudgetedFilter {
         for (int j = 0; j < state.parallelBatches; j++) {
             final int start = lastCompletedRow + budgetPerThread * j;
             final int end = Math.min(start + budgetPerThread, LAST_TABLE_ROW);
-            if (start >= end) continue;
             endRow = end;
+            if (end == LAST_TABLE_ROW) break;
+
+            System.out.println(start + " " + end);
 
             if (state.cachedEval != null) {
                 futures.add(ParallelService.HIGH_POOL.submit(() -> {
@@ -165,6 +167,8 @@ public class BudgetedFilter {
                 }));
             }
         }
+
+        System.out.println(endRow);
 
         for (Future<MutableIntList> f : futures) {
             try {

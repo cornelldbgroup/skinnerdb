@@ -27,6 +27,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import static operators.Filter.*;
 import static preprocessing.PreprocessorUtil.*;
+import static preprocessing.search.FilterSearchConfig.ENABLE_COMPILATION;
 import static preprocessing.search.FilterSearchConfig.FORGET;
 
 public class SearchPreprocessor implements Preprocessor {
@@ -265,7 +266,7 @@ public class SearchPreprocessor implements Preprocessor {
                 nextForget *= 10;
             }
 
-            if (roundCtr == nextCompile) {
+            if (ENABLE_COMPILATION && roundCtr == nextCompile) {
                 nextCompile += 100;
 
                 int compileSetSize = predicates.size();
