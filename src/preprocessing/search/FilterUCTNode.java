@@ -63,7 +63,7 @@ public class FilterUCTNode {
             }
         }
         this.indexActions = indexActions;
-        this.branchingActions = 0;
+        this.branchingActions = 1;
         this.nrActions = numPredicates + indexActions + branchingActions;
         this.childNodes = new FilterUCTNode[nrActions];
         this.chosenPreds = new ArrayList<>();
@@ -157,7 +157,7 @@ public class FilterUCTNode {
         } else {
             assert type == NodeType.ROW_PARALLEL : type.name();
             this.minBatches = arg;
-            this.nrActions = BRANCHING_PARALLEL_ACTIONS;
+            this.nrActions = ROW_PARALLEL_ACTIONS;
             this.childNodes = new FilterUCTNode[nrActions];
             this.chosenPreds = new ArrayList<>();
             this.unchosenPreds = new ArrayList<>();
@@ -214,9 +214,14 @@ public class FilterUCTNode {
 
                     if (childNodes[action] == null && canExpand) {
                         if (numPredicates == 1) {
-                            childNodes[action] = new FilterUCTNode(this,
-                                    roundCtr, 0,
-                                    NodeType.ROW_PARALLEL);
+                            if (ENABLE_ROW_PARALLELSIM) {
+                                childNodes[action] = new FilterUCTNode(this,
+                                        roundCtr, 0,
+                                        NodeType.ROW_PARALLEL);
+                            } else {
+                                childNodes[action] = new FilterUCTNode(this,
+                                        roundCtr, NodeType.LEAF);
+                            }
                         } else if (state.useIndexScan) {
                             childNodes[action] = new FilterUCTNode(this,
                                     roundCtr, predicate, NodeType.INDEX);
@@ -241,18 +246,23 @@ public class FilterUCTNode {
                 }
 
                 if (childNodes[action] == null && canExpand) {
-                    if (type == NodeType.INDEX) {
-                        childNodes[action] = new FilterUCTNode(this,
-                                roundCtr, (nrActions == 1) ? 0 : predicate,
-                                (nrActions == 1) ?
-                                        NodeType.ROW_PARALLEL :
-                                        NodeType.INDEX);
+                    if (this.nrActions == 1) {
+                        if (ENABLE_ROW_PARALLELSIM) {
+                            childNodes[action] = new FilterUCTNode(this,
+                                    roundCtr, 0,
+                                    NodeType.ROW_PARALLEL);
+                        } else {
+                            childNodes[action] = new FilterUCTNode(this,
+                                    roundCtr, NodeType.LEAF);
+                        }
                     } else {
-                        childNodes[action] = new FilterUCTNode(this,
-                                roundCtr, (nrActions == 1) ? 0 : predicate,
-                                (nrActions == 1) ?
-                                        NodeType.ROW_PARALLEL :
-                                        NodeType.BRANCHING);
+                        if (type == NodeType.INDEX) {
+                            childNodes[action] = new FilterUCTNode(this,
+                                    roundCtr, predicate, NodeType.INDEX);
+                        } else {
+                            childNodes[action] = new FilterUCTNode(this,
+                                    roundCtr, predicate, NodeType.BRANCHING);
+                        }
                     }
                 }
                 break;
@@ -261,7 +271,7 @@ public class FilterUCTNode {
             case ROW_PARALLEL: {
                 if (action != nrActions - 1) {
                     state.parallelBatches =
-                            minBatches + action * BRANCHING_PARALLEL_DELTA;
+                            minBatches + action * ROW_PARALLEL_DELTA;
                     if (childNodes[action] == null && canExpand) {
                         childNodes[action] = new FilterUCTNode(this, roundCtr,
                                 NodeType.LEAF);
