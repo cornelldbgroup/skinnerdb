@@ -214,7 +214,7 @@ public class FilterUCTNode {
 
                     if (childNodes[action] == null && canExpand) {
                         if (numPredicates == 1) {
-                            if (ENABLE_ROW_PARALLELSIM) {
+                            if (ENABLE_ROW_PARALLELISM) {
                                 childNodes[action] = new FilterUCTNode(this,
                                         roundCtr, 0,
                                         NodeType.ROW_PARALLEL);
@@ -247,7 +247,7 @@ public class FilterUCTNode {
 
                 if (childNodes[action] == null && canExpand) {
                     if (this.nrActions == 1) {
-                        if (ENABLE_ROW_PARALLELSIM) {
+                        if (ENABLE_ROW_PARALLELISM) {
                             childNodes[action] = new FilterUCTNode(this,
                                     roundCtr, 0,
                                     NodeType.ROW_PARALLEL);
