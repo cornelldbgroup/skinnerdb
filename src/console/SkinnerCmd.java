@@ -30,10 +30,8 @@ import query.SQLexception;
 
 import java.io.File;
 import java.io.PrintWriter;
-import java.util.Map;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.NoSuchElementException;
-import java.util.Scanner;
 import java.util.regex.Pattern;
 
 /**
@@ -89,9 +87,12 @@ public class SkinnerCmd {
                 // Load all queries to benchmark
                 Map<String, PlainSelect> nameToQuery =
                         BenchUtil.readAllQueries(dirPath);
+                List<String> keys = new ArrayList<>(nameToQuery.keySet());
+                Collections.shuffle(keys);
                 // Iterate over queries
                 for (Entry<String, PlainSelect> entry :
                         nameToQuery.entrySet()) {
+                    System.gc();
                     String queryName = entry.getKey();
                     PlainSelect query = entry.getValue();
                     System.out.println(queryName);
