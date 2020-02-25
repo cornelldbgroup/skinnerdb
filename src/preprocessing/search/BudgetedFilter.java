@@ -116,9 +116,9 @@ public class BudgetedFilter {
 
         for (int j = 0; j < state.parallelBatches; j++) {
             final int start = lastCompletedRow + budgetPerThread * j;
+            if (start >= LAST_TABLE_ROW) break;
             final int end = Math.min(start + budgetPerThread, LAST_TABLE_ROW);
             endRow = end;
-            if (end == LAST_TABLE_ROW) break;
 
             System.out.println(start + " " + end);
 
