@@ -19,6 +19,7 @@ public class FilterUCTNode {
     private static Map<List<Integer>, UnaryBoolEval> cache;
     private static List<Integer> order = null;
     private static BudgetedFilter filterOp;
+    private static List<HashIndex> indices;
 
     // Node common members
     private final long createdIn;
@@ -54,7 +55,7 @@ public class FilterUCTNode {
         this.cache = cache;
         this.filterOp = filterOp;
         this.numPredicates = numPredicates;
-
+        this.indices = indices;
 
         int indexActions = 0;
         for (HashIndex index : indices) {
@@ -132,13 +133,14 @@ public class FilterUCTNode {
 
         if (type == NodeType.BRANCHING || type == NodeType.INDEX) {
             int nextPred = arg;
-            if (type == NodeType.BRANCHING && parent.type == NodeType.ROOT) {
-                this.nrActions = numPredicates - 1;
+            int actions;
+            if (type == NodeType.BRANCHING || type == NodeType.INDEX &&
+                    parent.type == NodeType.ROOT) {
+                actions = numPredicates - 1;
             } else {
-                this.nrActions = parent.nrActions - 1;
+                actions = parent.nrActions - 1;
             }
 
-            this.childNodes = new FilterUCTNode[nrActions];
 
             this.chosenPreds = new ArrayList<>();
             this.chosenPreds.addAll(parent.chosenPreds);
@@ -149,11 +151,41 @@ public class FilterUCTNode {
             int indexToRemove = unchosenPreds.indexOf(nextPred);
             this.unchosenPreds.remove(indexToRemove);
 
-            this.actionToPredicate = new int[nrActions];
-            for (int action = 0; action < nrActions; ++action) {
-                actionToPredicate[action] = unchosenPreds.get(action);
+            if (this.type == NodeType.INDEX) {
+                List<Integer> indexedPreds = new ArrayList<>();
+                int indexActions = 0;
+                if (type == NodeType.INDEX) {
+                    for (int pred : unchosenPreds) {
+                        HashIndex index = indices.get(pred);
+                        if (index != null) {
+                            indexActions++;
+                            indexedPreds.add(pred);
+                        }
+                    }
+                }
+                this.indexActions = indexActions;
+                this.nrActions = actions + this.indexActions;
+
+
+                this.childNodes = new FilterUCTNode[nrActions];
+                this.actionToPredicate = new int[nrActions];
+
+                for (int a = unchosenPreds.size(), i = 0; a < nrActions; ++a) {
+                    actionToPredicate[a] = indexedPreds.get(i++);
+                }
+
+            } else {
+                this.indexActions = 0;
+                this.nrActions = actions;
+
+                this.childNodes = new FilterUCTNode[nrActions];
+                this.actionToPredicate = new int[nrActions];
             }
 
+
+            for (int a = 0; a < unchosenPreds.size(); ++a) {
+                actionToPredicate[a] = unchosenPreds.get(a);
+            }
         } else {
             assert type == NodeType.ROW_PARALLEL : type.name();
             this.minBatches = arg;
@@ -162,9 +194,9 @@ public class FilterUCTNode {
             this.chosenPreds = new ArrayList<>();
             this.unchosenPreds = new ArrayList<>();
             this.actionToPredicate = new int[0];
+            this.indexActions = 0;
         }
 
-        this.indexActions = 0;
         this.branchingActions = 0;
 
         // CONCLUSION - DO NOT CHANGE
@@ -197,23 +229,25 @@ public class FilterUCTNode {
             case ROOT: {
                 if (action == numPredicates + indexActions) {
                     state.avoidBranching = true;
-                    state.useIndexScan = false;
                     if (childNodes[action] == null && canExpand) {
                         childNodes[action] = new FilterUCTNode(this, roundCtr,
                                 NodeType.LEAF);
                     }
                 } else {
                     state.avoidBranching = false;
-                    state.useIndexScan = this.indexActions > 0 &&
-                            action >= numPredicates && action < numPredicates +
-                            indexActions;
-                    if (state.useIndexScan) {
-                        state.indexedTil = 0;
-                    }
                     int predicate = actionToPredicate[action];
                     state.order[treeLevel] = predicate;
                     order = new ArrayList<>();
                     order.add(predicate);
+
+                    if (this.indexActions > 0 &&
+                            action >= unchosenPreds.size() &&
+                            action < unchosenPreds.size() + indexActions) {
+                        state.indexedTil = treeLevel;
+                        order = new ArrayList<>();
+                        state.cachedTil = -1;
+                        state.cachedEval = null;
+                    }
 
                     if (childNodes[action] == null && canExpand) {
                         if (numPredicates == 1) {
@@ -225,7 +259,7 @@ public class FilterUCTNode {
                                 childNodes[action] = new FilterUCTNode(this,
                                         roundCtr, NodeType.LEAF);
                             }
-                        } else if (state.useIndexScan) {
+                        } else if (state.indexedTil == treeLevel) {
                             childNodes[action] = new FilterUCTNode(this,
                                     roundCtr, predicate, NodeType.INDEX);
                         } else {
@@ -248,6 +282,15 @@ public class FilterUCTNode {
                     state.cachedEval = cache.get(order);
                 }
 
+                if (this.indexActions > 0 &&
+                        action >= unchosenPreds.size() &&
+                        action < unchosenPreds.size() + indexActions) {
+                    state.indexedTil = treeLevel;
+                    order = new ArrayList<>();
+                    state.cachedTil = -1;
+                    state.cachedEval = null;
+                }
+
                 if (childNodes[action] == null && canExpand) {
                     if (this.nrActions == 1) {
                         if (ENABLE_ROW_PARALLELISM) {
@@ -259,7 +302,7 @@ public class FilterUCTNode {
                                     roundCtr, NodeType.LEAF);
                         }
                     } else {
-                        if (type == NodeType.INDEX) {
+                        if (state.indexedTil == treeLevel) {
                             childNodes[action] = new FilterUCTNode(this,
                                     roundCtr, predicate, NodeType.INDEX);
                         } else {

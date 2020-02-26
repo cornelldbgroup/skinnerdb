@@ -6,7 +6,6 @@ import java.util.Arrays;
 
 public class FilterState {
     public final int[] order;
-    public boolean useIndexScan;
     public boolean avoidBranching;
 
     public int indexedTil;
@@ -19,7 +18,6 @@ public class FilterState {
     public FilterState(int numPredicates) {
         this.order = new int[numPredicates];
         this.avoidBranching = false;
-        this.useIndexScan = false;
         this.cachedEval = null;
         this.cachedTil = -1;
         this.parallelBatches = 0;
@@ -30,7 +28,6 @@ public class FilterState {
     public String toString() {
         return "FilterState{" +
                 "order=" + Arrays.toString(order) +
-                ", useIndexScan=" + useIndexScan +
                 ", avoidBranching=" + avoidBranching +
                 ", cachedTil=" + cachedTil +
                 ", parallelBatches=" + parallelBatches +
@@ -39,7 +36,6 @@ public class FilterState {
 
     public void reset() {
         this.avoidBranching = false;
-        this.useIndexScan = false;
         this.cachedEval = null;
         this.cachedTil = -1;
         this.indexedTil = -1;

@@ -218,7 +218,7 @@ public class BudgetedFilter {
     public double executeWithBudget(int budget, FilterState state) {
         Pair<Long, Integer> result;
 
-        if (state.useIndexScan) { // Use index to filter rows.
+        if (state.indexedTil >= 0) { // Use index to filter rows.
             result = indexScan(budget, state);
         } else if (state.avoidBranching) {
             result = tableScanBitset(budget, state);

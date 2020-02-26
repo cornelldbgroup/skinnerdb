@@ -27,7 +27,7 @@ public class IndexFilter {
         while (start <= end) {
             int mid = (start + end) / 2;
 
-            if (list.get(mid) < target) {
+            if (list.get(mid) <= target) {
                 start = mid + 1;
             } else {
                 nextHighest = mid;
