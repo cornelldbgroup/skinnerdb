@@ -207,6 +207,9 @@ public class FilterUCTNode {
                     state.useIndexScan = this.indexActions > 0 &&
                             action >= numPredicates && action < numPredicates +
                             indexActions;
+                    if (state.useIndexScan) {
+                        state.indexedTil = 0;
+                    }
                     int predicate = actionToPredicate[action];
                     state.order[treeLevel] = predicate;
                     order = new ArrayList<>();

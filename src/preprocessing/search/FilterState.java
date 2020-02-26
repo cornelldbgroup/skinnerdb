@@ -9,6 +9,8 @@ public class FilterState {
     public boolean useIndexScan;
     public boolean avoidBranching;
 
+    public int indexedTil;
+
     public UnaryBoolEval cachedEval;
     public int cachedTil;
 
@@ -21,6 +23,7 @@ public class FilterState {
         this.cachedEval = null;
         this.cachedTil = -1;
         this.parallelBatches = 0;
+        this.indexedTil = -1;
     }
 
     @Override
@@ -39,6 +42,7 @@ public class FilterState {
         this.useIndexScan = false;
         this.cachedEval = null;
         this.cachedTil = -1;
+        this.indexedTil = -1;
         this.parallelBatches = 0;
     }
 }

@@ -58,5 +58,9 @@ public abstract class HashIndex<T extends Number> {
         return nextHighest;
     }
 
+    public int getBucketEnd(int dataLocation) {
+        return dataLocation + this.data[dataLocation];
+    }
+
     public abstract int getDataLocation(T data);
 }

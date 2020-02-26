@@ -2,10 +2,9 @@ package preprocessing.search;
 
 import catalog.CatalogManager;
 import expressions.compilation.UnaryBoolEval;
-import indexing.HashIndex;
-import net.sf.jsqlparser.expression.Expression;
 import org.apache.commons.lang3.tuple.Pair;
 import org.eclipse.collections.api.list.ImmutableList;
+import org.eclipse.collections.api.list.primitive.IntList;
 import org.eclipse.collections.api.list.primitive.MutableIntList;
 import org.eclipse.collections.impl.factory.primitive.IntLists;
 import parallel.ParallelService;
@@ -20,90 +19,49 @@ public class BudgetedFilter {
     private final int LAST_TABLE_ROW;
     private int lastCompletedRow;
     private List<MutableIntList> resultList;
-    private ImmutableList<Expression> predicates;
     private ImmutableList<UnaryBoolEval> compiled;
-    private List<HashIndex> indices;
-    private List<Number> values;
+    private IndexFilter indexFilter;
+
 
     public BudgetedFilter(String tableName,
-                          ImmutableList<Expression> predicates,
                           ImmutableList<UnaryBoolEval> compiled,
-                          List<HashIndex> indices,
-                          List<Number> values) {
+                          IndexFilter indexFilter) {
         this.resultList = new ArrayList<>();
         this.compiled = compiled;
         this.LAST_TABLE_ROW = CatalogManager.getCardinality(tableName) - 1;
         this.lastCompletedRow = -1;
-        this.indices = indices;
-        this.predicates = predicates;
-        this.values = values;
+        this.indexFilter = indexFilter;
     }
 
 
-    private Pair<Long, Integer> indexScanWithOnePredicate(int remainingRows,
-                                                          FilterState state) {
-        int currentCompletedRow = lastCompletedRow;
-        MutableIntList result = IntLists.mutable.empty();
+    private Pair<Long, Integer> indexScan(int budget,
+                                          FilterState state) {
 
         long startTime = System.nanoTime();
-        HashIndex index = indices.get(state.order[0]);
-        @SuppressWarnings("unchecked")
-        int dataLocation =
-                index.getDataLocation(values.get(state.order[0]));
-        if (dataLocation < 0) {
-            return Pair.of(0l, LAST_TABLE_ROW);
-        }
+        MutableIntList result = IntLists.mutable.empty();
 
-        int startPos = index.nextHighestRowInBucket(dataLocation,
-                lastCompletedRow);
-        if (startPos < 0) {
-            return Pair.of(0l, LAST_TABLE_ROW);
-        }
+        Pair<MutableIntList, Integer> pair = indexFilter.getRows(budget,
+                state, lastCompletedRow, LAST_TABLE_ROW);
 
-        int endPos = index.data[dataLocation] + dataLocation + 1;
+        IntList candidate = pair.getKey();
+        ROW_LOOP:
+        for (int i = 0; i < candidate.size(); i++) {
+            int row = candidate.get(i);
 
-        if (state.cachedEval != null) {
-            ROW_LOOP:
-            while (remainingRows > 0 && startPos < endPos) {
-                currentCompletedRow = index.data[startPos];
-                remainingRows -= currentCompletedRow - lastCompletedRow;
-                startPos++;
-
-                if (state.cachedEval.evaluate(currentCompletedRow) <= 0) {
+            for (int j = state.indexedTil + 1; j < state.order.length; j++) {
+                UnaryBoolEval expr = compiled.get(state.order[j]);
+                if (expr.evaluate(row) <= 0) {
                     continue ROW_LOOP;
                 }
-
-                for (int i = state.cachedTil + 1; i < state.order.length; i++) {
-                    UnaryBoolEval expr = compiled.get(state.order[i]);
-                    if (expr.evaluate(currentCompletedRow) <= 0) {
-                        continue ROW_LOOP;
-                    }
-                }
-
-                result.add(currentCompletedRow);
             }
-        } else {
-            ROW_LOOP:
-            while (remainingRows > 0 && startPos < endPos) {
-                currentCompletedRow = index.data[startPos];
-                remainingRows -= currentCompletedRow - lastCompletedRow;
-                startPos++;
 
-                for (int i = 1; i < state.order.length; i++) {
-                    UnaryBoolEval expr = compiled.get(state.order[i]);
-                    if (expr.evaluate(currentCompletedRow) <= 0) {
-                        continue ROW_LOOP;
-                    }
-                }
-
-                result.add(currentCompletedRow);
-            }
+            result.add(row);
         }
 
         resultList.add(result);
         long endTime = System.nanoTime();
         long duration = endTime - startTime;
-        return Pair.of(duration, currentCompletedRow);
+        return Pair.of(duration, pair.getValue());
     }
 
     private Pair<Long, Integer> tableScanBranchingParallel(int budgetPerThread,
@@ -261,7 +219,7 @@ public class BudgetedFilter {
         Pair<Long, Integer> result;
 
         if (state.useIndexScan) { // Use index to filter rows.
-            result = indexScanWithOnePredicate(budget, state);
+            result = indexScan(budget, state);
         } else if (state.avoidBranching) {
             result = tableScanBitset(budget, state);
         } else if (state.parallelBatches > 0) {

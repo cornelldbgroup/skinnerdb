@@ -191,14 +191,14 @@ public class SearchPreprocessor implements Preprocessor {
 
 
         List<HashIndex> indices = new ArrayList<>(predicates.size());
-        List<Number> values = new ArrayList<>(predicates.size());
+        List<Integer> values = new ArrayList<>(predicates.size());
         for (Expression expression : predicates) {
             SinglePredicateIndexTest test =
                     new SinglePredicateIndexTest(queryInfo);
             expression.accept(test);
             if (test.canUseIndex) {
                 indices.add(test.index);
-                values.add(test.constant);
+                values.add(test.index.getDataLocation(test.constant));
             } else {
                 indices.add(null);
                 values.add(null);
@@ -237,7 +237,7 @@ public class SearchPreprocessor implements Preprocessor {
             ImmutableList<Expression> predicates,
             ImmutableList<UnaryBoolEval> compiled,
             List<HashIndex> indices,
-            List<Number> values,
+            List<Integer> dataLocations,
             ExpressionInfo unaryPred,
             Map<ColumnRef, ColumnRef> colMap) {
         ConcurrentHashMap<List<Integer>, UnaryBoolEval> cache =
@@ -246,9 +246,9 @@ public class SearchPreprocessor implements Preprocessor {
 
         long roundCtr = 0;
         int nrCompiled = compiled.size();
-        BudgetedFilter filterOp = new BudgetedFilter(tableName, predicates,
-                compiled, indices, values);
-
+        IndexFilter indexFilter = new IndexFilter(indices, dataLocations);
+        BudgetedFilter filterOp = new BudgetedFilter(tableName, compiled,
+                indexFilter);
         FilterState state = new FilterState(nrCompiled);
         FilterUCTNode root = new FilterUCTNode(filterOp, cache, roundCtr,
                 nrCompiled, indices);
