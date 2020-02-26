@@ -97,14 +97,14 @@ public class SkinnerCmd {
                     }
                 }
 
+                System.runFinalization();
+                System.gc();
+                System.runFinalization();
+                System.gc();
+                Thread.sleep(5000);
 
                 // Iterate over queries
                 for (String queryName : keys) {
-                    System.runFinalization();
-                    System.gc();
-                    System.runFinalization();
-                    System.gc();
-                    Thread.sleep(5000);
                     PlainSelect query = nameToQuery.get(queryName);
                     System.out.println(queryName);
                     System.out.println(query.toString());
