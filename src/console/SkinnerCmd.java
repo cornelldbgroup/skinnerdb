@@ -29,9 +29,7 @@ import print.RelationPrinter;
 import query.SQLexception;
 
 import java.io.File;
-import java.io.FileWriter;
 import java.io.PrintWriter;
-import java.nio.file.Files;
 import java.util.*;
 import java.util.regex.Pattern;
 
@@ -73,48 +71,14 @@ public class SkinnerCmd {
      */
     static void processBenchCmd(String input) throws Exception {
         String[] inputFrags = input.split("\\s");
-        if (inputFrags.length < 3) {
+        if (inputFrags.length != 4) {
             System.out.println("Error - specify only path "
                     + "to directory containing queries and "
-                    + "name of output file");
+                    + "name of output file and # of warmups");
         } else {
             // Check whether directory exists
             String dirPath = inputFrags[1];
             if (fileOrError(dirPath)) {
-                if (dirPath.endsWith(".sql")) {
-                    String outputName = inputFrags[2];
-                    int warmupIterations = Integer.valueOf(inputFrags[3]);
-
-                    FileWriter fw = new FileWriter(outputName, true);
-                    PrintWriter benchOut = new PrintWriter(fw);
-                    File file = new File(dirPath);
-                    String queryName = file.getName();
-
-                    String sql = new String(Files.readAllBytes(file.toPath()));
-                    System.out.println(sql);
-                    Statement sqlStatement = CCJSqlParserUtil.parse(sql);
-                    Select select = (Select) sqlStatement;
-                    PlainSelect query =
-                            (PlainSelect) select.getSelectBody();
-
-                    for (int i = 0; i < warmupIterations; i++) {
-                        processSQL(query.toString(), true);
-                        System.runFinalization();
-                        System.gc();
-                        System.runFinalization();
-                        System.gc();
-                        Thread.sleep(5000);
-                    }
-
-
-                    long startMillis = System.currentTimeMillis();
-                    processSQL(query.toString(), true);
-                    long totalMillis = System.currentTimeMillis() - startMillis;
-                    BenchUtil.writeStats(queryName, totalMillis, benchOut);
-                    benchOut.close();
-                    return;
-                }
-
                 // Open benchmark result file and write header
                 String outputName = inputFrags[2];
                 PrintWriter benchOut = new PrintWriter(outputName);
@@ -124,8 +88,23 @@ public class SkinnerCmd {
                         BenchUtil.readAllQueries(dirPath);
                 List<String> keys = new ArrayList<>(nameToQuery.keySet());
                 Collections.shuffle(keys);
+
+                int warmupIterations = Integer.valueOf(inputFrags[3]);
+                for (int i = 0; i < warmupIterations; i++) {
+                    for (String queryName : keys) {
+                        PlainSelect query = nameToQuery.get(queryName);
+                        processSQL(query.toString(), true);
+                    }
+                }
+
+
                 // Iterate over queries
                 for (String queryName : keys) {
+                    System.runFinalization();
+                    System.gc();
+                    System.runFinalization();
+                    System.gc();
+                    Thread.sleep(5000);
                     PlainSelect query = nameToQuery.get(queryName);
                     System.out.println(queryName);
                     System.out.println(query.toString());
@@ -133,11 +112,6 @@ public class SkinnerCmd {
                     processSQL(query.toString(), true);
                     long totalMillis = System.currentTimeMillis() - startMillis;
                     BenchUtil.writeStats(queryName, totalMillis, benchOut);
-                    System.runFinalization();
-                    System.gc();
-                    System.runFinalization();
-                    System.gc();
-                    Thread.sleep(5000);
                 }
                 // Close benchmark result file
                 benchOut.close();
