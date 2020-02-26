@@ -101,7 +101,9 @@ public class SkinnerCmd {
                         processSQL(query.toString(), true);
                         System.runFinalization();
                         System.gc();
-                        Thread.sleep(2500);
+                        System.runFinalization();
+                        System.gc();
+                        Thread.sleep(5000);
                     }
 
 
@@ -133,7 +135,9 @@ public class SkinnerCmd {
                     BenchUtil.writeStats(queryName, totalMillis, benchOut);
                     System.runFinalization();
                     System.gc();
-                    Thread.sleep(2500);
+                    System.runFinalization();
+                    System.gc();
+                    Thread.sleep(5000);
                 }
                 // Close benchmark result file
                 benchOut.close();
