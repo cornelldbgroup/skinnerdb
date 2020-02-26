@@ -234,7 +234,6 @@ public class FilterUCTNode {
                                 NodeType.LEAF);
                     }
                 } else {
-                    state.avoidBranching = false;
                     int predicate = actionToPredicate[action];
                     state.order[treeLevel] = predicate;
                     order = new ArrayList<>();
@@ -250,7 +249,7 @@ public class FilterUCTNode {
                     }
 
                     if (childNodes[action] == null && canExpand) {
-                        if (numPredicates == 1) {
+                        if (this.unchosenPreds.size() == 1) {
                             if (ENABLE_ROW_PARALLELISM) {
                                 childNodes[action] = new FilterUCTNode(this,
                                         roundCtr, 0,
@@ -292,7 +291,7 @@ public class FilterUCTNode {
                 }
 
                 if (childNodes[action] == null && canExpand) {
-                    if (this.nrActions == 1) {
+                    if (this.unchosenPreds.size() == 1) {
                         if (ENABLE_ROW_PARALLELISM) {
                             childNodes[action] = new FilterUCTNode(this,
                                     roundCtr, 0,
