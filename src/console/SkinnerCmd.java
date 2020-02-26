@@ -29,7 +29,9 @@ import print.RelationPrinter;
 import query.SQLexception;
 
 import java.io.File;
+import java.io.FileWriter;
 import java.io.PrintWriter;
+import java.nio.file.Files;
 import java.util.*;
 import java.util.regex.Pattern;
 
@@ -71,7 +73,7 @@ public class SkinnerCmd {
      */
     static void processBenchCmd(String input) throws Exception {
         String[] inputFrags = input.split("\\s");
-        if (inputFrags.length != 3) {
+        if (inputFrags.length < 3) {
             System.out.println("Error - specify only path "
                     + "to directory containing queries and "
                     + "name of output file");
@@ -79,6 +81,38 @@ public class SkinnerCmd {
             // Check whether directory exists
             String dirPath = inputFrags[1];
             if (fileOrError(dirPath)) {
+                if (dirPath.endsWith(".sql")) {
+                    String outputName = inputFrags[2];
+                    int warmupIterations = Integer.valueOf(inputFrags[3]);
+
+                    FileWriter fw = new FileWriter(outputName, true);
+                    PrintWriter benchOut = new PrintWriter(fw);
+                    File file = new File(dirPath);
+                    String queryName = file.getName();
+
+                    String sql = new String(Files.readAllBytes(file.toPath()));
+                    System.out.println(sql);
+                    Statement sqlStatement = CCJSqlParserUtil.parse(sql);
+                    Select select = (Select) sqlStatement;
+                    PlainSelect query =
+                            (PlainSelect) select.getSelectBody();
+
+                    for (int i = 0; i < warmupIterations; i++) {
+                        processSQL(query.toString(), true);
+                        System.runFinalization();
+                        System.gc();
+                        Thread.sleep(2500);
+                    }
+
+
+                    long startMillis = System.currentTimeMillis();
+                    processSQL(query.toString(), true);
+                    long totalMillis = System.currentTimeMillis() - startMillis;
+                    BenchUtil.writeStats(queryName, totalMillis, benchOut);
+                    benchOut.close();
+                    return;
+                }
+
                 // Open benchmark result file and write header
                 String outputName = inputFrags[2];
                 PrintWriter benchOut = new PrintWriter(outputName);
