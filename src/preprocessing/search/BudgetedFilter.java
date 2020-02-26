@@ -44,19 +44,41 @@ public class BudgetedFilter {
                 state, lastCompletedRow, LAST_TABLE_ROW);
 
         IntList candidate = pair.getKey();
-        ROW_LOOP:
-        for (int i = 0; i < candidate.size(); i++) {
-            int row = candidate.get(i);
 
-            for (int j = state.indexedTil + 1; j < state.order.length; j++) {
-                UnaryBoolEval expr = compiled.get(state.order[j]);
-                if (expr.evaluate(row) <= 0) {
+        if (state.cachedEval != null) {
+            ROW_LOOP:
+            for (int i = 0; i < candidate.size(); i++) {
+                int row = candidate.get(i);
+
+                if (state.cachedEval.evaluate(row) <= 0) {
                     continue ROW_LOOP;
                 }
-            }
 
-            result.add(row);
+                for (int j = state.cachedTil + 1; j < state.order.length; j++) {
+                    UnaryBoolEval expr = compiled.get(state.order[j]);
+                    if (expr.evaluate(row) <= 0) {
+                        continue ROW_LOOP;
+                    }
+                }
+
+                result.add(row);
+            }
+        } else {
+            ROW_LOOP:
+            for (int i = 0; i < candidate.size(); i++) {
+                int row = candidate.get(i);
+
+                for (int j = state.indexedTil + 1; j < state.order.length; j++) {
+                    UnaryBoolEval expr = compiled.get(state.order[j]);
+                    if (expr.evaluate(row) <= 0) {
+                        continue ROW_LOOP;
+                    }
+                }
+
+                result.add(row);
+            }
         }
+
 
         resultList.add(result);
         long endTime = System.nanoTime();
@@ -222,11 +244,13 @@ public class BudgetedFilter {
             result = indexScan(budget, state);
         } else if (state.avoidBranching) {
             result = tableScanBitset(budget, state);
-        } else if (state.parallelBatches > 0) {
-            result = tableScanBranchingParallel(budget, state);
-            budget *= state.parallelBatches;
         } else {
-            result = tableScanBranching(budget, state);
+            if (state.parallelBatches > 0) {
+                result = tableScanBranchingParallel(budget, state);
+                budget *= state.parallelBatches;
+            } else {
+                result = tableScanBranching(budget, state);
+            }
         }
 
 
