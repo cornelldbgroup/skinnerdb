@@ -284,7 +284,6 @@ public class CopyVisitor extends SkinnerVisitor {
         } else {
             IsNullExpression isNull = new IsNullExpression();
             isNull.setLeftExpression(newLeft);
-            isNull.setNot(arg0.isNot());
             exprStack.push(isNull);
         }
 
@@ -303,7 +302,6 @@ public class CopyVisitor extends SkinnerVisitor {
         LikeExpression newLike = new LikeExpression();
         newLike.setLeftExpression(newLeft);
         newLike.setRightExpression(newRight);
-        newLike.setNot(arg0.isNot());
         newLike.setCaseInsensitive(arg0.isCaseInsensitive());
         newLike.setEscape(arg0.getEscape());
         exprStack.push(newLike);
