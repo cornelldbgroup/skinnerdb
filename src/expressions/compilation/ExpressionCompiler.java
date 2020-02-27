@@ -1414,15 +1414,10 @@ public class ExpressionCompiler extends SkinnerVisitor {
         // Value on top, not null flag below
         smartPop(jType);
         // Discarded value, kept only not null flag
-        if (arg0.isNot()) {
-            // test if not null, i.e. if not null flag is 1
-            // -> nothing to be done here
-        } else {
-            // test if null, i.e. if not null flag is 0
-            evaluationVisitor.visitInsn(Opcodes.ICONST_1);
-            evaluationVisitor.visitInsn(Opcodes.SWAP);
-            evaluationVisitor.visitInsn(Opcodes.ISUB);
-        }
+        // test if null, i.e. if not null flag is 0
+        evaluationVisitor.visitInsn(Opcodes.ICONST_1);
+        evaluationVisitor.visitInsn(Opcodes.SWAP);
+        evaluationVisitor.visitInsn(Opcodes.ISUB);
         // Set not null flag
         evaluationVisitor.visitInsn(Opcodes.ICONST_1);
     }
@@ -1448,13 +1443,6 @@ public class ExpressionCompiler extends SkinnerVisitor {
         evaluationVisitor.visitMethodInsn(Opcodes.INVOKEVIRTUAL,
                 "dk/brics/automaton/RunAutomaton", "run",
                 "(Ljava/lang/String;)Z", false);
-        // Treat negation
-        if (arg0.isNot()) {
-            evaluationVisitor.visitInsn(Opcodes.ICONST_1);
-            // (swap between two integers)
-            evaluationVisitor.visitInsn(Opcodes.SWAP);
-            evaluationVisitor.visitInsn(Opcodes.ISUB);
-        }
         // Put not null flag on top and end
         evaluationVisitor.visitInsn(Opcodes.ICONST_1);
         evaluationVisitor.visitJumpInsn(Opcodes.GOTO, theEnd);
