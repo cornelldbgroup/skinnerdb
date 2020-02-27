@@ -30,7 +30,6 @@ public class FilterUCTNode {
     private int nrVisits;
     private final List<Integer> priorityActions;
 
-
     private final int actionToPredicate[];
     private final FilterUCTNode[] childNodes;
 
@@ -133,15 +132,6 @@ public class FilterUCTNode {
 
         if (type == NodeType.BRANCHING || type == NodeType.INDEX) {
             int nextPred = arg;
-            int actions;
-            if (type == NodeType.BRANCHING || type == NodeType.INDEX &&
-                    parent.type == NodeType.ROOT) {
-                actions = numPredicates - 1;
-            } else {
-                actions = parent.nrActions - 1;
-            }
-
-
             this.chosenPreds = new ArrayList<>();
             this.chosenPreds.addAll(parent.chosenPreds);
             this.chosenPreds.add(nextPred);
@@ -164,8 +154,7 @@ public class FilterUCTNode {
                     }
                 }
                 this.indexActions = indexActions;
-                this.nrActions = actions + this.indexActions;
-
+                this.nrActions = unchosenPreds.size() + this.indexActions;
 
                 this.childNodes = new FilterUCTNode[nrActions];
                 this.actionToPredicate = new int[nrActions];
@@ -173,11 +162,9 @@ public class FilterUCTNode {
                 for (int a = unchosenPreds.size(), i = 0; a < nrActions; ++a) {
                     actionToPredicate[a] = indexedPreds.get(i++);
                 }
-
             } else {
                 this.indexActions = 0;
-                this.nrActions = actions;
-
+                this.nrActions = unchosenPreds.size();
                 this.childNodes = new FilterUCTNode[nrActions];
                 this.actionToPredicate = new int[nrActions];
             }
