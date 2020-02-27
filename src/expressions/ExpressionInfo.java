@@ -95,6 +95,18 @@ public class ExpressionInfo {
      */
     public ExpressionInfo(QueryInfo queryInfo,
                           Expression expression) throws Exception {
+        this(queryInfo, expression, false);
+    }
+
+    /**
+     * Initializes the expression info.
+     *
+     * @param queryInfo  meta-data about input query
+     * @param expression the expression
+     */
+    public ExpressionInfo(QueryInfo queryInfo,
+                          Expression expression,
+                          boolean CNF) throws Exception {
         // Store input parameters
         this.queryInfo = queryInfo;
         this.originalExpression = expression;
@@ -121,11 +133,17 @@ public class ExpressionInfo {
                 new SimplificationVisitor();
         VisitorUtil.tryVisit(afterNormalization, simplificationVisitor);
         Expression simplified = simplificationVisitor.opStack.pop();
-        Expression cnf = CNFConverter.convertToCNF(simplified);
-        simplificationVisitor =
-                new SimplificationVisitor();
-        VisitorUtil.tryVisit(cnf, simplificationVisitor);
-        this.finalExpression = simplificationVisitor.opStack.pop();
+
+        if (CNF) {
+            Expression cnfConverted =
+                    CNFConverter.convertToCNF(simplified);
+            simplificationVisitor =
+                    new SimplificationVisitor();
+            VisitorUtil.tryVisit(cnfConverted, simplificationVisitor);
+            this.finalExpression = simplificationVisitor.opStack.pop();
+        } else {
+            this.finalExpression = simplified;
+        }
 
         log("Final:\t" + finalExpression.toString());
         // Collect references in the given expression

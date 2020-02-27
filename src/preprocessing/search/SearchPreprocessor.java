@@ -97,8 +97,10 @@ public class SearchPreprocessor implements Preprocessor {
             // Filter and project if enabled
             if (curUnaryPred != null && PreConfig.PRE_FILTER) {
                 try {
-                    ImmutableList<Expression> conjuncts =
-                            Lists.immutable.ofAll(curUnaryPred.conjuncts);
+                    curUnaryPred = new ExpressionInfo(query,
+                            curUnaryPred.finalExpression, true);
+                    ImmutableList<Expression> conjuncts = Lists.immutable.ofAll(
+                            curUnaryPred.conjuncts);
                     filterProject(query, curUnaryPred, conjuncts, alias,
                             curRequiredCols, preSummary, shouldFilter);
                 } catch (Exception e) {
@@ -176,8 +178,9 @@ public class SearchPreprocessor implements Preprocessor {
                     return compilePred(unaryPred,
                             expression,
                             preSummary.columnMapping);
-                } catch (Exception e) {}
-                return null;
+                } catch (Exception e) {
+                    return null;
+                }
             }, compiled, 1, ParallelService.HIGH_POOL, false);
         } else {
             for (Expression expression : predicates) {
