@@ -305,8 +305,14 @@ public class FilterUCTNode {
                         minBatches + action * ROW_PARALLEL_DELTA;
 
                 if (childNodes[action] == null && canExpand) {
-                    childNodes[action] = new FilterUCTNode(this, roundCtr,
-                            NodeType.LEAF);
+                    if (action == nrActions - 1) {
+                        childNodes[action] = new FilterUCTNode(this,
+                                roundCtr, state.parallelBatches,
+                                NodeType.ROW_PARALLEL);
+                    } else {
+                        childNodes[action] = new FilterUCTNode(this, roundCtr,
+                                NodeType.LEAF);
+                    }
                 }
                 break;
             }
