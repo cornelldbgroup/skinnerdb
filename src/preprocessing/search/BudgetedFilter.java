@@ -247,15 +247,17 @@ public class BudgetedFilter {
         } else {
             if (state.parallelBatches > 0) {
                 result = tableScanBranchingParallel(budget, state);
-                budget *= state.parallelBatches;
             } else {
                 result = tableScanBranching(budget, state);
             }
         }
 
+                
 
-        double reward = Math.exp(-result.getLeft() / (10.0 * budget));
-        lastCompletedRow = result.getRight();
+        int completedRow = result.getRight();
+        double reward = (completedRow - lastCompletedRow) / (0.0001 * result.getLeft());
+        lastCompletedRow = completedRow;
+        System.out.println(state.toString() + " " + reward + " " + lastCompletedRow);
         return reward;
     }
 
