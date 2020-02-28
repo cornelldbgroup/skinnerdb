@@ -252,12 +252,13 @@ public class BudgetedFilter {
             }
         }
 
-                
 
         int completedRow = result.getRight();
-        double reward = (completedRow - lastCompletedRow) / (0.0001 * result.getLeft());
+        double reward =
+                (completedRow - lastCompletedRow) / (0.0001 * result.getLeft());
         lastCompletedRow = completedRow;
-        System.out.println(state.toString() + " " + reward + " " + lastCompletedRow);
+        System.out.println(state.toString() + " " + reward + " " +
+                lastCompletedRow);
         return reward;
     }
 

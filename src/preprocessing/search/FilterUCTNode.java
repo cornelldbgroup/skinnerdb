@@ -11,7 +11,7 @@ import static preprocessing.search.FilterSearchConfig.*;
 
 public class FilterUCTNode {
     private enum NodeType {
-        ROOT, LEAF, INDEX, BRANCHING, ROW_PARALLEL
+        ROOT, LEAF, INDEX, BRANCHING, ROW_PARALLEL, PREDICATE_GROUPS
     }
 
     private static final Random random = new Random();
@@ -38,7 +38,7 @@ public class FilterUCTNode {
 
 
     private final int indexActions;
-    private final int branchingActions;
+    private final int groupsActions;
 
     private int minBatches = 0;
 
@@ -63,8 +63,9 @@ public class FilterUCTNode {
             }
         }
         this.indexActions = indexActions;
-        this.branchingActions = 1;
-        this.nrActions = numPredicates + indexActions + branchingActions;
+        this.groupsActions = 1;//numPredicates - 1;
+
+        this.nrActions = numPredicates + indexActions + groupsActions;
         this.childNodes = new FilterUCTNode[nrActions];
         this.chosenPreds = new ArrayList<>();
         this.unchosenPreds = new ArrayList<>(numPredicates);
@@ -83,6 +84,12 @@ public class FilterUCTNode {
             unchosenPreds.add(i);
             actionToPredicate[i] = i;
         }
+
+        /*
+        for (int i = numPredicates + indexActions, s = 1;
+             i < nrActions; i++) {
+            actionToPredicate[i] = s++;
+        }*/
 
         // CONCLUSION - DO NOT CHANGE
         this.nrVisits = 0;
@@ -109,7 +116,7 @@ public class FilterUCTNode {
         this.chosenPreds = new ArrayList<>();
         this.unchosenPreds = new ArrayList<>();
         this.actionToPredicate = new int[0];
-        this.branchingActions = 0;
+        this.groupsActions = 0;
 
         // CONCLUSION - DO NOT CHANGE
         this.nrVisits = 0;
@@ -184,7 +191,7 @@ public class FilterUCTNode {
             this.indexActions = 0;
         }
 
-        this.branchingActions = 0;
+        this.groupsActions = 0;
 
         // CONCLUSION - DO NOT CHANGE
         this.nrVisits = 0;
@@ -345,15 +352,16 @@ public class FilterUCTNode {
 
                 // Use playouts that have no parallel batches to avoid spending
                 // a large time on bad orders
-                double percent = (double) treeLevel/numPredicates;
+                double percent = (double) treeLevel / numPredicates;
                 int delta = (int) Math.ceil(percent * ROW_PARALLEL_DELTA);
                 state.parallelBatches = random.nextInt(ROW_PARALLEL_ACTIONS) *
-                    delta; 
+                        delta;
                 if (state.parallelBatches > 0) {
-                    return filterOp.executeWithBudget(ROWS_PER_TIMESTEP, state);
+                    return filterOp.executeWithBudget(
+                            PARALLEL_ROWS_PER_TIMESTEP, state);
                 } else {
-                    return filterOp.executeWithBudget(PARALLEL_ROWS_PER_TIMESTEP,
-                        state);
+                    return filterOp.executeWithBudget(
+                            ROWS_PER_TIMESTEP, state);
                 }
             }
 
