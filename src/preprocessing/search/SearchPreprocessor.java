@@ -201,7 +201,9 @@ public class SearchPreprocessor implements Preprocessor {
             expression.accept(test);
             if (test.canUseIndex) {
                 indices.add(test.index);
-                values.add(test.index.getDataLocation(test.constant));
+                @SuppressWarnings("unchecked")
+                int dataLoc = test.index.getDataLocation(test.constant);
+                values.add(dataLoc);
             } else {
                 indices.add(null);
                 values.add(null);
@@ -245,7 +247,7 @@ public class SearchPreprocessor implements Preprocessor {
             Map<ColumnRef, ColumnRef> colMap) {
         ConcurrentHashMap<List<Integer>, UnaryBoolEval> cache =
                 new ConcurrentHashMap<>();
-
+        Set<List<Integer>> toCompile = new HashSet<>();
 
         long roundCtr = 0;
         int nrCompiled = compiled.size();
@@ -256,8 +258,8 @@ public class SearchPreprocessor implements Preprocessor {
         FilterUCTNode root = new FilterUCTNode(filterOp, cache, roundCtr,
                 nrCompiled, indices);
         long nextForget = 1;
-        long nextCompile = 50;
-
+        long nextCompile = 75;
+        
         while (!filterOp.isFinished()) {
             ++roundCtr;
             state.reset();
@@ -270,18 +272,18 @@ public class SearchPreprocessor implements Preprocessor {
             }
 
             if (ENABLE_COMPILATION && roundCtr == nextCompile) {
-                nextCompile += 100;
+                nextCompile += 25;
 
                 int compileSetSize = predicates.size();
                 PriorityQueue<FilterUCTNode> compile =
                         new PriorityQueue<>(compileSetSize,
                                 Comparator.comparingInt
                                         (FilterUCTNode::getNumVisits));
-                root.getTopNodesForCompilation(compile, compileSetSize);
+                root.getTopNodesForCompilation(compile, compileSetSize, toCompile);
                 while (!compile.isEmpty()) {
                     FilterUCTNode node = compile.poll();
                     final List<Integer> preds = node.getChosenPreds();
-                    if (cache.get(preds) == null) {
+                    //System.out.println(preds.toString());
                         ParallelService.LOW_POOL.submit(() -> {
                             Expression expr = null;
                             for (int i = preds.size() - 1; i >= 0; i--) {
@@ -298,9 +300,6 @@ public class SearchPreprocessor implements Preprocessor {
                                         colMap));
                             } catch (Exception e) {}
                         });
-                    }
-
-                    node.getTopNodesForCompilation(compile, compileSetSize);
                 }
             }
         }

@@ -237,7 +237,7 @@ public class BudgetedFilter {
         return Pair.of(duration, end);
     }
 
-    public double executeWithBudget(int budget, FilterState state) {
+    public Pair<Double, Integer> executeWithBudget(int budget, FilterState state) {
         Pair<Long, Integer> result;
 
         if (state.indexedTil >= 0) { // Use index to filter rows.
@@ -254,12 +254,10 @@ public class BudgetedFilter {
 
 
         int completedRow = result.getRight();
-        double reward =
-                (completedRow - lastCompletedRow) / (0.0001 * result.getLeft());
+        int delta = completedRow - lastCompletedRow;
+        double reward = delta / (0.0001 * result.getLeft());
         lastCompletedRow = completedRow;
-        System.out.println(state.toString() + " " + reward + " " +
-                lastCompletedRow);
-        return reward;
+        return Pair.of(reward, delta);
     }
 
     public boolean isFinished() {

@@ -1,5 +1,6 @@
 package preprocessing.search;
 
+import org.apache.commons.lang3.tuple.Pair;
 import config.JoinConfig;
 import expressions.compilation.UnaryBoolEval;
 import indexing.HashIndex;
@@ -28,6 +29,7 @@ public class FilterUCTNode {
     private final int[] nrTries;
     private final double[] accumulatedReward;
     private int nrVisits;
+    private int nrExecutions = 0;
     private final List<Integer> priorityActions;
 
     private final int actionToPredicate[];
@@ -205,7 +207,7 @@ public class FilterUCTNode {
         }
     }
 
-    public double sample(long roundCtr, FilterState state) {
+    public Pair<Double, Integer> sample(long roundCtr, FilterState state) {
         if (type == NodeType.LEAF) {
             if (state.parallelBatches > 0) {
                 return filterOp.executeWithBudget(PARALLEL_ROWS_PER_TIMESTEP,
@@ -326,15 +328,15 @@ public class FilterUCTNode {
         }
 
         FilterUCTNode child = childNodes[action];
-        double reward = (child != null) ?
+        Pair<Double, Integer> reward = (child != null) ?
                 child.sample(roundCtr, state) :
                 playout(state);
-
-        updateStatistics(action, reward);
+        
+        updateStatistics(action, reward.getKey(), reward.getValue());
         return reward;
     }
 
-    private double playout(FilterState state) {
+    private Pair<Double, Integer> playout(FilterState state) {
         switch (type) {
             case BRANCHING:
             case INDEX: {
@@ -367,27 +369,35 @@ public class FilterUCTNode {
             case ROOT:
                 throw new RuntimeException("Not possible to playout from root");
         }
-        return 0;
+        return Pair.of(0.0, 0);
     }
 
 
     public void getTopNodesForCompilation(PriorityQueue<FilterUCTNode> compile,
-                                          int compileSetSize) {
+                                          int compileSetSize,
+                                          Set<List<Integer>> compiled) {
         if (this.type == NodeType.ROOT) {
             for (int a = 0; a < Math.min(nrActions, numPredicates); ++a) {
                 if (this.childNodes[a] != null) {
                     this.childNodes[a].getTopNodesForCompilation(compile,
-                            compileSetSize);
+                            compileSetSize, compiled);
                 }
             }
         } else {
             for (int a = 0; a < nrActions; ++a) {
                 if (this.childNodes[a] != null) {
-                    this.childNodes[a].getTopNodesForCompilation(compile,
-                            compileSetSize);
-                    if (compile.size() >= compileSetSize) {
-                        compile.poll();
+                    if (!compiled.contains(this.chosenPreds)) {
+                        compile.add(this.childNodes[a]);
+                        if (compile.size() > compileSetSize) {
+                            FilterUCTNode node = compile.poll();
+                            if (node.nrVisits >= this.childNodes[a].nrVisits) {
+                                continue;
+                            }
+                        }
                     }
+                    this.childNodes[a].getTopNodesForCompilation(compile,
+                        compileSetSize, compiled);
+
                 }
             }
         }
@@ -456,7 +466,8 @@ public class FilterUCTNode {
         return bestAction;
     }
 
-    private void updateStatistics(int selectedAction, double reward) {
+    private void updateStatistics(int selectedAction, double reward, int calls) {
+        nrExecutions += calls;
         ++nrVisits;
         ++nrTries[selectedAction];
         accumulatedReward[selectedAction] += reward;
@@ -464,7 +475,7 @@ public class FilterUCTNode {
 
     // Getters
     public int getNumVisits() {
-        return nrVisits;
+        return nrExecutions;
     }
 
     public List<Integer> getChosenPreds() {
