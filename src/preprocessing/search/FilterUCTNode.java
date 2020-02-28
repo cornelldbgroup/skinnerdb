@@ -352,17 +352,8 @@ public class FilterUCTNode {
 
                 // Use playouts that have no parallel batches to avoid spending
                 // a large time on bad orders
-                double percent = (double) treeLevel / numPredicates;
-                int delta = (int) Math.ceil(percent * ROW_PARALLEL_DELTA);
-                state.parallelBatches = random.nextInt(ROW_PARALLEL_ACTIONS) *
-                        delta;
-                if (state.parallelBatches > 0) {
-                    return filterOp.executeWithBudget(
-                            PARALLEL_ROWS_PER_TIMESTEP, state);
-                } else {
-                    return filterOp.executeWithBudget(
-                            ROWS_PER_TIMESTEP, state);
-                }
+                state.parallelBatches = 0;
+                return filterOp.executeWithBudget(ROWS_PER_TIMESTEP, state);
             }
 
             case ROW_PARALLEL: {
