@@ -244,7 +244,7 @@ public class SearchPreprocessor implements Preprocessor {
             List<HashIndex> indices,
             List<Integer> dataLocations,
             ExpressionInfo unaryPred,
-            Map<ColumnRef, ColumnRef> colMap) {
+            Map<ColumnRef, ColumnRef> colMap) throws Exception {
         ConcurrentHashMap<List<Integer>, UnaryBoolEval> cache =
                 new ConcurrentHashMap<>();
         Set<List<Integer>> toCompile = new HashSet<>();
@@ -256,7 +256,8 @@ public class SearchPreprocessor implements Preprocessor {
         FilterUCTNode root = new FilterUCTNode(cache, roundCtr,
                 nrCompiled, indices);
         final BlockingQueue<ExecutionResult>
-                completedSimulations = new LinkedBlockingQueue<>();
+                completedSimulations =
+                new LinkedBlockingQueue<>();
         int currentSimulations = 0;
         int lastCompletedRow = 0;
         int finishedRows = 0;
@@ -265,15 +266,24 @@ public class SearchPreprocessor implements Preprocessor {
         ForkJoinPool pool = new ForkJoinPool(ParallelService.HIGH_POOL_THREADS);
 
         while (lastCompletedRow < CARDINALITY) {
+            if (currentSimulations == MAX_SIMULATIONS) {
+                ExecutionResult result = completedSimulations.take();
+                finishedRows += result.rows;
+                currentSimulations--;
+                FilterUCTNode.finalUpdateStatistics(result.selected,
+                        result.state, result.reward, result.rows);
+                continue;
+            }
+
             ++roundCtr;
-            System.out.println(lastCompletedRow);
+            currentSimulations++;
 
             final FilterState state = new FilterState(nrCompiled);
-            Pair<FilterUCTNode, Boolean> sample = root.sample(roundCtr, state);
+            Pair<FilterUCTNode, Boolean> sample = root.sample(roundCtr,
+                    state);
             final FilterUCTNode selected = sample.getLeft();
             boolean playedOut = sample.getRight();
 
-            currentSimulations++;
             final int start = lastCompletedRow;
             final int end;
             if (playedOut) {
@@ -286,16 +296,16 @@ public class SearchPreprocessor implements Preprocessor {
             }
             lastCompletedRow = end;
             FilterUCTNode.initialUpdateStatistics(selected, state);
-            List<Integer> outputId = initializeEpoch(resultList, state.batches);
+            List<Integer> outputId = initializeEpoch(resultList,
+                    state.batches);
             pool.submit(new RecursiveAction() {
                 @Override
                 public void compute() {
-                    System.out.println("starting simulation");
                     BudgetedFilter filterOp = new BudgetedFilter(compiled,
-                            indexFilter, CARDINALITY, start, outputId, state,
+                            indexFilter, CARDINALITY, start, outputId,
+                            state,
                             resultList);
                     double reward = filterOp.compute();
-                    System.out.println("finished simulation");
                     try {
                         completedSimulations.put(new ExecutionResult(selected,
                                 reward, state, end - start));
@@ -303,17 +313,6 @@ public class SearchPreprocessor implements Preprocessor {
                 }
             });
 
-            if (currentSimulations == ParallelService.HIGH_POOL_THREADS) {
-                try {
-                    System.out.println("waiting: " + currentSimulations);
-                    ExecutionResult result = completedSimulations.take();
-                    finishedRows += result.rows;
-                    System.out.println(finishedRows);
-                    currentSimulations--;
-                    FilterUCTNode.finalUpdateStatistics(result.selected,
-                            result.state, result.reward, result.rows);
-                } catch (Exception e) {}
-            }
 
             if (ENABLE_COMPILATION && roundCtr == nextCompile) {
                 nextCompile += 25;
@@ -351,11 +350,9 @@ public class SearchPreprocessor implements Preprocessor {
 
 
         while (currentSimulations > 0) {
-            try {
-                ExecutionResult result = completedSimulations.take();
-                finishedRows += result.rows;
-                System.out.println(finishedRows);
-            } catch (Exception e) {}
+            ExecutionResult result = completedSimulations.take();
+            finishedRows += result.rows;
+            System.out.println(finishedRows);
             currentSimulations--;
         }
 
