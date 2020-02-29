@@ -8,30 +8,20 @@ import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Collection;
 import java.util.List;
-import java.util.concurrent.Future;
-import java.util.concurrent.RecursiveAction;
-import java.util.concurrent.RecursiveTask;
 
-public class BudgetedFilter extends RecursiveTask<Double> {
+public class BudgetedFilter {
     private List<MutableIntList> resultList;
     private ImmutableList<UnaryBoolEval> compiled;
     private IndexFilter indexFilter;
     private int CARDINALITY;
-    private int start;
-    private List<Integer> outputIds;
-    private FilterState state;
 
     public BudgetedFilter(ImmutableList<UnaryBoolEval> compiled,
                           IndexFilter indexFilter,
-                          int CARDINALITY, int start, List<Integer> outputIds,
-                          FilterState state, List<MutableIntList> resultList) {
+                          int CARDINALITY, List<MutableIntList> resultList) {
         this.resultList = resultList;
         this.compiled = compiled;
         this.indexFilter = indexFilter;
         this.CARDINALITY = CARDINALITY;
-        this.start = start;
-        this.state = state;
-        this.outputIds = outputIds;
     }
 
     /*private long indexScan(int budget,
@@ -90,62 +80,44 @@ public class BudgetedFilter extends RecursiveTask<Double> {
                                     FilterState state) {
         long startTime = System.nanoTime();
 
-        List<Future> futures = new ArrayList<>();
-
         for (int b = 0; b < state.batches; b++) {
             final int start = begin + b * state.batchSize;
             final int end = Math.min(start + state.batchSize, CARDINALITY);
             final MutableIntList batchResult = result.get(b);
 
             if (state.cachedEval != null) {
-                futures.add(new RecursiveAction() {
-                    @Override
-                    public void compute() {
-                        ROW_LOOP:
-                        for (int row = start; row < end; row++) {
-                            if (state.cachedEval.evaluate(row) <= 0) {
-                                continue ROW_LOOP;
-                            }
+                ROW_LOOP:
+                for (int row = start; row < end; row++) {
+                    if (state.cachedEval.evaluate(row) <= 0) {
+                        continue ROW_LOOP;
+                    }
 
-                            for (int i = state.cachedTil + 1;
-                                 i < state.order.length; i++) {
-                                UnaryBoolEval expr =
-                                        compiled.get(state.order[i]);
-                                if (expr.evaluate(row) <= 0) {
-                                    continue ROW_LOOP;
-                                }
-                            }
-
-                            batchResult.add(row);
+                    for (int i = state.cachedTil + 1;
+                         i < state.order.length; i++) {
+                        UnaryBoolEval expr =
+                                compiled.get(state.order[i]);
+                        if (expr.evaluate(row) <= 0) {
+                            continue ROW_LOOP;
                         }
                     }
-                }.fork());
+
+                    batchResult.add(row);
+                }
             } else {
-                futures.add(new RecursiveAction() {
-                    @Override
-                    public void compute() {
-                        ROW_LOOP:
-                        for (int row = start; row < end; row++) {
-                            for (int predIndex : state.order) {
-                                UnaryBoolEval expr = compiled.get(predIndex);
-                                if (expr.evaluate(row) <= 0) {
-                                    continue ROW_LOOP;
-                                }
-                            }
-
-                            batchResult.add(row);
+                ROW_LOOP:
+                for (int row = start; row < end; row++) {
+                    for (int predIndex : state.order) {
+                        UnaryBoolEval expr = compiled.get(predIndex);
+                        if (expr.evaluate(row) <= 0) {
+                            continue ROW_LOOP;
                         }
                     }
-                }.fork());
+
+                    batchResult.add(row);
+                }
             }
 
             if (end == CARDINALITY) break;
-        }
-
-        for (Future f : futures) {
-            try {
-                f.get();
-            } catch (Exception e) {}
         }
 
         long endTime = System.nanoTime();
@@ -186,8 +158,8 @@ public class BudgetedFilter extends RecursiveTask<Double> {
         return endTime - startTime;
     }
 
-    @Override
-    public Double compute() {
+    public double execute(int start, List<Integer> outputIds,
+                          FilterState state) {
         long time;
 
         List<MutableIntList> outputs = new ArrayList<>(outputIds.size());

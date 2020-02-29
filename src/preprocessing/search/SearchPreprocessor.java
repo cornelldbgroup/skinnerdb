@@ -26,7 +26,9 @@ import query.QueryInfo;
 import statistics.PreStats;
 
 import java.util.*;
-import java.util.concurrent.*;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.LinkedBlockingQueue;
 
 import static operators.Filter.*;
 import static preprocessing.PreprocessorUtil.*;
@@ -260,15 +262,13 @@ public class SearchPreprocessor implements Preprocessor {
                 new LinkedBlockingQueue<>();
         int currentSimulations = 0;
         int lastCompletedRow = 0;
-        int finishedRows = 0;
         List<MutableIntList> resultList = new ArrayList<>();
-
-        ForkJoinPool pool = new ForkJoinPool(ParallelService.HIGH_POOL_THREADS);
+        BudgetedFilter filterOp = new BudgetedFilter(compiled, indexFilter,
+                CARDINALITY, resultList);
 
         while (lastCompletedRow < CARDINALITY) {
             if (currentSimulations == MAX_SIMULATIONS) {
                 ExecutionResult result = completedSimulations.take();
-                finishedRows += result.rows;
                 currentSimulations--;
                 FilterUCTNode.finalUpdateStatistics(result.selected,
                         result.state, result.reward, result.rows);
@@ -298,19 +298,12 @@ public class SearchPreprocessor implements Preprocessor {
             FilterUCTNode.initialUpdateStatistics(selected, state);
             List<Integer> outputId = initializeEpoch(resultList,
                     state.batches);
-            pool.submit(new RecursiveAction() {
-                @Override
-                public void compute() {
-                    BudgetedFilter filterOp = new BudgetedFilter(compiled,
-                            indexFilter, CARDINALITY, start, outputId,
-                            state,
-                            resultList);
-                    double reward = filterOp.compute();
-                    try {
-                        completedSimulations.put(new ExecutionResult(selected,
-                                reward, state, end - start));
-                    } catch (Exception e) {}
-                }
+            ParallelService.HIGH_POOL.submit(() -> {
+                double reward = filterOp.execute(start, outputId, state);
+                try {
+                    completedSimulations.put(new ExecutionResult(selected,
+                            reward, state, end - start));
+                } catch (Exception e) {}
             });
 
 
@@ -350,12 +343,9 @@ public class SearchPreprocessor implements Preprocessor {
 
 
         while (currentSimulations > 0) {
-            ExecutionResult result = completedSimulations.take();
-            finishedRows += result.rows;
+            completedSimulations.take();
             currentSimulations--;
         }
-
-        pool.shutdownNow();
 
         return resultList;
     }
