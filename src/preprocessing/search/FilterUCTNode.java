@@ -1,10 +1,8 @@
 package preprocessing.search;
 
-import org.apache.commons.lang3.tuple.Pair;
-import config.JoinConfig;
 import expressions.compilation.UnaryBoolEval;
 import indexing.HashIndex;
-import joining.uct.SelectionPolicy;
+import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.*;
 
@@ -23,12 +21,15 @@ public class FilterUCTNode {
     private static List<HashIndex> indices;
 
     // Node common members
+    private final FilterUCTNode parent;
     private final long createdIn;
     private final NodeType type;
     private final int treeLevel, nrActions;
     private final int[] nrTries;
+    private final int[] nrParallelSimulationsPerAction;
     private final double[] accumulatedReward;
     private int nrVisits;
+    private int nrParallelSimulations;
     private int nrExecutions = 0;
     private final List<Integer> priorityActions;
 
@@ -48,6 +49,7 @@ public class FilterUCTNode {
                          Map<List<Integer>, UnaryBoolEval> cache,
                          long roundCtr,
                          int numPredicates, List<HashIndex> indices) {
+        this.parent = null;
         this.type = NodeType.ROOT;
         this.treeLevel = 0;
         this.createdIn = roundCtr;
@@ -95,11 +97,14 @@ public class FilterUCTNode {
 
         // CONCLUSION - DO NOT CHANGE
         this.nrVisits = 0;
+        this.nrParallelSimulations = 0;
         this.nrTries = new int[nrActions];
+        this.nrParallelSimulationsPerAction = new int[nrActions];
         this.accumulatedReward = new double[nrActions];
         this.priorityActions = new ArrayList<>(nrActions);
         for (int i = 0; i < nrActions; i++) {
             nrTries[i] = 0;
+            nrParallelSimulationsPerAction[i] = 0;
             accumulatedReward[i] = 0;
             priorityActions.add(i);
         }
@@ -107,6 +112,7 @@ public class FilterUCTNode {
 
     private FilterUCTNode(FilterUCTNode parent, long roundCtr, NodeType type) {
         assert type == NodeType.LEAF : type.name();
+        this.parent = parent;
         this.type = type;
         this.treeLevel = parent.treeLevel + 1;
         this.createdIn = roundCtr;
@@ -122,11 +128,14 @@ public class FilterUCTNode {
 
         // CONCLUSION - DO NOT CHANGE
         this.nrVisits = 0;
+        this.nrParallelSimulations = 0;
         this.nrTries = new int[nrActions];
+        this.nrParallelSimulationsPerAction = new int[nrActions];
         this.accumulatedReward = new double[nrActions];
         this.priorityActions = new ArrayList<>(nrActions);
         for (int i = 0; i < nrActions; i++) {
             nrTries[i] = 0;
+            nrParallelSimulationsPerAction[i] = 0;
             accumulatedReward[i] = 0;
             priorityActions.add(i);
         }
@@ -134,6 +143,7 @@ public class FilterUCTNode {
 
     private FilterUCTNode(FilterUCTNode parent, long roundCtr, int arg,
                           NodeType type) {
+        this.parent = parent;
         this.type = type;
         this.treeLevel = parent.treeLevel + 1;
         this.createdIn = roundCtr;
@@ -197,29 +207,28 @@ public class FilterUCTNode {
 
         // CONCLUSION - DO NOT CHANGE
         this.nrVisits = 0;
+        this.nrParallelSimulations = 0;
         this.nrTries = new int[nrActions];
+        this.nrParallelSimulationsPerAction = new int[nrActions];
         this.accumulatedReward = new double[nrActions];
         this.priorityActions = new ArrayList<>(nrActions);
         for (int i = 0; i < nrActions; i++) {
             nrTries[i] = 0;
+            nrParallelSimulationsPerAction[i] = 0;
             accumulatedReward[i] = 0;
             priorityActions.add(i);
         }
     }
 
-    public Pair<Double, Integer> sample(long roundCtr, FilterState state) {
+    public Pair<FilterUCTNode, Boolean> sample(long roundCtr,
+                                               FilterState state) {
         if (type == NodeType.LEAF) {
-            if (state.parallelBatches > 0) {
-                return filterOp.executeWithBudget(PARALLEL_ROWS_PER_TIMESTEP,
-                        state);
-            }
-
-            return filterOp.executeWithBudget(ROWS_PER_TIMESTEP, state);
+            return Pair.of(this, false);
         }
 
 
         boolean canExpand = createdIn != roundCtr;
-        int action = selectAction(SelectionPolicy.UCB1);
+        int action = selectAction();
 
         switch (type) {
             case ROOT: {
@@ -248,7 +257,7 @@ public class FilterUCTNode {
                         if (this.unchosenPreds.size() == 1) {
                             if (ENABLE_ROW_PARALLELISM) {
                                 childNodes[action] = new FilterUCTNode(this,
-                                        roundCtr, 0,
+                                        roundCtr, 1,
                                         NodeType.ROW_PARALLEL);
                             } else {
                                 childNodes[action] = new FilterUCTNode(this,
@@ -290,7 +299,7 @@ public class FilterUCTNode {
                     if (this.unchosenPreds.size() == 1) {
                         if (ENABLE_ROW_PARALLELISM) {
                             childNodes[action] = new FilterUCTNode(this,
-                                    roundCtr, 0,
+                                    roundCtr, 1,
                                     NodeType.ROW_PARALLEL);
                         } else {
                             childNodes[action] = new FilterUCTNode(this,
@@ -310,13 +319,13 @@ public class FilterUCTNode {
             }
 
             case ROW_PARALLEL: {
-                state.parallelBatches =
+                state.batches =
                         minBatches + action * ROW_PARALLEL_DELTA;
 
                 if (childNodes[action] == null && canExpand) {
                     if (action == nrActions - 1) {
                         childNodes[action] = new FilterUCTNode(this,
-                                roundCtr, state.parallelBatches,
+                                roundCtr, state.batches,
                                 NodeType.ROW_PARALLEL);
                     } else {
                         childNodes[action] = new FilterUCTNode(this, roundCtr,
@@ -328,15 +337,16 @@ public class FilterUCTNode {
         }
 
         FilterUCTNode child = childNodes[action];
-        Pair<Double, Integer> reward = (child != null) ?
-                child.sample(roundCtr, state) :
-                playout(state);
-        
-        updateStatistics(action, reward.getKey(), reward.getValue());
-        return reward;
+        if (child == null) {
+            playout(state);
+            return Pair.of(this, true);
+        } else {
+            state.actions.add(action);
+            return child.sample(roundCtr, state);
+        }
     }
 
-    private Pair<Double, Integer> playout(FilterState state) {
+    private void playout(FilterState state) {
         switch (type) {
             case BRANCHING:
             case INDEX: {
@@ -354,13 +364,13 @@ public class FilterUCTNode {
 
                 // Use playouts that have no parallel batches to avoid spending
                 // a large time on bad orders
-                state.parallelBatches = 0;
-                return filterOp.executeWithBudget(ROWS_PER_TIMESTEP, state);
+                state.batches = 1;
+                break;
             }
 
             case ROW_PARALLEL: {
-                return filterOp.executeWithBudget(PARALLEL_ROWS_PER_TIMESTEP,
-                        state);
+                // no additional work needed
+                break;
             }
 
             case LEAF:
@@ -369,7 +379,6 @@ public class FilterUCTNode {
             case ROOT:
                 throw new RuntimeException("Not possible to playout from root");
         }
-        return Pair.of(0.0, 0);
     }
 
 
@@ -390,13 +399,14 @@ public class FilterUCTNode {
                         compile.add(this.childNodes[a]);
                         if (compile.size() > compileSetSize) {
                             FilterUCTNode node = compile.poll();
-                            if (node.nrVisits >= this.childNodes[a].nrVisits) {
+                            if (node.getAddedUtility() >=
+                                    this.childNodes[a].getAddedUtility()) {
                                 continue;
                             }
                         }
                     }
                     this.childNodes[a].getTopNodesForCompilation(compile,
-                        compileSetSize, compiled);
+                            compileSetSize, compiled);
 
                 }
             }
@@ -405,7 +415,7 @@ public class FilterUCTNode {
 
 
     // Common UCT functions
-    private int selectAction(SelectionPolicy policy) {
+    private int selectAction() {
         if (!priorityActions.isEmpty()) {
             int nrUntried = priorityActions.size();
             int actionIndex = random.nextInt(nrUntried);
@@ -424,57 +434,59 @@ public class FilterUCTNode {
             int action = (offset + actionCtr) % nrActions;
             double meanReward = accumulatedReward[action] / nrTries[action];
             double exploration =
-                    Math.sqrt(Math.log(nrVisits) / nrTries[action]);
+                    Math.sqrt(Math.log(nrVisits + nrParallelSimulations) /
+                            (nrTries[action] + nrParallelSimulations));
             // Assess the quality of the action according to policy
-            double quality = -1;
-            switch (policy) {
-                case UCB1:
-                    quality = meanReward +
-                            FilterSearchConfig.EXPLORATION_FACTOR * exploration;
-                    break;
-                case MAX_REWARD:
-                case EPSILON_GREEDY:
-                    quality = meanReward;
-                    break;
-                case RANDOM:
-                    quality = random.nextDouble();
-                    break;
-                case RANDOM_UCB1:
-                    if (treeLevel == 0) {
-                        quality = random.nextDouble();
-                    } else {
-                        quality = meanReward +
-                                FilterSearchConfig.EXPLORATION_FACTOR *
-                                        exploration;
-                    }
-                    break;
-            }
+            double quality = meanReward +
+                    FilterSearchConfig.EXPLORATION_FACTOR * exploration;
 
             if (quality > bestQuality) {
                 bestAction = action;
                 bestQuality = quality;
             }
         }
-        // For epsilon greedy, return random action with
-        // probability epsilon.
-        if (policy.equals(SelectionPolicy.EPSILON_GREEDY)) {
-            if (random.nextDouble() <= JoinConfig.EPSILON) {
-                return random.nextInt(nrActions);
-            }
-        }
+
         // Otherwise: return best action.
         return bestAction;
     }
 
-    private void updateStatistics(int selectedAction, double reward, int calls) {
-        nrExecutions += calls;
-        ++nrVisits;
-        ++nrTries[selectedAction];
-        accumulatedReward[selectedAction] += reward;
+    public static void finalUpdateStatistics(FilterUCTNode node,
+                                             FilterState state, double reward,
+                                             int calls) {
+        int i = state.actions.size() - 1;
+        while (node != null) {
+            node.nrExecutions += calls;
+            ++node.nrVisits;
+            --node.nrParallelSimulations;
+
+            if (i >= 0) {
+                int selectedAction = state.actions.get(i--);
+                ++node.parent.nrTries[selectedAction];
+                --node.parent.nrParallelSimulationsPerAction[selectedAction];
+                node.parent.accumulatedReward[selectedAction] += reward;
+            }
+
+            node = node.parent;
+        }
+    }
+
+    public static void initialUpdateStatistics(FilterUCTNode node,
+                                               FilterState state) {
+        int i = state.actions.size() - 1;
+        while (node != null) {
+            ++node.nrParallelSimulations;
+
+            if (i >= 0) {
+                int selectedAction = state.actions.get(i--);
+                --node.parent.nrParallelSimulationsPerAction[selectedAction];
+            }
+
+            node = node.parent;
+        }
     }
 
     // Getters
-    public int getNumVisits() {
+    public int getAddedUtility() {
         return nrExecutions;
     }
 

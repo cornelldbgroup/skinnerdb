@@ -1,5 +1,6 @@
 package preprocessing.search;
 
+import catalog.CatalogManager;
 import config.LoggingConfig;
 import config.NamingConfig;
 import config.PreConfig;
@@ -9,6 +10,7 @@ import indexing.HashIndex;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
 import operators.Materialize;
+import org.apache.commons.lang3.tuple.Pair;
 import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.ImmutableList;
 import org.eclipse.collections.api.list.MutableList;
@@ -23,12 +25,14 @@ import query.QueryInfo;
 import statistics.PreStats;
 
 import java.util.*;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingQueue;
 
 import static operators.Filter.*;
 import static preprocessing.PreprocessorUtil.*;
-import static preprocessing.search.FilterSearchConfig.ENABLE_COMPILATION;
-import static preprocessing.search.FilterSearchConfig.FORGET;
+import static preprocessing.search.FilterSearchConfig.*;
 
 public class SearchPreprocessor implements Preprocessor {
     /**
@@ -37,8 +41,6 @@ public class SearchPreprocessor implements Preprocessor {
      * without an exception being thrown.
      */
     private boolean hadError = false;
-
-    Map<List<Integer>, UnaryBoolEval> compileCache = null;
 
     /**
      * Executes pre-processing.
@@ -248,27 +250,60 @@ public class SearchPreprocessor implements Preprocessor {
         ConcurrentHashMap<List<Integer>, UnaryBoolEval> cache =
                 new ConcurrentHashMap<>();
         Set<List<Integer>> toCompile = new HashSet<>();
-
-        long roundCtr = 0;
         int nrCompiled = compiled.size();
+        long nextCompile = 75;
+        final int CARDINALITY = CatalogManager.getCardinality(tableName);
+        long roundCtr = 0;
         IndexFilter indexFilter = new IndexFilter(indices, dataLocations);
-        BudgetedFilter filterOp = new BudgetedFilter(tableName, compiled,
-                indexFilter);
-        FilterState state = new FilterState(nrCompiled);
+        BudgetedFilter filterOp = new BudgetedFilter(compiled,
+                indexFilter, CARDINALITY);
         FilterUCTNode root = new FilterUCTNode(filterOp, cache, roundCtr,
                 nrCompiled, indices);
-        long nextForget = 1;
-        long nextCompile = 75;
-        
-        while (!filterOp.isFinished()) {
-            ++roundCtr;
-            state.reset();
-            root.sample(roundCtr, state);
+        final BlockingQueue<ExecutionResult>
+                completedSimulations = new LinkedBlockingQueue<>();
+        int currentSimulations = 0;
+        int lastCompletedRow = 0;
 
-            if (FORGET && roundCtr == nextForget) {
-                root = new FilterUCTNode(filterOp, cache, roundCtr, nrCompiled,
-                        indices);
-                nextForget *= 10;
+        final Queue<Future> simulationFutures = new LinkedList<>();
+
+        while (lastCompletedRow < CARDINALITY) {
+            ++roundCtr;
+
+            final FilterState state = new FilterState(nrCompiled);
+            Pair<FilterUCTNode, Boolean> sample = root.sample(roundCtr, state);
+            final FilterUCTNode selected = sample.getLeft();
+            boolean playedOut = sample.getRight();
+
+            currentSimulations++;
+            final int start = lastCompletedRow;
+            final int end;
+            if (playedOut) {
+                state.batchSize = ROWS_PER_TIMESTEP;
+                end = Math.min(start + ROWS_PER_TIMESTEP, CARDINALITY);
+            } else {
+                state.batchSize = LEAF_ROWS_PER_TIMESTEP;
+                end = Math.min(start + state.batches * LEAF_ROWS_PER_TIMESTEP,
+                        CARDINALITY);
+            }
+            lastCompletedRow = end;
+            FilterUCTNode.initialUpdateStatistics(selected, state);
+            List<Integer> outputId = filterOp.initializeEpoch(state.batches);
+            simulationFutures.add(ParallelService.HIGH_POOL.submit(() -> {
+                double reward = filterOp.execute(start, outputId,
+                        state);
+                try {
+                    completedSimulations.put(new ExecutionResult(selected,
+                            reward, state, end - start));
+                } catch (Exception e) {}
+            }));
+
+            while (!completedSimulations.isEmpty()) {
+                try {
+                    ExecutionResult result = completedSimulations.take();
+                    currentSimulations--;
+                    FilterUCTNode.finalUpdateStatistics(result.selected,
+                            result.state, result.reward, result.rows);
+                } catch (Exception e) {}
             }
 
             if (ENABLE_COMPILATION && roundCtr == nextCompile) {
@@ -278,31 +313,39 @@ public class SearchPreprocessor implements Preprocessor {
                 PriorityQueue<FilterUCTNode> compile =
                         new PriorityQueue<>(compileSetSize,
                                 Comparator.comparingInt
-                                        (FilterUCTNode::getNumVisits));
-                root.getTopNodesForCompilation(compile, compileSetSize, toCompile);
+                                        (FilterUCTNode::getAddedUtility));
+                root.getTopNodesForCompilation(compile, compileSetSize,
+                        toCompile);
                 while (!compile.isEmpty()) {
                     FilterUCTNode node = compile.poll();
                     final List<Integer> preds = node.getChosenPreds();
                     //System.out.println(preds.toString());
-                        ParallelService.LOW_POOL.submit(() -> {
-                            Expression expr = null;
-                            for (int i = preds.size() - 1; i >= 0; i--) {
-                                if (expr == null) {
-                                    expr = predicates.get(preds.get(i));
-                                } else {
-                                    expr = new AndExpression(expr,
-                                            predicates.get(preds.get(i)));
-                                }
+                    ParallelService.LOW_POOL.submit(() -> {
+                        Expression expr = null;
+                        for (int i = preds.size() - 1; i >= 0; i--) {
+                            if (expr == null) {
+                                expr = predicates.get(preds.get(i));
+                            } else {
+                                expr = new AndExpression(expr,
+                                        predicates.get(preds.get(i)));
                             }
+                        }
 
-                            try {
-                                cache.put(preds, compilePred(unaryPred, expr,
-                                        colMap));
-                            } catch (Exception e) {}
-                        });
+                        try {
+                            cache.put(preds, compilePred(unaryPred, expr,
+                                    colMap));
+                        } catch (Exception e) {}
+                    });
                 }
             }
         }
+
+
+        try {
+            for (Future f : simulationFutures) {
+                f.get();
+            }
+        } catch (Exception e) {}
 
         return filterOp.getResult();
     }
