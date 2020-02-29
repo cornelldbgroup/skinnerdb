@@ -15,6 +15,7 @@ import org.eclipse.collections.api.factory.Lists;
 import org.eclipse.collections.api.list.ImmutableList;
 import org.eclipse.collections.api.list.MutableList;
 import org.eclipse.collections.api.list.primitive.MutableIntList;
+import org.eclipse.collections.impl.factory.primitive.IntLists;
 import org.eclipse.collections.impl.parallel.ParallelIterate;
 import parallel.ParallelService;
 import preprocessing.Context;
@@ -25,9 +26,7 @@ import query.QueryInfo;
 import statistics.PreStats;
 
 import java.util.*;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.*;
 
 import static operators.Filter.*;
 import static preprocessing.PreprocessorUtil.*;
@@ -254,15 +253,16 @@ public class SearchPreprocessor implements Preprocessor {
         final int CARDINALITY = CatalogManager.getCardinality(tableName);
         long roundCtr = 0;
         IndexFilter indexFilter = new IndexFilter(indices, dataLocations);
-        BudgetedFilter filterOp = new BudgetedFilter(compiled,
-                indexFilter, CARDINALITY);
-        FilterUCTNode root = new FilterUCTNode(filterOp, cache, roundCtr,
+        FilterUCTNode root = new FilterUCTNode(cache, roundCtr,
                 nrCompiled, indices);
         final BlockingQueue<ExecutionResult>
                 completedSimulations = new LinkedBlockingQueue<>();
         int currentSimulations = 0;
         int lastCompletedRow = 0;
         int finishedRows = 0;
+        List<MutableIntList> resultList = new ArrayList<>();
+
+        ForkJoinPool pool = new ForkJoinPool(ParallelService.HIGH_POOL_THREADS);
 
         while (lastCompletedRow < CARDINALITY) {
             ++roundCtr;
@@ -286,15 +286,21 @@ public class SearchPreprocessor implements Preprocessor {
             }
             lastCompletedRow = end;
             FilterUCTNode.initialUpdateStatistics(selected, state);
-            List<Integer> outputId = filterOp.initializeEpoch(state.batches);
-            ParallelService.HIGH_POOL.submit(() -> {
-                System.out.println("starting simulation");
-                double reward = filterOp.execute(start, outputId,
-                        state);
-                try {
-                    completedSimulations.put(new ExecutionResult(selected,
-                            reward, state, end - start));
-                } catch (Exception e) {}
+            List<Integer> outputId = initializeEpoch(resultList, state.batches);
+            pool.submit(new RecursiveAction() {
+                @Override
+                public void compute() {
+                    System.out.println("starting simulation");
+                    BudgetedFilter filterOp = new BudgetedFilter(compiled,
+                            indexFilter, CARDINALITY, start, outputId, state,
+                            resultList);
+                    double reward = filterOp.compute();
+                    System.out.println("finished simulation");
+                    try {
+                        completedSimulations.put(new ExecutionResult(selected,
+                                reward, state, end - start));
+                    } catch (Exception e) {}
+                }
             });
 
             if (currentSimulations == ParallelService.HIGH_POOL_THREADS) {
@@ -353,6 +359,18 @@ public class SearchPreprocessor implements Preprocessor {
             currentSimulations--;
         }
 
-        return filterOp.getResult();
+        return resultList;
+    }
+
+    public List<Integer> initializeEpoch(List<MutableIntList> resultList,
+                                         int numEpochs) {
+        List<Integer> outputIds = new ArrayList<>(numEpochs);
+
+        for (int i = 0; i < numEpochs; i++) {
+            resultList.add(IntLists.mutable.empty());
+            outputIds.add(resultList.size() - 1);
+        }
+
+        return outputIds;
     }
 }

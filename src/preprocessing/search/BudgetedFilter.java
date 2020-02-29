@@ -3,30 +3,36 @@ package preprocessing.search;
 import expressions.compilation.UnaryBoolEval;
 import org.eclipse.collections.api.list.ImmutableList;
 import org.eclipse.collections.api.list.primitive.MutableIntList;
-import org.eclipse.collections.impl.factory.primitive.IntLists;
-import parallel.ParallelService;
 
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.Future;
+import java.util.concurrent.RecursiveAction;
+import java.util.concurrent.RecursiveTask;
 
-public class BudgetedFilter {
+public class BudgetedFilter extends RecursiveTask<Double> {
     private List<MutableIntList> resultList;
     private ImmutableList<UnaryBoolEval> compiled;
     private IndexFilter indexFilter;
     private int CARDINALITY;
+    private int start;
+    private List<Integer> outputIds;
+    private FilterState state;
 
     public BudgetedFilter(ImmutableList<UnaryBoolEval> compiled,
                           IndexFilter indexFilter,
-                          int CARDINALITY) {
-        this.resultList = new ArrayList<>();
+                          int CARDINALITY, int start, List<Integer> outputIds,
+                          FilterState state, List<MutableIntList> resultList) {
+        this.resultList = resultList;
         this.compiled = compiled;
         this.indexFilter = indexFilter;
         this.CARDINALITY = CARDINALITY;
+        this.start = start;
+        this.state = state;
+        this.outputIds = outputIds;
     }
-
 
     /*private long indexScan(int budget,
                            List<MutableIntList> outputs,
@@ -83,7 +89,8 @@ public class BudgetedFilter {
     private long tableScanBranching(int begin, List<MutableIntList> result,
                                     FilterState state) {
         long startTime = System.nanoTime();
-        List<Runnable> actions = new ArrayList<>();
+
+        List<Future> futures = new ArrayList<>();
 
         for (int b = 0; b < state.batches; b++) {
             final int start = begin + b * state.batchSize;
@@ -91,46 +98,48 @@ public class BudgetedFilter {
             final MutableIntList batchResult = result.get(b);
 
             if (state.cachedEval != null) {
-                actions.add(() -> {
-                    ROW_LOOP:
-                    for (int row = start; row < end; row++) {
-                        if (state.cachedEval.evaluate(row) <= 0) {
-                            continue ROW_LOOP;
-                        }
-
-                        for (int i = state.cachedTil + 1;
-                             i < state.order.length; i++) {
-                            UnaryBoolEval expr = compiled.get(state.order[i]);
-                            if (expr.evaluate(row) <= 0) {
+                futures.add(new RecursiveAction() {
+                    @Override
+                    public void compute() {
+                        ROW_LOOP:
+                        for (int row = start; row < end; row++) {
+                            if (state.cachedEval.evaluate(row) <= 0) {
                                 continue ROW_LOOP;
                             }
-                        }
 
-                        batchResult.add(row);
+                            for (int i = state.cachedTil + 1;
+                                 i < state.order.length; i++) {
+                                UnaryBoolEval expr =
+                                        compiled.get(state.order[i]);
+                                if (expr.evaluate(row) <= 0) {
+                                    continue ROW_LOOP;
+                                }
+                            }
+
+                            batchResult.add(row);
+                        }
                     }
-                });
+                }.fork());
             } else {
-                actions.add(() -> {
-                    ROW_LOOP:
-                    for (int row = start; row < end; row++) {
-                        for (int predIndex : state.order) {
-                            UnaryBoolEval expr = compiled.get(predIndex);
-                            if (expr.evaluate(row) <= 0) {
-                                continue ROW_LOOP;
+                futures.add(new RecursiveAction() {
+                    @Override
+                    public void compute() {
+                        ROW_LOOP:
+                        for (int row = start; row < end; row++) {
+                            for (int predIndex : state.order) {
+                                UnaryBoolEval expr = compiled.get(predIndex);
+                                if (expr.evaluate(row) <= 0) {
+                                    continue ROW_LOOP;
+                                }
                             }
-                        }
 
-                        batchResult.add(row);
+                            batchResult.add(row);
+                        }
                     }
-                });
+                }.fork());
             }
 
             if (end == CARDINALITY) break;
-        }
-
-        List<Future> futures = new ArrayList<>();
-        for (Runnable r : actions) {
-            futures.add(ParallelService.HIGH_POOL.submit(r));
         }
 
         for (Future f : futures) {
@@ -177,8 +186,8 @@ public class BudgetedFilter {
         return endTime - startTime;
     }
 
-    public double execute(int start, List<Integer> outputIds,
-                          FilterState state) {
+    @Override
+    protected Double compute() {
         long time;
 
         List<MutableIntList> outputs = new ArrayList<>(outputIds.size());
@@ -199,17 +208,6 @@ public class BudgetedFilter {
                 CARDINALITY) - start;
         System.out.println("FILTERING: " + start + " " + (start + delta));
         return delta / (0.0001 * time);
-    }
-
-    public List<Integer> initializeEpoch(int numEpochs) {
-        List<Integer> outputIds = new ArrayList<>(numEpochs);
-
-        for (int i = 0; i < numEpochs; i++) {
-            resultList.add(IntLists.mutable.empty());
-            outputIds.add(resultList.size() - 1);
-        }
-
-        return outputIds;
     }
 
     public Collection<MutableIntList> getResult() {

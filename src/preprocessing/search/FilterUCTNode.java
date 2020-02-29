@@ -17,7 +17,6 @@ public class FilterUCTNode {
     private static int numPredicates;
     private static Map<List<Integer>, UnaryBoolEval> cache;
     private static List<Integer> order = null;
-    private static BudgetedFilter filterOp;
     private static List<HashIndex> indices;
 
     // Node common members
@@ -45,8 +44,7 @@ public class FilterUCTNode {
 
     private int minBatches = 0;
 
-    public FilterUCTNode(BudgetedFilter filterOp,
-                         Map<List<Integer>, UnaryBoolEval> cache,
+    public FilterUCTNode(Map<List<Integer>, UnaryBoolEval> cache,
                          long roundCtr,
                          int numPredicates, List<HashIndex> indices) {
         this.parent = null;
@@ -56,7 +54,6 @@ public class FilterUCTNode {
         // PREAMBLE - DO NOT CHANGE
 
         this.cache = cache;
-        this.filterOp = filterOp;
         this.numPredicates = numPredicates;
         this.indices = indices;
 
