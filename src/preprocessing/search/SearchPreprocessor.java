@@ -359,6 +359,8 @@ public class SearchPreprocessor implements Preprocessor {
             currentSimulations--;
         }
 
+        pool.shutdownNow();
+
         return resultList;
     }
 
