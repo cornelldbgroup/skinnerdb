@@ -187,7 +187,7 @@ public class BudgetedFilter extends RecursiveTask<Double> {
     }
 
     @Override
-    protected Double compute() {
+    public Double compute() {
         long time;
 
         List<MutableIntList> outputs = new ArrayList<>(outputIds.size());
@@ -206,7 +206,6 @@ public class BudgetedFilter extends RecursiveTask<Double> {
 
         int delta = Math.min(start + state.batches * state.batchSize,
                 CARDINALITY) - start;
-        System.out.println("FILTERING: " + start + " " + (start + delta));
         return delta / (0.0001 * time);
     }
 

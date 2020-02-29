@@ -429,6 +429,7 @@ public class FilterUCTNode {
         for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
             // Calculate index of current action
             int action = (offset + actionCtr) % nrActions;
+            if (nrTries[action] == 0) continue;
             double meanReward = accumulatedReward[action] / nrTries[action];
             double exploration =
                     Math.sqrt(Math.log(nrVisits + nrParallelSimulations) /
@@ -442,6 +443,10 @@ public class FilterUCTNode {
                 bestAction = action;
                 bestQuality = quality;
             }
+        }
+
+        if (bestAction < 0) {
+            return random.nextInt(nrActions);
         }
 
         // Otherwise: return best action.

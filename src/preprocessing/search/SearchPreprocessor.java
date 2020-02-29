@@ -77,7 +77,7 @@ public class SearchPreprocessor implements Preprocessor {
 
         final boolean shouldFilter = shouldFilter(query, preSummary);
 
-        ParallelIterate.forEach(query.aliasToTable.keySet(), alias -> {
+        for (String alias : query.aliasToTable.keySet()) {
             // Collect required columns (for joins and
             // post-processing) for
             // this table
@@ -112,7 +112,7 @@ public class SearchPreprocessor implements Preprocessor {
                 String table = query.aliasToTable.get(alias);
                 preSummary.aliasToFiltered.put(alias, table);
             }
-        }, ParallelService.HIGH_POOL);
+        }
 
 
         // Abort pre-processing if filtering error occurred
@@ -352,7 +352,6 @@ public class SearchPreprocessor implements Preprocessor {
         while (currentSimulations > 0) {
             ExecutionResult result = completedSimulations.take();
             finishedRows += result.rows;
-            System.out.println(finishedRows);
             currentSimulations--;
         }
 
