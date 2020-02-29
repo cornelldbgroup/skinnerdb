@@ -197,7 +197,7 @@ public class BudgetedFilter {
 
         int delta = Math.min(start + state.batches * state.batchSize,
                 CARDINALITY) - start;
-        System.out.println("FILTERING: " + start + " " + start + delta);
+        System.out.println("FILTERING: " + start + " " + (start + delta));
         return delta / (0.0001 * time);
     }
 

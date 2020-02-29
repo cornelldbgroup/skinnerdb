@@ -288,6 +288,7 @@ public class SearchPreprocessor implements Preprocessor {
             FilterUCTNode.initialUpdateStatistics(selected, state);
             List<Integer> outputId = filterOp.initializeEpoch(state.batches);
             ParallelService.HIGH_POOL.submit(() -> {
+                System.out.println("starting simulation");
                 double reward = filterOp.execute(start, outputId,
                         state);
                 try {
@@ -298,7 +299,7 @@ public class SearchPreprocessor implements Preprocessor {
 
             if (currentSimulations == ParallelService.HIGH_POOL_THREADS) {
                 try {
-                    System.out.println("waiting");
+                    System.out.println("waiting: " + currentSimulations);
                     ExecutionResult result = completedSimulations.take();
                     finishedRows += result.rows;
                     System.out.println(finishedRows);
