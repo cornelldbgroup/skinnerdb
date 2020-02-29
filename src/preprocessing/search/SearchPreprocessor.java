@@ -298,6 +298,7 @@ public class SearchPreprocessor implements Preprocessor {
 
             if (currentSimulations == ParallelService.HIGH_POOL_THREADS) {
                 try {
+                    System.out.println("waiting");
                     ExecutionResult result = completedSimulations.take();
                     finishedRows += result.rows;
                     System.out.println(finishedRows);
