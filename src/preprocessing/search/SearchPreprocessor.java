@@ -288,16 +288,16 @@ public class SearchPreprocessor implements Preprocessor {
             lastCompletedRow = end;
             FilterUCTNode.initialUpdateStatistics(selected, state);
             List<Integer> outputId = filterOp.initializeEpoch(state.batches);
-            simulationFutures.add(ParallelService.HIGH_POOL.submit(() -> {
+            ParallelService.HIGH_POOL.submit(() -> {
                 double reward = filterOp.execute(start, outputId,
                         state);
                 try {
                     completedSimulations.put(new ExecutionResult(selected,
                             reward, state, end - start));
                 } catch (Exception e) {}
-            }));
+            });
 
-            while (!completedSimulations.isEmpty()) {
+            if (currentSimulations == ParallelService.HIGH_POOL_THREADS) {
                 try {
                     ExecutionResult result = completedSimulations.take();
                     currentSimulations--;
@@ -341,11 +341,12 @@ public class SearchPreprocessor implements Preprocessor {
         }
 
 
-        try {
-            for (Future f : simulationFutures) {
-                f.get();
-            }
-        } catch (Exception e) {}
+        while (currentSimulations > 0) {
+            try {
+                completedSimulations.take();
+            } catch (Exception e) {}
+            currentSimulations--;
+        }
 
         return filterOp.getResult();
     }
