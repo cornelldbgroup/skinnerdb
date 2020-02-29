@@ -476,7 +476,7 @@ public class FilterUCTNode {
 
             if (i >= 0) {
                 int selectedAction = state.actions.get(i--);
-                --node.parent.nrParallelSimulationsPerAction[selectedAction];
+                ++node.parent.nrParallelSimulationsPerAction[selectedAction];
             }
 
             node = node.parent;
