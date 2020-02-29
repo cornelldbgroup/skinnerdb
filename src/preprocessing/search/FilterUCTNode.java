@@ -6,7 +6,8 @@ import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.*;
 
-import static preprocessing.search.FilterSearchConfig.*;
+import static preprocessing.search.FilterSearchConfig.ROW_PARALLEL_ACTIONS;
+import static preprocessing.search.FilterSearchConfig.ROW_PARALLEL_DELTA;
 
 public class FilterUCTNode {
     private enum NodeType {
@@ -229,6 +230,7 @@ public class FilterUCTNode {
 
         switch (type) {
             case ROOT: {
+                state.batches = 1;
                 if (action == numPredicates + indexActions) {
                     state.avoidBranching = true;
                     if (childNodes[action] == null && canExpand) {
@@ -252,14 +254,8 @@ public class FilterUCTNode {
 
                     if (childNodes[action] == null && canExpand) {
                         if (this.unchosenPreds.size() == 1) {
-                            if (ENABLE_ROW_PARALLELISM) {
-                                childNodes[action] = new FilterUCTNode(this,
-                                        roundCtr, 1,
-                                        NodeType.ROW_PARALLEL);
-                            } else {
-                                childNodes[action] = new FilterUCTNode(this,
-                                        roundCtr, NodeType.LEAF);
-                            }
+                            childNodes[action] = new FilterUCTNode(this,
+                                    roundCtr, NodeType.LEAF);
                         } else if (state.indexedTil == treeLevel) {
                             childNodes[action] = new FilterUCTNode(this,
                                     roundCtr, predicate, NodeType.INDEX);
@@ -294,14 +290,8 @@ public class FilterUCTNode {
 
                 if (childNodes[action] == null && canExpand) {
                     if (this.unchosenPreds.size() == 1) {
-                        if (ENABLE_ROW_PARALLELISM) {
-                            childNodes[action] = new FilterUCTNode(this,
-                                    roundCtr, 1,
-                                    NodeType.ROW_PARALLEL);
-                        } else {
-                            childNodes[action] = new FilterUCTNode(this,
-                                    roundCtr, NodeType.LEAF);
-                        }
+                        childNodes[action] = new FilterUCTNode(this,
+                                roundCtr, NodeType.LEAF);
                     } else {
                         if (state.indexedTil == treeLevel) {
                             childNodes[action] = new FilterUCTNode(this,

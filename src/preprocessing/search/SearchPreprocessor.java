@@ -321,7 +321,7 @@ public class SearchPreprocessor implements Preprocessor {
                     FilterUCTNode node = compile.poll();
                     final List<Integer> preds = node.getChosenPreds();
                     //System.out.println(preds.toString());
-                    ParallelService.LOW_POOL.submit(() -> {
+                    ParallelService.HIGH_POOL.submit(() -> {
                         Expression expr = null;
                         for (int i = preds.size() - 1; i >= 0; i--) {
                             if (expr == null) {
