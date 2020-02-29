@@ -27,7 +27,6 @@ import statistics.PreStats;
 import java.util.*;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 
 import static operators.Filter.*;
@@ -263,11 +262,11 @@ public class SearchPreprocessor implements Preprocessor {
                 completedSimulations = new LinkedBlockingQueue<>();
         int currentSimulations = 0;
         int lastCompletedRow = 0;
-
-        final Queue<Future> simulationFutures = new LinkedList<>();
+        int finishedRows = 0;
 
         while (lastCompletedRow < CARDINALITY) {
             ++roundCtr;
+            System.out.println(lastCompletedRow);
 
             final FilterState state = new FilterState(nrCompiled);
             Pair<FilterUCTNode, Boolean> sample = root.sample(roundCtr, state);
@@ -300,6 +299,8 @@ public class SearchPreprocessor implements Preprocessor {
             if (currentSimulations == ParallelService.HIGH_POOL_THREADS) {
                 try {
                     ExecutionResult result = completedSimulations.take();
+                    finishedRows += result.rows;
+                    System.out.println(finishedRows);
                     currentSimulations--;
                     FilterUCTNode.finalUpdateStatistics(result.selected,
                             result.state, result.reward, result.rows);
@@ -343,7 +344,9 @@ public class SearchPreprocessor implements Preprocessor {
 
         while (currentSimulations > 0) {
             try {
-                completedSimulations.take();
+                ExecutionResult result = completedSimulations.take();
+                finishedRows += result.rows;
+                System.out.println(finishedRows);
             } catch (Exception e) {}
             currentSimulations--;
         }
