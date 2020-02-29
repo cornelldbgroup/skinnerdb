@@ -432,7 +432,8 @@ public class FilterUCTNode {
             double meanReward = accumulatedReward[action] / nrTries[action];
             double exploration =
                     Math.sqrt(Math.log(nrVisits + nrParallelSimulations) /
-                            (nrTries[action] + nrParallelSimulations));
+                            (nrTries[action] +
+                                    nrParallelSimulationsPerAction[action]));
             // Assess the quality of the action according to policy
             double quality = meanReward +
                     FilterSearchConfig.EXPLORATION_FACTOR * exploration;
