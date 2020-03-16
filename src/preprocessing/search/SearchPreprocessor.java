@@ -269,8 +269,6 @@ public class SearchPreprocessor implements Preprocessor {
         while (lastCompletedRow < CARDINALITY) {
             if (currentSimulations == MAX_SIMULATIONS) {
                 ExecutionResult result = completedSimulations.take();
-                System.out.println(result.state.toString() + " " +
-                        result.reward + " " + result.rows);
                 currentSimulations--;
                 FilterUCTNode.finalUpdateStatistics(result.selected,
                         result.state, result.reward, result.rows);
@@ -345,9 +343,7 @@ public class SearchPreprocessor implements Preprocessor {
 
 
         while (currentSimulations > 0) {
-            ExecutionResult result = completedSimulations.take();
-            System.out.println(result.state.toString() + " " +
-                    result.reward + " " + result.rows);
+            completedSimulations.take();
             currentSimulations--;
         }
 
