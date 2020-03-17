@@ -178,7 +178,7 @@ public class BudgetedFilter {
 
         int delta = Math.min(start + state.batches * state.batchSize,
                 CARDINALITY) - start;
-        return Math.exp(-(0.0001 * time) / delta);
+        return Math.exp(-delta / (0.0001 * time));
     }
 
     public Collection<MutableIntList> getResult() {
