@@ -349,7 +349,7 @@ public class SearchPreprocessor implements Preprocessor {
 
         FilterState state = new FilterState(nrCompiled);
         root.selectMostVisited(state);
-        System.out.println(root.toString());
+        System.out.println(state.toString());
 
         return resultList;
     }
