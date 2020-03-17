@@ -347,6 +347,10 @@ public class SearchPreprocessor implements Preprocessor {
             currentSimulations--;
         }
 
+        FilterState state = new FilterState();
+        root.selectMostVisited(state);
+        System.out.println(root.toString());
+
         return resultList;
     }
 

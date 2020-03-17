@@ -343,6 +343,74 @@ public class FilterUCTNode {
         }
     }
 
+    public void selectMostVisited(FilterState state) {
+        if (type == NodeType.LEAF) {
+            return;
+        }
+
+        int action = -1;
+        for (int i = 0; i < nrActions; i++) {
+            if (action < 0 || nrTries[i] > nrTries[action]) {
+                action = i;
+            }
+        }
+
+        switch (type) {
+            case ROOT: {
+                if (action == numPredicates + indexActions) {
+                    state.avoidBranching = true;
+                } else {
+                    int predicate = actionToPredicate[action];
+                    state.order[treeLevel] = predicate;
+                    order = new ArrayList<>();
+                    order.add(predicate);
+
+                    if (this.indexActions > 0 &&
+                            action >= unchosenPreds.size() &&
+                            action < unchosenPreds.size() + indexActions) {
+                        state.indexedTil = treeLevel;
+                        order = new ArrayList<>();
+                        state.cachedTil = -1;
+                        state.cachedEval = null;
+                    }
+                }
+
+                break;
+            }
+
+            case INDEX:
+            case BRANCHING: {
+                int predicate = actionToPredicate[action];
+                state.order[treeLevel] = predicate;
+                order.add(predicate);
+                if (cache.get(order) != null) {
+                    state.cachedTil = treeLevel;
+                    state.cachedEval = cache.get(order);
+                }
+
+                if (this.indexActions > 0 &&
+                        action >= unchosenPreds.size() &&
+                        action < unchosenPreds.size() + indexActions) {
+                    state.indexedTil = treeLevel;
+                    order = new ArrayList<>();
+                    state.cachedTil = -1;
+                    state.cachedEval = null;
+                }
+                break;
+            }
+
+            case ROW_PARALLEL: {
+                state.batches =
+                        minBatches + action * ROW_PARALLEL_DELTA;
+                break;
+            }
+        }
+
+        FilterUCTNode child = childNodes[action];
+        state.actions.add(action);
+        child.selectMostVisited(state);
+    }
+
     private void playout(FilterState state) {
         switch (type) {
             case BRANCHING:
