@@ -99,8 +99,8 @@ public class SearchPreprocessor implements Preprocessor {
             // Filter and project if enabled
             if (curUnaryPred != null && PreConfig.PRE_FILTER) {
                 try {
-                    curUnaryPred = new ExpressionInfo(query,
-                            curUnaryPred.finalExpression, true);
+                    //curUnaryPred = new ExpressionInfo(query,
+                    //        curUnaryPred.finalExpression, false);
                     ImmutableList<Expression> conjuncts = Lists.immutable.ofAll(
                             curUnaryPred.conjuncts);
                     filterProject(query, curUnaryPred, conjuncts, alias,
