@@ -28,11 +28,82 @@ public class JoinIntPartitionWrapper extends JoinPartitionIndexWrapper {
     }
 
     @Override
+    public void reset(int[] tupleIndices) {
+        int priorTuple = tupleIndices[priorTable];
+        int priorVal = priorIntData.data[priorTuple];
+        int prevTuple = tupleIndices[nextTable];
+        if (!(lastValue == priorVal &&
+                lastPositionsStart >= 0 &&
+                nextIntIndex.positions[lastPositionsStart] <= prevTuple)) {
+            lastPositionsStart = -1;
+            lastPositionsEnd = -1;
+        }
+    }
+
+    @Override
     public int nextIndex(int[] tupleIndices, int[] nextSize) {
         int priorTuple = tupleIndices[priorTable];
         int priorVal = priorIntData.data[priorTuple];
         int curTuple = tupleIndices[nextTable];
         return nextIntIndex.nextTuple(priorVal, curTuple, nextTable, nextSize);
+    }
+
+    @Override
+    public int nextIndexFromLast(int[] tupleIndices, int[] nextSize) {
+        return 0;
+    }
+
+    @Override
+    public int nextIndexFromLast(int[] tupleIndices, int[] nextSize, int tid) {
+        int priorTuple = tupleIndices[priorTable];
+        int priorVal = priorIntData.data[priorTuple];
+        int prevTuple = tupleIndices[nextTable];
+        int cardinality = nextIntIndex.cardinality;
+        if (nextIntIndex.unique) {
+            int onlyRow = nextIntIndex.keyToPositions.getOrDefault(priorVal, cardinality);
+            return onlyRow > prevTuple ? onlyRow : cardinality;
+        }
+        else {
+            int[] positions = nextIntIndex.positions;
+            int nextIndex = -1;
+            if (lastPositionsStart >= 0) {
+                for (int i = lastPositionsStart + 1; i <= lastPositionsEnd; i++) {
+                    nextIndex = positions[i];
+                    if (nextIndex > prevTuple) {
+                        lastPositionsStart = i;
+                        return nextIndex;
+                    }
+                }
+            }
+            else {
+                int firstPos = lastValue == priorVal ?
+                        lastFirst : nextIntIndex.keyToPositions.getOrDefault(priorVal, -1);
+                lastValue = priorVal;
+                lastFirst = firstPos;
+                if (firstPos < 0) {
+                    return cardinality;
+                }
+                // Get number of indexed values
+                int nrVals = nextIntIndex.positions[firstPos];
+                // Can we return first indexed value?
+                int firstTuple = nextIntIndex.positions[firstPos + 1];
+                if (firstTuple > prevTuple) {
+                    lastPositionsStart = firstPos + 1;
+                    lastPositionsEnd = firstPos + nrVals;
+                    return firstTuple;
+                }
+                for (int i = 2; i <= nrVals; i++) {
+                    nextIndex = positions[firstPos + i];
+                    if (nextIndex > prevTuple) {
+                        lastPositionsStart = firstPos + i;
+                        lastPositionsEnd = firstPos + nrVals;
+                        return nextIndex;
+                    }
+                }
+            }
+            lastPositionsStart = -1;
+            return cardinality;
+        }
     }
 
     @Override

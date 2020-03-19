@@ -560,7 +560,9 @@ public class DPNode {
             // update UCT statistics and return reward
 //            reward = 0.01;
             if (ParallelConfig.PARALLEL_SPEC == 0) {
-                nodeStatistics[tid].updateStatistics(reward, action);
+                if (treeLevel <= joinOp.deepIndex) {
+                    nodeStatistics[tid].updateStatistics(reward, action);
+                }
             }
             else {
                 updateStatistics(action, reward);
@@ -627,8 +629,9 @@ public class DPNode {
         int splitLen = 5;
         int splitSize = ParallelConfig.PARTITION_SIZE;
         int splitTable = joinOrder[0];
-        int end = Math.min(splitLen, joinOrder.length);
-        for (int i = 0; i < end; i++) {
+        int end = Math.min(splitLen, nrTables);
+        int start = nrTables < splitLen ? 0 : 1;
+        for (int i = start; i < end; i++) {
             int table = joinOrder[i];
             int cardinality = cardinalities[table];
             if (cardinality >= splitSize && !query.temporaryTables.contains(table)) {
@@ -647,7 +650,7 @@ public class DPNode {
         int splitSize = ParallelConfig.PARTITION_SIZE;
         int splitTable = -1;
         int end = Math.min(splitLen, joinOrder.length);
-        for (int i = 0; i < nrTables; i++) {
+        for (int i = 0; i < end; i++) {
             int table = joinOrder[i];
             int cardinality = cardinalities[table];
             if (cardinality >= splitSize && !finishedTables.contains(table) && !query.temporaryTables.contains(table)) {

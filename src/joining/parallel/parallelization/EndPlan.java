@@ -2,6 +2,7 @@ package joining.parallel.parallelization;
 
 import config.ParallelConfig;
 import joining.parallel.uct.BaseUctInner;
+import joining.parallel.uct.DPNode;
 import joining.parallel.uct.SimpleUctNode;
 import joining.progress.State;
 
@@ -36,17 +37,19 @@ public class EndPlan {
      * the slowest thread id for each split table
      */
     public int[] slowThreads;
+    /**
+     * Root of
+     */
+    public volatile DPNode root;
 
-    public final ReentrantLock lock;
-
-    public EndPlan(int nrThreads, int nrTables, int[] cardinalities) {
+    public EndPlan(int nrThreads, int nrTables, DPNode root) {
         joinOrder = new int[nrTables];
         finishFlags = new boolean[nrThreads][nrTables];
         splitTable = -1;
         this.slowThreads = new int[nrTables];
         Arrays.fill(slowThreads, -1);
         this.slowestState = new AtomicReference<>(new State(nrTables));
-        this.lock = new ReentrantLock();
+        this.root = root;
     }
 
     public int[] getJoinOrder() {

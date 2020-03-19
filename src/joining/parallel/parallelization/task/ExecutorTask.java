@@ -65,7 +65,8 @@ public class ExecutorTask implements Callable<TaskResult> {
             int nextThread = 1;
             int lastCount = 0;
             int nextPeriod = 1;
-            int base  = ParallelConfig.C / nrThreads;
+            double nextNum = 1;
+            double base  = Math.pow(ParallelConfig.C, 1.0 / nrThreads);
             SPNode root = new SPNode(0, query, true, 1);
             while (!finish.get()) {
                 ++roundCtr;
@@ -95,7 +96,8 @@ public class ExecutorTask implements Callable<TaskResult> {
                         nextThread++;
                     }
                     lastCount = (int) roundCtr;
-                    nextPeriod = nextPeriod * base;
+                    nextNum = nextNum * base;
+                    nextPeriod = (int) Math.round(nextNum);
 
                 }
 

@@ -24,7 +24,7 @@ public class ParallelConfig {
 	/**
 	 * Whether to collect statistics of all constraints.
 	 */
-	public final static boolean CONSTRAINTS = true;
+	public final static boolean CONSTRAINTS = false;
 	/**
 	 * Maximal number of tuples per batch during execution.
 	 */
@@ -36,15 +36,23 @@ public class ParallelConfig {
 	/**
 	 * The minimal size of sparse columns.
 	 */
-	public static int SPARSE_KEY_SIZE = 10000;
+	public final static int SPARSE_KEY_SIZE = 10000;
 	/**
 	 * The minimal size of sparse columns.
 	 */
-	public static int SPARSE_FILTER_SIZE = 100;
+	public final static int SPARSE_FILTER_SIZE = 100;
 	/**
 	 * The minimum size of partitioned table
 	 */
-	public static int PARTITION_SIZE = 50000;
+	public final static int PARTITION_SIZE = 50000;
+	/**
+	 * The maximum size of statistics
+	 */
+	public final static int STATISTICS_SIZE = 20;
+	/**
+	 * Whether to assign constraint per thread.
+	 */
+	public final static boolean CONSTRAINT_PER_THREAD = true;
 	/**
 	 * The base of round counts to assign a new best join order
 	 * to executor thread.

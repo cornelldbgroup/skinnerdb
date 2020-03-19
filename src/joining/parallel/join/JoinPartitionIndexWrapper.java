@@ -33,9 +33,33 @@ public abstract class JoinPartitionIndexWrapper {
      */
     final ColumnData priorData;
     /**
+     * Reference to prior column data.
+     */
+    final IntData priorTest;
+    /**
+     * Reference to prior column data.
+     */
+    final IntData nextTest;
+    /**
      * Index on join column to use.
      */
     final Index nextIndex;
+    /**
+     * last prior value.
+     */
+    int lastValue = -1;
+    /**
+     * Last first position according to the last value.
+     */
+    int lastFirst = -1;
+    /**
+     * last start index of positions array.
+     */
+    int lastPositionsStart = -1;
+    /**
+     * last end index of positions array.
+     */
+    int lastPositionsEnd = -1;
     /**
      * Initialize index wrapper for
      * given query and join order.
@@ -55,9 +79,16 @@ public abstract class JoinPartitionIndexWrapper {
         nextTable = pos1<pos2?table2:table1;
         // Get column data reference for prior table
         priorData = equiPred.dataMentioned.get(priorTable);
+        priorTest = (IntData) priorData;
+        nextTest = (IntData) equiPred.dataMentioned.get(nextTable);
         // Get index for next table
         nextIndex = equiPred.indexMentioned.get(nextTable);
     }
+
+    /**
+     * Reset temporary variables at the beginning of the join episode.
+     */
+    public abstract void reset(int[] tupleIndices);
 
     /**
      * Extracts index of table in query column reference.
@@ -97,6 +128,9 @@ public abstract class JoinPartitionIndexWrapper {
      */
     public abstract int nextIndex(int[] tupleIndices, int[] nextSize);
 
+    public abstract int nextIndexFromLast(int[] tupleIndices, int[] nextSize);
+    public int nextIndexFromLast(int[] tupleIndices, int[] nextSize, int tid) {return 0;}
+
     /**
      * Propose next index in next table that
      * satisfies equi-join condition in partitions with
@@ -108,7 +142,9 @@ public abstract class JoinPartitionIndexWrapper {
      * @return              next interesting tuple index or cardinality
      */
     public abstract int nextIndexInScope(int[] tupleIndices, int tid, int[] nextSize);
+
     public abstract int nextIndexInScope(int[] tupleIndices, int tid, int[] nextSize, IntSet finishedThreads);
+
     /**
      * Propose next index in next table that
      * satisfies equi-join condition with
@@ -129,6 +165,7 @@ public abstract class JoinPartitionIndexWrapper {
      * @return	next interesting tuple index or cardinality
      */
     public abstract boolean evaluateInScope(int[] tupleIndices, int tid);
+
     public abstract boolean evaluateInScope(int[] tupleIndices, int tid, IntSet finishedThreads);
 
     @Override

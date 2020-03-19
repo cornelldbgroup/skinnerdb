@@ -1,32 +1,22 @@
 package joining.parallel.parallelization.search;
 
-import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Sets;
-import com.koloboke.collect.map.IntIntMap;
-import com.koloboke.collect.map.hash.HashIntIntMap;
-import com.koloboke.collect.map.hash.HashIntIntMaps;
+
 import com.koloboke.collect.set.IntSet;
-import com.koloboke.collect.set.hash.HashIntSet;
 import com.koloboke.collect.set.hash.HashIntSets;
 import config.ParallelConfig;
 import joining.parallel.join.SPJoin;
 import joining.parallel.uct.ASPNode;
-import joining.parallel.uct.SPNode;
 import joining.plan.HotSet;
 import joining.result.ResultTuple;
 import joining.uct.SelectionPolicy;
-import logs.LogUtils;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
-import preprocessing.Context;
 import query.QueryInfo;
-import statistics.QueryStats;
 
 import java.util.*;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 /**
  * The thread task for adptive search parallelization.
@@ -89,15 +79,16 @@ public class AdaptiveSearchTask implements Callable<SearchResult> {
         // Iterate until join result was generated
         double accReward = 0;
         int[] last = new int[1];
-        while (!finish.get()) {
+        boolean isFinished = false;
+        while (!isFinished) {
+            long timer0 = System.currentTimeMillis();
             ++roundCtr;
             double reward;
             last[0] = nrThreads - 1;
             List<Pair<Integer, Integer>> constraints = spJoin.constraints;
             int detect = spJoin.nextDetect;
-//            reward = root.sample(roundCtr, joinOrder, spJoin, policy, tags, weights, 0, last);
-//            spJoin.writeLog("Constraints: " + Arrays.toString(constraints.toArray()));
             reward = root.sample(roundCtr, joinOrder, spJoin, policy, constraints, detect);
+//            reward = spJoin.execute(new int[]{8, 2, 9, 1, 5, 7, 3, 6, 4, 0}, (int) roundCtr);
 
             // Count reward except for final sample
             if (!spJoin.isFinished()) {
@@ -116,38 +107,6 @@ public class AdaptiveSearchTask implements Callable<SearchResult> {
                 List<Pair<Integer, Integer>> newConstraints = new ArrayList<>();
                 IntSet cycle = HashIntSets.newMutableSet();
 
-                // hot predicates
-//                Map<Pair<Integer, Integer>, Double> counts = new HashMap<>();
-//                spJoin.constraintsStats.keySet().forEach(pair -> {
-//                    double less = 0;
-//                    double greater = 0;
-//                    for (SPJoin joinOp: joinOps) {
-//                        int[] stats = joinOp.constraintsStats.get(pair);
-//                        less += joinOp.statsCount == 0 ? 0 : (stats[0] + 0.0) / joinOp.statsCount;
-//                        greater += joinOp.statsCount == 0 ? 0 : (stats[1] + 0.0) / joinOp.statsCount;
-//                    }
-//                    counts.put(pair, Math.max(greater, less));
-//                });
-//
-//
-//                int size = counts.size();
-//                List<Pair<Integer, Integer>> sortedConstraints = counts.keySet().stream().sorted(
-//                        Comparator.comparing(counts::get)).collect(Collectors.toList());
-//
-//                for (int i = size - 1; i >= 0; i--) {
-//                    Pair<Integer, Integer> pair = sortedConstraints.get(i);
-//                    int left = pair.getLeft();
-//                    int right = pair.getRight();
-//                    if (!cycle.contains(left) || !cycle.contains(right)) {
-//                        newConstraints.add(pair);
-//                        cycle.add(left);
-//                        cycle.add(right);
-//                        if (newConstraints.size() == nrConstraints) {
-//                            break;
-//                        }
-//                    }
-//                }
-
                 // hot set
                 Map<HotSet, Double> setCounts = new HashMap<>();
                 for (SPJoin joinOp: joinOps) {
@@ -160,63 +119,88 @@ public class AdaptiveSearchTask implements Callable<SearchResult> {
                 int joinSize = setCounts.size();
                 List<HotSet> sortedJoin = setCounts.keySet().stream().sorted(
                         Comparator.comparing(setCounts::get)).collect(Collectors.toList());
-//                IntIntMap count = HashIntIntMaps.newMutableMap(query.nrJoined);
-                System.out.println("Hot Set: ");
-//                Set<Pair<Integer, Integer>> queryConstraints = new HashSet<>(query.constraints);
                 List<HotSet> topHostSet = new ArrayList<>();
-                for(int i = 0; i < joinSize; i++) {
-                    HotSet hotSet = sortedJoin.get(joinSize - 1 - i);
-                    topHostSet.add(hotSet);
-                    if (topHostSet.size() == nrConstraints) {
-                        topHostSet.sort(Comparator.comparing(set -> set.nrJoinedTables));
-                        Map<Integer, Integer> priority = new HashMap<>();
-                        for (int hi = 0; hi < topHostSet.size(); hi++) {
-                            HotSet set = topHostSet.get(hi);
-                            System.out.println(set.toString());
-//                            Pair<Integer, Integer> constraint = set.getConstraint(
-//                                    cycle, queryConstraints, count, query.joinConnection);
-                            IntSet next = hi == topHostSet.size() - 1 ?
-                                    HashIntSets.newMutableSet() : topHostSet.get(hi+1).hotSet;
-                            Pair<Integer, Integer> constraint = set.getConstraint(
-                                    cycle, query, next, priority);
-                            if (constraint != null) {
-                                newConstraints.add(constraint);
-                                System.out.println("New Constraints: " + constraint.toString());
-                                if (newConstraints.size() == nrConstraints) {
-                                    break;
-                                }
-                            }
 
-                        }
-                        topHostSet.clear();
+                if (ParallelConfig.CONSTRAINT_PER_THREAD) {
+//                    root.getConstraints(nrThreads, newConstraints);
+//                    // broadcast constraints to all of threads.
+//                    for (int i = 0; i < newConstraints.size(); i++) {
+//                        Pair<Integer, Integer> originalConstraint = newConstraints.get(i);
+//                        System.out.println("New Constraints: " + originalConstraint.toString());
+//                        List<Pair<Integer, Integer>> threadConstraints = new ArrayList<>();
+//                        threadConstraints.add(originalConstraint);
+//                        SPJoin joinOp = joinOps.get(i);
+//                        joinOp.constraints = threadConstraints;
+//                        joinOp.nextDetect = nextDetect;
+//                    }
+                    List<List<Pair<Integer, Integer>>> threadsConstraints = ASPNode.getNodeConstraints(nrThreads, root);
+                    for (int i = 0; i < nrThreads; i++) {
+//                        StringBuilder constraints_str = new StringBuilder();
+//                        for (int c = 0; c < threadsConstraints.get(i).size(); c++) {
+//                            constraints_str.append(threadsConstraints.get(i).get(c).toString());
+//                        }
+//                        System.out.println("Thread " + i + ": " + constraints_str);
+                        SPJoin joinOp = joinOps.get(i);
+                        joinOp.constraints = threadsConstraints.get(i);
+                        joinOp.nextDetect = nextDetect;
                     }
-                    if (newConstraints.size() == nrConstraints || cycle.size() == query.nrJoined) {
-                        break;
-                    }
-                }
-
-                // broadcast constraints to all of threads.
-                for (SPJoin joinOp: joinOps) {
-                    int spID = joinOp.tid;
-                    StringBuilder binary = new StringBuilder(Integer.toBinaryString(spID));
-                    List<Pair<Integer, Integer>> threadConstraints = new ArrayList<>();
-                    while (binary.length() < nrConstraints) {
-                        binary.insert(0, "0");
-                    }
-                    for (int i = 0; i < newConstraints.size(); i++) {
-                        char tag = binary.charAt(i);
-                        Pair<Integer, Integer> originalConstraint = newConstraints.get(i);
-                        Pair<Integer, Integer> constraint = tag == '0' ? originalConstraint :
-                                new ImmutablePair<>(originalConstraint.getRight(), originalConstraint.getLeft());
-                        threadConstraints.add(constraint);
-                    }
-                    joinOp.constraints = threadConstraints;
-                    joinOp.nextDetect = nextDetect;
-                }
 //                nextDetect = nextDetect * 10;
-                nextDetect = Integer.MAX_VALUE;
-            }
+                    nextDetect = Integer.MAX_VALUE;
+                }
+                else {
+                    System.out.println("Hot Set: ");
+                    for(int i = 0; i < joinSize; i++) {
+                        HotSet hotSet = sortedJoin.get(joinSize - 1 - i);
+                        topHostSet.add(hotSet);
+                        if (topHostSet.size() == nrConstraints) {
+                            topHostSet.sort(Comparator.comparing(set -> set.nrJoinedTables));
+                            Map<Integer, Integer> priority = new HashMap<>();
+                            for (int hi = 0; hi < topHostSet.size(); hi++) {
+                                HotSet set = topHostSet.get(hi);
+                                System.out.println(set.toString());
+                                IntSet next = hi == topHostSet.size() - 1 ?
+                                        HashIntSets.newMutableSet() : topHostSet.get(hi+1).hotSet;
+                                Pair<Integer, Integer> constraint = set.getConstraint(
+                                        cycle, query, next, priority);
+                                if (constraint != null) {
+                                    newConstraints.add(constraint);
+                                    System.out.println("New Constraints: " + constraint.toString());
+                                    if (newConstraints.size() == nrConstraints) {
+                                        break;
+                                    }
+                                }
 
+                            }
+                            topHostSet.clear();
+                        }
+                        if (newConstraints.size() == nrConstraints || cycle.size() == query.nrJoined) {
+                            break;
+                        }
+                    }
+
+                    // broadcast constraints to all of threads.
+                    for (SPJoin joinOp: joinOps) {
+                        int spID = joinOp.tid;
+                        StringBuilder binary = new StringBuilder(Integer.toBinaryString(spID));
+                        List<Pair<Integer, Integer>> threadConstraints = new ArrayList<>();
+                        while (binary.length() < nrConstraints) {
+                            binary.insert(0, "0");
+                        }
+                        for (int i = 0; i < newConstraints.size(); i++) {
+                            char tag = binary.charAt(i);
+                            Pair<Integer, Integer> originalConstraint = newConstraints.get(i);
+                            Pair<Integer, Integer> constraint = tag == '0' ? originalConstraint :
+                                    new ImmutablePair<>(originalConstraint.getRight(), originalConstraint.getLeft());
+                            threadConstraints.add(constraint);
+                        }
+                        joinOp.constraints = threadConstraints;
+                        joinOp.nextDetect = nextDetect;
+                    }
+//                nextDetect = nextDetect * 10;
+                    nextDetect = Integer.MAX_VALUE;
+                }
+            }
+            isFinished = finish.get();
 
 //            if (roundCtr == 100000 && tid < 8) {
 //                List<String>[] logs = new List[1];

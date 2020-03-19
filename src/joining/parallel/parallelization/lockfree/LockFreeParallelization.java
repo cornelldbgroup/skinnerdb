@@ -2,6 +2,7 @@ package joining.parallel.parallelization.lockfree;
 
 import config.JoinConfig;
 import config.LoggingConfig;
+import config.ParallelConfig;
 import expressions.compilation.KnaryBoolEval;
 import joining.parallel.plan.LeftDeepPartitionPlan;
 import joining.progress.ProgressTracker;
@@ -82,7 +83,7 @@ public class LockFreeParallelization extends Parallelization {
         // Initialize variables for broadcasting.
         int nrTables = query.nrJoined;
         // initialize an end plan.
-        EndPlan endPlan = new EndPlan(nrThreads, nrTables, dpJoins.get(0).cardinalities);
+        EndPlan endPlan = new EndPlan(nrThreads, nrTables, root);
         List<LockFreeTask> tasks = new ArrayList<>();
         // Mutex shared by multiple threads.
         ReentrantLock lock = new ReentrantLock();
@@ -92,6 +93,9 @@ public class LockFreeParallelization extends Parallelization {
         List<String>[] logs = new List[nrThreads];
         for (int i = 0; i < nrThreads; i++) {
             logs[i] = new ArrayList<>();
+        }
+        if (nrThreads == 1) {
+            JoinConfig.PARALLEL_WEIGHT = JoinConfig.EXPLORATION_WEIGHT;
         }
         for (int i = 0; i < nrThreads; i++) {
             LockFreeTask lockFreeTask = new LockFreeTask(query, context, root, endPlan, end, finish, lock, dpJoins.get(i));

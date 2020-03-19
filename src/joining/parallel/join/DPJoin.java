@@ -87,6 +87,10 @@ public abstract class DPJoin {
      */
     public int largeTable;
     /**
+     * Last large table.
+     */
+    public int deepIndex;
+    /**
      * Whether we have progress on the split table.
      */
     public boolean noProgressOnSplit;

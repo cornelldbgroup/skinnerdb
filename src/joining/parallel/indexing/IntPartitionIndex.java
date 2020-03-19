@@ -175,6 +175,7 @@ public class IntPartitionIndex extends PartitionIndex {
                 }
             });
         }
+        int nrPos = positions == null ? 0 : positions.length;
     }
 
     /**

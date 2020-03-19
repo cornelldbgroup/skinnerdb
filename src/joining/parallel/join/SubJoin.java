@@ -1,6 +1,7 @@
 package joining.parallel.join;
 
 import config.JoinConfig;
+import config.LoggingConfig;
 import config.ParallelConfig;
 import config.PreConfig;
 import expressions.compilation.KnaryBoolEval;
@@ -15,6 +16,7 @@ import preprocessing.Context;
 import query.QueryInfo;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class SubJoin extends SPJoin {
     /**
@@ -110,7 +112,6 @@ public class SubJoin extends SPJoin {
      */
     @Override
     public double execute(int[] order, int roundCtr) throws Exception {
-        long timer0 = System.currentTimeMillis();
         // Treat special case: at least one input relation is empty
         for (int tableCtr=0; tableCtr<nrJoined; ++tableCtr) {
             if (cardinalities[tableCtr]==0) {
@@ -124,12 +125,10 @@ public class SubJoin extends SPJoin {
             tableIndex[order[i]] = i;
         }
         lastIndex = 0;
-        Arrays.fill(nrIndexed, 0);
-        Arrays.fill(nrVisited, 0);
         int joinHash = joinOrder.splitHashCode(-1);
         LeftDeepPartitionPlan plan = planCache.get(joinHash);
         if (plan == null) {
-            plan = new LeftDeepPartitionPlan(query, predToEval, joinOrder);
+            plan = new LeftDeepPartitionPlan(query, predToEval, joinOrder, tid);
             planCache.putIfAbsent(joinHash, plan);
         }
 //        long timer1 = System.currentTimeMillis();
@@ -138,7 +137,9 @@ public class SubJoin extends SPJoin {
 //        int firstTable = getFirstLargeTable(order);
         int firstTable = leftTable;
         State state = tracker.continueFromSP(joinOrder, tid, firstTable);
-//        writeLog("Round: " + roundCtr + "\t" + "Join: " + Arrays.toString(order));
+        if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
+            writeLog("Round: " + roundCtr + "\t" + "Join: " + Arrays.toString(order));
+        }
         int[] offsets;
         if (JoinConfig.OFFSETS_SHARING) {
             offsets = Arrays.copyOf(tracker.tableOffset, nrJoined);
@@ -161,34 +162,31 @@ public class SubJoin extends SPJoin {
             else {
                 state.tupleIndices[table] = 0;
             }
+            plan.joinIndices.get(i).forEach(index ->index.reset(state.tupleIndices));
         }
         executeWithBudget(plan, state, offsets);
 //        long timer3 = System.currentTimeMillis();
         // update stats for the constraints
         if (ParallelConfig.CONSTRAINTS && ParallelConfig.PARALLEL_SPEC == 8) {
-//            constraintsStats.forEach((pair, stats) -> {
-//                int table1 = pair.getLeft();
-//                int table2 = pair.getRight();
-//                int index1 = tableIndex[table1];
-//                int index2 = tableIndex[table2];
-//                if (index1 > lastIndex && index2 <= lastIndex) {
-//                    stats[1]++;
-//                    statsCount++;
-//                }
-//                else if (index2 > lastIndex && index1 <= lastIndex) {
-//                    stats[0]++;
-//                    statsCount++;
-//                }
-//            });
             Set<Integer> joinedTable = new HashSet<>(nrJoined);
             boolean single = query.joinConnection.get(leftTable).size() == 1;
             for (int i = 0; i < nrJoined - 1; i++) {
                 joinedTable.add(order[i]);
                 if (!(i == 1 && single)) {
                     HotSet hotSet = new HotSet(joinedTable, nrJoined);
-                    joinStats.merge(hotSet, 1, Integer::sum);
-                    statsCount++;
+                    int preValue = joinStats.getOrDefault(hotSet, 0);
+                    if (joinStats.size() <= ParallelConfig.STATISTICS_SIZE || preValue > 0 || roundCtr < 80) {
+                        joinStats.put(hotSet, preValue + 1);
+                        statsCount++;
+                    }
                 }
+            }
+            if (roundCtr == 80 && joinStats.size() > ParallelConfig.STATISTICS_SIZE) {
+                int size = joinStats.size();
+                List<HotSet> sortedJoin = joinStats.keySet().stream().sorted(
+                        Comparator.comparing(joinStats::get)).collect(Collectors.toList()).
+                        subList(0, size - ParallelConfig.STATISTICS_SIZE);
+                sortedJoin.forEach(joinStats::remove);
             }
         }
 //        long timer4 = System.currentTimeMillis();
@@ -263,7 +261,6 @@ public class SubJoin extends SPJoin {
 //                System.out.println("Wrong");
 //            }
 //        }
-
         return true;
     }
 
@@ -296,7 +293,6 @@ public class SubJoin extends SPJoin {
         int nextCardinality = cardinalities[nextTable];
         List<JoinPartitionIndexWrapper> indexWrappers = indexWrappersList.get(curIndex);
         // If there is no equi-predicates.
-        List<String> time = new ArrayList<>();
         if (indexWrappers.isEmpty()) {
             tupleIndices[nextTable]++;
         }
@@ -313,7 +309,8 @@ public class SubJoin extends SPJoin {
                     }
                 }
 //                long timer11 = System.currentTimeMillis();
-                int nextRaw = wrapper.nextIndex(tupleIndices, null);
+//                int nextRaw = wrapper.nextIndex(tupleIndices, null);
+                int nextRaw = wrapper.nextIndexFromLast(tupleIndices, null, tid);
 //                long timer12 = System.currentTimeMillis();
                 if (nextRaw < 0 || nextRaw == nextCardinality) {
                     tupleIndices[nextTable] = nextCardinality;

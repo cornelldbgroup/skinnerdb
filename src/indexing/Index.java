@@ -39,10 +39,6 @@ public abstract class Index {
 	 */
 	public boolean sorted = true;
 	/**
-	 * Whether it is unique key.
-	 */
-	public boolean filterSorted = true;
-	/**
 	 * Initialize for given cardinality of indexed table.
 	 * 
 	 * @param cardinality	number of rows to index

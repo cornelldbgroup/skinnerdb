@@ -28,11 +28,26 @@ public class JoinDoublePartitionWrapper extends JoinPartitionIndexWrapper {
     }
 
     @Override
+    public void reset(int[] tupleIndices) {
+
+    }
+
+    @Override
     public int nextIndex(int[] tupleIndices, int[] nextSize) {
         int priorTuple = tupleIndices[priorTable];
         double priorVal = priorDoubleData.data[priorTuple];
         int curTuple = tupleIndices[nextTable];
         return nextDoubleIndex.nextTuple(priorVal, curTuple, nextTable, nextSize);
+    }
+
+    @Override
+    public int nextIndexFromLast(int[] tupleIndices, int[] nextSize) {
+        return 0;
+    }
+
+    @Override
+    public int nextIndexFromLast(int[] tupleIndices, int[] nextSize, int tid) {
+        return 0;
     }
 
     @Override

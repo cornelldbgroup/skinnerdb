@@ -151,12 +151,12 @@ public class ModJoin extends DPJoin {
         // Lookup or generate left-deep query plan
         JoinOrder joinOrder = new JoinOrder(order);
         int joinHash = joinOrder.splitHashCode(-1);
+//        long timer1 = System.currentTimeMillis();
         LeftDeepPartitionPlan plan = planCache.get(joinHash);
         if (plan == null) {
             plan = new LeftDeepPartitionPlan(query, predToEval, joinOrder);
             planCache.putIfAbsent(joinHash, plan);
         }
-//        long timer1 = System.currentTimeMillis();
         int splitHash = nrThreads == 1 ? 0 : plan.splitStrategies[splitTable];
         // Execute from ing state, save progress, return progress
 
@@ -661,16 +661,17 @@ public class ModJoin extends DPJoin {
         // Number of completed tuples added
         nrResultTuples = 0;
         Arrays.fill(this.nrVisits, 0);
+        deepIndex = -1;
         // Execute join order until budget depleted or all input finished -
         // at each iteration start, tuple indices contain next tuple
         // combination to look at.
         while (remainingBudget > 0 && joinIndex >= 0) {
-
 //            ++statsInstance.nrIterations;
             //log("Offsets:\t" + Arrays.toString(offsets));
             //log("Indices:\t" + Arrays.toString(tupleIndices));
             // Get next table in join order
             int nextTable = plan.joinOrder.order[joinIndex];
+            deepIndex = Math.max(deepIndex, joinIndex);
 //            writeLog("Indices: " + Arrays.toString(tupleIndices));
             // Integrate table offset
             tupleIndices[nextTable] = Math.max(

@@ -7,6 +7,7 @@ import joining.uct.SelectionPolicy;
 import preprocessing.Context;
 import query.QueryInfo;
 
+import java.util.Arrays;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -83,15 +84,16 @@ public class TreeTask implements Callable<TreeResult> {
             }
             // broadcasting the finished plan.
             else {
-                if (!finish.get()) {
-                    finish.set(true);
+                if (finish.compareAndSet(false, true)) {
+                    System.out.println("Finish id: " + tid + "\t" + Arrays.toString(joinOrder) + "\t" + roundCtr);
+                    spJoin.roundCtr = roundCtr;
                 }
+                break;
             }
 //            joinOp.writeLog("Episode Time: " + (end - start) + "\tReward: " + reward);
         }
         // Materialize result table
         long timer2 = System.currentTimeMillis();
-        spJoin.roundCtr = roundCtr;
         System.out.println("Thread " + tid + " " + (timer2 - timer1) + "\t Round: " + roundCtr);
         Set<ResultTuple> tuples = spJoin.result.tuples;
         return new TreeResult(tuples, spJoin.logs, tid);

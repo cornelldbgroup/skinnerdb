@@ -33,7 +33,7 @@ public class LockFreeTask implements Callable<LockFreeResult>{
     /**
      * The root of parallel UCT tree.
      */
-    private DPNode root;
+    private volatile DPNode root;
     /**
      * The finished plan.
      */
@@ -86,6 +86,7 @@ public class LockFreeTask implements Callable<LockFreeResult>{
         double accReward = 0;
         Set<Integer> finishedTables = new HashSet<>();
         while (!terminated.get()) {
+            DPNode root = endPlan.root;
             ++roundCtr;
             double reward = 0;
             int finalTable = endPlan.getSplitTable();
@@ -94,7 +95,7 @@ public class LockFreeTask implements Callable<LockFreeResult>{
                 joinOp.isShared = true;
 
                 if (ParallelConfig.HEURISTIC_SHARING) {
-                    int lastTable = joinOp.lastTable;
+                    int lastTable;
                     if (finishedTables.contains(finalTable)) {
                         int table = root.getSplitTableByCard(joinOrder, joinOp.cardinalities, finishedTables);
                         if (table == -1) {
@@ -166,9 +167,8 @@ public class LockFreeTask implements Callable<LockFreeResult>{
 //                System.out.println("Write to logs!");
 //                System.exit(0);
 //            }
-            // Consider memory loss
-            if (JoinConfig.FORGET && ParallelConfig.EXE_THREADS == 1 && roundCtr==nextForget) {
-                root = new DPNode(roundCtr, query, true, 1);
+            if (JoinConfig.FORGET && roundCtr == nextForget) {
+                endPlan.root = new DPNode(roundCtr, query, true, ParallelConfig.EXE_THREADS);
                 nextForget *= 10;
             }
         }

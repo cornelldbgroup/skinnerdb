@@ -6,11 +6,8 @@ import expressions.ExpressionInfo;
 import expressions.compilation.KnaryBoolEval;
 import joining.join.JoinDoubleWrapper;
 import joining.join.JoinIntWrapper;
-import joining.parallel.join.JoinDoublePartitionWrapper;
-import joining.parallel.join.JoinIntPartitionWrapper;
+import joining.parallel.join.*;
 import joining.plan.JoinOrder;
-import joining.parallel.join.DPJoin;
-import joining.parallel.join.JoinPartitionIndexWrapper;
 import net.sf.jsqlparser.expression.Expression;
 import predicate.NonEquiNode;
 import query.ColumnRef;
@@ -140,6 +137,180 @@ public class LeftDeepPartitionPlan {
 
 		} // over join positions
 	}
+
+	public LeftDeepPartitionPlan(
+			QueryInfo query,
+			Map<Expression, NonEquiNode> evalMap,
+			JoinOrder joinOrder,
+			int tid)
+			throws Exception {
+		// Count generated plan
+		int nrTables = query.nrJoined;
+		this.joinOrder = joinOrder;
+		int[] order = joinOrder.order;
+		splitStrategies = new int[order.length];
+		// Initialize remaining predicates
+		List<ExpressionInfo> remainingEquiPreds = new ArrayList<>(query.equiJoinPreds);
+		List<ExpressionInfo> remainingPreds = new ArrayList<>();
+		// Initialize nonEquiJoinPredicates
+		for (ExpressionInfo predInfo : query.nonEquiJoinPreds) {
+			if (predInfo.aliasesMentioned.size()>1) {
+				remainingPreds.add(predInfo);
+			}
+		}
+		// Initialize applicable predicates
+		joinIndices = new ArrayList<>();
+		applicablePreds = new ArrayList<>();
+		nonEquiNodes = new ArrayList<>();
+		for (int tableCtr=0; tableCtr<nrTables; ++tableCtr) {
+			joinIndices.add(new ArrayList<>());
+			applicablePreds.add(new ArrayList<>());
+			nonEquiNodes.add(new ArrayList<>());
+		}
+		// Iterate over join order positions, adding tables
+		Set<Integer> availableTables = new HashSet<>();
+		int noEquiPredsId = query.equiJoinPreds.size();
+		for (int joinCtr=0; joinCtr<nrTables; ++joinCtr) {
+			int nextTable = order[joinCtr];
+			availableTables.add(nextTable);
+			// Iterate over remaining equi-join predicates
+			Iterator<ExpressionInfo> equiPredsIter = remainingEquiPreds.iterator();
+			boolean first = true;
+			while (equiPredsIter.hasNext()) {
+				ExpressionInfo equiPred = equiPredsIter.next();
+				if (availableTables.containsAll(
+						equiPred.aliasIdxMentioned)) {
+					// initialize split strategy
+					if (first) {
+						splitStrategies[nextTable] = equiPred.pid;
+						first = false;
+					}
+					switch (equiPred.type) {
+						case INT:
+							switch (tid) {
+								case 0:
+									joinIndices.get(joinCtr).add(new JoinIntPartitionWrapper0(equiPred, order));
+									break;
+								case 1:
+									joinIndices.get(joinCtr).add(new JoinIntPartitionWrapper1(equiPred, order));
+									break;
+								case 2:
+									joinIndices.get(joinCtr).add(new JoinIntPartitionWrapper2(equiPred, order));
+									break;
+								case 3:
+									joinIndices.get(joinCtr).add(new JoinIntPartitionWrapper3(equiPred, order));
+									break;
+								case 4:
+									joinIndices.get(joinCtr).add(new JoinIntPartitionWrapper4(equiPred, order));
+									break;
+								case 5:
+									joinIndices.get(joinCtr).add(new JoinIntPartitionWrapper5(equiPred, order));
+									break;
+								case 6:
+									joinIndices.get(joinCtr).add(new JoinIntPartitionWrapper6(equiPred, order));
+									break;
+								case 7:
+									joinIndices.get(joinCtr).add(new JoinIntPartitionWrapper7(equiPred, order));
+									break;
+								case 8:
+									joinIndices.get(joinCtr).add(new JoinIntPartitionWrapper8(equiPred, order));
+									break;
+								case 9:
+									joinIndices.get(joinCtr).add(new JoinIntPartitionWrapper9(equiPred, order));
+									break;
+								case 10:
+									joinIndices.get(joinCtr).add(new JoinIntPartitionWrapper10(equiPred, order));
+									break;
+								case 11:
+									joinIndices.get(joinCtr).add(new JoinIntPartitionWrapper11(equiPred, order));
+									break;
+								case 12:
+									joinIndices.get(joinCtr).add(new JoinIntPartitionWrapper12(equiPred, order));
+									break;
+								case 13:
+									joinIndices.get(joinCtr).add(new JoinIntPartitionWrapper13(equiPred, order));
+									break;
+								case 14:
+									joinIndices.get(joinCtr).add(new JoinIntPartitionWrapper14(equiPred, order));
+									break;
+								case 15:
+									joinIndices.get(joinCtr).add(new JoinIntPartitionWrapper15(equiPred, order));
+									break;
+								case 16:
+									joinIndices.get(joinCtr).add(new JoinIntPartitionWrapper16(equiPred, order));
+									break;
+								case 17:
+									joinIndices.get(joinCtr).add(new JoinIntPartitionWrapper17(equiPred, order));
+									break;
+								case 18:
+									joinIndices.get(joinCtr).add(new JoinIntPartitionWrapper18(equiPred, order));
+									break;
+								case 19:
+									joinIndices.get(joinCtr).add(new JoinIntPartitionWrapper19(equiPred, order));
+									break;
+								case 20:
+									joinIndices.get(joinCtr).add(new JoinIntPartitionWrapper20(equiPred, order));
+									break;
+								case 21:
+									joinIndices.get(joinCtr).add(new JoinIntPartitionWrapper21(equiPred, order));
+									break;
+								case 22:
+									joinIndices.get(joinCtr).add(new JoinIntPartitionWrapper22(equiPred, order));
+									break;
+								case 23:
+									joinIndices.get(joinCtr).add(new JoinIntPartitionWrapper23(equiPred, order));
+									break;
+								case 24:
+									joinIndices.get(joinCtr).add(new JoinIntPartitionWrapper24(equiPred, order));
+									break;
+								case 25:
+									joinIndices.get(joinCtr).add(new JoinIntPartitionWrapper25(equiPred, order));
+									break;
+								case 26:
+									joinIndices.get(joinCtr).add(new JoinIntPartitionWrapper26(equiPred, order));
+									break;
+								case 27:
+									joinIndices.get(joinCtr).add(new JoinIntPartitionWrapper27(equiPred, order));
+									break;
+								case 28:
+									joinIndices.get(joinCtr).add(new JoinIntPartitionWrapper28(equiPred, order));
+									break;
+								default:
+									joinIndices.get(joinCtr).add(new JoinIntPartitionWrapper29(equiPred, order));
+									break;
+							}
+							break;
+						case DOUBLE:
+							joinIndices.get(joinCtr).add(new JoinDoublePartitionWrapper(equiPred, order));
+							break;
+						default:
+							throw new SQLexception("Error - no support for equality "
+									+ "join predicates between columns of type " + equiPred.type);
+					}
+					equiPredsIter.remove();
+				}
+			}
+			if (first) {
+				splitStrategies[nextTable] = noEquiPredsId;
+				noEquiPredsId++;
+			}
+			// Iterate over remaining other predicates
+			Iterator<ExpressionInfo> generalPredsIter =
+					remainingPreds.iterator();
+			while (generalPredsIter.hasNext()) {
+				ExpressionInfo pred = generalPredsIter.next();
+				if (availableTables.containsAll(
+						pred.aliasIdxMentioned)) {
+					NonEquiNode nonEquiNode = evalMap.get(
+							pred.finalExpression);
+					nonEquiNodes.get(joinCtr).add(nonEquiNode);
+					generalPredsIter.remove();
+				}
+			}
+
+		} // over join positions
+	}
+
 	@Override
 	public String toString() {
 		return "Join indices:\t" + joinIndices.toString() + System.lineSeparator() +

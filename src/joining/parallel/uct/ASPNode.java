@@ -11,6 +11,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 /**
  * Represents node in search parallel UCT search tree.
@@ -59,7 +60,7 @@ public class ASPNode {
     /**
      * node statistics that should be aligned to a cache line
      */
-    public NodeStatistics[] nodeStatistics;
+    public volatile NodeStatistics[] nodeStatistics;
     /**
      * Total number of tables to join.
      */
@@ -901,4 +902,162 @@ public class ASPNode {
             return reward;
         }
     }
+
+    public void getConstraints(int size, List<Pair<Integer, Integer>> constraints) {
+        ASPNode node = this;
+        while (constraints.size() < size) {
+            if (node.recommendedActions.size() > 1) {
+                int[] nrTries = new int[node.nrActions];
+                // collect all statistics
+                for (int i = 0; i < nrThreads; i++) {
+                    NodeStatistics threadStats = node.nodeStatistics[i];
+                    for (Integer recAction : node.recommendedActions) {
+                        int threadTries = threadStats.nrTries[recAction];
+                        nrTries[recAction] += threadTries;
+                    }
+                }
+                int hotIndex = -1;
+                int hotVisits = -1;
+                for (Integer action: node.recommendedActions) {
+                    hotIndex = nrTries[action] > hotVisits ? action : hotIndex;
+                    hotVisits = Math.max(hotVisits, nrTries[action]);
+                }
+                if (node.treeLevel == 0) {
+                    int finalHotIndex = hotIndex;
+                    int otherIndex = node.recommendedActions.stream().
+                            filter(action -> action != finalHotIndex).findFirst().orElse(-1);
+                    if (finalHotIndex >= 0 && otherIndex >= 0) {
+                        constraints.add(new ImmutablePair<>(node.nextTable[otherIndex], node.nextTable[finalHotIndex]));
+                    }
+                }
+                else {
+                    for (Integer action: node.recommendedActions) {
+                        if (action != hotIndex) {
+                            constraints.add(new ImmutablePair<>(node.nextTable[action], node.nextTable[hotIndex]));
+                        }
+                        if (constraints.size() >= size) {
+                            return;
+                        }
+
+                    }
+                }
+                node = node.childNodes[hotIndex];
+                if (node == null) {
+                    return;
+                }
+            }
+            else if (node.nrActions > 0) {
+                int hotIndex = node.recommendedActions.iterator().next();
+                node = node.childNodes[hotIndex];
+                if (node == null) {
+                    return;
+                }
+            }
+            else {
+                break;
+            }
+        }
+    }
+
+    public static List<List<Pair<Integer, Integer>>> getNodeConstraints(int nrThreads, ASPNode node) {
+        List<List<Pair<Integer, Integer>>> threadsConstraints = new ArrayList<>(nrThreads);
+        IntStream.range(0, nrThreads).forEach(i -> threadsConstraints.add(new ArrayList<>()));
+        int lastThread = nrThreads - 1;
+        while (lastThread > 0) {
+            if (node.recommendedActions.size() > 1) {
+                int[] nrTries = new int[node.nrActions];
+                // collect all statistics
+                for (int i = 0; i < nrThreads; i++) {
+                    NodeStatistics threadStats = node.nodeStatistics[i];
+                    for (Integer recAction : node.recommendedActions) {
+                        int threadTries = threadStats.nrTries[recAction];
+                        nrTries[recAction] += threadTries;
+                    }
+                }
+                List<Integer> sortedIndex = node.recommendedActions.stream().sorted(
+                        Comparator.comparing(action -> -1 * nrTries[action])).collect(Collectors.toList());
+//                ASPNode finalNode = node;
+//                System.out.println(Arrays.toString(sortedIndex.stream().mapToInt(action -> finalNode.nextTable[action]).toArray()));
+                int hotIndex = sortedIndex.get(0);
+                if (node.treeLevel == 0) {
+                    int otherIndex = sortedIndex.get(1);
+                    int leftTable = node.nextTable[hotIndex];
+                    int rightTable = node.nextTable[otherIndex];
+                    Pair<Integer, Integer> hotConstraint = new ImmutablePair<>(leftTable, rightTable);
+                    Pair<Integer, Integer> complementConstraint = new ImmutablePair<>(rightTable, leftTable);
+                    for (int i = 0; i < lastThread; i++) {
+                        threadsConstraints.get(i).add(hotConstraint);
+                    }
+                    threadsConstraints.get(lastThread).add(complementConstraint);
+
+//                    int nrTables = node.nrActions - 1;
+//                    for (int i = 0; i < lastThread - nrTables + 1; i++) {
+//                        threadsConstraints.get(i).add(hotConstraint);
+//                    }
+//                    for (int i = lastThread - nrTables + 1; i <= lastThread; i++) {
+//                        int sid = i - (lastThread - nrTables);
+//                        int table = node.nextTable[sortedIndex.get(sid)];
+//                        threadsConstraints.get(lastThread).add(new ImmutablePair<>(table, -1));
+//                    }
+                    lastThread--;
+                }
+                else {
+                    int rval = 1;
+                    int nrConstraints = 0;
+                    while(rval <= lastThread + 1) {
+                        rval <<= 1;
+                        nrConstraints++;
+                    }
+                    nrConstraints = Math.min(node.recommendedActions.size() - 1, nrConstraints - 1);
+                    rval = (int) Math.pow(2, nrConstraints);
+                    List<Pair<Integer, Integer>> hotConstraints = new ArrayList<>(nrConstraints);
+                    List<Pair<Integer, Integer>> complementConstraints = new ArrayList<>(nrConstraints);
+                    for (int cid = 0; cid < nrConstraints; cid++) {
+                        int leftTable = node.nextTable[sortedIndex.get(cid)];
+                        int rightTable = node.nextTable[sortedIndex.get(cid + 1)];
+                        Pair<Integer, Integer> hotConstraint = new ImmutablePair<>(leftTable, rightTable);
+                        Pair<Integer, Integer> complementConstraint = new ImmutablePair<>(rightTable, leftTable);
+                        hotConstraints.add(hotConstraint);
+                        complementConstraints.add(complementConstraint);
+                    }
+//                    for (int cid = 0; cid < nrConstraints; cid++) {
+//                        for (int i = 0; i < lastThread - rval + 1; i++) {
+//                            threadsConstraints.get(i).add(hotConstraints.get(cid));
+//                        }
+//                    }
+                    for (int i = lastThread - rval + 1; i <= lastThread; i++) {
+                        int sid = i - (lastThread - rval + 1);
+                        StringBuilder binary = new StringBuilder(Integer.toBinaryString(sid));
+                        while (binary.length() < nrConstraints) {
+                            binary.insert(0, "0");
+                        }
+                        for (int cid = 0; cid < nrConstraints; cid++) {
+                            char tag = binary.charAt(cid);
+                            Pair<Integer, Integer> target = tag == '0' ?
+                                    hotConstraints.get(cid) : complementConstraints.get(cid);
+                            threadsConstraints.get(i).add(target);
+                        }
+                    }
+                    lastThread = lastThread - rval;
+
+                }
+                node = node.childNodes[hotIndex];
+                if (node == null) {
+                    break;
+                }
+            }
+            else if (node.nrActions > 0) {
+                int hotIndex = node.recommendedActions.iterator().next();
+                node = node.childNodes[hotIndex];
+                if (node == null) {
+                    break;
+                }
+            }
+            else {
+                break;
+            }
+        }
+        return threadsConstraints;
+    }
+
 }

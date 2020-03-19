@@ -30,6 +30,8 @@ public class ThreadPool {
     public static void initThreadsPool(int nrThreads, int preThreads) {
         if (nrThreads > 0) {
             executorService = Executors.newFixedThreadPool(nrThreads);
+//            executorService = Executors.newFixedThreadPool(nrThreads,
+//                    new AffinityThreadFactory("bg", SAME_CORE, DIFFERENT_SOCKET, ANY));
         }
         if (preThreads > 0) {
             preprocessingService = Executors.newFixedThreadPool(preThreads);
