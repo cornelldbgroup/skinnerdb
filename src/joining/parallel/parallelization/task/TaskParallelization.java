@@ -2,6 +2,7 @@ package joining.parallel.parallelization.task;
 
 import config.LoggingConfig;
 import config.ParallelConfig;
+import joining.parallel.join.FixJoin;
 import joining.parallel.join.SPJoin;
 import joining.parallel.join.SubJoin;
 import joining.parallel.parallelization.Parallelization;
@@ -31,7 +32,7 @@ public class TaskParallelization extends Parallelization {
     /**
      * Multiple join operators for threads
      */
-    private List<SPJoin> spJoins = new ArrayList<>();
+    private List<FixJoin> spJoins = new ArrayList<>();
     /**
      * initialization of parallelization
      *
@@ -54,7 +55,7 @@ public class TaskParallelization extends Parallelization {
         int nrTables = query.nrJoined;
         ParallelProgressTracker tracker = new ParallelProgressTracker(nrTables, nrThreads, 1);
         for (int i = 0; i < nrThreads; i++) {
-            SubJoin modJoin = new SubJoin(query, context, budget, nrThreads, i, predToEval);
+            FixJoin modJoin = new FixJoin(query, context, budget, nrThreads, i, predToEval);
             modJoin.tracker = tracker;
             spJoins.add(modJoin);
         }
@@ -77,28 +78,29 @@ public class TaskParallelization extends Parallelization {
             logs[i] = new ArrayList<>();
         }
         for (int i = 0; i < nrThreads; i++) {
-            SPJoin spJoin = spJoins.get(i);
+            FixJoin spJoin = spJoins.get(i);
             ExecutorTask executorTask = new ExecutorTask(query, spJoin, end, best);
             tasks.add(executorTask);
         }
         long executionStart = System.currentTimeMillis();
-        List<Future<TaskResult>> futures = executorService.invokeAll(tasks);
+        TaskResult result = executorService.invokeAny(tasks);
         long executionEnd = System.currentTimeMillis();
         JoinStats.exeTime = executionEnd - executionStart;
         JoinStats.subExeTime.add(JoinStats.exeTime);
-        futures.forEach(futureResult -> {
-            try {
-                TaskResult result = futureResult.get();
-                resultList.addAll(result.result);
-                if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
-                    logs[result.id] = result.logs;
-                }
-
-            } catch (InterruptedException | ExecutionException e) {
-                e.printStackTrace();
-            }
-
-        });
+        resultList.addAll(result.result);
+//        futures.forEach(futureResult -> {
+//            try {
+//                TaskResult result = futureResult.get();
+//                resultList.addAll(result.result);
+//                if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
+//                    logs[result.id] = result.logs;
+//                }
+//
+//            } catch (InterruptedException | ExecutionException e) {
+//                e.printStackTrace();
+//            }
+//
+//        });
 
         long nrSamples = 0;
         for (SPJoin joinOp: spJoins) {

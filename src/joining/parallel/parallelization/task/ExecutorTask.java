@@ -2,6 +2,7 @@ package joining.parallel.parallelization.task;
 
 import config.JoinConfig;
 import config.ParallelConfig;
+import joining.parallel.join.FixJoin;
 import joining.parallel.join.SPJoin;
 import joining.parallel.parallelization.tree.TreeResult;
 import joining.parallel.uct.ASPNode;
@@ -18,6 +19,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicIntegerArray;
 
 public class ExecutorTask implements Callable<TaskResult> {
     /**
@@ -27,7 +29,7 @@ public class ExecutorTask implements Callable<TaskResult> {
     /**
      * Multi-way join operator.
      */
-    private final SPJoin spJoin;
+    private final FixJoin spJoin;
     /**
      * Shared atomic flags among all threads.
      * It indicates whether the join finishes.
@@ -39,7 +41,7 @@ public class ExecutorTask implements Callable<TaskResult> {
      */
     private int[][] bestJoinOrder;
 
-    public ExecutorTask(QueryInfo query, SPJoin spJoin, AtomicBoolean finish, int[][] bestJoinOrder) {
+    public ExecutorTask(QueryInfo query, FixJoin spJoin, AtomicBoolean finish, int[][] bestJoinOrder) {
         this.query = query;
         this.spJoin = spJoin;
         this.finish = finish;
@@ -88,12 +90,13 @@ public class ExecutorTask implements Callable<TaskResult> {
                     int[] best = new int[nrTables];
                     root.maxJoinOrder(best, 0);
                     System.arraycopy(best, 0, bestJoinOrder[nextThread], 0, nrTables);
-                    bestJoinOrder[nextThread][nrTables] = 1;
+                    bestJoinOrder[nextThread][nrTables] = nextThread == nrThreads - 1 ? 2 : 1;
                     System.out.println("Assign " + Arrays.toString(best)
                             + " to Thread " + nextThread + " at round " + roundCtr);
                     nextThread = (nextThread + 1) % nrThreads;
                     if (nextThread == 0) {
                         nextThread++;
+                        nrThreads--;
                     }
                     lastCount = (int) roundCtr;
                     nextNum = nextNum * base;
@@ -142,6 +145,11 @@ public class ExecutorTask implements Callable<TaskResult> {
                 if (order[nrTables] == 1) {
                     System.arraycopy(order, 0, joinOrder, 0, nrTables);
                     order[nrTables] = 0;
+                }
+                else if (order[nrTables] == 2) {
+                    System.arraycopy(order, 0, joinOrder, 0, nrTables);
+                    spJoin.isFixed = true;
+                    System.out.println("Thread " + tid + " uses fixed join order: " + Arrays.toString(order));
                 }
             }
         }
