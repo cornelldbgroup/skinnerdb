@@ -39,15 +39,15 @@ import statistics.JoinStats;
  * Benchmarks pre-, join, and post-processing stage and compares
  * the output sizes against the sizes of results produced by
  * Postgres.
- * 
+ *
  * @author immanueltrummer
  *
  */
 public class BenchAndVerify {
 	/**
 	 * Processes all queries in given directory.
-	 * 
-	 * @param args	first argument is Skinner DB directory, 
+	 *
+	 * @param args	first argument is Skinner DB directory,
 	 * 				second argument is query directory
 	 * 				third argument is Postgres database name
 	 * 				fourth argument is Postgres user name
@@ -77,9 +77,9 @@ public class BenchAndVerify {
 		System.out.println("Data loaded.");
 		Indexer.indexAll(StartupConfig.INDEX_CRITERIA);
 		// Read all queries from files
-		Map<String, PlainSelect> nameToQuery = 
+		Map<String, PlainSelect> nameToQuery =
 				BenchUtil.readAllQueries(queryDir);
-		// Open connection to Postgres 
+		// Open connection to Postgres
 		String url = "jdbc:postgresql:" + PgDB;
 		Properties props = new Properties();
 		props.setProperty("user",PgUser);
@@ -103,7 +103,7 @@ public class BenchAndVerify {
 			long preMillis = System.currentTimeMillis() - startMillis;
 			JoinProcessor.process(query, preSummary);
 			long postStartMillis = System.currentTimeMillis();
-			PostProcessor.process(query, preSummary, 
+			PostProcessor.process(query, preSummary,
 					NamingConfig.FINAL_RESULT_NAME, true);
 			long postMillis = System.currentTimeMillis() - postStartMillis;
 			long totalMillis = System.currentTimeMillis() - startMillis;
@@ -166,7 +166,7 @@ public class BenchAndVerify {
 			// Get cardinality of Skinner join result
 			int skinnerJoinCard = CatalogManager.getCardinality(
 					NamingConfig.DEFAULT_JOINED_NAME);
-			System.out.println("PG Card: " + pgJoinCard + 
+			System.out.println("PG Card: " + pgJoinCard +
 					"; Skinner card: " + skinnerJoinCard);
 			if (pgJoinCard != skinnerJoinCard) {
 				throw new Exception("Inconsistent join result"

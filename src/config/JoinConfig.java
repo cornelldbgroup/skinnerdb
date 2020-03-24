@@ -76,4 +76,6 @@ public class JoinConfig {
 	 * is reached).
 	 */
 	public static final boolean SIMPLE_ANTI_JOIN = false;
+
+	public static final int SAMPLE_PER_LEARN = 20;
 }
