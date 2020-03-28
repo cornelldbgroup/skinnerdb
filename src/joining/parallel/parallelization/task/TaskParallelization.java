@@ -32,7 +32,7 @@ public class TaskParallelization extends Parallelization {
     /**
      * Multiple join operators for threads
      */
-    private List<FixJoin> spJoins = new ArrayList<>();
+    private final List<FixJoin> spJoins = new ArrayList<>();
     /**
      * initialization of parallelization
      *
@@ -79,15 +79,15 @@ public class TaskParallelization extends Parallelization {
         }
         for (int i = 0; i < nrThreads; i++) {
             FixJoin spJoin = spJoins.get(i);
-            ExecutorTask executorTask = new ExecutorTask(query, spJoin, end, best);
+            ExecutorTask executorTask = new ExecutorTask(query, spJoin, end, best, spJoins);
             tasks.add(executorTask);
         }
         long executionStart = System.currentTimeMillis();
+//        List<Future<TaskResult>> futures = executorService.invokeAll(tasks);
         TaskResult result = executorService.invokeAny(tasks);
         long executionEnd = System.currentTimeMillis();
         JoinStats.exeTime = executionEnd - executionStart;
         JoinStats.subExeTime.add(JoinStats.exeTime);
-        resultList.addAll(result.result);
 //        futures.forEach(futureResult -> {
 //            try {
 //                TaskResult result = futureResult.get();
@@ -101,7 +101,11 @@ public class TaskParallelization extends Parallelization {
 //            }
 //
 //        });
-
+        resultList.addAll(result.result);
+        // close thread pool
+        for (FixJoin fixJoin: spJoins) {
+            fixJoin.executorService.shutdown();
+        }
         long nrSamples = 0;
         for (SPJoin joinOp: spJoins) {
             nrSamples = Math.max(joinOp.roundCtr, nrSamples);

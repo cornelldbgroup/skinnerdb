@@ -30,6 +30,10 @@ public class ParallelConfig {
 	 */
 	public static int EXE_THREADS = 1;
 	/**
+	 * The number of threads per executor.
+	 */
+	public static int EXE_EXECUTORS = 30;
+	/**
 	 * Maximal number of tuples per batch during pre-processing.
 	 */
 	public static int PRE_THREADS = 30;
@@ -72,6 +76,7 @@ public class ParallelConfig {
 	 * 9: One search thread and multiple executor threads
 	 */
 	public static int PARALLEL_SPEC = 8;
+
 
 	public static final boolean HEURISTIC_SHARING = true;
 	public static final boolean HEURISTIC_STOP = false;

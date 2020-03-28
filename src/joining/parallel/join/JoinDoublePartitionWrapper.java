@@ -96,4 +96,52 @@ public class JoinDoublePartitionWrapper extends JoinPartitionIndexWrapper {
         double priorVal = priorDoubleData.data[priorTuple];
         return nextDoubleIndex.nrIndexed(priorVal);
     }
+
+    @Override
+    public int indexSize(int[] tupleIndices, int[] points) {
+        int priorTuple = tupleIndices[priorTable];
+        double priorVal = priorDoubleData.data[priorTuple];
+        int prevTuple = tupleIndices[nextTable];
+        if (nextDoubleIndex.unique) {
+            int onlyRow = nextDoubleIndex.keyToPositions.getOrDefault(priorVal, -1);
+            if (onlyRow > prevTuple) {
+                points[0] = onlyRow;
+                points[1] = onlyRow;
+                return 1;
+            }
+            else {
+                points[0] = 0;
+                points[1] = -1;
+                return 0;
+            }
+        }
+        else {
+            int firstPos = nextDoubleIndex.keyToPositions.getOrDefault(priorVal, -1);
+            if (firstPos < 0) {
+                points[0] = 0;
+                points[1] = -1;
+                return 0;
+            }
+            // Get number of indexed values
+            int nrVals = nextDoubleIndex.positions[firstPos];
+            int[] positions = nextDoubleIndex.positions;
+            // Can we return first indexed value?
+            int firstTuple = positions[firstPos + 1];
+            if (firstTuple > prevTuple) {
+                points[0] = firstPos + 1;
+                points[1] = firstPos + nrVals;
+                return nrVals;
+            }
+            int size = nrVals;
+            for (int i = 2; i <= nrVals; i++) {
+                if (positions[firstPos + i] > prevTuple) {
+                    points[0] = firstPos + i;
+                    points[1] = firstPos + nrVals;
+                    size = nrVals - i + 1;
+                    break;
+                }
+            }
+            return size;
+        }
+    }
 }

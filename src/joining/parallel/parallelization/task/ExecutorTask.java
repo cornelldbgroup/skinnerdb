@@ -14,6 +14,7 @@ import logs.LogUtils;
 import query.QueryInfo;
 import statistics.QueryStats;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
@@ -40,12 +41,18 @@ public class ExecutorTask implements Callable<TaskResult> {
      * each executor threads by the searching thread.
      */
     private int[][] bestJoinOrder;
+    /**
+     * Multiple join operators for threads
+     */
+    private final List<FixJoin> fixJoins;
 
-    public ExecutorTask(QueryInfo query, FixJoin spJoin, AtomicBoolean finish, int[][] bestJoinOrder) {
+    public ExecutorTask(QueryInfo query, FixJoin spJoin, AtomicBoolean finish, int[][] bestJoinOrder,
+                        List<FixJoin> fixJoins) {
         this.query = query;
         this.spJoin = spJoin;
         this.finish = finish;
         this.bestJoinOrder = bestJoinOrder;
+        this.fixJoins = fixJoins;
     }
 
     @Override
@@ -68,7 +75,7 @@ public class ExecutorTask implements Callable<TaskResult> {
             int lastCount = 0;
             int nextPeriod = 1;
             double nextNum = 1;
-            double base  = Math.pow(ParallelConfig.C, 1.0 / nrThreads);
+            double base = Math.pow(ParallelConfig.C, 1.0 / (nrThreads-1));
             SPNode root = new SPNode(0, query, true, 1);
             while (!finish.get()) {
                 ++roundCtr;
@@ -82,6 +89,9 @@ public class ExecutorTask implements Callable<TaskResult> {
                     if (finish.compareAndSet(false, true)) {
                         System.out.println("Finish id: " + tid + "\t" + Arrays.toString(joinOrder) + "\t" + roundCtr);
                         spJoin.roundCtr = roundCtr;
+                        for (FixJoin fixJoin: fixJoins) {
+                            fixJoin.terminate.set(true);
+                        }
                     }
                     break;
                 }
@@ -90,13 +100,28 @@ public class ExecutorTask implements Callable<TaskResult> {
                     int[] best = new int[nrTables];
                     root.maxJoinOrder(best, 0);
                     System.arraycopy(best, 0, bestJoinOrder[nextThread], 0, nrTables);
-                    bestJoinOrder[nextThread][nrTables] = nextThread == nrThreads - 1 ? 2 : 1;
+//                    if (roundCtr >= fixRound) {
+//                        bestJoinOrder[nextThread][nrTables] = 2;
+//                        fixNum++;
+//                        fixRound = Math.pow(fixRound, fixNum + 1);
+//                    }
+//                    else {
+//                        bestJoinOrder[nextThread][nrTables] = 1;
+//                    }
+                    bestJoinOrder[nextThread][nrTables] = 2;
+                    fixJoins.get(nextThread).terminate.set(true);
                     System.out.println("Assign " + Arrays.toString(best)
                             + " to Thread " + nextThread + " at round " + roundCtr);
+
+//                    if (fixNum < nrThreads - 1) {
+//                        nextThread = (nextThread + 1) % nrThreads;
+//                        while (bestJoinOrder[nextThread][nrTables] == 2 || nextThread == 0) {
+//                            nextThread = (nextThread + 1) % nrThreads;
+//                        }
+//                    }
                     nextThread = (nextThread + 1) % nrThreads;
                     if (nextThread == 0) {
-                        nextThread++;
-                        nrThreads--;
+                        nextThread = (nextThread + 1) % nrThreads;
                     }
                     lastCount = (int) roundCtr;
                     nextNum = nextNum * base;
@@ -109,16 +134,6 @@ public class ExecutorTask implements Callable<TaskResult> {
                     root = new SPNode(0, query, true, 1);
                     nextForget *= 10;
                 }
-
-//                if (roundCtr == 100000) {
-//                    List<String>[] logs = new List[1];
-//                    for (int i = 0; i < 1; i++) {
-//                        logs[i] = spJoin.logs;
-//                    }
-//                    LogUtils.writeLogs(logs, "verbose/task/" + QueryStats.queryName);
-//                    System.out.println("Write to logs!");
-//                    System.exit(0);
-//                }
             }
         }
         else {
@@ -138,6 +153,9 @@ public class ExecutorTask implements Callable<TaskResult> {
                             System.out.println("Finish id: " + tid + "\t" +
                                     Arrays.toString(joinOrder) + "\t" + roundCtr);
                             spJoin.roundCtr = roundCtr;
+                            for (FixJoin fixJoin: fixJoins) {
+                                fixJoin.terminate.set(true);
+                            }
                         }
                         break;
                     }
@@ -149,7 +167,6 @@ public class ExecutorTask implements Callable<TaskResult> {
                 else if (order[nrTables] == 2) {
                     System.arraycopy(order, 0, joinOrder, 0, nrTables);
                     spJoin.isFixed = true;
-                    System.out.println("Thread " + tid + " uses fixed join order: " + Arrays.toString(order));
                 }
             }
         }

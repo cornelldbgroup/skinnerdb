@@ -281,10 +281,6 @@ public class SPNode {
             recommendedActions = this.recommendedActions;
         }
         if (isLocal) {
-            if (JoinConfig.FORGET && nextForget[tid] <= roundCtr) {
-                nodeStatistics[tid].clear();
-                nextForget[tid] *= 10;
-            }
             NodeStatistics threadStats = nodeStatistics[tid];
             nrVisits += threadStats.nrVisits;
             for(Integer recAction : recommendedActions) {

@@ -8,7 +8,10 @@ import joining.parallel.indexing.PartitionIndex;
 import query.ColumnRef;
 import query.QueryInfo;
 
+import java.util.Comparator;
 import java.util.Iterator;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Uses index on join column to identify next
@@ -181,4 +184,5 @@ public abstract class JoinPartitionIndexWrapper {
      * @return		number of indexed values
      */
     public abstract int nrIndexed(int[] tupleIndices);
+    public abstract int indexSize(int[] tupleIndices, int[] points);
 }

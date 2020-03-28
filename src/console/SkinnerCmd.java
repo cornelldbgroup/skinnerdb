@@ -425,7 +425,7 @@ public class SkinnerCmd {
                     output += "APS_" + ParallelConfig.EXE_THREADS + caseName + ".txt";
                 }
                 else if (spec == 9) {
-                    output += "PT_" + ParallelConfig.EXE_THREADS + caseName + ".txt";
+                    output += "SPT_" + ParallelConfig.EXE_THREADS + caseName + ".txt";
                 }
             } else {
                 output += "Seq_1.txt";
