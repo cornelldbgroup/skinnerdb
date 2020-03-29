@@ -11,12 +11,11 @@ import config.PreConfig;
 import config.JoinConfig;
 import joining.join.OldJoin;
 import joining.result.ResultTuple;
-import joining.uct.ExplorationWeightPolicy;
-import joining.uct.SelectionPolicy;
+import joining.uct.BrueNode2;
 import joining.uct.UctNode;
 import operators.Materialize;
+import org.apache.commons.lang3.mutable.MutableBoolean;
 import preprocessing.Context;
-import print.RelationPrinter;
 import query.ColumnRef;
 import query.QueryInfo;
 import statistics.JoinStats;
@@ -66,9 +65,10 @@ public class JoinProcessor {
         }
         // Initialize multi-way join operator
         OldJoin joinOp = new OldJoin(query, context,
-                JoinConfig.BUDGET_PER_EPISODE);
+                JoinConfig.LEARN_BUDGET_EPISODE);
         // Initialize UCT join order search tree
-        UctNode root = new UctNode(0, query, true, joinOp);
+//        UctNode root = new UctNode(0, query, true, joinOp);
+        BrueNode2 root = new BrueNode2(0, query, true, joinOp);
         // Initialize counters and variables
         int[] joinOrder = new int[query.nrJoined];
         long roundCtr = 0;
@@ -79,13 +79,20 @@ public class JoinProcessor {
         double maxReward = Double.NEGATIVE_INFINITY;
         int nrSampleTries = JoinConfig.SAMPLE_PER_LEARN;
         int nrJoined = query.nrJoined;
-//		int nExecutionTries = 0;
+		int nExecutionTries = 0;
+//		int executionBudget =  JoinConfig.START_EXECUTION_BUDGET_EPISODE;
         while (!joinOp.isFinished()) {
             // Learning phase
+            joinOp.budget = JoinConfig.LEARN_BUDGET_EPISODE;
             for (int num = 0; num < nrSampleTries; num++) {
                 ++roundCtr;
                 int selectSwitch = nrJoined - ((int) ((roundCtr - 1) % nrJoined));
-                double reward = root.sample(roundCtr, joinOrder, 0, selectSwitch);
+//                double reward = root.sample(roundCtr, joinOrder, 0, selectSwitch);
+                MutableBoolean restart = new MutableBoolean(false);
+                double reward = root.sample(roundCtr, joinOrder, 0, selectSwitch, true, restart);
+                if(restart.booleanValue()) {
+                    roundCtr = 0;
+                }
                 // Generate logging entries if activated
                 log("Selected join order " + Arrays.toString(joinOrder));
                 log("Obtained reward:\t" + reward);
@@ -93,20 +100,24 @@ public class JoinProcessor {
                 log("Table cardinalities:\t" + Arrays.toString(joinOp.cardinalities));
             }
 
-//			//Execution phase
-//			int[] currentOptimalJoinOrder = new int[query.nrJoined];
-//			boolean finish = root.getOptimalPolicy(currentOptimalJoinOrder, 0);
-//			// System.out.println("Opt:" + Arrays.toString(currentOptimalJoinOrder));
+			//Execution phase
+			int[] currentOptimalJoinOrder = new int[query.nrJoined];
+			boolean finish = root.getOptimalPolicy(currentOptimalJoinOrder, 0);
+			// System.out.println("Opt:" + Arrays.toString(currentOptimalJoinOrder));
 //			System.out.println("Current Optimal:" + Arrays.toString(currentOptimalJoinOrder) + ", EntireOrder:" + finish);
 
-//			if(finish) {
-//			System.out.println("Current Optimal:" + Arrays.toString(currentOptimalJoinOrder));
-//				//joinOp.budget = JoinConfig.BUDGET_PER_EPISODE;
-//				root.executePhaseWithBudget(currentOptimalJoinOrder);
-//			}
-//			nExecutionTries++;
-
+			if(finish) {
+//			    System.out.println("Current Optimal:" + Arrays.toString(currentOptimalJoinOrder));
+//				joinOp.budget = executionBudget;
+                joinOp.budget = JoinConfig.START_EXECUTION_BUDGET_EPISODE;
+				root.executePhaseWithBudget(currentOptimalJoinOrder);
+//                executionBudget *= JoinConfig.EXECUTION_BUDGET_INCREASE_DELTA;
+			}
+			nExecutionTries++;
         }
+        //Clear node map
+        root.clearNodeMap();
+
         // Output most frequently used join order
         System.out.print("MFJO: ");
         for (int joinCtr = 0; joinCtr < query.nrJoined; ++joinCtr) {
@@ -116,11 +127,11 @@ public class JoinProcessor {
         }
         System.out.println();
         // Draw final plot if activated
-        if (query.explain) {
-            String plotName = "ucttreefinal.pdf";
-            String plotPath = Paths.get(query.plotDir, plotName).toString();
-            TreePlotter.plotTree(root, plotPath);
-        }
+//        if (query.explain) {
+//            String plotName = "ucttreefinal.pdf";
+//            String plotPath = Paths.get(query.plotDir, plotName).toString();
+//            TreePlotter.plotTree(root, plotPath);
+//        }
         // Update statistics
         JoinStats.nrSamples = roundCtr;
         JoinStats.avgReward = accReward / roundCtr;

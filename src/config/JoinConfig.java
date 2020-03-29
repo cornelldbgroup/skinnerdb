@@ -19,7 +19,15 @@ public class JoinConfig {
 	/**
 	 * Number of steps performed per episode.
 	 */
-	public static int BUDGET_PER_EPISODE = 500;
+	public static int LEARN_BUDGET_EPISODE = 5000;
+	/**
+	 * Number of steps performed per episode.
+	 */
+	public static int START_EXECUTION_BUDGET_EPISODE = 7000;
+	/**
+	 * Execution budget increase delta
+	 */
+	public static int EXECUTION_BUDGET_INCREASE_DELTA = 1;
 	/**
 	 * How to weigh progress calculated based on the
 	 * percentage of input processed when calculating
@@ -77,5 +85,5 @@ public class JoinConfig {
 	 */
 	public static final boolean SIMPLE_ANTI_JOIN = false;
 
-	public static final int SAMPLE_PER_LEARN = 20;
+	public static int SAMPLE_PER_LEARN = 20;
 }

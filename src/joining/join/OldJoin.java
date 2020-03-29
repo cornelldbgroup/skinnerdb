@@ -25,7 +25,7 @@ public class OldJoin extends MultiWayJoin {
     /**
      * Number of steps per episode.
      */
-    public final int budget;
+    public int budget;
     /**
      * Re-initialized in each invocation:
      * stores the remaining budget for
