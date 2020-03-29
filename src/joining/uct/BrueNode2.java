@@ -315,28 +315,28 @@ public class BrueNode2 {
         return offset;
     }
 
-    public boolean getOptimalPolicy(int[] joinOrder, int roundCtr) {
-//        for (int i = 0; i < nrActions; i++) {
-//            System.out.println("reward:" + accumulatedReward[i]);
+//    public boolean getOptimalPolicy(int[] joinOrder, int roundCtr) {
+////        for (int i = 0; i < nrActions; i++) {
+////            System.out.println("reward:" + accumulatedReward[i]);
+////        }
+//
+//        if (treeLevel < nrTables) {
+//            int action = estimationPolicy();
+//            int table = nextTable[action];
+//            joinOrder[treeLevel] = table;
+//            if (childNodes[action] != null)
+//                return childNodes[action].getOptimalPolicy(joinOrder, roundCtr);
+//            else {
+//                childNodes[action] = new BrueNode2(roundCtr, this, table);
+//                BrueNode2 child = childNodes[action];
+//                child.getOptimalPolicy(joinOrder, roundCtr);
+//                return false;
+//            }
 //        }
-
-        if (treeLevel < nrTables) {
-            int action = estimationPolicy();
-            int table = nextTable[action];
-            joinOrder[treeLevel] = table;
-            if (childNodes[action] != null)
-                return childNodes[action].getOptimalPolicy(joinOrder, roundCtr);
-            else {
-                childNodes[action] = new BrueNode2(roundCtr, this, table);
-                BrueNode2 child = childNodes[action];
-                child.getOptimalPolicy(joinOrder, roundCtr);
-                return false;
-            }
-        }
-
-        //System.out.println(Arrays.toString(joinOrder));
-        return true;
-    }
+//
+//        //System.out.println(Arrays.toString(joinOrder));
+//        return true;
+//    }
 
     public void executePhaseWithBudget(int[] joinOrder) throws Exception {
         joinOp.execute(joinOrder);

@@ -79,7 +79,7 @@ public class JoinProcessor {
         double maxReward = Double.NEGATIVE_INFINITY;
         int nrSampleTries = JoinConfig.SAMPLE_PER_LEARN;
         int nrJoined = query.nrJoined;
-		int nExecutionTries = 0;
+//		int nExecutionTries = 0;
 //		int executionBudget =  JoinConfig.START_EXECUTION_BUDGET_EPISODE;
         while (!joinOp.isFinished()) {
             // Learning phase
@@ -101,19 +101,19 @@ public class JoinProcessor {
             }
 
 			//Execution phase
-			int[] currentOptimalJoinOrder = new int[query.nrJoined];
-			boolean finish = root.getOptimalPolicy(currentOptimalJoinOrder, 0);
-			// System.out.println("Opt:" + Arrays.toString(currentOptimalJoinOrder));
-//			System.out.println("Current Optimal:" + Arrays.toString(currentOptimalJoinOrder) + ", EntireOrder:" + finish);
-
-			if(finish) {
-//			    System.out.println("Current Optimal:" + Arrays.toString(currentOptimalJoinOrder));
-//				joinOp.budget = executionBudget;
-                joinOp.budget = JoinConfig.START_EXECUTION_BUDGET_EPISODE;
-				root.executePhaseWithBudget(currentOptimalJoinOrder);
-//                executionBudget *= JoinConfig.EXECUTION_BUDGET_INCREASE_DELTA;
-			}
-			nExecutionTries++;
+//			int[] currentOptimalJoinOrder = new int[query.nrJoined];
+//			boolean finish = root.getOptimalPolicy(currentOptimalJoinOrder, 0);
+//			// System.out.println("Opt:" + Arrays.toString(currentOptimalJoinOrder));
+////			System.out.println("Current Optimal:" + Arrays.toString(currentOptimalJoinOrder) + ", EntireOrder:" + finish);
+//
+//			if(finish) {
+////			    System.out.println("Current Optimal:" + Arrays.toString(currentOptimalJoinOrder));
+////				joinOp.budget = executionBudget;
+//                joinOp.budget = JoinConfig.START_EXECUTION_BUDGET_EPISODE;
+//				root.executePhaseWithBudget(currentOptimalJoinOrder);
+////                executionBudget *= JoinConfig.EXECUTION_BUDGET_INCREASE_DELTA;
+//			}
+//			nExecutionTries++;
         }
         //Clear node map
         root.clearNodeMap();
