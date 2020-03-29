@@ -327,10 +327,12 @@ public class BrueNode2 {
 //            if (childNodes[action] != null)
 //                return childNodes[action].getOptimalPolicy(joinOrder, roundCtr);
 //            else {
-//                childNodes[action] = new BrueNode2(roundCtr, this, table);
-//                BrueNode2 child = childNodes[action];
-//                child.getOptimalPolicy(joinOrder, roundCtr);
-//                return false;
+//                JoinOrder currentOrder = new JoinOrder(Arrays.copyOfRange(joinOrder, 0, treeLevel + 1));
+//                if(nodeMap.containsKey(currentOrder)) {
+//                    return nodeMap.get(currentOrder).getOptimalPolicy(joinOrder, roundCtr);
+//                } else {
+//                    return false;
+//                }
 //            }
 //        }
 //
