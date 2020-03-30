@@ -7,7 +7,9 @@ import joining.parallel.plan.LeftDeepPartitionPlan;
 import joining.parallel.progress.ParallelProgressTracker;
 import joining.plan.JoinOrder;
 import joining.progress.State;
+import joining.result.ResultTuple;
 import net.sf.jsqlparser.expression.Expression;
+import org.omg.CORBA.SystemException;
 import org.omg.PortableInterceptor.SYSTEM_EXCEPTION;
 import predicate.NonEquiNode;
 import preprocessing.Context;
@@ -71,6 +73,8 @@ public class FixJoin extends SPJoin {
      * The first table that is larger than 1.
      */
     private int firstTable;
+
+    private List<int[]>[] resultList;
     /**
      * Initializes join algorithm for given input query.
      *
@@ -86,6 +90,7 @@ public class FixJoin extends SPJoin {
         this.unaryPreds = new KnaryBoolEval[nrJoined];
         this.tupleIndexDelta = new int[nrJoined];
         this.terminate = new AtomicBoolean(false);
+        System.out.println("Working Numbers: " + nrWorking);
         this.executorService = Executors.newFixedThreadPool(nrWorking);
     }
     /**
@@ -134,7 +139,7 @@ public class FixJoin extends SPJoin {
                 return 1;
             }
         }
-//        order = new int[]{8, 2, 5, 1, 7, 9, 3, 6, 4, 0};
+        order = new int[]{8, 2, 5, 1, 7, 9, 3, 6, 4, 0};
 //        order = new int[]{3, 10, 11, 7, 0, 8, 9, 2, 1, 6, 13, 5, 12, 4};
         // Lookup or generate left-deep query plan
         JoinOrder joinOrder = new JoinOrder(order);
@@ -177,11 +182,16 @@ public class FixJoin extends SPJoin {
             }
             plan.joinIndices.get(i).forEach(index ->index.reset(state.tupleIndices));
         }
-        if (isFixed) {
+        if (true) {
             Arrays.fill(state.tupleIndices , 0);
 //            executeFixedJoin(plan, state, offsets);
             terminate.set(false);
-            executeParallelFixedJoin(plan, state, offsets);
+            long exe1 = System.currentTimeMillis();
+            executeParallelRePartition(plan, state, offsets);
+            long exe2 = System.currentTimeMillis();
+            System.out.println("Execution: " + (exe2 - exe1));
+            lastState = state;
+            return 0;
         }
         else {
             executeWithBudget(plan, state, offsets);
@@ -193,12 +203,6 @@ public class FixJoin extends SPJoin {
             lastState = state;
             return reward;
         }
-//        long timer3 = System.currentTimeMillis();
-        lastState = state;
-//        long timer5 = System.currentTimeMillis();
-//        writeLog((timer5 - timer1) + "\t" + (timer2 - timer1) + "\t" + (timer3 - timer2)
-//                + "\t" + (timer4 - timer3) + "\t" + (timer5 - timer4));
-        return 0;
     }
     /**
      * Evaluates list of given predicates on current tuple
@@ -523,6 +527,237 @@ public class FixJoin extends SPJoin {
 //        }
 //    }
 
+    // re-partitioning
+    private void executeParallelRePartition(LeftDeepPartitionPlan plan, State state, int[] offsets) {
+        // Extract variables for convenient access
+        int nrTables = query.nrJoined;
+        int[] tupleIndices = new int[nrTables];
+        List<List<JoinPartitionIndexWrapper>> joinIndices = plan.joinIndices;
+        // Initialize state and flags to prepare budgeted execution
+        System.arraycopy(state.tupleIndices, 0, tupleIndices, 0, nrTables);
+        // Number of completed tuples added
+        nrResultTuples = 0;
+
+        // Execute join order until budget depleted or all input finished -
+        // at each iteration start, tuple indices contain next tuple
+        // combination to look at.
+        int firstTable = plan.joinOrder.order[0];
+        int start = Math.max(offsets[firstTable], tupleIndices[firstTable]);
+        int[] intermediateResults = new int[(cardinalities[firstTable] - start) * nrTables];
+
+
+        for (int firstTuple = start; firstTuple < cardinalities[firstTable]; firstTuple++) {
+            tupleIndices[firstTable] = firstTuple;
+            int resultPos = firstTuple - start;
+            System.arraycopy(tupleIndices, 0, intermediateResults, resultPos, nrTables);
+        }
+        //
+        for (int nextIndex = 1; nextIndex < nrTables; nextIndex++) {
+            long timer0 = System.currentTimeMillis();
+            // the next table to join
+            int nextTable = plan.joinOrder.order[nextIndex];
+            // the cardinality of the next table
+            int nextCardinality = cardinalities[nextTable];
+            // Integrate table offset
+            tupleIndices[nextTable] = Math.max(
+                    offsets[nextTable], tupleIndices[nextTable]);
+            // the minimal tuple for current table
+            int curTuple = tupleIndices[nextTable];
+            // join indexes
+            List<JoinPartitionIndexWrapper> indexWrappers = joinIndices.get(nextIndex);
+            final boolean isEmpty = indexWrappers.isEmpty();
+            final boolean isSingle = indexWrappers.size() == 1;
+            // partition the input table
+            List<IntIndexRange> batches = this.split(intermediateResults.length / nrTables, nrTables);
+            final int finalNextIndex = nrTables;
+
+
+            // first run: counting size of output for each thread in parallel
+            List<Future<Integer>> futures = new ArrayList<>();
+            for (IntIndexRange batch: batches) {
+                int startPos = batch.firstTuple;
+                int endPos = batch.lastTuple;
+                int[] finalIntermediateResults = intermediateResults;
+                futures.add(executorService.submit(() -> {
+                    long t1 = System.currentTimeMillis();
+                    int[] points = new int[2];
+                    // temporary array of tuples copying from intermediate results
+                    int[] tuples = new int[nrTables];
+                    List<int[]> newPointsList = new ArrayList<>();
+                    for (int i = 0; i < indexWrappers.size(); i++) {
+                        newPointsList.add(new int[2]);
+                    }
+                    // the index wrapper is empty
+                    if (isEmpty) {
+                        // how many intermediate results?
+                        int size = (endPos - startPos) / finalNextIndex;
+                        // Cartesian product
+                        size = size * (nextCardinality - curTuple);
+                        return size;
+                    }
+                    else {
+                        int allResultCounts = 0;
+                        // iterate all tuples in intermediate results
+                        for (int pos = startPos; pos < endPos; pos += finalNextIndex) {
+                            System.arraycopy(finalIntermediateResults, pos, tuples, 0, finalNextIndex);
+                            tuples[nextTable] = curTuple;
+                            // get the smallest index
+                            // the size of index is defined by the number of matched rows
+                            // that are larger than the offset
+                            int small = Integer.MAX_VALUE;
+                            int index = 0;
+                            for (int i = 0; i < indexWrappers.size(); i++) {
+                                int[] newPoints = newPointsList.get(i);
+                                int size = indexWrappers.get(i).indexSize(tuples, newPoints);
+                                if (size < small) {
+                                    small = size;
+                                    index = i;
+                                    System.arraycopy(newPoints, 0, points, 0, 2);
+                                }
+                            }
+                            // there is only one join index
+                            if (isSingle) {
+                                allResultCounts += small;
+                            }
+                            else {
+                                // the index with the least matched rows.
+                                JoinPartitionIndexWrapper prob = indexWrappers.get(index);
+                                // points has two elements: first is the start position in the positions array.
+                                // second is the end position in the positions array.
+                                int startIndexPos = points[0];
+                                int endIndexPos = points[1];
+                                int[] positions = prob.nextIndex.positions;
+                                // the remaining indexes that are used to evaluate
+                                List<JoinPartitionIndexWrapper> remainedWrappers = new ArrayList<>(indexWrappers);
+                                remainedWrappers.remove(index);
+                                // iterate all matched rows in the right table
+                                for (int indexPos = startIndexPos; indexPos <= endIndexPos; indexPos++) {
+                                    int nextTuple = prob.nextIndex.unique ? indexPos : positions[indexPos];
+                                    tuples[nextTable] = nextTuple;
+                                    boolean pass = true;
+                                    for (JoinPartitionIndexWrapper wrapper : remainedWrappers) {
+                                        if (!wrapper.evaluate(tuples)) {
+                                            pass = false;
+                                            break;
+                                        }
+                                    }
+                                    // if the matched row also matched with the remaining predicates.
+                                    if (pass) {
+                                        allResultCounts++;
+                                    }
+                                }
+                            }
+                        }
+                        long t2 = System.currentTimeMillis();
+                        System.out.println(finalNextIndex + " First: " + startPos + " " + (t2 - t1));
+                        return allResultCounts;
+                    }
+                }));
+            }
+            int nrBatches = batches.size();
+            int[] batchesCount = new int[nrBatches];
+            int prefixSum = 0;
+            for (int i = 0; i < nrBatches; i++) {
+                batchesCount[i] = prefixSum;
+                Future<Integer> batchCount = futures.get(i);
+                try {
+                    prefixSum += batchCount.get();
+                } catch (InterruptedException | ExecutionException ignored) {
+
+                }
+            }
+            long timer1 = System.currentTimeMillis();
+            System.out.println("Second Run: ");
+            // second run: write data to intermediate results
+            final int[] newIntermediateResults = new int[prefixSum * nrTables];
+            List<Future<Integer>> secondFutures = new ArrayList<>();
+            for (int batchCtr = 0; batchCtr < nrBatches; batchCtr++) {
+                IntIndexRange batch = batches.get(batchCtr);
+                int startPos = batch.firstTuple;
+                int endPos = batch.lastTuple;
+                int[] finalIntermediateResults = intermediateResults;
+                int writeStartPos = batchesCount[batchCtr] * nrTables;
+                secondFutures.add(executorService.submit(() -> {
+                    long t1 = System.currentTimeMillis();
+                    int[] points = new int[2];
+                    // temporary array of tuples copying from intermediate results
+                    int[] tuples = new int[nrTables];
+                    List<int[]> newPointsList = new ArrayList<>();
+                    for (int i = 0; i < indexWrappers.size(); i++) {
+                        newPointsList.add(new int[2]);
+                    }
+                    int writePos = writeStartPos;
+                    // the index wrapper is empty
+                    if (isEmpty) {
+                        for (int pos = startPos; pos < endPos; pos += finalNextIndex) {
+                            System.arraycopy(finalIntermediateResults, pos, tuples, 0, finalNextIndex);
+                            for (int row = curTuple; row < nextCardinality; row++) {
+                                tuples[nextTable] = row;
+                                System.arraycopy(tuples, 0, newIntermediateResults, writePos, finalNextIndex);
+                                writePos += finalNextIndex;
+                            }
+                        }
+                    }
+                    else {
+                        // iterate all intermediate results
+                        for (int pos = startPos; pos < endPos; pos += finalNextIndex) {
+                            System.arraycopy(finalIntermediateResults, pos, tuples, 0, finalNextIndex);
+                            tuples[nextTable] = curTuple;
+                            // get smallest index
+                            int small = Integer.MAX_VALUE;
+                            int index = 0;
+                            for (int i = 0; i < indexWrappers.size(); i++) {
+                                int[] newPoints = newPointsList.get(i);
+                                int size = indexWrappers.get(i).indexSize(tuples, newPoints);
+                                if (size < small) {
+                                    small = size;
+                                    index = i;
+                                    System.arraycopy(newPoints, 0, points, 0, 2);
+                                }
+                            }
+                            JoinPartitionIndexWrapper prob = indexWrappers.get(index);
+                            int startIndexPos = points[0];
+                            int endIndexPos = points[1];
+                            int[] positions = prob.nextIndex.positions;
+
+                            List<JoinPartitionIndexWrapper> remainedWrappers = new ArrayList<>(indexWrappers);
+                            remainedWrappers.remove(index);
+                            for (int indexPos = startIndexPos; indexPos <= endIndexPos; indexPos++) {
+                                int nextTuple = prob.nextIndex.unique ? indexPos : positions[indexPos];
+                                tuples[nextTable] = nextTuple;
+                                boolean pass = true;
+                                for (JoinPartitionIndexWrapper wrapper : remainedWrappers) {
+                                    if (!wrapper.evaluate(tuples)) {
+                                        pass = false;
+                                        break;
+                                    }
+                                }
+                                if (pass) {
+                                    System.arraycopy(tuples, 0, newIntermediateResults, writePos, finalNextIndex);
+                                    writePos += finalNextIndex;
+                                }
+                            }
+                        }
+                        long t2 = System.currentTimeMillis();
+                        System.out.println(finalNextIndex + " Second: " + startPos + " " + (t2 - t1));
+                    }
+                    return 0;
+                }));
+            }
+            for (int i = 0; i < nrBatches; i++) {
+                Future<Integer> batchCount = futures.get(i);
+                try {
+                    prefixSum += batchCount.get();
+                } catch (InterruptedException | ExecutionException ignored) {
+
+                }
+            }
+            long timer2 = System.currentTimeMillis();
+            System.out.println("Index: " + nextIndex + "; First: " + (timer1 - timer0) + "; Second: " + (timer2 - timer1));
+            intermediateResults = newIntermediateResults;
+        }
+        state.lastIndex = terminate.get() ? 1 : -1;
+    }
 
     private void executeParallelFixedJoin(LeftDeepPartitionPlan plan, State state, int[] offsets) {
         // Extract variables for convenient access
@@ -563,7 +798,7 @@ public class FixJoin extends SPJoin {
             // partition the input table
             List<IntIndexRange> ranges = this.split(finalIntermediateResults.size());
             List<int[]> curResults = new ArrayList<>();
-            if (ranges.size() < nrWorking) {
+            if (finalIntermediateResults.size() < 1000) {
                 int[] points = new int[2];
                 List<int[]> newPointsList = new ArrayList<>();
                 for (int i = 0; i < indexWrappers.size(); i++) {
@@ -626,99 +861,131 @@ public class FixJoin extends SPJoin {
                 }
             }
             else {
-                this.firstTable = nextTable;
                 List<Future<List<int[]>>> futures = new ArrayList<>();
+                this.resultList = new ArrayList[ranges.size()];
                 for (IntIndexRange batch : ranges) {
                     int startIndex = batch.firstTuple;
                     int endIndex = batch.lastTuple;
                     final int indexStart = nextIndex;
                     futures.add(executorService.submit(() -> {
+                        long timer0 = System.currentTimeMillis();
                         int[] points = new int[2];
                         int[] threadIndices = tupleIndices.clone();
                         List<int[]> threadFinalResults = new ArrayList<>();
-                        for (int threadIndex = indexStart; threadIndex < nrTables; threadIndex++) {
-                            int rStart;
-                            int rEnd;
-                            List<int[]> source;
-                            if (threadIndex == indexStart) {
-                                rStart = startIndex;
-                                rEnd = endIndex;
-                                source = finalIntermediateResults;
+                        // the first table. We need to get tuples from a list
+                        int threadTable = plan.joinOrder.order[indexStart];
+                        // Integrate table offset
+                        threadIndices[threadTable] = Math.max(
+                                offsets[threadTable], threadIndices[threadTable]);
+                        // some join statistics for current index
+                        int threadCardinality = cardinalities[threadTable];
+                        int threadTuple = threadIndices[threadTable];
+                        List<JoinPartitionIndexWrapper> threadIndexWrappers = joinIndices.get(indexStart);
+                        final boolean threadEmpty = threadIndexWrappers.isEmpty();
+
+                        List<int[]> newPointsList = new ArrayList<>();
+                        for (int i = 0; i < threadIndexWrappers.size(); i++) {
+                            newPointsList.add(new int[2]);
+                        }
+
+                        ThreadResult[] threadResults = new ThreadResult[endIndex - startIndex + 1];
+                        int allResultCounts = 0;
+                        // the index wrapper is empty
+                        if (threadEmpty) {
+                            for (int rid = startIndex; rid <= endIndex; rid++) {
+                                int[] tuples = finalIntermediateResults.get(rid);
+                                int[] threadResultsArray = new int[(threadCardinality - threadTuple) * nrTables + 1];
+                                for (int tuple = threadTuple; tuple < threadCardinality; tuple++) {
+                                    tuples[threadTable] = tuple;
+                                    int resultPos = (tuple - threadTuple) * nrTables + 1;
+                                    System.arraycopy(tuples, 0, threadResultsArray, resultPos, nrTables);
+                                }
+                                int count = threadCardinality - threadTuple;
+                                threadResultsArray[0] = count;
+                                allResultCounts += count;
+                                threadResults[rid - startIndex] = new ThreadResult(threadResultsArray);
                             }
-                            else {
-                                rStart = 0;
-                                rEnd = threadFinalResults.size() - 1;
-                                source = threadFinalResults;
+                        }
+                        else {
+                            for (int rid = startIndex; rid <= endIndex; rid++) {
+                                int[] tuples = finalIntermediateResults.get(rid);
+                                threadResults[rid - startIndex] = getThreadResult(tuples, threadTable,
+                                        threadTuple, newPointsList, points, nrTables, threadIndexWrappers);
+                                allResultCounts += threadResults[rid - startIndex].count;
                             }
-                            int threadTable = plan.joinOrder.order[threadIndex];
+                        }
+                        // master thread update a new join order?
+                        if (terminate.get()) {
+                            return new ArrayList<>();
+                        }
+
+
+                        //
+                        for (int threadIndex = indexStart + 1; threadIndex < nrTables; threadIndex++) {
+                            ThreadResult[] curThreadResults = new ThreadResult[allResultCounts];
+                            allResultCounts = 0;
+                            threadTable = plan.joinOrder.order[threadIndex];
                             // Integrate table offset
                             threadIndices[threadTable] = Math.max(
                                     offsets[threadTable], threadIndices[threadTable]);
                             // some join statistics for current index
-                            int threadCardinality = cardinalities[threadTable];
-                            int threadTuple = threadIndices[threadTable];
-                            List<JoinPartitionIndexWrapper> threadIndexWrappers = joinIndices.get(threadIndex);
-                            final boolean threadEmpty = threadIndexWrappers.isEmpty();
+                            threadCardinality = cardinalities[threadTable];
+                            threadTuple = threadIndices[threadTable];
+                            threadIndexWrappers = joinIndices.get(threadIndex);
+                            final boolean empty = threadIndexWrappers.isEmpty();
 
-                            List<int[]> newPointsList = new ArrayList<>();
+                            newPointsList = new ArrayList<>();
                             for (int i = 0; i < threadIndexWrappers.size(); i++) {
                                 newPointsList.add(new int[2]);
                             }
-                            List<int[]> threadResults = new ArrayList<>();
-                            if (threadEmpty) {
-                                for (int rid = rStart; rid <= rEnd; rid++) {
-                                    int[] tuples = source.get(rid);
-                                    for (int tuple = threadTuple; tuple < threadCardinality; tuple++) {
-                                        tuples[threadTable] = tuple;
-                                        threadResults.add(tuples.clone());
+
+                            if (empty) {
+                                int nrTuples = 0;
+                                for (ThreadResult threadResult: threadResults) {
+                                    int count = threadResult.count;
+                                    int[] threadResultsArray = new int[count * nrTables + 1];
+                                    for (int tuplesCtr = 0; tuplesCtr < count; tuplesCtr++) {
+                                        int tuplePos = 1 + tuplesCtr * nrTables;
+                                        for (int tuple = threadTuple; tuple < threadCardinality; tuple++) {
+                                            int resultPos = (tuple - threadTuple) * nrTables + 1;
+                                            System.arraycopy(threadResult.result, tuplePos, threadResultsArray, resultPos, nrTables);
+                                            threadResultsArray[resultPos + threadIndex] = tuple;
+                                        }
+                                        int newCount = threadCardinality - threadTuple;
+                                        threadResultsArray[0] = newCount;
+                                        allResultCounts += newCount;
+                                        threadResults[nrTuples] = new ThreadResult(threadResultsArray);
+                                        nrTuples++;
                                     }
                                 }
+
+                                for (ThreadResult threadResult: threadResults) {
+                                    int count = threadResult.count;
+                                    int[] threadResultsArray = new int[count * nrTables + 1];
+                                }
+
+//                                for (int rid = startIndex; rid <= endIndex; rid++) {
+//                                    int[] tuples = source.get(rid);
+//                                    for (int tuple = threadTuple; tuple < threadCardinality; tuple++) {
+//                                        tuples[threadTable] = tuple;
+//                                    }
+//                                }
                             }
                             else {
-                                for (int rid = rStart; rid <= rEnd; rid++) {
-                                    int[] tuples = source.get(rid);
-                                    tuples[threadTable] = threadTuple;
-                                    // get smallest index
-                                    int small = Integer.MAX_VALUE;
-                                    int index = 0;
-                                    for (int i = 0; i < threadIndexWrappers.size(); i++) {
-                                        int[] newPoints = newPointsList.get(i);
-                                        int size = threadIndexWrappers.get(i).indexSize(tuples, newPoints);
-                                        if (size < small) {
-                                            small = size;
-                                            index = i;
-                                            System.arraycopy(newPoints, 0, points, 0, 2);
-                                        }
-                                    }
-
-                                    JoinPartitionIndexWrapper prob = threadIndexWrappers.get(index);
-                                    int startPos = points[0];
-                                    int endPos = points[1];
-                                    int[] positions = prob.nextIndex.positions;
-
-                                    List<JoinPartitionIndexWrapper> remainedWrappers = new ArrayList<>(threadIndexWrappers);
-                                    remainedWrappers.remove(index);
-                                    for (int pos = startPos; pos <= endPos; pos++) {
-                                        int nextTuple = prob.nextIndex.unique ? pos : positions[pos];
-                                        tuples[threadTable] = nextTuple;
-                                        boolean pass = true;
-                                        for (JoinPartitionIndexWrapper wrapper : remainedWrappers) {
-                                            if (!wrapper.evaluate(tuples)) {
-                                                pass = false;
-                                                break;
-                                            }
-                                        }
-                                        if (pass) {
-                                            threadResults.add(tuples.clone());
-                                        }
-                                    }
-                                }
+//                                for (int rid = startIndex; rid <= endIndex; rid++) {
+//                                    int[] tuples = source.get(rid);
+//                                    ThreadResult threadResult = getThreadResult(tuples, threadTable,
+//                                            threadTuple, newPointsList, points, nrTables, threadIndexWrappers);
+//                                }
                             }
-                            threadFinalResults = threadResults;
+//                            threadFinalResults = threadResults;
+                            // master thread update a new join order?
                             if (terminate.get()) {
                                 return new ArrayList<>();
                             }
                         }
+                        long timer1 = System.currentTimeMillis();
+                        System.out.println("Start: " + startIndex + " " + (timer1 - timer0));
                         return threadFinalResults;
                     }));
                 }
@@ -726,8 +993,7 @@ public class FixJoin extends SPJoin {
                 for (int i = 0; i < ranges.size(); i++) {
                     Future<List<int[]>> futureResult = futures.get(i);
                     try {
-                        List<int[]> resultList = futureResult.get();
-                        resultList.forEach(result::add);
+                        this.resultList[i] = futureResult.get();
                     } catch (InterruptedException | ExecutionException ignored) {
 
                     }
@@ -737,6 +1003,56 @@ public class FixJoin extends SPJoin {
             }
             intermediateResults = curResults;
         }
+    }
+
+    private ThreadResult getThreadResult(int[] tuples,
+                                  int threadTable,
+                                  int threadTuple,
+                                  List<int[]> newPointsList,
+                                  int[] points,
+                                  int nrTables,
+                                  List<JoinPartitionIndexWrapper> threadIndexWrappers) {
+        tuples[threadTable] = threadTuple;
+        // get smallest index
+        int small = Integer.MAX_VALUE;
+        int index = 0;
+        for (int i = 0; i < threadIndexWrappers.size(); i++) {
+            int[] newPoints = newPointsList.get(i);
+            int size = threadIndexWrappers.get(i).indexSize(tuples, newPoints);
+            if (size < small) {
+                small = size;
+                index = i;
+                System.arraycopy(newPoints, 0, points, 0, 2);
+            }
+        }
+
+        JoinPartitionIndexWrapper prob = threadIndexWrappers.get(index);
+        int startPos = points[0];
+        int endPos = points[1];
+        int[] positions = prob.nextIndex.positions;
+
+        List<JoinPartitionIndexWrapper> remainedWrappers = new ArrayList<>(threadIndexWrappers);
+        remainedWrappers.remove(index);
+        int[] threadResultsArray = new int[(endPos - startPos + 1) * nrTables + 1];
+        int count = 0;
+        for (int pos = startPos; pos <= endPos; pos++) {
+            int nextTuple = prob.nextIndex.unique ? pos : positions[pos];
+            tuples[threadTable] = nextTuple;
+            boolean pass = true;
+            for (JoinPartitionIndexWrapper wrapper : remainedWrappers) {
+                if (!wrapper.evaluate(tuples)) {
+                    pass = false;
+                    break;
+                }
+            }
+            if (pass) {
+                int resultPos = count * nrTables + 1;
+                System.arraycopy(tuples, 0, threadResultsArray, resultPos, nrTables);
+                count++;
+            }
+        }
+        threadResultsArray[0] = count;
+        return new ThreadResult(threadResultsArray);
     }
 
 
@@ -750,7 +1066,14 @@ public class FixJoin extends SPJoin {
     public List<IntIndexRange> split(int cardinality) {
         List<IntIndexRange> batches = new ArrayList<>();
 //        int batchSize = (int) Math.max(ParallelConfig.PRE_BATCH_SIZE, Math.round((cardinality + 0.0) / nrWorking));
-        int batchSize = ParallelConfig.PRE_BATCH_SIZE;
+        int batchSize;
+        if (cardinality >= ParallelConfig.PRE_BATCH_SIZE) {
+            batchSize = (int) Math.floor((cardinality + 0.0) / nrWorking);
+
+        }
+        else {
+            batchSize = ParallelConfig.PRE_BATCH_SIZE;
+        }
         for (int batchCtr = 0; batchCtr * batchSize < cardinality;
              ++batchCtr) {
             int startIdx = batchCtr * batchSize;
@@ -762,9 +1085,40 @@ public class FixJoin extends SPJoin {
         return batches;
     }
 
+    /**
+     * Splits table with given cardinality into tuple batches
+     * according to the configuration for joining.parallel processing.
+     *
+     * @return list of row ranges (batches)
+     */
+    public List<IntIndexRange> split(int cardinality, int nrTables) {
+        List<IntIndexRange> batches = new ArrayList<>();
+        int batchSize = (int) Math.ceil((cardinality + 0.0) / nrWorking);
+
+        for (int batchCtr = 0; batchCtr * batchSize < cardinality;
+             ++batchCtr) {
+            int startIdx = batchCtr * batchSize;
+            int tentativeEndIdx = startIdx + batchSize;
+            int endIdx = Math.min(cardinality, tentativeEndIdx);
+            IntIndexRange IntIndexRange = new IntIndexRange(startIdx * nrTables,
+                    endIdx * nrTables, batchCtr);
+            batches.add(IntIndexRange);
+        }
+        return batches;
+    }
+
 
     @Override
     public boolean isFinished() {
         return isFinished || (lastState != null && lastState.isFinished());
+    }
+}
+
+class ThreadResult {
+    final int[] result;
+    final int count;
+    public ThreadResult(int[] result) {
+        this.result = result;
+        count = result[0];
     }
 }

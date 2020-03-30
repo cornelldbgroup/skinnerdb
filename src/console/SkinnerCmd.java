@@ -486,6 +486,7 @@ public class SkinnerCmd {
         }
         if (args.length > 1) {
             ParallelConfig.EXE_THREADS = Integer.parseInt(args[1]);
+            ParallelConfig.EXE_EXECUTORS = Integer.parseInt(Configuration.getProperty("THREADS", "30"));
             System.out.println("Threads: " + ParallelConfig.EXE_THREADS + " " + ParallelConfig.PARALLEL_SPEC);
         }
         // whether to use parallel strategy
