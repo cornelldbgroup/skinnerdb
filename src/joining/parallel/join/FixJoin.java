@@ -187,7 +187,8 @@ public class FixJoin extends SPJoin {
 //            executeFixedJoin(plan, state, offsets);
             terminate.set(false);
             long exe1 = System.currentTimeMillis();
-            executeParallelRePartition(plan, state, offsets);
+//            executeParallelRePartition(plan, state, offsets);
+            executeParallelFixedJoin(plan, state, offsets);
             long exe2 = System.currentTimeMillis();
             System.out.println("Execution: " + (exe2 - exe1));
             lastState = state;
@@ -759,6 +760,7 @@ public class FixJoin extends SPJoin {
         state.lastIndex = terminate.get() ? 1 : -1;
     }
 
+    // parallel breadth-first join algorithm without re-paritioning
     private void executeParallelFixedJoin(LeftDeepPartitionPlan plan, State state, int[] offsets) {
         // Extract variables for convenient access
         int nrTables = query.nrJoined;
@@ -775,15 +777,14 @@ public class FixJoin extends SPJoin {
         int firstTable = plan.joinOrder.order[0];
         int start = Math.max(offsets[firstTable], tupleIndices[firstTable]);
         List<int[]> intermediateResults = new ArrayList<>(cardinalities[firstTable] - start);
-        int firstIndex = 0;
-        while (plan.joinOrder.order[firstIndex] != this.firstTable) {
-            firstIndex++;
-        }
 
+        // for the first table, just add tuples of the first table to the intermediate result.
         for (int firstTuple = start; firstTuple < cardinalities[firstTable]; firstTuple++) {
             tupleIndices[firstTable] = firstTuple;
             intermediateResults.add(tupleIndices.clone());
         }
+
+        // iterate all joining tables
         for (int nextIndex = 1; nextIndex < nrTables; nextIndex++) {
             int nextTable = plan.joinOrder.order[nextIndex];
             // Integrate table offset
@@ -795,10 +796,14 @@ public class FixJoin extends SPJoin {
             List<JoinPartitionIndexWrapper> indexWrappers = joinIndices.get(nextIndex);
             final boolean isEmpty = indexWrappers.isEmpty();
             List<int[]> finalIntermediateResults = intermediateResults;
-            // partition the input table
+            // partition the input intermediate results
             List<IntIndexRange> ranges = this.split(finalIntermediateResults.size());
             List<int[]> curResults = new ArrayList<>();
-            if (finalIntermediateResults.size() < 1000) {
+
+            // if the intermediate result size is smaller than the minimal batch size.
+            // use breadth-first join sequentially
+            // Please just skip this branch because the else branch uses the same join algorithm but in parallel
+            if (finalIntermediateResults.size() < ParallelConfig.PRE_BATCH_SIZE) {
                 int[] points = new int[2];
                 List<int[]> newPointsList = new ArrayList<>();
                 for (int i = 0; i < indexWrappers.size(); i++) {
@@ -860,10 +865,12 @@ public class FixJoin extends SPJoin {
                     }
                 }
             }
+            // parallel breadth-first join algorithm
             else {
                 List<Future<List<int[]>>> futures = new ArrayList<>();
                 this.resultList = new ArrayList[ranges.size()];
                 for (IntIndexRange batch : ranges) {
+                    // the start and end position of the parition.
                     int startIndex = batch.firstTuple;
                     int endIndex = batch.lastTuple;
                     final int indexStart = nextIndex;
@@ -872,7 +879,7 @@ public class FixJoin extends SPJoin {
                         int[] points = new int[2];
                         int[] threadIndices = tupleIndices.clone();
                         List<int[]> threadFinalResults = new ArrayList<>();
-                        // the first table. We need to get tuples from a list
+                        // For the first table that is larger than batch size, we need to get tuples from a list
                         int threadTable = plan.joinOrder.order[indexStart];
                         // Integrate table offset
                         threadIndices[threadTable] = Math.max(
@@ -882,18 +889,24 @@ public class FixJoin extends SPJoin {
                         int threadTuple = threadIndices[threadTable];
                         List<JoinPartitionIndexWrapper> threadIndexWrappers = joinIndices.get(indexStart);
                         final boolean threadEmpty = threadIndexWrappers.isEmpty();
-
+                        // Create a list of int array. Each array is according to a join index.
+                        // The array has two elements. After running indexSize function,
+                        // the first element will be used to save the start matched row and
+                        // the second element will be used to save the end matched row.
                         List<int[]> newPointsList = new ArrayList<>();
                         for (int i = 0; i < threadIndexWrappers.size(); i++) {
                             newPointsList.add(new int[2]);
                         }
-
+                        // create an object array that has the same size of intermediate result partition
                         ThreadResult[] threadResults = new ThreadResult[endIndex - startIndex + 1];
                         int allResultCounts = 0;
                         // the index wrapper is empty
                         if (threadEmpty) {
+                            // iterate all intermediate tuples
                             for (int rid = startIndex; rid <= endIndex; rid++) {
                                 int[] tuples = finalIntermediateResults.get(rid);
+                                // For this tuple, we know there are (threadCardinality - threadTuple) numbers of
+                                // tuples that will be joined to the given tuple. And we save all tuples in a long array.
                                 int[] threadResultsArray = new int[(threadCardinality - threadTuple) * nrTables + 1];
                                 for (int tuple = threadTuple; tuple < threadCardinality; tuple++) {
                                     tuples[threadTable] = tuple;
@@ -902,11 +915,14 @@ public class FixJoin extends SPJoin {
                                 }
                                 int count = threadCardinality - threadTuple;
                                 threadResultsArray[0] = count;
+                                // accumulate how many new tuples we have found.
                                 allResultCounts += count;
+                                // save the encapsulation into the object array.
                                 threadResults[rid - startIndex] = new ThreadResult(threadResultsArray);
                             }
                         }
                         else {
+                            // iterate all intermediate tuples
                             for (int rid = startIndex; rid <= endIndex; rid++) {
                                 int[] tuples = finalIntermediateResults.get(rid);
                                 threadResults[rid - startIndex] = getThreadResult(tuples, threadTable,
@@ -920,9 +936,11 @@ public class FixJoin extends SPJoin {
                         }
 
 
-                        //
+                        // For the remaining tables, we cannot get tuples from a list.
+                        // Instead, we need to get tuples from the object array.
                         for (int threadIndex = indexStart + 1; threadIndex < nrTables; threadIndex++) {
                             ThreadResult[] curThreadResults = new ThreadResult[allResultCounts];
+
                             allResultCounts = 0;
                             threadTable = plan.joinOrder.order[threadIndex];
                             // Integrate table offset
@@ -938,47 +956,52 @@ public class FixJoin extends SPJoin {
                             for (int i = 0; i < threadIndexWrappers.size(); i++) {
                                 newPointsList.add(new int[2]);
                             }
-
+                            // the number of tuples from the intermediate results that have been joined
+                            int nrTuples = 0;
                             if (empty) {
-                                int nrTuples = 0;
+                                // iterate each encapsulation in the object array
                                 for (ThreadResult threadResult: threadResults) {
+                                    // the number of saved tuples in each object.
                                     int count = threadResult.count;
-                                    int[] threadResultsArray = new int[count * nrTables + 1];
                                     for (int tuplesCtr = 0; tuplesCtr < count; tuplesCtr++) {
+                                        int newCount = threadCardinality - threadTuple;
+                                        int[] threadResultsArray = new int[newCount * nrTables + 1];
                                         int tuplePos = 1 + tuplesCtr * nrTables;
+                                        // iterate all rows in the right table
                                         for (int tuple = threadTuple; tuple < threadCardinality; tuple++) {
+                                            // the destination position
                                             int resultPos = (tuple - threadTuple) * nrTables + 1;
-                                            System.arraycopy(threadResult.result, tuplePos, threadResultsArray, resultPos, nrTables);
+                                            // copy new tuples to according position
+                                            System.arraycopy(threadResult.result,
+                                                    tuplePos, threadResultsArray, resultPos, nrTables);
                                             threadResultsArray[resultPos + threadIndex] = tuple;
                                         }
-                                        int newCount = threadCardinality - threadTuple;
                                         threadResultsArray[0] = newCount;
                                         allResultCounts += newCount;
-                                        threadResults[nrTuples] = new ThreadResult(threadResultsArray);
+                                        curThreadResults[nrTuples] = new ThreadResult(threadResultsArray);
                                         nrTuples++;
                                     }
                                 }
-
-                                for (ThreadResult threadResult: threadResults) {
-                                    int count = threadResult.count;
-                                    int[] threadResultsArray = new int[count * nrTables + 1];
-                                }
-
-//                                for (int rid = startIndex; rid <= endIndex; rid++) {
-//                                    int[] tuples = source.get(rid);
-//                                    for (int tuple = threadTuple; tuple < threadCardinality; tuple++) {
-//                                        tuples[threadTable] = tuple;
-//                                    }
-//                                }
                             }
                             else {
-//                                for (int rid = startIndex; rid <= endIndex; rid++) {
-//                                    int[] tuples = source.get(rid);
-//                                    ThreadResult threadResult = getThreadResult(tuples, threadTable,
-//                                            threadTuple, newPointsList, points, nrTables, threadIndexWrappers);
-//                                }
+                                // iterate each encapsulation in the object array
+                                for (ThreadResult threadResult: threadResults) {
+                                    // the number of saved tuples in each object.
+                                    int count = threadResult.count;
+                                    int[] resultArray = threadResult.result;
+                                    // iterate each tuple in the object.
+                                    for (int resultCtr = 0; resultCtr < count; resultCtr++) {
+                                        int startPos = resultCtr * nrTables + 1;
+                                        System.arraycopy(resultArray, startPos, threadIndices, 0, nrTables);
+                                        // create a new object encapsulation and save it to according position.
+                                        curThreadResults[nrTuples] = getThreadResult(threadIndices, threadTable,
+                                                threadTuple, newPointsList, points, nrTables, threadIndexWrappers);
+                                        allResultCounts += curThreadResults[nrTuples].count;
+                                        nrTuples++;
+                                    }
+                                }
                             }
-//                            threadFinalResults = threadResults;
+                            threadResults = curThreadResults;
                             // master thread update a new join order?
                             if (terminate.get()) {
                                 return new ArrayList<>();
@@ -1005,6 +1028,17 @@ public class FixJoin extends SPJoin {
         }
     }
 
+    /**
+     * Get ThreadResult for a given tuple
+     * @param tuples                a tuple from the previous intermediate results
+     * @param threadTable           the right table to join
+     * @param threadTuple           the offset of the right table
+     * @param newPointsList         data structure to save start and end matched rows for each join index
+     * @param points                data structure to save start and end matched rows for the smallest join index
+     * @param nrTables              the numbers of tables
+     * @param threadIndexWrappers   all join indexes
+     * @return
+     */
     private ThreadResult getThreadResult(int[] tuples,
                                   int threadTable,
                                   int threadTuple,
@@ -1030,9 +1064,11 @@ public class FixJoin extends SPJoin {
         int startPos = points[0];
         int endPos = points[1];
         int[] positions = prob.nextIndex.positions;
-
+        // remaining join indexes
         List<JoinPartitionIndexWrapper> remainedWrappers = new ArrayList<>(threadIndexWrappers);
         remainedWrappers.remove(index);
+        // we know that the number of matched rows is upper bounded by the size of the smallest index
+        // we save all new intermediate results according to the given tuple into this long array.
         int[] threadResultsArray = new int[(endPos - startPos + 1) * nrTables + 1];
         int count = 0;
         for (int pos = startPos; pos <= endPos; pos++) {
@@ -1051,7 +1087,9 @@ public class FixJoin extends SPJoin {
                 count++;
             }
         }
+        // the first element is the number of tuples saved in the long array
         threadResultsArray[0] = count;
+        // return the object encapsulation.
         return new ThreadResult(threadResultsArray);
     }
 
@@ -1068,8 +1106,7 @@ public class FixJoin extends SPJoin {
 //        int batchSize = (int) Math.max(ParallelConfig.PRE_BATCH_SIZE, Math.round((cardinality + 0.0) / nrWorking));
         int batchSize;
         if (cardinality >= ParallelConfig.PRE_BATCH_SIZE) {
-            batchSize = (int) Math.floor((cardinality + 0.0) / nrWorking);
-
+            batchSize = (int) Math.floor((cardinality + 0.0) / 20);
         }
         else {
             batchSize = ParallelConfig.PRE_BATCH_SIZE;
