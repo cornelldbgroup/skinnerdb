@@ -2,6 +2,7 @@ package config;
 
 import joining.uct.ExplorationWeightPolicy;
 import joining.uct.SelectionPolicy;
+import joining.uct.TreeSearchPolicy;
 
 /**
  * Configures reinforcement-learning based
@@ -17,11 +18,11 @@ public class JoinConfig {
 	public static final SelectionPolicy DEFAULT_SELECTION =
 			SelectionPolicy.UCB1;
 	/**
-	 * Number of steps performed per episode.
+	 * Number of learning steps performed per episode.
 	 */
 	public static int LEARN_BUDGET_EPISODE = 500;
 	/**
-	 * Number of steps performed per episode.
+	 * Number of execution steps performed per episode.
 	 */
 	public static int EXECUTION_BUDGET_EPISODE = 10000;
 	/**
@@ -47,7 +48,7 @@ public class JoinConfig {
 	 * most interesting action to try next). This
 	 * factor may be dynamically adapted.
 	 */
-	public static double EXPLORATION_WEIGHT = 1E-20;
+	public static double EXPLORATION_WEIGHT = 1E-5;
 	/**
 	 * Determines how the weight for the exploration term
 	 * of the UCT algorithm is updated over time.
@@ -86,6 +87,12 @@ public class JoinConfig {
 	 * is reached).
 	 */
 	public static final boolean SIMPLE_ANTI_JOIN = false;
-
+	/**
+	 * number of learning per iteration
+	 */
 	public static int SAMPLE_PER_LEARN = 10;
+	/**
+	 * monte carlo tree search policy
+	 */
+	public static TreeSearchPolicy TREE_POLICY = TreeSearchPolicy.UCT;
 }

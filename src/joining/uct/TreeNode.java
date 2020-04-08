@@ -1,19 +1,17 @@
 package joining.uct;
 
 import joining.join.MultiWayJoin;
-import joining.plan.JoinOrder;
-import org.apache.commons.lang3.mutable.MutableBoolean;
 import query.QueryInfo;
 import statistics.JoinStats;
 
 import java.util.*;
 
 /**
- * Represents node in brue search tree.
+ * base class to represent the tree node
  *
  * @author Junxiong Wang
  */
-public class BrueINode {
+public abstract class TreeNode {
     /**
      * Used for randomized selection policy.
      */
@@ -42,10 +40,6 @@ public class BrueINode {
      * that have not been tried and are recommended.
      */
     final List<Integer> priorityActions;
-    /**
-     * Assigns each action index to child node.
-     */
-    public final BrueINode[] childNodes;
     /**
      * Number of times this node was visited.
      */
@@ -95,8 +89,43 @@ public class BrueINode {
      * is activated.
      */
     final Set<Integer> recommendedActions;
+    /**
+     * Set to false only for actions representing sub-queries
+     * in exists expressions that are connected via predicates
+     * to some of the unselected tables. (the treatment of
+     * exists expression in the join algorithm assumes that
+     * the corresponding tables are selected only when all
+     * connected predicates can be immediately evaluated).
+     */
+    final boolean[] eligibleExists;
 
-    static HashMap<JoinOrder, BrueINode> nodeMap = new HashMap<>();
+    /**
+     * Set flags for all tables indicating whether they
+     * are eligible for selection. We assume that this
+     * function is only called after all fields except
+     * for eligibleExists have been initialized.
+     */
+    void determineEligibility() {
+        // All actions are eligible by default
+        Arrays.fill(eligibleExists, true);
+        // Check for ineligible actions
+        for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
+            // Does this action select a table representing
+            // a sub-query in an exists expression?
+            int tableIdx = nextTable[actionCtr];
+            String alias = query.aliases[tableIdx];
+            if (query.aliasToExistsFlag.containsKey(alias)) {
+                // Is this table connected to unselected
+                // tables via predicates?
+                Set<Integer> otherUnjoined = new HashSet<>();
+                otherUnjoined.addAll(unjoinedTables);
+                otherUnjoined.remove(tableIdx);
+                if (query.connected(otherUnjoined, tableIdx)) {
+                    eligibleExists[actionCtr] = false;
+                }
+            }
+        }
+    }
 
     /**
      * Initialize UCT root node.
@@ -106,8 +135,8 @@ public class BrueINode {
      * @param useHeuristic whether to avoid Cartesian products
      * @param joinOp       multi-way join operator allowing fast join order switching
      */
-    public BrueINode(long roundCtr, QueryInfo query,
-                     boolean useHeuristic, MultiWayJoin joinOp) {
+    public TreeNode(long roundCtr, QueryInfo query,
+                    boolean useHeuristic, MultiWayJoin joinOp) {
         // Count node generation
         ++JoinStats.nrUctNodes;
         this.query = query;
@@ -115,11 +144,6 @@ public class BrueINode {
         createdIn = roundCtr;
         treeLevel = 0;
         nrActions = nrTables;
-        priorityActions = new ArrayList<Integer>();
-        for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
-            priorityActions.add(actionCtr);
-        }
-        childNodes = new BrueINode[nrActions];
         nrTries = new int[nrActions];
         accumulatedReward = new double[nrActions];
         joinedTables = new HashSet<Integer>();
@@ -136,6 +160,15 @@ public class BrueINode {
             accumulatedReward[action] = 0;
             recommendedActions.add(action);
         }
+        this.eligibleExists = new boolean[nrActions];
+        determineEligibility();
+        // All eligible actions become priority actions
+        priorityActions = new ArrayList<Integer>();
+        for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
+            if (eligibleExists[actionCtr]) {
+                priorityActions.add(actionCtr);
+            }
+        }
     }
 
     /**
@@ -145,13 +178,12 @@ public class BrueINode {
      * @param parent      parent node in UCT tree
      * @param joinedTable new joined table
      */
-    public BrueINode(long roundCtr, BrueINode parent, int joinedTable) {
+    public TreeNode(long roundCtr, TreeNode parent, int joinedTable) {
         // Count node generation
         ++JoinStats.nrUctNodes;
         createdIn = roundCtr;
         treeLevel = parent.treeLevel + 1;
         nrActions = parent.nrActions - 1;
-        childNodes = new BrueINode[nrActions];
         nrTries = new int[nrActions];
         accumulatedReward = new double[nrActions];
         query = parent.query;
@@ -169,6 +201,9 @@ public class BrueINode {
             nextTable[actionCtr] = unjoinedTables.get(actionCtr);
         }
         this.joinOp = parent.joinOp;
+        // Determine eligibility
+        this.eligibleExists = new boolean[nrActions];
+        determineEligibility();
         // Calculate recommended actions if heuristic is activated
         this.useHeuristic = parent.useHeuristic;
         if (useHeuristic) {
@@ -179,14 +214,17 @@ public class BrueINode {
                 int table = nextTable[actionCtr];
                 // Check if at least one predicate connects current
                 // tables to new table.
-                if (query.connected(joinedTables, table)) {
+                if (query.connected(joinedTables, table) &&
+                        eligibleExists[actionCtr]) {
                     recommendedActions.add(actionCtr);
                 } // over predicates
             } // over actions
             if (recommendedActions.isEmpty()) {
-                // add all actions to recommended actions
+                // add all eligible actions to recommended actions
                 for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
-                    recommendedActions.add(actionCtr);
+                    if (eligibleExists[actionCtr]) {
+                        recommendedActions.add(actionCtr);
+                    }
                 }
             }
         } // if heuristic is used
@@ -197,14 +235,15 @@ public class BrueINode {
         // if the heuristic is activated.
         priorityActions = new ArrayList<Integer>();
         for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
-            if (!useHeuristic || recommendedActions.contains(actionCtr)) {
+            if (eligibleExists[actionCtr] && (!useHeuristic ||
+                    recommendedActions.contains(actionCtr))) {
                 priorityActions.add(actionCtr);
             }
         }
     }
 
     /**
-     * Updates UCT statistics after sampling.
+     * Updates monte carlo tree statistics after sampling.
      *
      * @param selectedAction action taken
      * @param reward         reward achieved
@@ -215,132 +254,5 @@ public class BrueINode {
         accumulatedReward[selectedAction] += reward;
     }
 
-    /**
-     * Recursively sample from UCT tree and return reward.
-     *
-     * @param roundCtr  current round (used as timestamp for expansion)
-     * @param joinOrder partially completed join order
-     * @return achieved reward
-     */
-    public double sample(long roundCtr, int[] joinOrder, int depth,
-                         int selectSwitch, boolean expand, MutableBoolean restart) throws Exception {
-        //System.out.println("roundCtr:" + roundCtr);
-        //System.out.println("selectSwitchFun:" + selectSwitchFun);
-        //System.out.println("order " + Arrays.toString(joinOrder));
-        if (depth == nrTables) {
-//            System.out.println("order " + Arrays.toString(joinOrder));
-            return joinOp.execute(joinOrder);
-        }
-        //pick up action for the next step
-        int action = 0;
-        if (depth < selectSwitch) {
-            //explore the current best action
-            //System.out.println("explore new order=====");
-            action = explorationPolicy();
-            //System.out.println("explore:" + action);
-        } else {
-            //select the new action
-            //System.out.println("exploit best order=====");
-            action = estimationPolicy();
-            //System.out.println("random:" + action);
-        }
 
-        int table = nextTable[action];
-        joinOrder[treeLevel] = table;
-        //System.out.println("table:" + table);
-        double reward = 0;
-        if (childNodes[action] != null) {
-            //go to the lower level
-            reward = childNodes[action].sample(roundCtr, joinOrder, depth + 1, selectSwitch, false, restart);
-        } else {
-            //go the the lower level
-            JoinOrder currentOrder = new JoinOrder(Arrays.copyOfRange(joinOrder, 0, treeLevel + 1));
-            BrueINode nextNode;
-            if (nodeMap.containsKey(currentOrder)) {
-                nextNode = nodeMap.get(currentOrder);
-            } else {
-                nextNode = new BrueINode(roundCtr, this, table);
-                nodeMap.put(currentOrder, nextNode);
-            }
-            if (expand) {
-                //Expand the BRUE tree
-                childNodes[action] = nextNode;
-                if (depth != selectSwitch) {
-                    restart.setTrue();
-                }
-                //only expand one time.
-                expand = false;
-            }
-            reward = nextNode.sample(roundCtr, joinOrder, depth + 1, selectSwitch, expand, restart);
-        }
-        if (depth == selectSwitch) {
-            //System.out.println("update reward");
-            updateStatistics(action, reward);
-        }
-        return reward;
-    }
-
-    private int estimationPolicy() {
-        int offset = random.nextInt(nrActions);
-        int bestAction = -1;
-        double bestQuality = -1;
-        for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
-            // Calculate index of current action
-            int action = (offset + actionCtr) % nrActions;
-            if (useHeuristic && !recommendedActions.contains(action))
-                continue;
-            double meanReward = (nrTries[action] > 0) ? accumulatedReward[action] / nrTries[action] : 0;
-            //System.out.println("action:" + action);
-            //System.out.println("meanReward:" + meanReward);
-            if (meanReward > bestQuality) {
-                bestAction = action;
-                bestQuality = meanReward;
-            }
-        }
-        return bestAction;
-    }
-
-    private int explorationPolicy() {
-        int offset = random.nextInt(nrActions);
-        for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
-            int action = (offset + actionCtr) % nrActions;
-            if (useHeuristic && !recommendedActions.contains(action))
-                continue;
-            return action;
-        }
-        return offset;
-    }
-
-    public boolean getOptimalPolicy(int[] joinOrder, int roundCtr) {
-//        for (int i = 0; i < nrActions; i++) {
-//            System.out.println("reward:" + accumulatedReward[i]);
-//        }
-
-        if (treeLevel < nrTables) {
-            int action = estimationPolicy();
-            int table = nextTable[action];
-            joinOrder[treeLevel] = table;
-            if (childNodes[action] != null)
-                return childNodes[action].getOptimalPolicy(joinOrder, roundCtr);
-            else {
-                JoinOrder currentOrder = new JoinOrder(Arrays.copyOfRange(joinOrder, 0, treeLevel + 1));
-                if(nodeMap.containsKey(currentOrder)) {
-                    return nodeMap.get(currentOrder).getOptimalPolicy(joinOrder, roundCtr);
-                } else {
-                    return false;
-                }
-            }
-        }
-
-        //System.out.println(Arrays.toString(joinOrder));
-        return true;
-    }
-
-    public void executePhaseWithBudget(int[] joinOrder) throws Exception {
-        joinOp.execute(joinOrder);
-    }
-
-    public void clearNodeMap() {
-        nodeMap.clear();
-    }
 }

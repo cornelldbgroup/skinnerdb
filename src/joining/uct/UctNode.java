@@ -2,7 +2,6 @@ package joining.uct;
 
 import joining.join.MultiWayJoin;
 import query.QueryInfo;
-import statistics.JoinStats;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -15,168 +14,26 @@ import config.JoinConfig;
  *
  * @author immanueltrummer
  */
-public class UctNode {
-    /**
-     * Used for randomized selection policy.
-     */
-    final Random random = new Random();
-    /**
-     * The query for which we are optimizing.
-     */
-    final QueryInfo query;
-    /**
-     * Iteration in which node was created.
-     */
-    final long createdIn;
-    /**
-     * Level of node in tree (root node has level 0).
-     * At the same time the join order index into
-     * which table selected in this node is inserted.
-     */
-    public final int treeLevel;
-    /**
-     * Number of possible actions from this state.
-     */
-    public final int nrActions;
-    /**
-     * Actions that have not been tried yet - if the
-     * heuristic is used, this only contains actions
-     * that have not been tried and are recommended.
-     */
-    final List<Integer> priorityActions;
+public class UctNode extends TreeNode {
     /**
      * Assigns each action index to child node.
      */
-    public final UctNode[] childNodes;
-    /**
-     * Number of times this node was visited.
-     */
-    int nrVisits = 0;
-    /**
-     * Number of times each action was tried out.
-     */
-    public final int[] nrTries;
-    /**
-     * Reward accumulated for specific actions.
-     */
-    public final double[] accumulatedReward;
-    /**
-     * Total number of tables to join.
-     */
-    final int nrTables;
-    /**
-     * Set of already joined tables (each UCT node represents
-     * a state in which a subset of tables are joined).
-     */
-    final Set<Integer> joinedTables;
-    /**
-     * List of unjoined tables (we use a list instead of a set
-     * to enable shuffling during playouts).
-     */
-    final List<Integer> unjoinedTables;
-    /**
-     * Associates each action index with a next table to join.
-     */
-    public final int[] nextTable;
-    /**
-     * Evaluates a given join order and accumulates results.
-     */
-    final MultiWayJoin joinOp;
-    /**
-     * Indicates whether the search space is restricted to
-     * join orders that avoid Cartesian products. This
-     * flag should only be activated if it is ensured
-     * that a given query can be evaluated under that
-     * constraint.
-     */
-    final boolean useHeuristic;
-    /**
-     * Contains actions that are consistent with the "avoid
-     * Cartesian products" heuristic. UCT algorithm will
-     * restrict focus on such actions if heuristic flag
-     * is activated.
-     */
-    final Set<Integer> recommendedActions;
-    /**
-     * Set to false only for actions representing sub-queries
-     * in exists expressions that are connected via predicates
-     * to some of the unselected tables. (the treatment of
-     * exists expression in the join algorithm assumes that
-     * the corresponding tables are selected only when all
-     * connected predicates can be immediately evaluated).
-     */
-    final boolean[] eligibleExists;
-    /**
-     * Set flags for all tables indicating whether they
-     * are eligible for selection. We assume that this
-     * function is only called after all fields except
-     * for eligibleExists have been initialized.
-     */
-    void determineEligibility() {
-        // All actions are eligible by default
-        Arrays.fill(eligibleExists, true);
-        // Check for ineligible actions
-        for (int actionCtr=0; actionCtr<nrActions; ++actionCtr) {
-            // Does this action select a table representing
-            // a sub-query in an exists expression?
-            int tableIdx = nextTable[actionCtr];
-            String alias = query.aliases[tableIdx];
-            if (query.aliasToExistsFlag.containsKey(alias)) {
-                // Is this table connected to unselected
-                // tables via predicates?
-                Set<Integer> otherUnjoined = new HashSet<>();
-                otherUnjoined.addAll(unjoinedTables);
-                otherUnjoined.remove(tableIdx);
-                if (query.connected(otherUnjoined, tableIdx)) {
-                    eligibleExists[actionCtr] = false;
-                }
-            }
-        }
-    }
+    public UctNode[] childNodes;
     /**
      * Initialize UCT root node.
      *
-     * @param roundCtr     	current round number
-     * @param query        	the query which is optimized
-     * @param useHeuristic 	whether to avoid Cartesian products
-     * @param joinOp		multi-way join operator allowing fast join order switching
+     * @param roundCtr     current round number
+     * @param query        the query which is optimized
+     * @param useHeuristic whether to avoid Cartesian products
+     * @param joinOp       multi-way join operator allowing fast join order switching
      */
     public UctNode(long roundCtr, QueryInfo query,
                    boolean useHeuristic, MultiWayJoin joinOp) {
         // Count node generation
-        ++JoinStats.nrUctNodes;
-        this.query = query;
-        this.nrTables = query.nrJoined;
-        createdIn = roundCtr;
-        treeLevel = 0;
-        nrActions = nrTables;
+        super(roundCtr, query, useHeuristic, joinOp);
         childNodes = new UctNode[nrActions];
-        nrTries = new int[nrActions];
-        accumulatedReward = new double[nrActions];
-        joinedTables = new HashSet<Integer>();
-        unjoinedTables = new ArrayList<>();
-        nextTable = new int[nrTables];
-        for (int tableCtr = 0; tableCtr < nrTables; ++tableCtr) {
-            unjoinedTables.add(tableCtr);
-            nextTable[tableCtr] = tableCtr;
-        }
-        this.joinOp = joinOp;
-        this.useHeuristic = useHeuristic;
-        recommendedActions = new HashSet<Integer>();
-        for (int action = 0; action < nrActions; ++action) {
-            accumulatedReward[action] = 0;
-            recommendedActions.add(action);
-        }
-        this.eligibleExists = new boolean[nrActions];
-        determineEligibility();
-        // All eligible actions become priority actions
-        priorityActions = new ArrayList<Integer>();
-        for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
-            if (eligibleExists[actionCtr]) {
-                priorityActions.add(actionCtr);
-            }
-        }
     }
+
     /**
      * Initializes UCT node by expanding parent node.
      *
@@ -186,73 +43,15 @@ public class UctNode {
      */
     public UctNode(long roundCtr, UctNode parent, int joinedTable) {
         // Count node generation
-        ++JoinStats.nrUctNodes;
-        createdIn = roundCtr;
-        treeLevel = parent.treeLevel + 1;
-        nrActions = parent.nrActions - 1;
+        super(roundCtr, parent, joinedTable);
         childNodes = new UctNode[nrActions];
-        nrTries = new int[nrActions];
-        accumulatedReward = new double[nrActions];
-        query = parent.query;
-        nrTables = parent.nrTables;
-        joinedTables = new HashSet<Integer>();
-        joinedTables.addAll(parent.joinedTables);
-        joinedTables.add(joinedTable);
-        unjoinedTables = new ArrayList<Integer>();
-        unjoinedTables.addAll(parent.unjoinedTables);
-        int indexToRemove = unjoinedTables.indexOf(joinedTable);
-        unjoinedTables.remove(indexToRemove);
-        nextTable = new int[nrActions];
-        for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
-            accumulatedReward[actionCtr] = 0;
-            nextTable[actionCtr] = unjoinedTables.get(actionCtr);
-        }
-        this.joinOp = parent.joinOp;
-        // Determine eligibility
-        this.eligibleExists = new boolean[nrActions];
-        determineEligibility();
-        // Calculate recommended actions if heuristic is activated
-        this.useHeuristic = parent.useHeuristic;
-        if (useHeuristic) {
-            recommendedActions = new HashSet<Integer>();
-            // Iterate over all actions
-            for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
-                // Get table associated with (join) action
-                int table = nextTable[actionCtr];
-                // Check if at least one predicate connects current
-                // tables to new table.
-                if (query.connected(joinedTables, table) &&
-                        eligibleExists[actionCtr]) {
-                    recommendedActions.add(actionCtr);
-                } // over predicates
-            } // over actions
-            if (recommendedActions.isEmpty()) {
-                // add all eligible actions to recommended actions
-                for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
-                    if (eligibleExists[actionCtr]) {
-                        recommendedActions.add(actionCtr);
-                    }
-                }
-            }
-        } // if heuristic is used
-        else {
-            recommendedActions = null;
-        }
-        // Collect untried actions, restrict to recommended actions
-        // if the heuristic is activated.
-        priorityActions = new ArrayList<Integer>();
-        for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
-            if (eligibleExists[actionCtr] && (!useHeuristic ||
-                    recommendedActions.contains(actionCtr))) {
-                priorityActions.add(actionCtr);
-            }
-        }
     }
+
     /**
      * Select most interesting action to try next. Also updates
      * list of unvisited actions.
      *
-     * @param policy	policy used to select action
+     * @param policy policy used to select action
      * @return index of action to try next
      */
     int selectAction(SelectionPolicy policy) {
@@ -260,7 +59,7 @@ public class UctNode {
         // in exists/not exists clauses if activated.
         if (JoinConfig.SIMPLE_ANTI_JOIN) {
             int offset = random.nextInt(nrActions);
-            for (int actionCtr=0; actionCtr<nrActions; ++actionCtr) {
+            for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
                 int action = (actionCtr + offset) % nrActions;
                 int table = nextTable[action];
                 if (query.existsFlags[table] != 0 &&
@@ -322,7 +121,7 @@ public class UctNode {
                         quality = random.nextDouble();
                         break;
                     case RANDOM_UCB1:
-                        if (treeLevel==0) {
+                        if (treeLevel == 0) {
                             quality = random.nextDouble();
                         } else {
                             quality = meanReward +
@@ -342,7 +141,7 @@ public class UctNode {
             // For epsilon greedy, return random action with
             // probability epsilon.
             if (policy.equals(SelectionPolicy.EPSILON_GREEDY)) {
-                if (random.nextDouble()<=JoinConfig.EPSILON) {
+                if (random.nextDouble() <= JoinConfig.EPSILON) {
                     return random.nextInt(nrActions);
                 }
             }
@@ -350,23 +149,13 @@ public class UctNode {
             return bestAction;
         } // if there are unvisited actions
     }
-    /**
-     * Updates UCT statistics after sampling.
-     *
-     * @param selectedAction action taken
-     * @param reward         reward achieved
-     */
-    void updateStatistics(int selectedAction, double reward) {
-        ++nrVisits;
-        ++nrTries[selectedAction];
-        accumulatedReward[selectedAction] += reward;
-    }
+
     /**
      * Repairs given join order by pushing tables representing
      * sub-queries in exists expression backwards if some of
      * their dependencies cannot be immediately evaluated.
      *
-     * @param joinOrder		repair this join order
+     * @param joinOrder repair this join order
      */
     void repairExistPos(int[] joinOrder) {
         int[] repairedJoinOrder = new int[nrTables];
@@ -375,7 +164,7 @@ public class UctNode {
         Set<Integer> unjoined = IntStream.range(0, nrTables).
                 boxed().collect(Collectors.toSet());
         int targetCtr = 0;
-        for (int srcCtr=0; srcCtr<nrTables; ++srcCtr) {
+        for (int srcCtr = 0; srcCtr < nrTables; ++srcCtr) {
             // Take care of tables that were previously pushed back
             Iterator<Integer> pushedIter = pushedBacks.iterator();
             while (pushedIter.hasNext()) {
@@ -402,10 +191,11 @@ public class UctNode {
             }
         }
         // Copy repaired join order
-        for (int joinCtr=0; joinCtr<nrTables; ++joinCtr) {
+        for (int joinCtr = 0; joinCtr < nrTables; ++joinCtr) {
             joinOrder[joinCtr] = repairedJoinOrder[joinCtr];
         }
     }
+
     /**
      * Randomly complete join order with remaining tables,
      * invoke evaluation, and return obtained reward.
@@ -464,12 +254,13 @@ public class UctNode {
         // Evaluate completed join order and return reward
         return joinOp.execute(joinOrder);
     }
+
     /**
      * Recursively sample from UCT tree and return reward.
      *
      * @param roundCtr  current round (used as timestamp for expansion)
      * @param joinOrder partially completed join order
-     * @param policy	policy used to select actions
+     * @param policy    policy used to select actions
      * @return achieved reward
      */
     public double sample(long roundCtr, int[] joinOrder,
@@ -491,7 +282,7 @@ public class UctNode {
             // evaluate via recursive invocation or via playout
             UctNode child = childNodes[action];
             double reward = (child != null) ?
-                    child.sample(roundCtr, joinOrder, policy):
+                    child.sample(roundCtr, joinOrder, policy) :
                     playout(joinOrder);
             // update UCT statistics and return reward
             updateStatistics(action, reward);
