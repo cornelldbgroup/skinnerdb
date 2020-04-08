@@ -1,23 +1,20 @@
 package joining.uct;
 
 import joining.join.MultiWayJoin;
-import joining.plan.JoinOrder;
-import org.apache.commons.lang3.mutable.MutableBoolean;
 import query.QueryInfo;
 import statistics.JoinStats;
 
-import java.lang.reflect.Array;
 import java.sql.SQLOutput;
 import java.util.*;
 
 import config.JoinConfig;
 
 /**
- * Represents node in brue search tree.
+ * Represents node in UCT search tree.
  *
- * @author Junxiong Wang
+ * @author immanueltrummer
  */
-public class BrueNode2 {
+public class BrueNode {
     /**
      * Used for randomized selection policy.
      */
@@ -49,7 +46,7 @@ public class BrueNode2 {
     /**
      * Assigns each action index to child node.
      */
-    public final BrueNode2[] childNodes;
+    public final BrueNode[] childNodes;
     /**
      * Number of times this node was visited.
      */
@@ -100,8 +97,6 @@ public class BrueNode2 {
      */
     final Set<Integer> recommendedActions;
 
-    static HashMap<JoinOrder, BrueNode2> nodeMap = new HashMap<>();
-
     /**
      * Initialize UCT root node.
      *
@@ -110,8 +105,8 @@ public class BrueNode2 {
      * @param useHeuristic whether to avoid Cartesian products
      * @param joinOp       multi-way join operator allowing fast join order switching
      */
-    public BrueNode2(long roundCtr, QueryInfo query,
-                     boolean useHeuristic, MultiWayJoin joinOp) {
+    public BrueNode(long roundCtr, QueryInfo query,
+                   boolean useHeuristic, MultiWayJoin joinOp) {
         // Count node generation
         ++JoinStats.nrUctNodes;
         this.query = query;
@@ -123,7 +118,7 @@ public class BrueNode2 {
         for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
             priorityActions.add(actionCtr);
         }
-        childNodes = new BrueNode2[nrActions];
+        childNodes = new BrueNode[nrActions];
         nrTries = new int[nrActions];
         accumulatedReward = new double[nrActions];
         joinedTables = new HashSet<Integer>();
@@ -149,13 +144,13 @@ public class BrueNode2 {
      * @param parent      parent node in UCT tree
      * @param joinedTable new joined table
      */
-    public BrueNode2(long roundCtr, BrueNode2 parent, int joinedTable) {
+    public BrueNode(long roundCtr, BrueNode parent, int joinedTable) {
         // Count node generation
         ++JoinStats.nrUctNodes;
         createdIn = roundCtr;
         treeLevel = parent.treeLevel + 1;
         nrActions = parent.nrActions - 1;
-        childNodes = new BrueNode2[nrActions];
+        childNodes = new BrueNode[nrActions];
         nrTries = new int[nrActions];
         accumulatedReward = new double[nrActions];
         query = parent.query;
@@ -227,12 +222,12 @@ public class BrueNode2 {
      * @return achieved reward
      */
     public double sample(long roundCtr, int[] joinOrder, int depth,
-                         int selectSwitch, boolean expand, MutableBoolean restart) throws Exception {
+                         int selectSwitch) throws Exception {
         //System.out.println("roundCtr:" + roundCtr);
         //System.out.println("selectSwitchFun:" + selectSwitchFun);
         //System.out.println("order " + Arrays.toString(joinOrder));
         if (depth == nrTables) {
-//            System.out.println("order " + Arrays.toString(joinOrder));
+            //System.out.println("order " + Arrays.toString(joinOrder));
             return joinOp.execute(joinOrder);
         }
         //pick up action for the next step
@@ -252,31 +247,11 @@ public class BrueNode2 {
         int table = nextTable[action];
         joinOrder[treeLevel] = table;
         //System.out.println("table:" + table);
-        double reward = 0;
-        if (childNodes[action] != null) {
-            //go to the lower level
-            reward = childNodes[action].sample(roundCtr, joinOrder, depth + 1, selectSwitch, false, restart);
-        } else {
-            //go the the lower level
-            JoinOrder currentOrder = new JoinOrder(Arrays.copyOfRange(joinOrder, 0, treeLevel + 1));
-            BrueNode2 nextNode;
-            if (nodeMap.containsKey(currentOrder)) {
-                nextNode = nodeMap.get(currentOrder);
-            } else {
-                nextNode = new BrueNode2(roundCtr, this, table);
-                nodeMap.put(currentOrder, nextNode);
-            }
-            if (expand) {
-                //Expand the BRUE tree
-                childNodes[action] = nextNode;
-                if (depth != selectSwitch) {
-                    restart.setTrue();
-                }
-                //only expand one time.
-                expand = false;
-            }
-            reward = nextNode.sample(roundCtr, joinOrder, depth + 1, selectSwitch, expand, restart);
+        if (childNodes[action] == null) {
+            childNodes[action] = new BrueNode(roundCtr, this, table);
         }
+        BrueNode child = childNodes[action];
+        double reward = child.sample(roundCtr, joinOrder, depth + 1, selectSwitch);
         if (depth == selectSwitch) {
             //System.out.println("update reward");
             updateStatistics(action, reward);
@@ -315,36 +290,30 @@ public class BrueNode2 {
         return offset;
     }
 
-//    public boolean getOptimalPolicy(int[] joinOrder, int roundCtr) {
-////        for (int i = 0; i < nrActions; i++) {
-////            System.out.println("reward:" + accumulatedReward[i]);
-////        }
-//
-//        if (treeLevel < nrTables) {
-//            int action = estimationPolicy();
-//            int table = nextTable[action];
-//            joinOrder[treeLevel] = table;
-//            if (childNodes[action] != null)
-//                return childNodes[action].getOptimalPolicy(joinOrder, roundCtr);
-//            else {
-//                JoinOrder currentOrder = new JoinOrder(Arrays.copyOfRange(joinOrder, 0, treeLevel + 1));
-//                if(nodeMap.containsKey(currentOrder)) {
-//                    return nodeMap.get(currentOrder).getOptimalPolicy(joinOrder, roundCtr);
-//                } else {
-//                    return false;
-//                }
-//            }
+    public boolean getOptimalPolicy(int[] joinOrder, int roundCtr) {
+//        for (int i = 0; i < nrActions; i++) {
+//            System.out.println("reward:" + accumulatedReward[i]);
 //        }
-//
-//        //System.out.println(Arrays.toString(joinOrder));
-//        return true;
-//    }
+
+        if (treeLevel < nrTables) {
+            int action = estimationPolicy();
+            int table = nextTable[action];
+            joinOrder[treeLevel] = table;
+            if (childNodes[action] != null)
+                return childNodes[action].getOptimalPolicy(joinOrder, roundCtr);
+            else {
+                childNodes[action] = new BrueNode(roundCtr, this, table);
+                BrueNode child = childNodes[action];
+                child.getOptimalPolicy(joinOrder, roundCtr);
+                return false;
+            }
+        }
+
+        //System.out.println(Arrays.toString(joinOrder));
+        return true;
+    }
 
     public void executePhaseWithBudget(int[] joinOrder) throws Exception {
         joinOp.execute(joinOrder);
-    }
-
-    public void clearNodeMap() {
-        nodeMap.clear();
     }
 }

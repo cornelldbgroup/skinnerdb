@@ -19,11 +19,11 @@ public class JoinConfig {
 	/**
 	 * Number of steps performed per episode.
 	 */
-	public static int LEARN_BUDGET_EPISODE = 5000;
+	public static int LEARN_BUDGET_EPISODE = 500;
 	/**
 	 * Number of steps performed per episode.
 	 */
-	public static int START_EXECUTION_BUDGET_EPISODE = 7000;
+	public static int EXECUTION_BUDGET_EPISODE = 10000;
 	/**
 	 * Execution budget increase delta
 	 */
@@ -40,12 +40,14 @@ public class JoinConfig {
 	 * reward.
 	 */
 	public static double OUTPUT_REWARD_WEIGHT = 0.5;
+
+	public static double REWARD_SCALE = 0.01;
 	/**
 	 * Weight for UCT exploration term (used to select
 	 * most interesting action to try next). This
 	 * factor may be dynamically adapted.
 	 */
-	public static double EXPLORATION_WEIGHT = 1E-5;
+	public static double EXPLORATION_WEIGHT = 1E-20;
 	/**
 	 * Determines how the weight for the exploration term
 	 * of the UCT algorithm is updated over time.
@@ -85,5 +87,5 @@ public class JoinConfig {
 	 */
 	public static final boolean SIMPLE_ANTI_JOIN = false;
 
-	public static int SAMPLE_PER_LEARN = 20;
+	public static int SAMPLE_PER_LEARN = 10;
 }

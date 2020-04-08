@@ -1,6 +1,5 @@
 package joining;
 
-import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Collection;
 
@@ -11,21 +10,19 @@ import config.PreConfig;
 import config.JoinConfig;
 import joining.join.OldJoin;
 import joining.result.ResultTuple;
-import joining.uct.SelectionPolicy;
-import joining.uct.UctNode;
+import joining.uct.BrueNode;
 import operators.Materialize;
 import preprocessing.Context;
 import query.ColumnRef;
 import query.QueryInfo;
 import statistics.JoinStats;
-import visualization.TreePlotter;
 
 /**
  * Controls the join phase.
  *
  * @author immanueltrummer
  */
-public class JoinProcessor {
+public class JoinProcessor2 {
     /**
      * The number of join-related log entries
      * generated for the current query.
@@ -66,92 +63,59 @@ public class JoinProcessor {
         OldJoin joinOp = new OldJoin(query, context,
                 JoinConfig.LEARN_BUDGET_EPISODE);
         // Initialize UCT join order search tree
-        UctNode root = new UctNode(0, query,
-                JoinConfig.AVOID_CARTESIANS, joinOp);
+        BrueNode root = new BrueNode(0, query, true, joinOp);
+//        BrueNode2 root = new BrueNode2(0, query, true, joinOp);
         // Initialize counters and variables
         int[] joinOrder = new int[query.nrJoined];
         long roundCtr = 0;
-        // Initialize exploration weight
-        switch (JoinConfig.EXPLORATION_POLICY) {
-            case SCALE_DOWN:
-                JoinConfig.EXPLORATION_WEIGHT = Math.sqrt(2);
-                break;
-            case STATIC:
-            case REWARD_AVERAGE:
-                // Nothing to do
-                break;
-            case ADAPT_TO_SAMPLE:
-                final int nrSamples = 1000;
-                double[] rewardSample = new double[nrSamples];
-                for (int i = 0; i < nrSamples; ++i) {
-                    ++roundCtr;
-                    rewardSample[i] = root.sample(
-                            roundCtr, joinOrder,
-                            SelectionPolicy.RANDOM);
-                }
-                Arrays.sort(rewardSample);
-                double median = rewardSample[nrSamples / 2];
-                JoinConfig.EXPLORATION_WEIGHT = median;
-                //System.out.println("Median:\t" + median);
-                break;
-        }
-        // Get default action selection policy
-        SelectionPolicy policy = JoinConfig.DEFAULT_SELECTION;
-        // Initialize counter until scale down
-        long nextScaleDown = 1;
-        // Initialize counter until memory loss
-        long nextForget = 1;
         // Initialize plot counter
         int plotCtr = 0;
         // Iterate until join result was generated
         double accReward = 0;
         double maxReward = Double.NEGATIVE_INFINITY;
+        int nrSampleTries = JoinConfig.SAMPLE_PER_LEARN;
+        int nrJoined = query.nrJoined;
+		int nExecutionTries = 0;
+//		int executionBudget =  JoinConfig.START_EXECUTION_BUDGET_EPISODE;
         while (!joinOp.isFinished()) {
-            ++roundCtr;
-            double reward = root.sample(roundCtr, joinOrder, policy);
-            // Count reward except for final sample
-            if (!joinOp.isFinished()) {
-                accReward += reward;
-                maxReward = Math.max(reward, maxReward);
+            // Learning phase
+            joinOp.budget = JoinConfig.LEARN_BUDGET_EPISODE;
+            for (int num = 0; num < nrSampleTries; num++) {
+                ++roundCtr;
+                int selectSwitch = nrJoined - ((int) ((roundCtr - 1) % nrJoined));
+                double reward = root.sample(roundCtr, joinOrder, 0, selectSwitch);
+//                MutableBoolean restart = new MutableBoolean(false);
+//                double reward = root.sample(roundCtr, joinOrder, 0, selectSwitch, true, restart);
+//                if(restart.booleanValue()) {
+//                    roundCtr = 0;
+//                }
+                // Generate logging entries if activated
+                log("Selected join order " + Arrays.toString(joinOrder));
+                log("Obtained reward:\t" + reward);
+                log("Table offsets:\t" + Arrays.toString(joinOp.tracker.tableOffset));
+                log("Table cardinalities:\t" + Arrays.toString(joinOp.cardinalities));
             }
-            switch (JoinConfig.EXPLORATION_POLICY) {
-                case REWARD_AVERAGE:
-                    double avgReward = accReward / roundCtr;
-                    JoinConfig.EXPLORATION_WEIGHT = avgReward;
-                    log("Avg. reward: " + avgReward);
-                    break;
-                case SCALE_DOWN:
-                    if (roundCtr == nextScaleDown) {
-                        JoinConfig.EXPLORATION_WEIGHT /= 10.0;
-                        nextScaleDown *= 10;
-                    }
-                    break;
-                case STATIC:
-                case ADAPT_TO_SAMPLE:
-                    // Nothing to do
-                    break;
-            }
-            // Consider memory loss
-            if (JoinConfig.FORGET && roundCtr == nextForget) {
-                root = new UctNode(roundCtr, query, true, joinOp);
-                nextForget *= 10;
-            }
-            // Generate logging entries if activated
-            log("Selected join order " + Arrays.toString(joinOrder));
-            log("Obtained reward:\t" + reward);
-            log("Table offsets:\t" + Arrays.toString(joinOp.tracker.tableOffset));
-            log("Table cardinalities:\t" + Arrays.toString(joinOp.cardinalities));
-            // Generate plots if activated
-            if (query.explain && plotCtr < query.plotAtMost &&
-                    roundCtr % query.plotEvery == 0) {
-                String plotName = "ucttree" + plotCtr + ".pdf";
-                String plotPath = Paths.get(query.plotDir, plotName).toString();
-                TreePlotter.plotTree(root, plotPath);
-                ++plotCtr;
-            }
+
+			//Execution phase
+			int[] currentOptimalJoinOrder = new int[query.nrJoined];
+			boolean finish = root.getOptimalPolicy(currentOptimalJoinOrder, 0);
+			// System.out.println("Opt:" + Arrays.toString(currentOptimalJoinOrder));
+//			System.out.println("Current Optimal:" + Arrays.toString(currentOptimalJoinOrder) + ", EntireOrder:" + finish);
+
+			if(finish) {
+//			    System.out.println("Current Optimal:" + Arrays.toString(currentOptimalJoinOrder));
+//				joinOp.budget = executionBudget;
+                joinOp.budget = JoinConfig.EXECUTION_BUDGET_EPISODE;
+				root.executePhaseWithBudget(currentOptimalJoinOrder);
+//                executionBudget *= JoinConfig.EXECUTION_BUDGET_INCREASE_DELTA;
+			}
+			nExecutionTries++;
         }
+
+        //Clear node map
+//        root.clearNodeMap();
+
         // Output most frequently used join order
-        root.sample(roundCtr, joinOrder, SelectionPolicy.MAX_VISIT);
         System.out.print("MFJO: ");
         for (int joinCtr = 0; joinCtr < query.nrJoined; ++joinCtr) {
             int table = joinOrder[joinCtr];
@@ -160,11 +124,11 @@ public class JoinProcessor {
         }
         System.out.println();
         // Draw final plot if activated
-        if (query.explain) {
-            String plotName = "ucttreefinal.pdf";
-            String plotPath = Paths.get(query.plotDir, plotName).toString();
-            TreePlotter.plotTree(root, plotPath);
-        }
+//        if (query.explain) {
+//            String plotName = "ucttreefinal.pdf";
+//            String plotPath = Paths.get(query.plotDir, plotName).toString();
+//            TreePlotter.plotTree(root, plotPath);
+//        }
         // Update statistics
         JoinStats.nrSamples = roundCtr;
         JoinStats.avgReward = accReward / roundCtr;
