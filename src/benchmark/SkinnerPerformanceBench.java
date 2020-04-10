@@ -21,8 +21,14 @@ import java.io.File;
 import java.io.PrintWriter;
 import java.util.Map;
 
+/**
+ * Test the performance of all those three RL search algorithm, UCT, BRUE and BRUEI
+ */
 public class SkinnerPerformanceBench {
 
+    /**
+     * the test number
+     */
     private final static int testNr = 3;
 
 //    private final static int[] testLearningBudgets = {500};
@@ -35,18 +41,7 @@ public class SkinnerPerformanceBench {
 
     private final static String[] scaleStr = {"-15", "1"};
 
-//            {4000, 5000, 6000, 7000, 8000, 9000, 10000};
-    //{500, 800, 1000, 2000, 3000, }
-//            {500, 800, 1000};
-//            {5000, 6000, 7000, 8000, 9000, 10000};
-    //{500, 800, 1000, 2000, 3000, 4000, }
-//            {28000, 27000, 26000, 25000, 24000, 23000, 22000};
-    // {5000000, 1000000, 500000, 100000, 50000, 10000};
-//            {21000, 19000, 17000, 15000, 13000, 11000, 9000, 7000, 5000, 3000, 1000, 800, 600, 400, 200};
-
-//    private final static int[] testExecutionBudgets =
-////            {9000, 7000, 5000, 3000, 1000, 800, 600, 400, 200};
-//    {9000, 7000, 5000, 4000, 3000, 2000, 1000};
+//    private final static int[] testExecutionBudgets = {9000, 7000, 5000, 3000, 1000, 800, 600, 400, 200};
 
 //    private final static int[] samplePerLearns = {10, 20, 40, 60, 80, 100};
 

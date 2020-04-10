@@ -163,7 +163,7 @@ public class JoinProcessor {
             }
         } else if (JoinConfig.TREE_POLICY == TreeSearchPolicy.BRUE || JoinConfig.TREE_POLICY == TreeSearchPolicy.BRUEI) {
             //No visualization support now
-            BrueNode root = new BrueNode(0, query, true, joinOp);
+            BrueNode root = new BrueNode(query, true, joinOp);
             int switchPoint = nrJoined;
             while (!joinOp.isFinished()) {
                 // Learning phase
@@ -171,7 +171,7 @@ public class JoinProcessor {
                 for (int num = 0; num < JoinConfig.SAMPLE_PER_LEARN; num++) {
                     ++roundCtr;
                     MutableBoolean restart = new MutableBoolean(false);
-                    double reward = root.sample(roundCtr, joinOrder, switchPoint, true, restart);
+                    double reward = root.sample(joinOrder, switchPoint, true, restart);
                     switchPoint--;
                     if (switchPoint == 0) switchPoint = nrJoined;
                     //restart the switch point
@@ -187,7 +187,7 @@ public class JoinProcessor {
 
                 //Execution phase
                 int[] currentOptimalJoinOrder = new int[query.nrJoined];
-                boolean finish = root.getOptimalPolicy(currentOptimalJoinOrder, 0);
+                boolean finish = root.getOptimalPolicy(currentOptimalJoinOrder);
                 //If we have a full order
                 if (finish) {
                     //execute the current join order.

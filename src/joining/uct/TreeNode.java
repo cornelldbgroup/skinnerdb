@@ -21,10 +21,6 @@ public abstract class TreeNode {
      */
     final QueryInfo query;
     /**
-     * Iteration in which node was created.
-     */
-    final long createdIn;
-    /**
      * Level of node in tree (root node has level 0).
      * At the same time the join order index into
      * which table selected in this node is inserted.
@@ -130,18 +126,16 @@ public abstract class TreeNode {
     /**
      * Initialize UCT root node.
      *
-     * @param roundCtr     current round number
      * @param query        the query which is optimized
      * @param useHeuristic whether to avoid Cartesian products
      * @param joinOp       multi-way join operator allowing fast join order switching
      */
-    public TreeNode(long roundCtr, QueryInfo query,
+    public TreeNode(QueryInfo query,
                     boolean useHeuristic, MultiWayJoin joinOp) {
         // Count node generation
         ++JoinStats.nrUctNodes;
         this.query = query;
         this.nrTables = query.nrJoined;
-        createdIn = roundCtr;
         treeLevel = 0;
         nrActions = nrTables;
         nrTries = new int[nrActions];
@@ -174,14 +168,12 @@ public abstract class TreeNode {
     /**
      * Initializes UCT node by expanding parent node.
      *
-     * @param roundCtr    current round number
      * @param parent      parent node in UCT tree
      * @param joinedTable new joined table
      */
-    public TreeNode(long roundCtr, TreeNode parent, int joinedTable) {
+    public TreeNode(TreeNode parent, int joinedTable) {
         // Count node generation
         ++JoinStats.nrUctNodes;
-        createdIn = roundCtr;
         treeLevel = parent.treeLevel + 1;
         nrActions = parent.nrActions - 1;
         nrTries = new int[nrActions];

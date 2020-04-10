@@ -9,7 +9,7 @@ import query.QueryInfo;
 import java.util.*;
 
 /**
- * Represents node in brue search tree.
+ * Represents node in BRUE search tree.
  *
  * @author Junxiong Wang
  */
@@ -19,41 +19,42 @@ public class BrueNode extends TreeNode {
      */
     public BrueNode[] childNodes;
     /**
-     * temporary map to store inter-middle nodes
+     * Temporary map to store inter-middle nodes.
+     * Notice that this map is introduced for the BRUEI and BRUE does not use this map.
+     * For BRUE, we expand all those nodes along to the switch point. Since those nodes are not updated, those are empty nodes.
+     * For BRUEI, the time of expand influences the restart of the switch point.
+     * Thus we cannot connect those nodes when they are created, we have to save them into a temporary map.
      */
-    static HashMap<JoinOrder, BrueNode> nodeMap = new HashMap<>();
+    static HashMap<JoinOrder, BrueNode> orderToNode = new HashMap<>();
 
     /**
-     * Initialize BRUEI root node.
+     * Initialize BRUE or BUREI root node.
      *
-     * @param roundCtr     current round number
      * @param query        the query which is optimized
      * @param useHeuristic whether to avoid Cartesian products
      * @param joinOp       multi-way join operator allowing fast join order switching
      */
-    public BrueNode(long roundCtr, QueryInfo query,
+    public BrueNode(QueryInfo query,
                     boolean useHeuristic, MultiWayJoin joinOp) {
-        // Count node generation
-        super(roundCtr, query, useHeuristic, joinOp);
+        // count node generation
+        super(query, useHeuristic, joinOp);
         childNodes = new BrueNode[nrActions];
     }
 
     /**
      * Initializes BRUEI node by expanding parent node.
      *
-     * @param roundCtr    current round number
      * @param parent      parent node in UCT tree
      * @param joinedTable new joined table
      */
-    public BrueNode(long roundCtr, BrueNode parent, int joinedTable) {
-        super(roundCtr, parent, joinedTable);
+    public BrueNode(BrueNode parent, int joinedTable) {
+        super(parent, joinedTable);
         childNodes = new BrueNode[nrActions];
     }
 
     /**
      * Recursively sample from BRUEI tree and return reward.
      *
-     * @param roundCtr    current round (used as timestamp for expansion)
      * @param joinOrder   partially completed join order
      * @param switchPoint switch point
      * @param expand      whether we should expand the tree
@@ -61,18 +62,18 @@ public class BrueNode extends TreeNode {
      * @return achieved reward
      * @throws Exception
      */
-    public double sample(long roundCtr, int[] joinOrder, int switchPoint,
+    public double sample(int[] joinOrder, int switchPoint,
                          boolean expand, MutableBoolean restart) throws Exception {
         if (this.treeLevel == nrTables) {
             return joinOp.execute(joinOrder);
         }
-        //pick up action for the next step
+        // pick up action for the next step
         int action = 0;
         if (this.treeLevel < switchPoint) {
-            //explore the current best action
+            // explore the current best action
             action = explorationPolicy();
         } else {
-            //select the new action
+            // select the new action
             action = estimationPolicy();
         }
 
@@ -80,41 +81,39 @@ public class BrueNode extends TreeNode {
         joinOrder[treeLevel] = table;
         double reward = 0;
         if (childNodes[action] != null) {
-            //go to the lower level
-            reward = childNodes[action].sample(roundCtr, joinOrder, switchPoint, false, restart);
+            // go to the lower level
+            reward = childNodes[action].sample(joinOrder, switchPoint, false, restart);
         } else {
             BrueNode nextNode = null;
             if(JoinConfig.TREE_POLICY == TreeSearchPolicy.BRUEI) {
-                //go the the lower level
+                // go the the lower level
                 JoinOrder currentOrder = new JoinOrder(Arrays.copyOfRange(joinOrder, 0, treeLevel + 1));
-                if (nodeMap.containsKey(currentOrder)) {
-                    nextNode = nodeMap.get(currentOrder);
+                if (orderToNode.containsKey(currentOrder)) {
+                    nextNode = orderToNode.get(currentOrder);
                 } else {
-                    nextNode = new BrueNode(roundCtr, this, table);
-                    nodeMap.put(currentOrder, nextNode);
+                    nextNode = new BrueNode(this, table);
+                    orderToNode.put(currentOrder, nextNode);
                 }
                 if (expand) {
-                    //Expand the BRUE tree
+                    // expand the BRUE tree
                     childNodes[action] = nextNode;
-                    //test whether we are currently at the switch point
+                    // test whether we are currently at the switch point
                     if (this.treeLevel != switchPoint) {
-                        //if the expansion is not at the switch point, mark the flag to restart the round robin
+                        // if the expansion is not at the switch point, mark the flag to restart the round robin
                         restart.setTrue();
                     }
-                    //only expand the shallow node.
+                    // only expand the shallow node.
                     expand = false;
                 }
             } else if(JoinConfig.TREE_POLICY == TreeSearchPolicy.BRUE) {
-                //go the the next level, and follow the same strategy (exploration policy and estimation policy)
-                //those intermediate nodes will not be updated except the switch point node
-                childNodes[action] = new BrueNode(roundCtr, this, table);
+                // go the the next level, and follow the same strategy (exploration policy and estimation policy)
+                // those intermediate nodes will not be updated except the switch point node
+                childNodes[action] = new BrueNode(this, table);
                 nextNode = childNodes[action];
             }
-            reward = nextNode.sample(roundCtr, joinOrder, switchPoint, expand, restart);
+            reward = nextNode.sample(joinOrder, switchPoint, expand, restart);
         }
-        /*
-         * only update the reward of the node at the switch point
-         */
+        // only update the reward of the node at the switch point
         if (this.treeLevel == switchPoint) {
             updateStatistics(action, reward);
         }
@@ -147,7 +146,7 @@ public class BrueNode extends TreeNode {
 
     /**
      * exploration policy, select a random action
-     * @return
+     * @return the selected action
      */
     private int explorationPolicy() {
         int offset = random.nextInt(nrActions);
@@ -162,21 +161,24 @@ public class BrueNode extends TreeNode {
 
     /**
      * Get the current optimal policy
-     * @param joinOrder
-     * @param roundCtr
+     * @param joinOrder the current optimal join order
      * @return whether we have a full order
      */
-    public boolean getOptimalPolicy(int[] joinOrder, int roundCtr) {
+    public boolean getOptimalPolicy(int[] joinOrder) {
         if (treeLevel < nrTables) {
+            // take the best action at the current node
             int action = estimationPolicy();
             int table = nextTable[action];
             joinOrder[treeLevel] = table;
+            // if the child node is not null, recursively pick the best action
             if (childNodes[action] != null)
-                return childNodes[action].getOptimalPolicy(joinOrder, roundCtr);
+                return childNodes[action].getOptimalPolicy(joinOrder);
             else {
+                // if the child node is null
                 JoinOrder currentOrder = new JoinOrder(Arrays.copyOfRange(joinOrder, 0, treeLevel + 1));
-                if (nodeMap.containsKey(currentOrder)) {
-                    return nodeMap.get(currentOrder).getOptimalPolicy(joinOrder, roundCtr);
+                // whether the child node is saved on the map which is still not connected to the tree.
+                if (orderToNode.containsKey(currentOrder)) {
+                    return orderToNode.get(currentOrder).getOptimalPolicy(joinOrder);
                 } else {
                     return false;
                 }
@@ -189,6 +191,6 @@ public class BrueNode extends TreeNode {
      * clear the node map
      */
     public void clearNodeMap() {
-        nodeMap.clear();
+        orderToNode.clear();
     }
 }

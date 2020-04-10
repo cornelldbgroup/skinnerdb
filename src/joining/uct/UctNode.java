@@ -16,6 +16,10 @@ import config.JoinConfig;
  */
 public class UctNode extends TreeNode {
     /**
+     * Iteration in which node was created.
+     */
+    final long createdIn;
+    /**
      * Assigns each action index to child node.
      */
     public UctNode[] childNodes;
@@ -30,8 +34,9 @@ public class UctNode extends TreeNode {
     public UctNode(long roundCtr, QueryInfo query,
                    boolean useHeuristic, MultiWayJoin joinOp) {
         // Count node generation
-        super(roundCtr, query, useHeuristic, joinOp);
-        childNodes = new UctNode[nrActions];
+        super(query, useHeuristic, joinOp);
+        this.createdIn = roundCtr;
+        this.childNodes = new UctNode[nrActions];
     }
 
     /**
@@ -43,7 +48,8 @@ public class UctNode extends TreeNode {
      */
     public UctNode(long roundCtr, UctNode parent, int joinedTable) {
         // Count node generation
-        super(roundCtr, parent, joinedTable);
+        super(parent, joinedTable);
+        this.createdIn = roundCtr;
         childNodes = new UctNode[nrActions];
     }
 
