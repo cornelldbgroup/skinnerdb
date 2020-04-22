@@ -26,9 +26,7 @@ import query.QueryInfo;
 import statistics.PreStats;
 
 import java.util.*;
-import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.LinkedBlockingQueue;
 
 import static operators.Filter.*;
 import static preprocessing.PreprocessorUtil.*;
@@ -249,7 +247,6 @@ public class SearchPreprocessor implements Preprocessor {
             Map<ColumnRef, ColumnRef> colMap) throws Exception {
         ConcurrentHashMap<List<Integer>, UnaryBoolEval> cache =
                 new ConcurrentHashMap<>();
-        Set<List<Integer>> toCompile = new HashSet<>();
         int nrCompiled = compiled.size();
         long nextCompile = 75;
         final int CARDINALITY = CatalogManager.getCardinality(tableName);
@@ -257,26 +254,13 @@ public class SearchPreprocessor implements Preprocessor {
         IndexFilter indexFilter = new IndexFilter(indices, dataLocations);
         FilterUCTNode root = new FilterUCTNode(cache, roundCtr,
                 nrCompiled, indices);
-        final BlockingQueue<ExecutionResult>
-                completedSimulations =
-                new LinkedBlockingQueue<>();
-        int currentSimulations = 0;
         int lastCompletedRow = 0;
         List<MutableIntList> resultList = new ArrayList<>();
         BudgetedFilter filterOp = new BudgetedFilter(compiled, indexFilter,
                 CARDINALITY, resultList);
 
         while (lastCompletedRow < CARDINALITY) {
-            if (currentSimulations == MAX_SIMULATIONS) {
-                ExecutionResult result = completedSimulations.take();
-                currentSimulations--;
-                FilterUCTNode.finalUpdateStatistics(result.selected,
-                        result.state, result.reward, result.rows);
-                continue;
-            }
-
             ++roundCtr;
-            currentSimulations++;
 
             final FilterState state = new FilterState(nrCompiled);
             Pair<FilterUCTNode, Boolean> sample = root.sample(roundCtr,
@@ -298,29 +282,30 @@ public class SearchPreprocessor implements Preprocessor {
             FilterUCTNode.initialUpdateStatistics(selected, state);
             List<Integer> outputId = initializeEpoch(resultList,
                     state.batches);
-            ParallelService.HIGH_POOL.submit(() -> {
-                double reward = filterOp.execute(start, outputId, state);
-                try {
-                    completedSimulations.put(new ExecutionResult(selected,
-                            reward, state, end - start));
-                } catch (Exception e) {}
-            });
-
+            double reward = filterOp.execute(start, outputId, state);
+            FilterUCTNode.finalUpdateStatistics(selected, state, reward);
 
             if (ENABLE_COMPILATION && roundCtr == nextCompile) {
-                nextCompile += 25;
+                nextCompile += 100;
 
                 int compileSetSize = predicates.size();
-                PriorityQueue<FilterUCTNode> compile =
-                        new PriorityQueue<>(compileSetSize,
-                                Comparator.comparingInt
-                                        (FilterUCTNode::getAddedUtility));
-                root.getTopNodesForCompilation(compile, compileSetSize,
-                        toCompile);
-                while (!compile.isEmpty()) {
-                    FilterUCTNode node = compile.poll();
+                HashMap<FilterUCTNode, Integer> savedCalls = new HashMap<>();
+                root.initializeUtility(savedCalls, cache);
+                for (int j = 0; j < Math.min(compileSetSize,
+                        savedCalls.size()); j++) {
+
+                    FilterUCTNode node = null;
+                    int maxSavedCalls = -1;
+                    for (Map.Entry<FilterUCTNode, Integer> entry :
+                            savedCalls.entrySet()) {
+                        if (entry.getValue() > maxSavedCalls) {
+                            maxSavedCalls = entry.getValue();
+                            node = entry.getKey();
+                        }
+                    }
+                    node.updateUtility(savedCalls, cache);
+
                     final List<Integer> preds = node.getChosenPreds();
-                    //System.out.println(preds.toString());
                     ParallelService.HIGH_POOL.submit(() -> {
                         Expression expr = null;
                         for (int i = preds.size() - 1; i >= 0; i--) {
@@ -340,16 +325,6 @@ public class SearchPreprocessor implements Preprocessor {
                 }
             }
         }
-
-
-        while (currentSimulations > 0) {
-            completedSimulations.take();
-            currentSimulations--;
-        }
-
-        FilterState state = new FilterState(nrCompiled);
-        root.selectMostVisited(state);
-        System.out.println(state.toString());
 
         return resultList;
     }

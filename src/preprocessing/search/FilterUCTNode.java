@@ -5,6 +5,7 @@ import indexing.HashIndex;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static preprocessing.search.FilterSearchConfig.*;
 
@@ -28,8 +29,8 @@ public class FilterUCTNode {
     private final int[] nrParallelSimulationsPerAction;
     private final double[] accumulatedReward;
     private int nrVisits;
+    private int numRows = 0;
     private int nrParallelSimulations;
-    private int nrExecutions = 0;
     private final List<Integer> priorityActions;
 
     private final int actionToPredicate[];
@@ -447,38 +448,6 @@ public class FilterUCTNode {
     }
 
 
-    public void getTopNodesForCompilation(PriorityQueue<FilterUCTNode> compile,
-                                          int compileSetSize,
-                                          Set<List<Integer>> compiled) {
-        if (this.type == NodeType.ROOT) {
-            for (int a = 0; a < Math.min(nrActions, numPredicates); ++a) {
-                if (this.childNodes[a] != null) {
-                    this.childNodes[a].getTopNodesForCompilation(compile,
-                            compileSetSize, compiled);
-                }
-            }
-        } else {
-            for (int a = 0; a < nrActions; ++a) {
-                if (this.childNodes[a] != null) {
-                    if (!compiled.contains(this.chosenPreds)) {
-                        compile.add(this.childNodes[a]);
-                        if (compile.size() > compileSetSize) {
-                            FilterUCTNode node = compile.poll();
-                            if (node.getAddedUtility() >=
-                                    this.childNodes[a].getAddedUtility()) {
-                                continue;
-                            }
-                        }
-                    }
-                    this.childNodes[a].getTopNodesForCompilation(compile,
-                            compileSetSize, compiled);
-
-                }
-            }
-        }
-    }
-
-
     // Common UCT functions
     private int selectAction() {
         if (!priorityActions.isEmpty()) {
@@ -521,14 +490,75 @@ public class FilterUCTNode {
         return bestAction;
     }
 
+    public void initializeUtility(HashMap<FilterUCTNode, Integer> utility,
+                                  ConcurrentHashMap<List<Integer>,
+                                          UnaryBoolEval> cache) {
+        if (this.type == NodeType.ROOT) {
+            for (int a = 0; a < Math.min(nrActions, numPredicates); ++a) {
+                if (this.childNodes[a] != null) {
+                    this.childNodes[a].initializeUtility(utility, cache);
+                }
+            }
+        } else {
+            for (int a = 0; a < nrActions; ++a) {
+                if (this.childNodes[a] != null) {
+                    if (!cache.contains(this.chosenPreds)) {
+                        utility.put(this.childNodes[a],
+                                this.chosenPreds.size() * this.numRows);
+                    }
+
+                    this.childNodes[a].initializeUtility(utility, cache);
+                }
+            }
+        }
+
+    }
+
+    public void updateUtility(HashMap<FilterUCTNode, Integer> utility,
+                              ConcurrentHashMap<List<Integer>,
+                                      UnaryBoolEval> cache) {
+        FilterUCTNode parent = this.parent;
+        while (parent != null) {
+            if (parent.parent == null || cache.contains(parent.chosenPreds)) {
+                break;
+            }
+
+            utility.put(parent,
+                    utility.get(parent) - parent.chosenPreds.size() * numRows);
+            parent = parent.parent;
+        }
+
+        Stack<FilterUCTNode> children = new Stack<>();
+        for (int a = 0; a < nrActions; ++a) {
+            if (this.childNodes[a] != null &&
+                    !cache.contains(this.childNodes[a])) {
+                children.push(this.childNodes[a]);
+            }
+        }
+        while (!children.empty()) {
+            FilterUCTNode curr = children.pop();
+            int saved = utility.get(curr);
+            utility.put(curr,
+                    saved - (this.chosenPreds.size() - curr.chosenPreds.size())
+                            * curr.numRows);
+            for (int a = 0; a < nrActions; ++a) {
+                if (curr.childNodes[a] != null &&
+                        !cache.contains(curr.childNodes[a])) {
+                    children.push(curr.childNodes[a]);
+                }
+            }
+        }
+    }
+
     public static void finalUpdateStatistics(FilterUCTNode node,
-                                             FilterState state, double reward,
-                                             int calls) {
+                                             FilterState state,
+                                             double reward) {
+        int numRows = state.batches * state.batchSize;
         int i = state.actions.size() - 1;
         while (node != null) {
-            node.nrExecutions += calls;
             ++node.nrVisits;
             --node.nrParallelSimulations;
+            node.numRows += numRows;
 
             if (i >= 0) {
                 int selectedAction = state.actions.get(i--);
@@ -557,10 +587,6 @@ public class FilterUCTNode {
     }
 
     // Getters
-    public int getAddedUtility() {
-        return nrExecutions;
-    }
-
     public List<Integer> getChosenPreds() {
         return chosenPreds;
     }
