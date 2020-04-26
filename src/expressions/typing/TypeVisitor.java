@@ -152,11 +152,11 @@ public class TypeVisitor extends SkinnerVisitor {
                     + " in expression " + binaryExpression.toString()));
         }
         // Cast operands if necessary
-        if (TypeUtil.toJavaType(type1) != TypeUtil.toJavaType(commonType)) {
+        if (type1 != commonType) {
             CastExpression cast = newCast(expression1, commonType);
             binaryExpression.setLeftExpression(cast);
         }
-        if (TypeUtil.toJavaType(type2) != TypeUtil.toJavaType(commonType)) {
+        if (type2 != commonType) {
             CastExpression cast = newCast(expression2, commonType);
             binaryExpression.setRightExpression(cast);
         }
