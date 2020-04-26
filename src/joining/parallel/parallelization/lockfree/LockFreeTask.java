@@ -104,6 +104,7 @@ public class LockFreeTask implements Callable<LockFreeResult>{
 //                        State slowState = table != lastTable ? endPlan.slowestState.get() : null;
                         State slowState = endPlan.slowestState.get();
                         reward = joinOp.execute(joinOrder, table, (int) roundCtr, endPlan.finishFlags, slowState);
+                        endPlan.threadSlowStates[tid][table] = joinOp.lastState;
                     }
                     else {
 //                        State slowState = finalTable != lastTable ? endPlan.slowestState.get() : null;
@@ -111,10 +112,16 @@ public class LockFreeTask implements Callable<LockFreeResult>{
                         reward = joinOp.execute(joinOrder, finalTable, (int) roundCtr, endPlan.finishFlags, slowState);
                         int largeTable = joinOp.largeTable;
                         lastTable = joinOp.lastTable;
-                        if (joinOp.slowest && largeTable != lastTable) {
+
+                        boolean isSlow = endPlan.isSlow(joinOp.lastState, tid, lastTable);
+                        if (isSlow && largeTable != lastTable) {
                             State curSlow = endPlan.setSplitTable(largeTable, joinOp.lastState);
 //                            joinOp.writeLog("Set split Table to: " + largeTable + "\tSlow: " + curSlow.toString());
                         }
+//                        else {
+//                            State slow = endPlan.getSlowState(lastTable);
+//                            joinOp.writeLog("Slow State: " + slow);
+//                        }
                     }
                 }
                 else if (ParallelConfig.HEURISTIC_STOP) {
@@ -141,9 +148,12 @@ public class LockFreeTask implements Callable<LockFreeResult>{
             else {
                 int splitTable = joinOp.lastTable;
                 if (finish.compareAndSet(false, true)) {
+//                    joinOrder = new int[]{8, 2, 5, 7, 3, 9, 1, 6, 4, 0};
+//                    splitTable = 2;
                     System.out.println(tid + " shared: " + Arrays.toString(joinOrder) + " splitting " + splitTable);
                     endPlan.setJoinOrder(joinOrder);
                     endPlan.setSplitTable(splitTable);
+                    endPlan.threadSlowStates[tid][splitTable] = joinOp.lastState;
                 }
 
                 boolean isFinished = endPlan.setFinished(tid, joinOp.lastTable);

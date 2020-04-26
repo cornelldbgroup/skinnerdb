@@ -30,6 +30,10 @@ public class ParallelConfig {
 	 */
 	public static int EXE_THREADS = 1;
 	/**
+	 * Maximal number of tuples per batch during execution.
+	 */
+	public static int NR_EXECUTORS = 1;
+	/**
 	 * The number of threads per executor.
 	 */
 	public static int EXE_EXECUTORS = 30;
@@ -61,7 +65,7 @@ public class ParallelConfig {
 	 * The base of round counts to assign a new best join order
 	 * to executor thread.
 	 */
-	public static final int C = 100;
+	public static final int C = 20;
 	/**
 	 * Parallel specification:
 	 * 0: DPDasync
@@ -76,8 +80,26 @@ public class ParallelConfig {
 	 * 9: One search thread and multiple executor threads
 	 */
 	public static int PARALLEL_SPEC = 8;
-
-
+	/**
+	 * Number of batches.
+	 */
+	public static int NR_BATCHES = 60;
+	/**
+	 * Whether to use heavy hitter detection to switch the split table.
+	 */
 	public static final boolean HEURISTIC_SHARING = true;
+	/**
+	 * Whether to terminate whenever the thread finishes.
+	 */
 	public static final boolean HEURISTIC_STOP = false;
+	/**
+	 * The top level using heuristic/learning
+	 */
+	public static final int TOP_LEVEL = 2;
+	/**
+	 * The policy of heuristics:
+	 * 0: The minimal cardinality of the table.
+	 * 1: minimal joined cardinality.
+	 */
+	public static final int HEURISTIC_POLICY = 1;
 }

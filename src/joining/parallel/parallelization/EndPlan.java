@@ -42,6 +42,8 @@ public class EndPlan {
      */
     public volatile DPNode root;
 
+    public volatile State[][] threadSlowStates;
+
     public EndPlan(int nrThreads, int nrTables, DPNode root) {
         joinOrder = new int[nrTables];
         finishFlags = new boolean[nrThreads][nrTables];
@@ -50,6 +52,7 @@ public class EndPlan {
         Arrays.fill(slowThreads, -1);
         this.slowestState = new AtomicReference<>(new State(nrTables));
         this.root = root;
+        this.threadSlowStates = new State[nrThreads][nrTables];
     }
 
     public int[] getJoinOrder() {
@@ -81,6 +84,23 @@ public class EndPlan {
         });
     }
 
+    public boolean isSlow(State state, int tid, int splitTable) {
+        threadSlowStates[tid][splitTable] = state;
+        int nrTables = joinOrder.length;
+        boolean isSlow = true;
+        for (int i = 0; i < threadSlowStates.length; i++) {
+            if (tid != i) {
+                State threadState = threadSlowStates[i][splitTable];
+                if (threadState == null ||
+                        (threadState.lastIndex >= 0 && threadState.isAhead(joinOrder, state, nrTables))) {
+                    isSlow = false;
+                    break;
+                }
+            }
+        }
+        return isSlow;
+    }
+
     public boolean setFinished(int tid, int splitTable) {
         finishFlags[tid][splitTable] = true;
         int number = 0;
@@ -101,5 +121,23 @@ public class EndPlan {
         }
 
         return number == 0;
+    }
+
+    public State getSlowState(int largeTable) {
+        int nrTables = joinOrder.length;
+        State state = null;
+        for (int i = 0; i < threadSlowStates.length; i++) {
+            State threadState = threadSlowStates[i][largeTable];
+            if (threadState == null) {
+                state = new State(joinOrder.length);
+                state.tid = i;
+                return state;
+            }
+            else if (state == null ||
+                    (threadState.lastIndex >=0 && threadState.isAhead(joinOrder, state, nrTables))) {
+                state = threadState;
+            }
+        }
+        return state;
     }
 }

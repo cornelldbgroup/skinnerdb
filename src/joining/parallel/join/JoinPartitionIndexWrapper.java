@@ -35,14 +35,14 @@ public abstract class JoinPartitionIndexWrapper {
      * Reference to prior column data.
      */
     final ColumnData priorData;
-    /**
-     * Reference to prior column data.
-     */
-    final IntData priorTest;
-    /**
-     * Reference to prior column data.
-     */
-    final IntData nextTest;
+//    /**
+//     * Reference to prior column data.
+//     */
+//    final IntData priorTest;
+//    /**
+//     * Reference to prior column data.
+//     */
+//    final IntData nextTest;
     /**
      * Index on join column to use.
      */
@@ -82,8 +82,6 @@ public abstract class JoinPartitionIndexWrapper {
         nextTable = pos1<pos2?table2:table1;
         // Get column data reference for prior table
         priorData = equiPred.dataMentioned.get(priorTable);
-        priorTest = (IntData) priorData;
-        nextTest = (IntData) equiPred.dataMentioned.get(nextTable);
         // Get index for next table
         nextIndex = equiPred.indexMentioned.get(nextTable);
     }

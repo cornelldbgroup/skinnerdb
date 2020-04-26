@@ -122,7 +122,7 @@ public class LockFreeParallelization extends Parallelization {
         long nrSamples = 0;
         for (DPJoin joinOp: dpJoins) {
             nrSamples = Math.max(joinOp.roundCtr, nrSamples);
-            JoinStats.nrTuples += joinOp.statsInstance.nrTuples;
+            JoinStats.nrTuples = Math.max(joinOp.statsInstance.nrTuples, JoinStats.nrTuples);
         }
         JoinStats.nrSamples = nrSamples;
         // Write log to the local file.

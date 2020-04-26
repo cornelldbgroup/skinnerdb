@@ -27,10 +27,10 @@ public class ThreadProgress {
         }
     }
 
-    public int isSlowest(int splitKey, int threadID, int stateIndex) {
+    public int isSlowest(int splitKey, int threadID, int stateIndex, boolean[] checkThreads) {
         int flag = 1;
         for (int i = 0; i < latestStates.length; i++) {
-            if (i != threadID) {
+            if (i != threadID && checkThreads[i]) {
                 if (latestStates[i] != null) {
                     int[] newIndex = latestStates[i].tableTupleIndexEpoch[splitKey];
                     if (newIndex[1] > 0) {
@@ -39,6 +39,9 @@ public class ThreadProgress {
                         }
                         else if (stateIndex == newIndex[0]) {
                             flag = 0;
+                        }
+                        else {
+                            checkThreads[i] = false;
                         }
                     }
                     else {
@@ -51,6 +54,38 @@ public class ThreadProgress {
             }
         }
         return flag;
+    }
+
+    public int getSlowID(int splitKey, int threadID, int stateIndex, boolean[] checkThreads) {
+        int slowID = -1;
+        int slowProgress = Integer.MAX_VALUE;
+        for (int i = 0; i < latestStates.length; i++) {
+            if (latestStates[i] != null) {
+                int[] newIndex = latestStates[i].tableTupleIndexEpoch[splitKey];
+                if (newIndex[1] > 0) {
+                    int progress = newIndex[0];
+                    if (progress < stateIndex) {
+                        slowID = i;
+                        slowProgress = progress;
+                    }
+                    else if (progress == stateIndex) {
+
+                    }
+                    else {
+
+                    }
+                }
+                else {
+                    slowID = i;
+                    break;
+                }
+            }
+            else {
+                slowID = i;
+                break;
+            }
+        }
+        return slowID;
     }
 
     public int getSlowestProgress(int splitKey) {

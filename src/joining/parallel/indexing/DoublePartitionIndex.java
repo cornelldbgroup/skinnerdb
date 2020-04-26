@@ -29,6 +29,10 @@ public class DoublePartitionIndex extends PartitionIndex {
      */
     public final DoubleIntMap keyToPositions;
     /**
+     * Number of unique keys.
+     */
+    public final int nrKeys;
+    /**
      * Number of threads.
      */
     public final int nrThreads;
@@ -175,6 +179,7 @@ public class DoublePartitionIndex extends PartitionIndex {
                 }
             });
         }
+        nrKeys = this.cardinality;
     }
 
 

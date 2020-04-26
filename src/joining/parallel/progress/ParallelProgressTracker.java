@@ -108,6 +108,8 @@ public class ParallelProgressTracker {
         // Iterate over position in join order
         boolean slowest = !state.isFinished();
         int upperLevel = Math.min(THRESHOLD, nrTables);
+        boolean[] checkThreads = new boolean[nrThreads];
+        Arrays.fill(checkThreads, true);
         for (int joinCtr = 0; joinCtr < upperLevel; ++joinCtr) {
             int table = joinOrder.order[joinCtr];
             int stateIndex = state.tupleIndices[table];
@@ -126,17 +128,17 @@ public class ParallelProgressTracker {
                         splitKey, roundCtr, state.lastIndex);
             }
 
-            if (checking) {
-                int slowestFlag = curPrefixProgress.isSlowest(splitKey, threadID, stateIndex);
-                if (slowestFlag == 1) {
-                    slowest = true;
-                    checking = false;
-                }
-                else if (slowestFlag == -1) {
-                    slowest = false;
-                    checking = false;
-                }
-            }
+//            if (checking) {
+//                int slowestFlag = curPrefixProgress.isSlowest(splitKey, threadID, stateIndex, checkThreads);
+//                if (slowestFlag == 1) {
+//                    slowest = true;
+//                    checking = false;
+//                }
+//                else if (slowestFlag == -1) {
+//                    slowest = false;
+//                    checking = false;
+//                }
+//            }
         }
         // Update progress for lower level.
         if (THRESHOLD < nrTables) {

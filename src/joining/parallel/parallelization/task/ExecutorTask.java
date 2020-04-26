@@ -4,6 +4,7 @@ import config.JoinConfig;
 import config.ParallelConfig;
 import joining.parallel.join.FixJoin;
 import joining.parallel.join.SPJoin;
+import joining.parallel.join.SubJoin;
 import joining.parallel.parallelization.tree.TreeResult;
 import joining.parallel.uct.ASPNode;
 import joining.parallel.uct.SPNode;
@@ -73,22 +74,27 @@ public class ExecutorTask implements Callable<TaskResult> {
             int nrThreads = ParallelConfig.EXE_THREADS;
             int nextThread = 1;
             int lastCount = 0;
-            int nextPeriod = 1;
+            int nextPeriod = ParallelConfig.C;
             double nextNum = 1;
-            double base = Math.pow(ParallelConfig.C, 1.0 / (nrThreads-1));
+            int nrExecutors = Math.min(ParallelConfig.NR_EXECUTORS, nrThreads - 1);
+//            double base = Math.pow(ParallelConfig.C, 1.0 / (nrThreads-1));
+            double base = ParallelConfig.C;
             SPNode root = new SPNode(0, query, true, 1);
+            SubJoin subJoin = new SubJoin(query, spJoin.preSummary, spJoin.budget, nrThreads, 0, spJoin.predToEval);
+//            FixJoin subJoin = new FixJoin(query, spJoin.preSummary, spJoin.budget, nrThreads, 0, spJoin.predToEval, 1);
+            subJoin.tracker = spJoin.tracker;
             while (!finish.get()) {
                 ++roundCtr;
                 double reward;
-                reward = root.sample(roundCtr, joinOrder, spJoin, policy, true);
+                reward = root.sample(roundCtr, joinOrder, subJoin, policy, true);
                 // Count reward except for final sample
-                if (!spJoin.isFinished()) {
+                if (!subJoin.isFinished()) {
                     accReward += reward;
                 }
                 else {
                     if (finish.compareAndSet(false, true)) {
                         System.out.println("Finish id: " + tid + "\t" + Arrays.toString(joinOrder) + "\t" + roundCtr);
-                        spJoin.roundCtr = roundCtr;
+                        subJoin.roundCtr = roundCtr;
                         for (FixJoin fixJoin: fixJoins) {
                             fixJoin.terminate.set(true);
                         }
@@ -96,32 +102,28 @@ public class ExecutorTask implements Callable<TaskResult> {
                     break;
                 }
                 // assign the best join order to next thread.
-                if (roundCtr == lastCount + nextPeriod && nrThreads > 1) {
+                if (roundCtr == lastCount + nextPeriod && nrExecutors >= 1) {
                     int[] best = new int[nrTables];
                     root.maxJoinOrder(best, 0);
-                    System.arraycopy(best, 0, bestJoinOrder[nextThread], 0, nrTables);
-//                    if (roundCtr >= fixRound) {
-//                        bestJoinOrder[nextThread][nrTables] = 2;
-//                        fixNum++;
-//                        fixRound = Math.pow(fixRound, fixNum + 1);
-//                    }
-//                    else {
-//                        bestJoinOrder[nextThread][nrTables] = 1;
-//                    }
-                    bestJoinOrder[nextThread][nrTables] = 2;
-                    fixJoins.get(nextThread).terminate.set(true);
-                    System.out.println("Assign " + Arrays.toString(best)
-                            + " to Thread " + nextThread + " at round " + roundCtr);
 
-//                    if (fixNum < nrThreads - 1) {
-//                        nextThread = (nextThread + 1) % nrThreads;
-//                        while (bestJoinOrder[nextThread][nrTables] == 2 || nextThread == 0) {
-//                            nextThread = (nextThread + 1) % nrThreads;
-//                        }
-//                    }
-                    nextThread = (nextThread + 1) % nrThreads;
+                    boolean equal = true;
+                    for (int i = 0; i < nrTables; i++) {
+                        if (best[i] != bestJoinOrder[nextThread][i]) {
+                            equal = false;
+                            break;
+                        }
+                    }
+                    if (!equal) {
+                        System.arraycopy(best, 0, bestJoinOrder[nextThread], 0, nrTables);
+                        bestJoinOrder[nextThread][nrTables] = 2;
+                        fixJoins.get(nextThread).terminate.set(true);
+                        System.out.println("Assign " + Arrays.toString(best)
+                                + " to Thread " + nextThread + " at round " + roundCtr + " " + System.currentTimeMillis());
+                    }
+
+                    nextThread = (nextThread + 1) % (nrExecutors + 1);
                     if (nextThread == 0) {
-                        nextThread = (nextThread + 1) % nrThreads;
+                        nextThread = (nextThread + 1) % (nrExecutors + 1);
                     }
                     lastCount = (int) roundCtr;
                     nextNum = nextNum * base;
@@ -134,7 +136,16 @@ public class ExecutorTask implements Callable<TaskResult> {
                     root = new SPNode(0, query, true, 1);
                     nextForget *= 10;
                 }
+                subJoin.roundCtr = roundCtr;
+                spJoin.roundCtr = roundCtr;
+                spJoin.statsInstance.nrTuples = subJoin.statsInstance.nrTuples;
             }
+            // Materialize result table
+            long timer2 = System.currentTimeMillis();
+            System.out.println("Thread " + tid + " " + (timer2 - timer1) + "\t Round: " + roundCtr);
+            Set<ResultTuple> tuples = subJoin.result.tuples;
+//            spJoin.threadResultsList = subJoin.threadResultsList;
+            return new TaskResult(tuples, subJoin.logs, tid);
         }
         else {
             int[] order = bestJoinOrder[tid];
@@ -169,13 +180,12 @@ public class ExecutorTask implements Callable<TaskResult> {
                     spJoin.isFixed = true;
                 }
             }
+            // Materialize result table
+            long timer2 = System.currentTimeMillis();
+            spJoin.roundCtr = roundCtr;
+            System.out.println("Thread " + tid + " " + (timer2 - timer1) + "\t Round: " + roundCtr);
+            Set<ResultTuple> tuples = spJoin.result.tuples;
+            return new TaskResult(tuples, spJoin.logs, tid);
         }
-
-        // Materialize result table
-        long timer2 = System.currentTimeMillis();
-        spJoin.roundCtr = roundCtr;
-        System.out.println("Thread " + tid + " " + (timer2 - timer1) + "\t Round: " + roundCtr);
-        Set<ResultTuple> tuples = spJoin.result.tuples;
-        return new TaskResult(tuples, spJoin.logs, tid);
     }
 }

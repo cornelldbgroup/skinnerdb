@@ -118,6 +118,8 @@ public class Master {
 //			}
 			// Convert nonEqui-predicates into nodes
 			subQueryInfo.convertNonEquiPredicates(context);
+			// Extract selectivity
+			subQueryInfo.extractSelectivity(context);
 			ParallelJoinProcessor.process(subQueryInfo, context);
 
 			// Determine result table name and properties

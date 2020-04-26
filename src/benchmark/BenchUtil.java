@@ -1,13 +1,13 @@
 package benchmark;
 
-import java.io.File;
-import java.io.PrintWriter;
+import java.io.*;
 import java.nio.file.Files;
 import java.util.*;
 import java.util.regex.Pattern;
 import java.util.stream.IntStream;
 
 import catalog.CatalogManager;
+import com.sun.jna.platform.win32.FlagEnum;
 import config.NamingConfig;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.statement.Statement;
@@ -72,6 +72,26 @@ public class BenchUtil {
 		}
 		return nameToQuery;
 	}
+
+	public static Map<String, int[]> readOptimalJoinOrders(String path) throws IOException {
+		File optimalFile = new File(path);
+		BufferedReader br = new BufferedReader(new FileReader(optimalFile));
+		Map<String, int[]> optimalOrders = new HashMap<>();
+		String st;
+		while ((st = br.readLine()) != null) {
+			String[] information = st.split("\t");
+			String query = information[0];
+			String order = information[1];
+			String[] tables = order.substring(1, order.length() - 1).split(", ");
+			int[] optimal = new int[tables.length];
+			for (int i = 0; i < tables.length; i++) {
+				optimal[i] = Integer.parseInt(tables[i]);
+			}
+			optimalOrders.put(query, optimal);
+		}
+		return optimalOrders;
+	}
+
 	/**
 	 * Writes header row of benchmark result file.
 	 * 

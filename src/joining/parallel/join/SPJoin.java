@@ -30,11 +30,11 @@ public abstract class SPJoin {
     /**
      * The query for which join orders are evaluated.
      */
-    protected final QueryInfo query;
+    public final QueryInfo query;
     /**
      * Number of tables joined by query.
      */
-    protected final int nrJoined;
+    public final int nrJoined;
     /**
      * At i-th position: cardinality of i-th joined table
      * (after pre-processing).
@@ -43,11 +43,11 @@ public abstract class SPJoin {
     /**
      * Summarizes pre-processing steps.
      */
-    protected final Context preSummary;
+    public final Context preSummary;
     /**
      * Maps non-equi join predicates to compiled evaluators.
      */
-    protected final Map<Expression, NonEquiNode> predToEval;
+    public final Map<Expression, NonEquiNode> predToEval;
     /**
      * Collects result tuples and contains
      * finally a complete result.

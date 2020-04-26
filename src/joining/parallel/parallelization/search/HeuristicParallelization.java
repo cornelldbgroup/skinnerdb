@@ -8,7 +8,7 @@ import joining.parallel.parallelization.Parallelization;
 import joining.parallel.progress.ParallelProgressTracker;
 import joining.parallel.threads.ThreadPool;
 import joining.parallel.uct.ASPNode;
-import joining.parallel.uct.SPNode;
+import joining.parallel.uct.HSPNode;
 import joining.result.ResultTuple;
 import logs.LogUtils;
 import net.sf.jsqlparser.expression.Expression;
@@ -33,7 +33,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *
  * @author Ziyun Wei
  */
-public class AdaptiveSearchParallelization extends Parallelization {
+public class HeuristicParallelization extends Parallelization {
     /**
      * Multiple join operators for threads
      */
@@ -47,7 +47,7 @@ public class AdaptiveSearchParallelization extends Parallelization {
      * @param query     select query with join predicates
      * @param context   query execution context
      */
-    public AdaptiveSearchParallelization(int nrThreads, int budget, QueryInfo query, Context context) throws Exception {
+    public HeuristicParallelization(int nrThreads, int budget, QueryInfo query, Context context) throws Exception {
         super(nrThreads, budget, query, context);
         // Compile predicates
         Map<Expression, NonEquiNode> predToEval = new HashMap<>();
@@ -70,13 +70,13 @@ public class AdaptiveSearchParallelization extends Parallelization {
     @Override
     public void execute(Set<ResultTuple> resultList) throws Exception {
         // Initialize UCT join order search tree.
-        ASPNode root = new ASPNode(0, query, true, nrThreads);
+        HSPNode root = new HSPNode(0, query, true, nrThreads);
         // Initialize a thread pool.
         ExecutorService executorService = ThreadPool.executorService;
         // Mutex shared by multiple threads.
         AtomicBoolean end = new AtomicBoolean(false);
         int nrTables = query.nrJoined;
-        List<AdaptiveSearchTask> tasks = new ArrayList<>();
+        List<HeuristicSearchTask> tasks = new ArrayList<>();
         // logs list
         List<String>[] logs = new List[nrThreads];
         for (int i = 0; i < nrThreads; i++) {
@@ -84,8 +84,8 @@ public class AdaptiveSearchParallelization extends Parallelization {
         }
         for (int i = 0; i < nrThreads; i++) {
             SPJoin spJoin = spJoins.get(i);
-            AdaptiveSearchTask adaptiveSearchTask = new AdaptiveSearchTask(query, root, spJoin, spJoins, end);
-            tasks.add(adaptiveSearchTask);
+            HeuristicSearchTask heuristicSearchTask = new HeuristicSearchTask(query, root, spJoin, spJoins, end);
+            tasks.add(heuristicSearchTask);
         }
         long executionStart = System.currentTimeMillis();
         List<Future<SearchResult>> futures = executorService.invokeAll(tasks);
@@ -115,17 +115,8 @@ public class AdaptiveSearchParallelization extends Parallelization {
         }
         // Write log to the local file.
         if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
-            if (ParallelConfig.PARALLEL_SPEC == 2) {
-                LogUtils.writeLogs(logs, "verbose/search/" + QueryStats.queryName);
-            }
-            else if (ParallelConfig.PARALLEL_SPEC == 3) {
-                LogUtils.writeLogs(logs, "verbose/dynamic_search/" + QueryStats.queryName);
-            }
-            else if (ParallelConfig.PARALLEL_SPEC == 8) {
-                LogUtils.writeLogs(logs, "verbose/adaptive_search/" + QueryStats.queryName);
-            }
+            LogUtils.writeLogs(logs, "verbose/heuristic_search/" + QueryStats.queryName);
         }
-
         System.out.println("Result Set: " + resultList.size());
     }
 }

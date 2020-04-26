@@ -15,6 +15,7 @@ import net.sf.jsqlparser.expression.Expression;
 import predicate.NonEquiNode;
 import preprocessing.Context;
 import query.QueryInfo;
+import statistics.QueryStats;
 
 import java.lang.reflect.Array;
 import java.util.Arrays;
@@ -146,6 +147,16 @@ public class ModJoin extends DPJoin {
                 return 1;
             }
         }
+//        order = new int[]{8, 2, 5, 7, 3, 9, 1, 6, 4, 0};
+//        order = QueryStats.optimal;
+//        System.out.println(Arrays.toString(order));
+//        for (int table : order) {
+//            if (cardinalities[table] > 1000) {
+//                splitTable = table;
+//                break;
+//            }
+//        }
+
         this.roundCtr = roundCtr;
         slowest = false;
         // Lookup or generate left-deep query plan
@@ -221,7 +232,6 @@ public class ModJoin extends DPJoin {
 
     public double execute(int[] order, int splitTable, int roundCtr,
                           boolean[][] finishFlags, State slowState) throws Exception {
-//        long timer0 = System.currentTimeMillis();
         // Treat special case: at least one input relation is empty
 //        writeLog("Round: " + roundCtr + "\tJoin Order: " + Arrays.toString(order) + "\tSplit: " + splitTable);
         for (int tableCtr = 0; tableCtr < nrJoined; ++tableCtr) {
@@ -286,7 +296,6 @@ public class ModJoin extends DPJoin {
         }
         executeFinalWithBudget(plan, splitTable, state, offsets, tid);
 //        executeWithBudget(plan, splitTable, state, offsets, tid);
-//        long timer3 = System.currentTimeMillis();
         int large = 0;
         largeTable = splitTable;
         for (int i = 0; i < nrVisits.length; i++) {
@@ -520,7 +529,8 @@ public class ModJoin extends DPJoin {
     }
 
     int proposeFinalNextInScope(int[] joinOrder, int splitTable, List<JoinPartitionIndexWrapper> indexWrappers,
-                           int curIndex, int[] tupleIndices, int tid, int splitIndex) {
+                           int curIndex, int[] tupleIndices, int tid, int splitIndex,
+                                List<List<JoinPartitionIndexWrapper>> joinIndices) {
         int nextTable = joinOrder[curIndex];
         int nextCardinality = cardinalities[nextTable];
         // If there is no equi-predicates.
@@ -619,6 +629,14 @@ public class ModJoin extends DPJoin {
             nextTable = joinOrder[curIndex];
             nextCardinality = cardinalities[nextTable];
             tupleIndices[nextTable] += 1;
+            if (this.nrVisits[nextTable] == 0 && tupleIndices[nextTable] < nextCardinality) {
+                List<JoinPartitionIndexWrapper> curWrappers = joinIndices.get(curIndex);
+                int preSize = Integer.MAX_VALUE;
+                for (JoinPartitionIndexWrapper wrapper : curWrappers) {
+                    preSize = Math.min(wrapper.nrIndexed(tupleIndices), preSize);
+                }
+                this.nrVisits[nextTable] = preSize;
+            }
         }
         return curIndex;
     }
@@ -658,10 +676,12 @@ public class ModJoin extends DPJoin {
             tupleIndices[table] = 0;
         }
         int remainingBudget = budget;
+//        int remainingBudget = Integer.MAX_VALUE;
         // Number of completed tuples added
         nrResultTuples = 0;
         Arrays.fill(this.nrVisits, 0);
         deepIndex = -1;
+
         // Execute join order until budget depleted or all input finished -
         // at each iteration start, tuple indices contain next tuple
         // combination to look at.
@@ -686,7 +706,6 @@ public class ModJoin extends DPJoin {
             ) {
                 ++statsInstance.nrTuples;
                 // Do we have a complete result row?
-                long timer2 = System.currentTimeMillis();
                 if(joinIndex == plan.joinOrder.order.length - 1) {
                     // Complete result row -> add to result
                     ++nrResultTuples;
@@ -790,7 +809,7 @@ public class ModJoin extends DPJoin {
                     joinIndex = proposeFinalNextInScope(
                             plan.joinOrder.order, splitTable,
                             joinIndices.get(joinIndex), joinIndex,
-                            tupleIndices, tid, splitIndex);
+                            tupleIndices, tid, splitIndex, joinIndices);
                 } else {
                     // No complete result row -> complete further
                     joinIndex++;
@@ -801,7 +820,7 @@ public class ModJoin extends DPJoin {
                 joinIndex = proposeFinalNextInScope(
                         plan.joinOrder.order, splitTable,
                         joinIndices.get(joinIndex), joinIndex,
-                        tupleIndices, tid, splitIndex);
+                        tupleIndices, tid, splitIndex, joinIndices);
 
             }
             --remainingBudget;

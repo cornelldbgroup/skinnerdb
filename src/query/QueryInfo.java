@@ -1,11 +1,6 @@
 package query;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.Map.Entry;
 
 import buffer.BufferManager;
@@ -17,6 +12,9 @@ import config.NamingConfig;
 import expressions.ExpressionInfo;
 import expressions.aggregates.AggInfo;
 import expressions.typing.ExpressionScope;
+import indexing.Index;
+import joining.parallel.indexing.DoublePartitionIndex;
+import joining.parallel.indexing.IntPartitionIndex;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.Function;
 import net.sf.jsqlparser.expression.LongValue;
@@ -136,6 +134,11 @@ public class QueryInfo {
 	 */
 	public Set<Set<Integer>> joinedIndices = new HashSet<>();
 	/**
+	 * Map alias indices that are connected via
+	 * join predicates to selectivity.
+	 */
+	public Map<Integer, Double> joinedSelectivity = new HashMap<>();
+	/**
 	 * Columns that are involved in binary equi-join
 	 * predicates (i.e., we may want to create hash
 	 * indices for them during pre-processing).
@@ -217,6 +220,11 @@ public class QueryInfo {
 	 * inner sub query.
 	 */
 	public final Set<Integer> temporaryTables = new HashSet<>();
+	/**
+	 * The set of temporary tables that are the result of
+	 * inner sub query.
+	 */
+	public final Map<Integer, Integer> temporaryConnection = new HashMap<>();
 	/**
 	 * For each table, initialize a set of tables that connect to the key.
 	 */
@@ -470,6 +478,11 @@ public class QueryInfo {
 									nameToTable.get(aliasToTable.get(alias));
 							if (tableInfo.tempTable || temporaryAlias.contains(alias)) {
 								temporaryTables.add(index);
+								for (String another: curInfo.aliasesMentioned) {
+									if (!another.equals(alias)) {
+										temporaryConnection.put(index, aliasToIndex.get(another));
+									}
+								}
 							}
 						}
 						nonEquiJoinPreds.add(curInfo);
@@ -496,7 +509,7 @@ public class QueryInfo {
 		} // if where clause
 	}
 
-	/**
+
 	/**
 	 * Convert each nonequi-predicates into a tree.
 	 *
@@ -511,6 +524,55 @@ public class QueryInfo {
 				nonEquiJoinNodes.add(nonEquiNodesTest.nonEquiNodes.pop());
 		});
 	}
+	/**
+	 * Generate a mapping from table pairs to selectivity
+	 *
+	 * @param context	context after preprocessing
+	 */
+	public void extractSelectivity(Context context) {
+		equiJoinPreds.forEach(expressionInfo -> {
+			Iterator<Integer> tableIter = expressionInfo.aliasIdxMentioned.iterator();
+			int priorTable = tableIter.next();
+			int table = tableIter.next();
+			int key = priorTable > table ? table * nrJoined + priorTable : priorTable * nrJoined + table;
+
+			Index priorIndex = expressionInfo.indexMentioned.get(priorTable);
+			Index curIndex = expressionInfo.indexMentioned.get(table);
+			if (priorIndex instanceof IntPartitionIndex) {
+				int priorKeys = ((IntPartitionIndex) priorIndex).nrKeys;
+				int curKeys = ((IntPartitionIndex) curIndex).nrKeys;
+				double selectivity = 1.0 / Math.max(priorKeys, curKeys);
+				joinedSelectivity.put(key, selectivity);
+			}
+			else {
+				int priorKeys = ((DoublePartitionIndex) priorIndex).nrKeys;
+				int curKeys = ((DoublePartitionIndex) curIndex).nrKeys;
+				double selectivity = 1.0 / Math.max(priorKeys, curKeys);
+				joinedSelectivity.put(key, selectivity);
+			}
+		});
+		nonEquiJoinPreds.forEach(expressionInfo -> {
+			if (expressionInfo.aliasIdxMentioned.size() == 2) {
+				Iterator<Integer> tableIter = expressionInfo.aliasIdxMentioned.iterator();
+				int priorTable = tableIter.next();
+				int table = tableIter.next();
+
+				Iterator<String> aliasIter = expressionInfo.aliasesMentioned.iterator();
+				String priorAlias = aliasIter.next();
+				String curAlias = aliasIter.next();
+
+				int key = priorTable > table ? table * nrJoined + priorTable : priorTable * nrJoined + table;
+
+				int priorKeys = CatalogManager.getCardinality(context.aliasToFiltered.get(priorAlias));
+				int curKeys = CatalogManager.getCardinality(context.aliasToFiltered.get(curAlias));
+
+				double selectivity = 1.0 / Math.max(priorKeys, curKeys);
+				double base = joinedSelectivity.getOrDefault(key, 1.0);
+				joinedSelectivity.put(key, selectivity * base);
+			}
+		});
+	}
+
 	/**
 	 * Adds expressions in the GROUP-By clause (if any).
 	 */
@@ -669,6 +731,21 @@ public class QueryInfo {
 			}
 		}
 		return false;
+	}
+	/**
+	 * Returns the selectivity estimation.
+	 *
+	 * @param joinedTables	tables that have been joined.
+	 * @param table			new table to join
+	 * @return				estimated selectivity
+	 */
+	public double estimate(Set<Integer> joinedTables, int table) {
+		double selectivity = 1;
+		for (Integer priorTable: joinedTables) {
+			int key = priorTable > table ? table * nrJoined + priorTable : priorTable * nrJoined + table;
+			selectivity *= joinedSelectivity.getOrDefault(key, 1.0);
+		}
+		return selectivity;
 	}
 	/**
 	 * Concatenates string representations of given expression

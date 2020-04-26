@@ -81,7 +81,6 @@ public class AdaptiveSearchTask implements Callable<SearchResult> {
         int[] last = new int[1];
         boolean isFinished = false;
         while (!isFinished) {
-            long timer0 = System.currentTimeMillis();
             ++roundCtr;
             double reward;
             last[0] = nrThreads - 1;

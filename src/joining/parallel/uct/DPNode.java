@@ -246,7 +246,6 @@ public class DPNode {
             if (recommendedActions.isEmpty()) {
                 // add all actions to recommended actions
                 for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
-                    int table = nextTable[actionCtr];
                     recommendedActions.add(actionCtr);
                 }
             }
@@ -456,12 +455,10 @@ public class DPNode {
                     for (int table : unjoinedTablesShuffled) {
                         if (!newlyJoined.contains(table)) {
                             found = table;
-                            if (!query.temporaryTables.contains(table)) {
-                                joinOrder[posCtr] = table;
-                                newlyJoined.add(table);
-                                foundTable = true;
-                                break;
-                            }
+                            joinOrder[posCtr] = table;
+                            newlyJoined.add(table);
+                            foundTable = true;
+                            break;
                         }
                     }
                 }
@@ -482,6 +479,7 @@ public class DPNode {
                 joinOrder[posCtr] = nextTable;
             }
         }
+//        joinOrder = new int[]{8, 2, 5, 7, 3, 9, 1, 6, 4, 0};
         int splitTable = getSplitTableByCard(joinOrder, joinOp.cardinalities);
         double reward = joinOp.execute(joinOrder, splitTable, (int) roundCtr);
 
@@ -503,12 +501,13 @@ public class DPNode {
         if (nrActions == 0) {
             if (ParallelConfig.HEURISTIC_SHARING) {
                 // Initialize table nodes
+//                joinOrder = new int[]{8, 2, 5, 7, 3, 9, 1, 6, 4, 0};
                 int splitTable = getSplitTableByCard(joinOrder, joinOp.cardinalities);
                 double reward = joinOp.execute(joinOrder, splitTable, (int) roundCtr);
                 return reward;
             }
             else {
-                if (nrTables < 4) {
+                if (nrTables < 100) {
                     // Initialize table nodes
                     int splitTable = getSplitTableByCard(joinOrder, joinOp.cardinalities);
                     double reward = joinOp.execute(joinOrder, splitTable, (int) roundCtr);

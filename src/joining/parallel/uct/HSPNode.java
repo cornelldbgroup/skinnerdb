@@ -1,20 +1,20 @@
 package joining.parallel.uct;
 
 import config.JoinConfig;
+import config.ParallelConfig;
 import joining.parallel.join.SPJoin;
 import joining.uct.SelectionPolicy;
 import query.QueryInfo;
 
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.stream.IntStream;
 
 /**
  * Represents node in search parallel UCT search tree.
  *
  * @author Ziyun Wei
  */
-public class SPNode {
+public class HSPNode {
     /**
      * The query for which we are optimizing.
      */
@@ -36,7 +36,7 @@ public class SPNode {
     /**
      * Assigns each action index to child node.
      */
-    public final SPNode[] childNodes;
+    public final HSPNode[] childNodes;
     /**
      * The table to join.
      */
@@ -101,7 +101,7 @@ public class SPNode {
     /**
      * the parent of current node
      */
-    public final SPNode parent;
+    public final HSPNode parent;
     /**
      * The action number of parent node;
      */
@@ -122,8 +122,8 @@ public class SPNode {
      * @param query        	the query which is optimized
      * @param useHeuristic 	whether to avoid Cartesian products
      */
-    public SPNode(long roundCtr, QueryInfo query,
-                  boolean useHeuristic, int nrThreads) {
+    public HSPNode(long roundCtr, QueryInfo query,
+                   boolean useHeuristic, int nrThreads) {
         // Count node generation
         joinedTable = 0;
         this.query = query;
@@ -132,7 +132,7 @@ public class SPNode {
         createdIn = roundCtr;
         treeLevel = 0;
         nrActions = nrTables;
-        childNodes = new SPNode[nrActions];
+        childNodes = new HSPNode[nrActions];
         nrVisits = new int[nrThreads];
         nrTries = new int[nrThreads][nrActions];
         accumulatedReward = new double[nrThreads][nrActions];
@@ -176,14 +176,14 @@ public class SPNode {
      * @param parent      parent node in UCT tree
      * @param joinedTable new joined table
      */
-    public SPNode(long roundCtr, SPNode parent, int joinedTable, int action) {
+    public HSPNode(long roundCtr, HSPNode parent, int joinedTable, int action) {
         // Count node generation
         this.joinedTable = joinedTable;
         createdIn = roundCtr;
         treeLevel = parent.treeLevel + 1;
         nrActions = parent.nrActions - 1;
         nrThreads = parent.nrThreads;
-        childNodes = new SPNode[nrActions];
+        childNodes = new HSPNode[nrActions];
         nrVisits = new int[nrThreads];
         nrTries = new int[nrThreads][nrActions];
         accumulatedReward = new double[nrThreads][nrActions];
@@ -262,96 +262,110 @@ public class SPNode {
      * @param policy	policy used to select action
      * @return index of action to try next
      */
-    int selectAction(long roundCtr, SelectionPolicy policy, int tid, SPJoin spJoin, boolean isLocal) {
-        /*
-         * We apply the UCT formula as no actions are untried.
-         * We iterate over all actions and calculate their
-         * UCT value, updating best action and best UCT value
-         * on the way. We start iterations with a randomly
-         * selected action to ensure that we pick a random
-         * action among the ones with maximal UCT value.
-         */
-        Integer priorAction = null;
-        if (!prioritySet.isEmpty()) {
-            priorAction = prioritySet.pollFirst();
-        }
-        if (priorAction != null) {
-            return priorAction;
-        }
-        int nrVisits = 0;
-        int[] nrTries = new int[nrActions];
-        double[] accumulatedReward = new double[nrActions];
-        Set<Integer> recommendedActions;
-        if (treeLevel < spJoin.prefix) {
-            Set<Integer> actions = spJoin.nextActions.get(sid);
-            recommendedActions = actions != null ? actions : this.recommendedActions;
+    int selectAction(long roundCtr, SelectionPolicy policy, int tid,
+                     SPJoin spJoin, boolean isLocal,
+                     boolean useLearning) {
+
+        if (useLearning) {
+            /*
+             * We apply the UCT formula as no actions are untried.
+             * We iterate over all actions and calculate their
+             * UCT value, updating best action and best UCT value
+             * on the way. We start iterations with a randomly
+             * selected action to ensure that we pick a random
+             * action among the ones with maximal UCT value.
+             */
+            Integer priorAction = null;
+            if (!prioritySet.isEmpty()) {
+                priorAction = prioritySet.pollFirst();
+            }
+            if (priorAction != null) {
+                return priorAction;
+            }
+            int nrVisits = 0;
+            int[] nrTries = new int[nrActions];
+            double[] accumulatedReward = new double[nrActions];
+            if (isLocal) {
+                NodeStatistics threadStats = nodeStatistics[tid];
+                nrVisits += threadStats.nrVisits;
+                for(Integer recAction : recommendedActions) {
+                    int threadTries = threadStats.nrTries[recAction];
+                    nrTries[recAction] += threadTries;
+                    accumulatedReward[recAction] += threadStats.accumulatedReward[recAction];
+                }
+            }
+            else {
+                nrVisits += this.nrVisits[tid];
+                for(Integer recAction : recommendedActions) {
+                    int threadTries = this.nrTries[tid][recAction];
+                    nrTries[recAction] += threadTries;
+                    accumulatedReward[recAction] += this.accumulatedReward[tid][recAction];
+                }
+            }
+            /* When using the default selection policy (UCB1):
+             * We apply the UCT formula as no actions are untried.
+             * We iterate over all actions and calculate their
+             * UCT value, updating best action and best UCT value
+             * on the way. We start iterations with a randomly
+             * selected action to ensure that we pick a random
+             * action among the ones with maximal UCT value.
+             */
+            int bestAction = -1;
+            double bestQuality = -1;
+            List<Integer> randomActions = new ArrayList<>(recommendedActions);
+            Collections.shuffle(randomActions, ThreadLocalRandom.current());
+
+            for (Integer action : randomActions) {
+                // Calculate index of current action
+                int nrTry = nrTries[action];
+                if (nrTry == 0) {
+                    return action;
+                }
+                double meanReward = accumulatedReward[action] / nrTry;
+                double exploration = Math.sqrt(Math.log(nrVisits) / nrTry);
+                // Assess the quality of the action according to policy
+                double quality = meanReward + JoinConfig.EXPLORATION_WEIGHT * exploration;
+                if (quality > bestQuality) {
+                    bestAction = action;
+                    bestQuality = quality;
+                }
+            }
+            // Otherwise: return best action.
+            return bestAction;
+
         }
         else {
-            recommendedActions = this.recommendedActions;
-        }
-        if (isLocal) {
-            NodeStatistics threadStats = nodeStatistics[tid];
-            nrVisits += threadStats.nrVisits;
-            for(Integer recAction : recommendedActions) {
-                int threadTries = threadStats.nrTries[recAction];
-                nrTries[recAction] += threadTries;
-                accumulatedReward[recAction] += threadStats.accumulatedReward[recAction];
-            }
+            int bestAction = -1;
+            double bestQuality = Integer.MAX_VALUE;
+            switch (ParallelConfig.HEURISTIC_POLICY) {
+                case 0: {
+                    for(Integer recAction : recommendedActions) {
+                        int table = nextTable[recAction];
+                        int cardinality = spJoin.cardinalities[table];
+                        if (cardinality < bestQuality) {
+                            bestAction = recAction;
+                            bestQuality = cardinality;
+                        }
+                    }
+                    break;
+                }
+                case 1: {
+                    for(Integer recAction : recommendedActions) {
+                        int table = nextTable[recAction];
+                        double selectivity = query.estimate(joinedTables, table);
+                        if (selectivity < bestQuality) {
+                            bestAction = recAction;
+                            bestQuality = selectivity;
+                        }
+                    }
+                    break;
+                }
+                default: {
 
-//            for (int i = 0; i < nrThreads; i++) {
-//                NodeStatistics threadStats = nodeStatistics[i];
-//                nrVisits += threadStats.nrVisits;
-//                for(Integer recAction : recommendedActions) {
-//                    int threadTries = threadStats.nrTries[recAction];
-//                    nrTries[recAction] += threadTries;
-//                    accumulatedReward[recAction] += threadStats.accumulatedReward[recAction];
-//                }
-//            }
-        }
-        else {
-            nrVisits += this.nrVisits[tid];
-            for(Integer recAction : recommendedActions) {
-                int threadTries = this.nrTries[tid][recAction];
-                nrTries[recAction] += threadTries;
-                accumulatedReward[recAction] += this.accumulatedReward[tid][recAction];
+                }
             }
+            return bestAction;
         }
-        /* When using the default selection policy (UCB1):
-         * We apply the UCT formula as no actions are untried.
-         * We iterate over all actions and calculate their
-         * UCT value, updating best action and best UCT value
-         * on the way. We start iterations with a randomly
-         * selected action to ensure that we pick a random
-         * action among the ones with maximal UCT value.
-         */
-        int bestAction = -1;
-        double bestQuality = -1;
-        List<Integer> randomActions = new ArrayList<>(recommendedActions);
-        Collections.shuffle(randomActions, ThreadLocalRandom.current());
-//        spJoin.writeLog("Action: " + Arrays.toString(randomActions.toArray()));
-//        spJoin.writeLog("Tables: " + Arrays.toString(nextTable));
-
-        for (Integer action : randomActions) {
-            // Calculate index of current action
-//            int action = (offset + actionCtr) % nrActions;
-//            if (useHeuristic && !recommendedActions.contains(action))
-//                continue;
-
-            int nrTry = nrTries[action];
-            if (nrTry == 0) {
-                return action;
-            }
-            double meanReward = accumulatedReward[action] / nrTry;
-            double exploration = Math.sqrt(Math.log(nrVisits) / nrTry);
-            // Assess the quality of the action according to policy
-            double quality = meanReward + JoinConfig.EXPLORATION_WEIGHT * exploration;
-            if (quality > bestQuality) {
-                bestAction = action;
-                bestQuality = quality;
-            }
-        }
-        // Otherwise: return best action.
-        return bestAction;
     }
     /**
      * Updates UCT statistics after sampling.
@@ -371,48 +385,115 @@ public class SPNode {
      * @param joinOrder partially completed join order
      * @return obtained reward
      */
-    double playout(long roundCtr, int[] joinOrder, SPJoin spJoin) throws Exception {
+    double playout(long roundCtr, int[] joinOrder, SPJoin spJoin, boolean useLearning) throws Exception {
         // Last selected table
         int lastTable = joinOrder[treeLevel];
         // Should we avoid Cartesian product joins?
-        if (useHeuristic) {
+        if (useLearning) {
+            if (useHeuristic) {
+                Set<Integer> newlyJoined = new HashSet<>(joinedTables);
+                newlyJoined.add(lastTable);
+                // Iterate over join order positions to fill
+                List<Integer> unjoinedTablesShuffled = new ArrayList<>(unjoinedTables);
+                Collections.shuffle(unjoinedTablesShuffled, ThreadLocalRandom.current());
+                for (int posCtr = treeLevel + 1; posCtr < nrTables; ++posCtr) {
+                    boolean foundTable = false;
+                    for (int table : unjoinedTablesShuffled) {
+                        if (!newlyJoined.contains(table) &&
+                                query.connected(newlyJoined, table)) {
+                            joinOrder[posCtr] = table;
+                            newlyJoined.add(table);
+                            foundTable = true;
+                            break;
+                        }
+                    }
+                    if (!foundTable) {
+                        for (int table : unjoinedTablesShuffled) {
+                            if (!newlyJoined.contains(table)) {
+                                joinOrder[posCtr] = table;
+                                newlyJoined.add(table);
+                                break;
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Shuffle remaining tables
+                Collections.shuffle(unjoinedTables);
+                Iterator<Integer> unjoinedTablesIter = unjoinedTables.iterator();
+                // Fill in remaining join order positions
+                for (int posCtr = treeLevel + 1; posCtr < nrTables; ++posCtr) {
+                    int nextTable = unjoinedTablesIter.next();
+                    while (nextTable == lastTable) {
+                        nextTable = unjoinedTablesIter.next();
+                    }
+                    joinOrder[posCtr] = nextTable;
+                }
+            }
+        }
+        else {
             Set<Integer> newlyJoined = new HashSet<>(joinedTables);
             newlyJoined.add(lastTable);
             // Iterate over join order positions to fill
             List<Integer> unjoinedTablesShuffled = new ArrayList<>(unjoinedTables);
-            Collections.shuffle(unjoinedTablesShuffled, ThreadLocalRandom.current());
-            for (int posCtr = treeLevel + 1; posCtr < nrTables; ++posCtr) {
-                boolean foundTable = false;
-                for (int table : unjoinedTablesShuffled) {
-                    if (!newlyJoined.contains(table) &&
-                            query.connected(newlyJoined, table)) {
-                        joinOrder[posCtr] = table;
-                        newlyJoined.add(table);
-                        foundTable = true;
-                        break;
-                    }
-                }
-                if (!foundTable) {
-                    for (int table : unjoinedTablesShuffled) {
-                        if (!newlyJoined.contains(table)) {
-                            joinOrder[posCtr] = table;
-                            newlyJoined.add(table);
-                            break;
+            switch (ParallelConfig.HEURISTIC_POLICY) {
+                case 0: {
+                    for (int posCtr = treeLevel + 1; posCtr < nrTables; ++posCtr) {
+                        int bestTable = -1;
+                        double bestQuality = Integer.MAX_VALUE;
+                        for (int table : unjoinedTablesShuffled) {
+                            if (!newlyJoined.contains(table) &&
+                                    query.connected(newlyJoined, table)) {
+                                int cardinality = spJoin.cardinalities[table];
+                                if (cardinality < bestQuality) {
+                                    bestTable = table;
+                                    bestQuality = cardinality;
+                                }
+                            }
                         }
+                        if (bestTable < 0) {
+                            for (int table : unjoinedTablesShuffled) {
+                                if (!newlyJoined.contains(table)) {
+                                    bestTable = table;
+                                    break;
+                                }
+                            }
+                        }
+                        joinOrder[posCtr] = bestTable;
+                        newlyJoined.add(bestTable);
                     }
+                    break;
                 }
-            }
-        } else {
-            // Shuffle remaining tables
-            Collections.shuffle(unjoinedTables);
-            Iterator<Integer> unjoinedTablesIter = unjoinedTables.iterator();
-            // Fill in remaining join order positions
-            for (int posCtr = treeLevel + 1; posCtr < nrTables; ++posCtr) {
-                int nextTable = unjoinedTablesIter.next();
-                while (nextTable == lastTable) {
-                    nextTable = unjoinedTablesIter.next();
+                case 1: {
+                    for (int posCtr = treeLevel + 1; posCtr < nrTables; ++posCtr) {
+                        int bestTable = -1;
+                        double bestQuality = Integer.MAX_VALUE;
+                        for (int table : unjoinedTablesShuffled) {
+                            if (!newlyJoined.contains(table) &&
+                                    query.connected(newlyJoined, table)) {
+                                double selectivity = query.estimate(newlyJoined, table);
+                                if (selectivity < bestQuality) {
+                                    bestTable = table;
+                                    bestQuality = selectivity;
+                                }
+                            }
+                        }
+                        if (bestTable < 0) {
+                            for (int table : unjoinedTablesShuffled) {
+                                if (!newlyJoined.contains(table)) {
+                                    bestTable = table;
+                                    break;
+                                }
+                            }
+                        }
+                        joinOrder[posCtr] = bestTable;
+                        newlyJoined.add(bestTable);
+                    }
+                    break;
                 }
-                joinOrder[posCtr] = nextTable;
+                default: {
+
+                }
             }
         }
 
@@ -428,10 +509,7 @@ public class SPNode {
      * @return achieved reward
      */
     public double sample(long roundCtr, int[] joinOrder, SPJoin spJoin,
-                         SelectionPolicy policy, boolean isLocal) throws Exception {
-        if (sid >= 0) {
-            spJoin.sid = sid;
-        }
+                         SelectionPolicy policy, boolean isLocal, int nrLevels, String tidStr) throws Exception {
         int tid = spJoin.tid;
         // Check if this is a (non-extendible) leaf node
         if (nrActions == 0) {
@@ -439,24 +517,29 @@ public class SPNode {
             return spJoin.execute(joinOrder, (int) roundCtr);
         }
         else {
+//            boolean topLevel = treeLevel < ParallelConfig.TOP_LEVEL;
+//            boolean useLearning = topLevel ? tid % 2 == 0 : (tid % 4 == 0 || tid % 4 == 1);
+
+            int pos = treeLevel % nrLevels;
+            boolean useLearning = tidStr.charAt(nrLevels - pos - 1) == '0';
             // inner node - select next action and expand tree if necessary
-            int action = selectAction(roundCtr, policy, tid, spJoin, isLocal);
+            int action = selectAction(roundCtr, policy, tid, spJoin, isLocal, useLearning);
             int table = nextTable[action];
             joinOrder[treeLevel] = table;
             // grow tree if possible
             boolean canExpand = createdIn != roundCtr;
-            SPNode child = childNodes[action];
+            HSPNode child = childNodes[action];
             // let join operator knows which space is evaluating.
             if (canExpand && child == null) {
                 if (childNodes[action] == null) {
-                    childNodes[action] = new SPNode(roundCtr, this, table, action);
+                    childNodes[action] = new HSPNode(roundCtr, this, table, action);
                 }
             }
             // evaluate via recursive invocation or via playout
             boolean isSample = child != null;
             double reward = isSample ?
-                    child.sample(roundCtr, joinOrder, spJoin, policy, isLocal):
-                    playout(roundCtr, joinOrder, spJoin);
+                    child.sample(roundCtr, joinOrder, spJoin, policy, isLocal, nrLevels, tidStr):
+                    playout(roundCtr, joinOrder, spJoin, useLearning);
             // update UCT statistics and return reward
             if (isLocal) {
                 nodeStatistics[tid].updateStatistics(reward, action);
@@ -467,60 +550,4 @@ public class SPNode {
             return reward;
         }
     }
-
-    public void maxJoinOrder(int[] joinOrder, int tid) {
-        if (nrActions > 0) {
-            int maxAction = -1;
-            double maxRewad = -1;
-            NodeStatistics threadStats = nodeStatistics[tid];
-            for(Integer recAction : recommendedActions) {
-                int threadTries = threadStats.nrTries[recAction];
-                double reward = 0;
-                if (threadTries != 0) {
-                    reward = threadStats.accumulatedReward[recAction] / threadTries;
-                }
-                if (reward > maxRewad) {
-                    maxRewad = reward;
-                    maxAction = recAction;
-                }
-            }
-
-            int table = nextTable[maxAction];
-            joinOrder[treeLevel] = table;
-            SPNode child = childNodes[maxAction];
-            if (child == null) {
-                int lastTable = joinOrder[treeLevel];
-                Set<Integer> newlyJoined = new HashSet<>(joinedTables);
-                newlyJoined.add(lastTable);
-                // Iterate over join order positions to fill
-                List<Integer> unjoinedTablesShuffled = new ArrayList<>(unjoinedTables);
-                Collections.shuffle(unjoinedTablesShuffled, ThreadLocalRandom.current());
-                for (int posCtr = treeLevel + 1; posCtr < nrTables; ++posCtr) {
-                    boolean foundTable = false;
-                    for (int joinedTable : unjoinedTablesShuffled) {
-                        if (!newlyJoined.contains(joinedTable) &&
-                                query.connected(newlyJoined, joinedTable)) {
-                            joinOrder[posCtr] = joinedTable;
-                            newlyJoined.add(joinedTable);
-                            foundTable = true;
-                            break;
-                        }
-                    }
-                    if (!foundTable) {
-                        for (int joinedTable : unjoinedTablesShuffled) {
-                            if (!newlyJoined.contains(joinedTable)) {
-                                joinOrder[posCtr] = joinedTable;
-                                newlyJoined.add(joinedTable);
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-            else {
-                child.maxJoinOrder(joinOrder, tid);
-            }
-        }
-    }
-
 }

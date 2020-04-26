@@ -5,6 +5,7 @@ import config.ParallelConfig;
 import joining.parallel.join.FixJoin;
 import joining.parallel.join.SPJoin;
 import joining.parallel.join.SubJoin;
+import joining.parallel.join.ThreadResult;
 import joining.parallel.parallelization.Parallelization;
 import joining.parallel.parallelization.search.SearchResult;
 import joining.parallel.parallelization.search.SearchScheduler;
@@ -53,9 +54,12 @@ public class TaskParallelization extends Parallelization {
         }
         // Initialize multi-way join operator
         int nrTables = query.nrJoined;
+        int nrExecutors = Math.min(ParallelConfig.NR_EXECUTORS, nrThreads - 1);
+        int threadsPerExecutor = nrExecutors == 0 ? 0 : (nrThreads - nrExecutors) / nrExecutors;
         ParallelProgressTracker tracker = new ParallelProgressTracker(nrTables, nrThreads, 1);
-        for (int i = 0; i < nrThreads; i++) {
-            FixJoin modJoin = new FixJoin(query, context, budget, nrThreads, i, predToEval);
+        for (int i = 0; i < (nrExecutors + 1); i++) {
+            FixJoin modJoin = new FixJoin(query, context, budget, nrThreads, i,
+                    predToEval, i == 0 ? 0 : threadsPerExecutor);
             modJoin.tracker = tracker;
             spJoins.add(modJoin);
         }
@@ -73,45 +77,75 @@ public class TaskParallelization extends Parallelization {
         List<String>[] logs = new List[nrThreads];
         // best join orders
         int[][] best = new int[nrThreads][nrTables + 1];
-
-        for (int i = 0; i < nrThreads; i++) {
+        int nrExecutors = Math.min(ParallelConfig.NR_EXECUTORS + 1, nrThreads);
+        for (int i = 0; i < nrExecutors; i++) {
             logs[i] = new ArrayList<>();
         }
-        for (int i = 0; i < nrThreads; i++) {
+        for (int i = 0; i < nrExecutors; i++) {
             FixJoin spJoin = spJoins.get(i);
             ExecutorTask executorTask = new ExecutorTask(query, spJoin, end, best, spJoins);
             tasks.add(executorTask);
         }
         long executionStart = System.currentTimeMillis();
-//        List<Future<TaskResult>> futures = executorService.invokeAll(tasks);
-        TaskResult result = executorService.invokeAny(tasks);
+        List<Future<TaskResult>> futures = executorService.invokeAll(tasks);
+//        TaskResult result = executorService.invokeAny(tasks);
         long executionEnd = System.currentTimeMillis();
+        JoinStats.subExeTime.clear();
         JoinStats.exeTime = executionEnd - executionStart;
         JoinStats.subExeTime.add(JoinStats.exeTime);
-//        futures.forEach(futureResult -> {
-//            try {
-//                TaskResult result = futureResult.get();
-//                resultList.addAll(result.result);
-//                if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
-//                    logs[result.id] = result.logs;
-//                }
-//
-//            } catch (InterruptedException | ExecutionException e) {
-//                e.printStackTrace();
-//            }
-//
-//        });
-        resultList.addAll(result.result);
+        futures.forEach(futureResult -> {
+            try {
+                TaskResult result = futureResult.get();
+                resultList.addAll(result.result);
+                if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
+                    logs[result.id] = result.logs;
+                }
+
+            } catch (InterruptedException | ExecutionException e) {
+                e.printStackTrace();
+            }
+
+        });
+//        resultList.addAll(result.result);
         // close thread pool
         for (FixJoin fixJoin: spJoins) {
-            fixJoin.executorService.shutdown();
+            List<int[]>[] opResultList = fixJoin.resultList;
+            ThreadResult[][] threadResultsList = fixJoin.threadResultsList;
+            if (opResultList != null) {
+                for (List<int[]> results: opResultList) {
+                    if (results != null) {
+                        for (int[] tuples: results) {
+                            resultList.add(new ResultTuple(tuples));
+                        }
+                    }
+                }
+            }
+            if (fixJoin.threadResultsList != null) {
+                for (ThreadResult[] results: threadResultsList) {
+                    if (results != null) {
+                        for (ThreadResult threadTuples: results) {
+                            int count = threadTuples.count;
+                            int[] tuples = new int[nrTables];
+                            for (int i = 0; i < count; i++) {
+                                int startPos = i * nrTables + 1;
+                                System.arraycopy(threadTuples.result, startPos, tuples, 0, nrTables);
+                                resultList.add(new ResultTuple(tuples));
+                            }
+                        }
+                    }
+                }
+            }
+            if (fixJoin.executorService != null)
+                fixJoin.executorService.shutdown();
         }
         long nrSamples = 0;
+        long nrTuples = 0;
         for (SPJoin joinOp: spJoins) {
             nrSamples = Math.max(joinOp.roundCtr, nrSamples);
-            JoinStats.nrTuples += joinOp.statsInstance.nrTuples;
+            nrTuples = Math.max(joinOp.statsInstance.nrTuples, nrTuples);
         }
         JoinStats.nrSamples = nrSamples;
+        JoinStats.nrTuples = nrTuples;
 
         // Write log to the local file.
         if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {

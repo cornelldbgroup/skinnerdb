@@ -6,6 +6,7 @@ import joining.parallel.parallelization.dpdsync.DPDSync;
 import joining.parallel.parallelization.leaf.LeafParallelization;
 import joining.parallel.parallelization.root.RootParallelization;
 import joining.parallel.parallelization.search.AdaptiveSearchParallelization;
+import joining.parallel.parallelization.search.HeuristicParallelization;
 import joining.parallel.parallelization.search.SearchParallelization;
 import joining.parallel.parallelization.task.TaskParallelization;
 import joining.parallel.parallelization.tree.TreeParallelization;
@@ -53,7 +54,6 @@ public class ParallelJoinProcessor {
      */
     public static void process(QueryInfo query,
                                Context context) throws Exception {
-        long startMillis = System.currentTimeMillis();
         // there is no predicate to evaluate in join phase.
         if (query.equiJoinPreds.size() == 0 && query.nonEquiJoinPreds.size() == 0 && PreConfig.FILTER) {
             String targetRelName = NamingConfig.JOINED_NAME;
@@ -138,6 +138,12 @@ public class ParallelJoinProcessor {
             // one search thread and multiple executor threads
             else if (ParallelConfig.PARALLEL_SPEC == 9) {
                 Parallelization parallelization = new TaskParallelization(ParallelConfig.EXE_THREADS,
+                        JoinConfig.BUDGET_PER_EPISODE, query, context);
+                parallelization.execute(resultTuples);
+            }
+            // Search parallelization fixing one join order
+            else if (ParallelConfig.PARALLEL_SPEC == 10) {
+                Parallelization parallelization = new HeuristicParallelization(ParallelConfig.EXE_THREADS,
                         JoinConfig.BUDGET_PER_EPISODE, query, context);
                 parallelization.execute(resultTuples);
             }

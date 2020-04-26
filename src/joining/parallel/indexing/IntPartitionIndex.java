@@ -29,6 +29,10 @@ public class IntPartitionIndex extends PartitionIndex {
      */
     public final IntIntMap keyToPositions;
     /**
+     * Number of unique keys.
+     */
+    public final int nrKeys;
+    /**
      * Number of threads.
      */
     public final int nrThreads;
@@ -175,7 +179,7 @@ public class IntPartitionIndex extends PartitionIndex {
                 }
             });
         }
-        int nrPos = positions == null ? 0 : positions.length;
+        nrKeys = this.cardinality;
     }
 
     /**
@@ -240,7 +244,7 @@ public class IntPartitionIndex extends PartitionIndex {
             });
 
             // joining.parallel fill prefix and indices value into positions array.
-            long t2 = System.currentTimeMillis();
+//            long t2 = System.currentTimeMillis();
             IntStream.range(0, nrBatches).parallel().forEach(bid -> {
                 IntIndexRange batch = batches.get(bid);
                 batch.prefixMap = HashIntIntMaps.newMutableMap(batch.valuesMap.size());

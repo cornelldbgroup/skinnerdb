@@ -11,6 +11,7 @@ import buffer.BufferManager;
 import catalog.CatalogManager;
 import catalog.info.ColumnInfo;
 import catalog.info.TableInfo;
+import com.sun.tools.javadoc.Start;
 import compression.Compressor;
 import config.*;
 import data.ColumnData;
@@ -95,6 +96,10 @@ public class SkinnerCmd {
                 // Load all queries to benchmark
                 Map<String, Statement> nameToQuery =
                         BenchUtil.readAllQueries(dirPath);
+                // read optimal join orders
+                String optimalFile = Configuration.getProperty("OPTIMAL");
+                Map<String, int[]> nameToOptimal = BenchUtil.readOptimalJoinOrders(optimalFile);
+
                 // Iterate over queries
                 for (Entry<String, Statement> entry : nameToQuery.entrySet()) {
                     String queryName = entry.getKey();
@@ -102,6 +107,7 @@ public class SkinnerCmd {
                     System.out.println(queryName);
                     System.out.println(query.toString());
                     QueryStats.queryName = queryName;
+                    QueryStats.optimal = nameToOptimal.get(queryName);
                     long startMillis = System.currentTimeMillis();
                     processSQL(query.toString(), true);
                     long totalMillis = System.currentTimeMillis() - startMillis;
@@ -299,6 +305,14 @@ public class SkinnerCmd {
                     GeneralConfig.ISTESTCASE = true;
                     Master.executeSelect(plainSelect,
                             false, -1, -1, null);
+//                    Master.executeSelect(plainSelect,
+//                            false, -1, -1, null);
+//                    Master.executeSelect(plainSelect,
+//                            false, -1, -1, null);
+//                    Master.executeSelect(plainSelect,
+//                            false, -1, -1, null);
+//                    Master.executeSelect(plainSelect,
+//                            false, -1, -1, null);
                     // Display query result if no target tables specified
                     // and if this is not a benchmark run.
                     if (!benchRun && printResult) {
@@ -399,7 +413,8 @@ public class SkinnerCmd {
             String benchmark = Configuration.getProperty("BENCH", "IMDB");
             String queries = Configuration.getProperty(benchmark, "../imdb/queries");
             String newInput = "bench " + queries + " ";
-            String output = "./" + benchmark.toLowerCase() + "/";
+            String warmup = StartupConfig.WARMUP_RUN ? "warmup/" : "";
+            String output = "./" + warmup + benchmark.toLowerCase() + "/";
             String caseName = GeneralConfig.TEST_CASE > 0 ? "_" + GeneralConfig.TEST_CASE : "";
             if (GeneralConfig.isParallel) {
                 int spec = ParallelConfig.PARALLEL_SPEC;
@@ -425,7 +440,11 @@ public class SkinnerCmd {
                     output += "APS_" + ParallelConfig.EXE_THREADS + caseName + ".txt";
                 }
                 else if (spec == 9) {
-                    output += "SPT_" + ParallelConfig.EXE_THREADS + caseName + ".txt";
+                    output += "SSPT_" + ParallelConfig.EXE_THREADS + caseName + ".txt";
+                }
+                else if (spec == 10) {
+                    String prefix = ParallelConfig.HEURISTIC_POLICY == 0 ? "CHPS_" : "SHPS_";
+                    output += prefix + ParallelConfig.EXE_THREADS + caseName + ".txt";
                 }
             } else {
                 output += "Seq_1.txt";
@@ -519,7 +538,12 @@ public class SkinnerCmd {
         if (args.length > 1) {
             // initialize a thread pool
             String command = Configuration.getProperty("COMMAND");
-            ThreadPool.initThreadsPool(ParallelConfig.EXE_THREADS, ParallelConfig.PRE_THREADS);
+            if (ParallelConfig.PARALLEL_SPEC == 9) {
+                ThreadPool.initThreadsPool(2, ParallelConfig.PRE_THREADS);
+            }
+            else {
+                ThreadPool.initThreadsPool(ParallelConfig.EXE_THREADS, ParallelConfig.PRE_THREADS);
+            }
             GeneralConfig.TEST_CASE = args.length == 3 ? Integer.parseInt(args[2]) : 0;
 //            processInput("exec ./tpch/skinnerqueries/q03.sql");
 //            processInput("exec ./jcch/queries/q02.sql");
@@ -529,7 +553,12 @@ public class SkinnerCmd {
 //            processInput("exp");
             processInput(command);
         } else {
-			ThreadPool.initThreadsPool(ParallelConfig.EXE_THREADS, ParallelConfig.PRE_THREADS);
+            if (ParallelConfig.PARALLEL_SPEC == 9) {
+                ThreadPool.initThreadsPool(2, ParallelConfig.PRE_THREADS);
+            }
+            else {
+                ThreadPool.initThreadsPool(ParallelConfig.EXE_THREADS, ParallelConfig.PRE_THREADS);
+            }
             // Command line processing
             System.out.println("Enter 'help' for help and 'quit' to exit");
             Scanner scanner = new Scanner(System.in);

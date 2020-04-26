@@ -119,6 +119,7 @@ public class SubJoin extends SPJoin {
                 return 1;
             }
         }
+//        order = new int[]{3, 0, 1, 2, 4, 5};
         // Lookup or generate left-deep query plan
         JoinOrder joinOrder = new JoinOrder(order);
         for (int i = 0; i < nrJoined; i++) {
@@ -128,7 +129,7 @@ public class SubJoin extends SPJoin {
         int joinHash = joinOrder.splitHashCode(-1);
         LeftDeepPartitionPlan plan = planCache.get(joinHash);
         if (plan == null) {
-            plan = new LeftDeepPartitionPlan(query, predToEval, joinOrder, tid);
+            plan = new LeftDeepPartitionPlan(query, predToEval, joinOrder);
             planCache.putIfAbsent(joinHash, plan);
         }
 //        long timer1 = System.currentTimeMillis();
@@ -198,6 +199,9 @@ public class SubJoin extends SPJoin {
 //        writeLog("End: "  + state.toString() + "\tReward: " + reward + "\tProgress: " + this.progress);
         // Get the first table whose cardinality is larger than 1.
         state.roundCtr = 0;
+        for (int table: query.temporaryTables) {
+            state.tupleIndices[table] = 0;
+        }
         tracker.updateProgressSP(joinOrder, state, tid, roundCtr, firstTable);
         lastState = state;
 //        long timer5 = System.currentTimeMillis();
@@ -309,8 +313,8 @@ public class SubJoin extends SPJoin {
                     }
                 }
 //                long timer11 = System.currentTimeMillis();
-//                int nextRaw = wrapper.nextIndex(tupleIndices, null);
-                int nextRaw = wrapper.nextIndexFromLast(tupleIndices, null, tid);
+                int nextRaw = wrapper.nextIndex(tupleIndices, null);
+//                int nextRaw = wrapper.nextIndexFromLast(tupleIndices, null, tid);
 //                long timer12 = System.currentTimeMillis();
                 if (nextRaw < 0 || nextRaw == nextCardinality) {
                     tupleIndices[nextTable] = nextCardinality;
@@ -340,14 +344,26 @@ public class SubJoin extends SPJoin {
         }
         // Have reached end of current table? -> we backtrack.
         while (tupleIndices[nextTable] >= nextCardinality) {
-            tupleIndices[nextTable] = 0;
-            --curIndex;
-            if (curIndex < 0) {
-                break;
+            if (query.temporaryTables.contains(nextTable)) {
+                int priorTable = query.temporaryConnection.get(nextTable);
+                while (nextTable != priorTable) {
+                    tupleIndices[nextTable] = 0;
+                    --curIndex;
+                    nextTable = joinOrder[curIndex];
+                    nextCardinality = cardinalities[nextTable];
+                }
+                tupleIndices[nextTable] += 1;
             }
-            nextTable = joinOrder[curIndex];
-            nextCardinality = cardinalities[nextTable];
-            tupleIndices[nextTable] += 1;
+            else {
+                tupleIndices[nextTable] = 0;
+                --curIndex;
+                if (curIndex < 0) {
+                    break;
+                }
+                nextTable = joinOrder[curIndex];
+                nextCardinality = cardinalities[nextTable];
+                tupleIndices[nextTable] += 1;
+            }
         }
         return curIndex;
     }
@@ -418,7 +434,6 @@ public class SubJoin extends SPJoin {
                 // try next tuple in same table.
                 joinIndex = proposeNextInScope(
                         plan.joinOrder.order, joinIndices, joinIndex, tupleIndices);
-
             }
             --remainingBudget;
         }

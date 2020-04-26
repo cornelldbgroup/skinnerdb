@@ -59,7 +59,7 @@ public class StandardParallelization extends Parallelization {
         int nrTables = query.nrJoined;
         ParallelProgressTracker tracker = new ParallelProgressTracker(nrTables, nrThreads, 1);
         for (int i = 0; i < nrThreads; i++) {
-            FixJoin modJoin = new FixJoin(query, context, budget, nrThreads, i, predToEval);
+            FixJoin modJoin = new FixJoin(query, context, budget, nrThreads, i, predToEval, 0);
             modJoin.tracker = tracker;
             spJoins.add(modJoin);
         }
