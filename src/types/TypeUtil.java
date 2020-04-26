@@ -59,6 +59,9 @@ public class TypeUtil {
             case STRING_CODE:
                 // String generalizes strings in dictionary
                 return type2 == SQLtype.STRING;
+            case DATE:
+                // Int generalizes date
+                return type2 == SQLtype.INT;
             default:
                 return false;
         }
