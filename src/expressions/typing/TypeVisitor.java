@@ -144,6 +144,7 @@ public class TypeVisitor extends SkinnerVisitor {
         SQLtype type1 = outputType.get(expression1);
         SQLtype type2 = outputType.get(expression2);
         SQLtype commonType = TypeUtil.commonType(type1, type2);
+
         if (commonType == null) {
             sqlExceptions.add(new SQLexception("Error - "
                     + "failed to add automated casts to "
@@ -151,11 +152,11 @@ public class TypeVisitor extends SkinnerVisitor {
                     + " in expression " + binaryExpression.toString()));
         }
         // Cast operands if necessary
-        if (type1 != commonType) {
+        if (TypeUtil.toJavaType(type1) != TypeUtil.toJavaType(commonType)) {
             CastExpression cast = newCast(expression1, commonType);
             binaryExpression.setLeftExpression(cast);
         }
-        if (type2 != commonType) {
+        if (TypeUtil.toJavaType(type2) != TypeUtil.toJavaType(commonType)) {
             CastExpression cast = newCast(expression2, commonType);
             binaryExpression.setRightExpression(cast);
         }

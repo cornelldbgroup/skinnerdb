@@ -13,6 +13,7 @@ import net.sf.jsqlparser.statement.create.table.ColDataType;
 import net.sf.jsqlparser.statement.select.SubSelect;
 import query.where.WhereUtil;
 
+import java.sql.Date;
 import java.util.*;
 
 /**
@@ -507,22 +508,100 @@ public class SimplificationVisitor extends SkinnerVisitor {
         }
     }
 
+    private boolean isDateExpression(Expression expr) {
+        if (!(expr instanceof CastExpression)) {
+            return false;
+        }
+
+        return ((CastExpression) expr).getLeftExpression() instanceof
+                ExtractExpression;
+    }
+
+    private boolean isConstantExpression(Expression expr) {
+        if (!(expr instanceof CastExpression)) {
+            return false;
+        }
+
+        Expression casted = ((CastExpression) expr).getLeftExpression();
+        return casted instanceof LongValue;
+    }
+
+    @SuppressWarnings("deprecation")
+    void treatDateComparison(BinaryExpression cmp) {
+        Expression left = cmp.getLeftExpression();
+        Expression right = cmp.getRightExpression();
+        if (isDateExpression(left) && isConstantExpression(right)) {
+            ExtractExpression extract = (ExtractExpression)
+                    ((CastExpression) left).getLeftExpression();
+            Expression column = extract.getExpression();
+            String name = extract.getName();
+            LongValue constant =
+                    (LongValue) ((CastExpression) right).getLeftExpression();
+
+            switch (name) {
+                case "YEAR": {
+                    int year = (int) constant.getValue();
+                    Date yearDate = new Date(year - 1900, 0, 1);
+                    int yearSeconds =
+                            (int) (yearDate.getTime() / ((long) 1000));
+                    Date nextYearDate = new Date(year + 1 - 1900, 0, 1);
+                    int nextYearSeconds =
+                            (int) (nextYearDate.getTime() / ((long) 1000));
+
+                    if (cmp instanceof EqualsTo) {
+                        GreaterThanEquals l = new GreaterThanEquals();
+                        l.setLeftExpression(column);
+                        l.setRightExpression(new LongValue(yearSeconds));
+                        GreaterThan r = new GreaterThan();
+                        r.setLeftExpression(new LongValue(nextYearSeconds));
+                        r.setRightExpression(column);
+                        AndExpression conjunction = new AndExpression(l, r);
+                        opStack.pop();
+                        opStack.push(conjunction);
+                    } else if (cmp instanceof GreaterThanEquals) {
+                        GreaterThanEquals gte = new GreaterThanEquals();
+                        gte.setLeftExpression(column);
+                        gte.setRightExpression(new LongValue(yearSeconds));
+                        opStack.pop();
+                        opStack.push(gte);
+                    } else { // cmp instanceof GreaterThan
+                        GreaterThan gt = new GreaterThan();
+                        gt.setLeftExpression(column);
+                        gt.setRightExpression(new LongValue(yearSeconds));
+                        opStack.pop();
+                        opStack.push(gt);
+                    }
+
+                    break;
+                }
+            }
+
+        } else if (isConstantExpression(left) && isDateExpression(right)) {
+
+        } else {
+
+        }
+    }
+
     @Override
     public void visit(EqualsTo arg0) {
         EqualsTo newEquals = new EqualsTo();
         treatBinaryComparison(arg0, newEquals);
+        treatDateComparison(newEquals);
     }
 
     @Override
     public void visit(GreaterThan arg0) {
         GreaterThan newGt = new GreaterThan();
         treatBinaryComparison(arg0, newGt);
+        treatDateComparison(newGt);
     }
 
     @Override
     public void visit(GreaterThanEquals arg0) {
         GreaterThanEquals newGte = new GreaterThanEquals();
         treatBinaryComparison(arg0, newGte);
+        treatDateComparison(newGte);
     }
 
     /**
