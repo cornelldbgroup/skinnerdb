@@ -603,21 +603,21 @@ public class SimplificationVisitor extends SkinnerVisitor {
     public void visit(EqualsTo arg0) {
         EqualsTo newEquals = new EqualsTo();
         treatBinaryComparison(arg0, newEquals);
-        treatDateComparison(newEquals);
+        //treatDateComparison(newEquals);
     }
 
     @Override
     public void visit(GreaterThan arg0) {
         GreaterThan newGt = new GreaterThan();
         treatBinaryComparison(arg0, newGt);
-        treatDateComparison(newGt);
+        //treatDateComparison(newGt);
     }
 
     @Override
     public void visit(GreaterThanEquals arg0) {
         GreaterThanEquals newGte = new GreaterThanEquals();
         treatBinaryComparison(arg0, newGte);
-        treatDateComparison(newGte);
+        //treatDateComparison(newGte);
     }
 
     /**
