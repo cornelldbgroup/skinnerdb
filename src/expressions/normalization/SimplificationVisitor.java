@@ -547,6 +547,9 @@ public class SimplificationVisitor extends SkinnerVisitor {
                     Date nextYearDate = new Date(year + 1 - 1900, 0, 1);
                     int nextYearSeconds =
                             (int) (nextYearDate.getTime() / ((long) 1000));
+                    System.out.println(year);
+                    System.out.println(yearSeconds);
+                    System.out.println(nextYearSeconds);
 
                     if (cmp instanceof EqualsTo) {
                         GreaterThanEquals l = new GreaterThanEquals();
