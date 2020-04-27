@@ -8,6 +8,7 @@ import compression.Compressor;
 import config.GeneralConfig;
 import config.NamingConfig;
 import config.StartupConfig;
+import data.IntData;
 import ddl.TableCreator;
 import diskio.LoadCSV;
 import diskio.PathUtil;
@@ -26,6 +27,7 @@ import org.jline.reader.UserInterruptException;
 import org.jline.reader.impl.history.DefaultHistory;
 import parallel.ParallelService;
 import print.RelationPrinter;
+import query.ColumnRef;
 import query.SQLexception;
 
 import java.io.File;
@@ -407,6 +409,11 @@ public class SkinnerCmd {
             BufferManager.loadDictionary();
         }
         CatalogManager.generateStats();
+
+        ColumnRef ref = new ColumnRef("motos_2", "fecha");
+        IntData data = (IntData) BufferManager.colToData.get(ref);
+        System.out.println(data.data[0]);
+        System.exit(0);
 
         if (System.console() == null) { // Piped input
             boolean continueProcessing = true;
