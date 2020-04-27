@@ -1180,9 +1180,6 @@ public class ExpressionCompiler extends SkinnerVisitor {
      *
      * @param binaryExpression binary expression to evaluate
      * @param intOp            jump instruction for integer operands
-     * @param longOp           jump instruction for long operands
-     * @param floatOp          jump instruction for float operands
-     * @param doubleOp         jump instruction for double operands
      * @param readableName     comparison name for warning messages
      */
     void treatBinaryCmp(BinaryExpression binaryExpression,
