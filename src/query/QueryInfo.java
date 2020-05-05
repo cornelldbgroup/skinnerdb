@@ -350,7 +350,9 @@ public class QueryInfo {
         Expression where = plainSelect.getWhere();
         if (where != null) {
             // Normalize WHERE clause and transform into CNF
+            System.out.println(where.toString());
             ExpressionInfo whereInfo = new ExpressionInfo(this, where);
+            System.out.println(whereInfo.finalExpression.toString());
             // Decompose into conjuncts
             List<Expression> conjuncts = whereInfo.conjuncts;
             // Merge conditions that refer to the same tables
