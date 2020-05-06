@@ -58,6 +58,25 @@ public abstract class HashIndex<T extends Number> {
         return nextHighest;
     }
 
+    public int nextSmallestRowInBucket(int dataLocation, int target) {
+        int end = dataLocation + this.data[dataLocation] - 1;
+        int start = dataLocation + 1;
+
+        int nextSmallest = -1;
+        while (start <= end) {
+            int mid = (start + end) / 2;
+
+            if (this.data[mid] >= target) {
+                end = mid - 1;
+            } else {
+                nextSmallest = mid;
+                start = mid + 1;
+            }
+        }
+
+        return nextSmallest;
+    }
+
     public int getBucketEnd(int dataLocation) {
         return dataLocation + this.data[dataLocation];
     }

@@ -367,7 +367,7 @@ public class SearchPreprocessor implements Preprocessor {
                 List<MutableIntList> resultList = new ArrayList<>();
                 BudgetedFilter filterOp = new BudgetedFilter(compiled,
                         indexFilter,
-                        CARDINALITY, resultList);
+                        nextEnd, resultList);
 
                 while (startRow < nextEnd) {
                     ++roundCtr;
@@ -393,6 +393,7 @@ public class SearchPreprocessor implements Preprocessor {
                     List<Integer> outputId = initializeEpoch(resultList,
                             state.batches);
                     double reward = filterOp.execute(start, outputId, state);
+                    if (filterOp.shouldEarlyFinish()) break;
                     FilterUCTNode.finalUpdateStatistics(selected, state,
                             reward);
 

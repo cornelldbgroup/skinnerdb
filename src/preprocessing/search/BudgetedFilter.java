@@ -1,8 +1,11 @@
 package preprocessing.search;
 
 import expressions.compilation.UnaryBoolEval;
+import org.apache.commons.lang3.tuple.Pair;
+import org.eclipse.collections.api.iterator.IntIterator;
 import org.eclipse.collections.api.list.ImmutableList;
 import org.eclipse.collections.api.list.primitive.MutableIntList;
+import org.eclipse.collections.api.set.primitive.MutableIntSet;
 
 import java.util.ArrayList;
 import java.util.BitSet;
@@ -13,33 +16,39 @@ public class BudgetedFilter {
     private List<MutableIntList> resultList;
     private ImmutableList<UnaryBoolEval> compiled;
     private IndexFilter indexFilter;
-    private int CARDINALITY;
+    private int LAST_ROW;
+    private boolean earlyFinish = false;
 
     public BudgetedFilter(ImmutableList<UnaryBoolEval> compiled,
                           IndexFilter indexFilter,
-                          int CARDINALITY, List<MutableIntList> resultList) {
+                          int LAST_ROW, List<MutableIntList> resultList) {
         this.resultList = resultList;
         this.compiled = compiled;
         this.indexFilter = indexFilter;
-        this.CARDINALITY = CARDINALITY;
+        this.LAST_ROW = LAST_ROW;
     }
 
-    /*private long indexScan(int budget,
-                           List<MutableIntList> outputs,
+    private long indexScan(int start,
+                           MutableIntList result,
                            FilterState state) {
 
         long startTime = System.nanoTime();
-        MutableIntList result = IntLists.mutable.empty();
 
-        Pair<MutableIntList, Integer> pair = indexFilter.getRows(budget,
-                state, lastCompletedRow, LAST_TABLE_ROW);
+        Pair<MutableIntSet, Boolean> indexScanResult =
+                indexFilter.getCandidateRowsFromIndex(state, start,
+                        LAST_ROW);
+        MutableIntSet candidate = indexScanResult.getLeft();
+        this.earlyFinish = indexScanResult.getRight();
+        if (this.earlyFinish) {
+            return 0;
+        }
 
-        IntList candidate = pair.getKey();
+        IntIterator iterator = candidate.intIterator();
 
         if (state.cachedEval != null) {
             ROW_LOOP:
-            for (int i = 0; i < candidate.size(); i++) {
-                int row = candidate.get(i);
+            while (iterator.hasNext()) {
+                int row = iterator.next();
 
                 if (state.cachedEval.evaluate(row) <= 0) {
                     continue ROW_LOOP;
@@ -56,11 +65,11 @@ public class BudgetedFilter {
             }
         } else {
             ROW_LOOP:
-            for (int i = 0; i < candidate.size(); i++) {
-                int row = candidate.get(i);
+            while (iterator.hasNext()) {
+                int row = iterator.next();
 
                 for (int j = state.indexedTil + 1; j < state.order.length;
-                j++) {
+                     j++) {
                     UnaryBoolEval expr = compiled.get(state.order[j]);
                     if (expr.evaluate(row) <= 0) {
                         continue ROW_LOOP;
@@ -71,10 +80,9 @@ public class BudgetedFilter {
             }
         }
 
-        resultList.add(result);
         long endTime = System.nanoTime();
         return endTime - startTime;
-    }*/
+    }
 
     private long tableScanBranching(int begin, List<MutableIntList> result,
                                     FilterState state) {
@@ -82,7 +90,7 @@ public class BudgetedFilter {
 
         for (int b = 0; b < state.batches; b++) {
             final int start = begin + b * state.batchSize;
-            final int end = Math.min(start + state.batchSize, CARDINALITY);
+            final int end = Math.min(start + state.batchSize, LAST_ROW);
             final MutableIntList batchResult = result.get(b);
 
             if (state.cachedEval != null) {
@@ -117,7 +125,7 @@ public class BudgetedFilter {
                 }
             }
 
-            if (end == CARDINALITY) break;
+            if (end == LAST_ROW) break;
         }
 
         long endTime = System.nanoTime();
@@ -128,7 +136,7 @@ public class BudgetedFilter {
                                  FilterState state) {
         long startTime = System.nanoTime();
         int end = Math.min(start + state.batchSize * state.batches,
-                CARDINALITY);
+                LAST_ROW);
         int nrRows = end - start;
 
         List<BitSet> predicateEval = new ArrayList<>(compiled.size());
@@ -167,21 +175,26 @@ public class BudgetedFilter {
             outputs.add(resultList.get(outId));
         }
 
-        /*if (state.indexedTil >= 0) {
-            time = indexScan(start, outputs, state);
-        } else*/
-        if (state.avoidBranching) {
+        int delta = Math.min(start + state.batches * state.batchSize,
+                LAST_ROW) - start;
+
+        if (state.indexedTil >= 0) {
+            time = indexScan(start, outputs.get(0), state);
+        } else if (state.avoidBranching) {
             time = tableScanBitset(start, outputs.get(0), state);
         } else {
             time = tableScanBranching(start, outputs, state);
         }
 
-        int delta = Math.min(start + state.batches * state.batchSize,
-                CARDINALITY) - start;
+
         return Math.exp(-(0.0001 * time) / delta);
     }
 
     public Collection<MutableIntList> getResult() {
         return resultList;
+    }
+
+    public boolean shouldEarlyFinish() {
+        return earlyFinish;
     }
 }
