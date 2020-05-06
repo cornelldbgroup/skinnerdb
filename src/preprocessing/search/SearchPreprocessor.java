@@ -356,6 +356,8 @@ public class SearchPreprocessor implements Preprocessor {
             futures.add(ParallelService.POOL.submit(() -> {
                 ConcurrentHashMap<List<Integer>, UnaryBoolEval> cache =
                         new ConcurrentHashMap<>();
+                List<Future<Pair<List<Integer>, UnaryBoolEval>>> compileTasks
+                        = new ArrayList<>();
                 int startRow = nextStart;
 
                 long nextCompile = 75;
@@ -399,6 +401,13 @@ public class SearchPreprocessor implements Preprocessor {
                     if (ENABLE_COMPILATION && roundCtr == nextCompile) {
                         nextCompile *= 2;
 
+                        for (Future<Pair<List<Integer>, UnaryBoolEval>> f :
+                                compileTasks) {
+                            Pair<List<Integer>, UnaryBoolEval> p = f.get();
+                            cache.put(p.getKey(), p.getValue());
+                        }
+                        compileTasks.clear();
+
                         int compileSetSize = predicates.size();
                         HashMap<FilterUCTNode, Integer> savedCalls =
                                 new HashMap<>();
@@ -416,8 +425,7 @@ public class SearchPreprocessor implements Preprocessor {
                                 }
                             }
                             node.updateUtility(savedCalls, cache);
-                            List<Future<UnaryBoolEval>> compileTasks =
-                                    new ArrayList<>();
+
                             final List<Integer> preds = node.getChosenPreds();
                             compileTasks.add(ParallelService.POOL.submit(() -> {
                                 Expression expr = null;
@@ -430,14 +438,14 @@ public class SearchPreprocessor implements Preprocessor {
                                     }
                                 }
 
-                                return compilePred(unaryPred,
-                                        expr, colMap);
+                                return Pair.of(preds, compilePred(unaryPred,
+                                        expr, colMap));
                             }));
-                            for (Future<UnaryBoolEval> f : compileTasks) {
-                                cache.put(preds, f.get());
-                            }
                         }
                     }
+                }
+                for (Future f : compileTasks) {
+                    f.cancel(true);
                 }
                 return resultList;
             }));
