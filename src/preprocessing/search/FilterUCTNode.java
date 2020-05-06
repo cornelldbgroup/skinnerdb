@@ -5,6 +5,7 @@ import indexing.HashIndex;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static preprocessing.search.FilterSearchConfig.*;
 
@@ -216,7 +217,7 @@ public class FilterUCTNode {
 
     public Pair<FilterUCTNode, Boolean> sample(long roundCtr,
                                                FilterState state,
-                                               Map<List<Integer>,
+                                               ConcurrentHashMap<List<Integer>,
                                                        UnaryBoolEval> cache) {
         if (type == NodeType.LEAF) {
             return Pair.of(this, false);
@@ -421,7 +422,7 @@ public class FilterUCTNode {
     }
 
     public void initializeUtility(HashMap<FilterUCTNode, Integer> utility,
-                                  Map<List<Integer>,
+                                  ConcurrentHashMap<List<Integer>,
                                           UnaryBoolEval> cache) {
         if (this.type == NodeType.ROOT) {
             for (int a = 0; a < Math.min(nrActions, numPredicates); ++a) {
@@ -432,7 +433,7 @@ public class FilterUCTNode {
         } else {
             for (int a = 0; a < nrActions; ++a) {
                 if (this.childNodes[a] != null) {
-                    if (!cache.containsKey(this.chosenPreds)) {
+                    if (!cache.contains(this.chosenPreds)) {
                         utility.put(this.childNodes[a],
                                 this.chosenPreds.size() * this.numRows);
                     }
@@ -445,11 +446,11 @@ public class FilterUCTNode {
     }
 
     public void updateUtility(HashMap<FilterUCTNode, Integer> utility,
-                              Map<List<Integer>,
+                              ConcurrentHashMap<List<Integer>,
                                       UnaryBoolEval> cache) {
         FilterUCTNode parent = this.parent;
         while (parent != null) {
-            if (parent.parent == null || cache.containsKey(parent.chosenPreds)) {
+            if (parent.parent == null || cache.contains(parent.chosenPreds)) {
                 break;
             }
 
@@ -461,7 +462,7 @@ public class FilterUCTNode {
         Stack<FilterUCTNode> children = new Stack<>();
         for (int a = 0; a < nrActions; ++a) {
             if (this.childNodes[a] != null &&
-                    !cache.containsKey(this.childNodes[a])) {
+                    !cache.contains(this.childNodes[a])) {
                 children.push(this.childNodes[a]);
             }
         }
@@ -473,7 +474,7 @@ public class FilterUCTNode {
                             * curr.numRows);
             for (int a = 0; a < nrActions; ++a) {
                 if (curr.childNodes[a] != null &&
-                        !cache.containsKey(curr.childNodes[a])) {
+                        !cache.contains(curr.childNodes[a])) {
                     children.push(curr.childNodes[a]);
                 }
             }
