@@ -400,10 +400,8 @@ public class SearchPreprocessor implements Preprocessor {
                     if (ENABLE_COMPILATION && roundCtr == nextCompile) {
                         nextCompile *= 2;
 
-                        for (Future<Pair<List<Integer>, UnaryBoolEval>> f :
-                                compileTasks) {
-                            Pair<List<Integer>, UnaryBoolEval> p = f.get();
-                            cache.put(p.getKey(), p.getValue());
+                        for (Future f : compileTasks) {
+                            f.get();
                         }
 
                         int compileSetSize = predicates.size();
@@ -436,8 +434,11 @@ public class SearchPreprocessor implements Preprocessor {
                                     }
                                 }
 
-                                return Pair.of(preds, compilePred(unaryPred,
-                                        expr, colMap));
+                                try {
+                                    cache.put(preds, compilePred(unaryPred,
+                                            expr,
+                                            colMap));
+                                } catch (Exception e) {}
                             }));
                         }
                     }
