@@ -27,6 +27,7 @@ import statistics.PreStats;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Future;
 
 import static operators.Filter.*;
 import static preprocessing.PreprocessorUtil.*;
@@ -327,6 +328,122 @@ public class SearchPreprocessor implements Preprocessor {
         }
 
         return resultList;
+    }
+
+    private Collection<MutableIntList> filterUCTNaiveParallel(
+            String tableName,
+            ImmutableList<Expression> predicates,
+            ImmutableList<UnaryBoolEval> compiled,
+            List<HashIndex> indices,
+            List<Integer> dataLocations,
+            ExpressionInfo unaryPred,
+            Map<ColumnRef, ColumnRef> colMap) throws Exception {
+        ConcurrentHashMap<List<Integer>, UnaryBoolEval> cache =
+                new ConcurrentHashMap<>();
+        int nrCompiled = compiled.size();
+        final int CARDINALITY = CatalogManager.getCardinality(tableName);
+        List<MutableIntList> finalResult = new ArrayList<>();
+        List<Future<List<MutableIntList>>> futures = new ArrayList<>();
+
+        int parallelBatchSize = (int) Math.ceil(CARDINALITY /
+                (double) ParallelService.POOL_THREADS);
+
+        for (int batch = 0; batch < ParallelService.POOL_THREADS; batch++) {
+            final int index = batch;
+            futures.add(ParallelService.POOL.submit(() -> {
+                int nextStart = 0 + parallelBatchSize * index;
+                int nextEnd = Math.min(nextStart + parallelBatchSize,
+                        CARDINALITY);
+
+                long nextCompile = 75;
+                long roundCtr = 0;
+                IndexFilter indexFilter = new IndexFilter(indices,
+                        dataLocations);
+                FilterUCTNode root = new FilterUCTNode(cache, roundCtr,
+                        nrCompiled, indices);
+                List<MutableIntList> resultList = new ArrayList<>();
+                BudgetedFilter filterOp = new BudgetedFilter(compiled,
+                        indexFilter,
+                        CARDINALITY, resultList);
+
+                while (nextStart < nextEnd) {
+                    ++roundCtr;
+
+                    final FilterState state = new FilterState(nrCompiled);
+                    Pair<FilterUCTNode, Boolean> sample = root.sample(roundCtr,
+                            state);
+                    final FilterUCTNode selected = sample.getLeft();
+                    boolean playedOut = sample.getRight();
+
+                    final int start = nextStart;
+                    final int end;
+                    if (playedOut) {
+                        state.batchSize = ROWS_PER_TIMESTEP;
+                        end = Math.min(start + ROWS_PER_TIMESTEP, CARDINALITY);
+                    } else {
+                        state.batchSize = LEAF_ROWS_PER_TIMESTEP;
+                        end = Math.min(start + state.batches *
+                                LEAF_ROWS_PER_TIMESTEP, CARDINALITY);
+                    }
+                    nextStart = end;
+                    FilterUCTNode.initialUpdateStatistics(selected, state);
+                    List<Integer> outputId = initializeEpoch(resultList,
+                            state.batches);
+                    double reward = filterOp.execute(start, outputId, state);
+                    FilterUCTNode.finalUpdateStatistics(selected, state,
+                            reward);
+
+                    if (ENABLE_COMPILATION && roundCtr == nextCompile) {
+                        nextCompile *= 2;
+
+                        int compileSetSize = predicates.size();
+                        HashMap<FilterUCTNode, Integer> savedCalls =
+                                new HashMap<>();
+                        root.initializeUtility(savedCalls, cache);
+                        for (int j = 0; j < Math.min(compileSetSize,
+                                savedCalls.size()); j++) {
+
+                            FilterUCTNode node = null;
+                            int maxSavedCalls = -1;
+                            for (Map.Entry<FilterUCTNode, Integer> entry :
+                                    savedCalls.entrySet()) {
+                                if (entry.getValue() > maxSavedCalls) {
+                                    maxSavedCalls = entry.getValue();
+                                    node = entry.getKey();
+                                }
+                            }
+                            node.updateUtility(savedCalls, cache);
+
+                            final List<Integer> preds = node.getChosenPreds();
+                            ParallelService.POOL.submit(() -> {
+                                Expression expr = null;
+                                for (int i = preds.size() - 1; i >= 0; i--) {
+                                    if (expr == null) {
+                                        expr = predicates.get(preds.get(i));
+                                    } else {
+                                        expr = new AndExpression(expr,
+                                                predicates.get(preds.get(i)));
+                                    }
+                                }
+
+                                try {
+                                    cache.put(preds, compilePred(unaryPred,
+                                            expr,
+                                            colMap));
+                                } catch (Exception e) {}
+                            });
+                        }
+                    }
+                }
+                return resultList;
+            }));
+        }
+
+        for (Future<List<MutableIntList>> future : futures) {
+            finalResult.addAll(future.get());
+        }
+
+        return finalResult;
     }
 
     public List<Integer> initializeEpoch(List<MutableIntList> resultList,
