@@ -338,8 +338,6 @@ public class SearchPreprocessor implements Preprocessor {
             List<Integer> dataLocations,
             ExpressionInfo unaryPred,
             Map<ColumnRef, ColumnRef> colMap) throws Exception {
-        ConcurrentHashMap<List<Integer>, UnaryBoolEval> cache =
-                new ConcurrentHashMap<>();
         int nrCompiled = compiled.size();
         final int CARDINALITY = CatalogManager.getCardinality(tableName);
         List<MutableIntList> finalResult = new ArrayList<>();
@@ -356,6 +354,8 @@ public class SearchPreprocessor implements Preprocessor {
             if (nextStart >= CARDINALITY) break;
 
             futures.add(ParallelService.POOL.submit(() -> {
+                ConcurrentHashMap<List<Integer>, UnaryBoolEval> cache =
+                        new ConcurrentHashMap<>();
                 int startRow = nextStart;
 
                 long nextCompile = 75;
