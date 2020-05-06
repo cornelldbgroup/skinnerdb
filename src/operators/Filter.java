@@ -114,7 +114,7 @@ public class Filter {
 
             // Process parallelBatches in parallel
             result =
-                    batches.asParallel(ParallelService.HIGH_POOL, 1)
+                    batches.asParallel(ParallelService.POOL, 1)
                             .collect(batch -> filterBatch(unaryBoolEval,
                                     batch))
                             .toList();

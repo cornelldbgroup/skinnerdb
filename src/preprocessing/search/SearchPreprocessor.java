@@ -181,7 +181,7 @@ public class SearchPreprocessor implements Preprocessor {
                 } catch (Exception e) {
                     return null;
                 }
-            }, compiled, 1, ParallelService.HIGH_POOL, false);
+            }, compiled, 1, ParallelService.POOL, false);
         } else {
             for (Expression expression : predicates) {
                 compiled.add(compilePred(unaryPred,
@@ -211,7 +211,7 @@ public class SearchPreprocessor implements Preprocessor {
         }
         Collection<MutableIntList> satisfyingRows =
                 shouldFilter ?
-                        filterUCT(tableName, predicates,
+                        filterUCTSingleThreaded(tableName, predicates,
                                 compiled.toImmutable(), indices,
                                 values, unaryPred, preSummary.columnMapping) :
                         Arrays.asList();
@@ -237,7 +237,7 @@ public class SearchPreprocessor implements Preprocessor {
         }
     }
 
-    private Collection<MutableIntList> filterUCT(
+    private Collection<MutableIntList> filterUCTSingleThreaded(
             String tableName,
             ImmutableList<Expression> predicates,
             ImmutableList<UnaryBoolEval> compiled,
@@ -286,7 +286,7 @@ public class SearchPreprocessor implements Preprocessor {
             FilterUCTNode.finalUpdateStatistics(selected, state, reward);
 
             if (ENABLE_COMPILATION && roundCtr == nextCompile) {
-                nextCompile += 100;
+                nextCompile *= 2;
 
                 int compileSetSize = predicates.size();
                 HashMap<FilterUCTNode, Integer> savedCalls = new HashMap<>();
@@ -306,7 +306,7 @@ public class SearchPreprocessor implements Preprocessor {
                     node.updateUtility(savedCalls, cache);
 
                     final List<Integer> preds = node.getChosenPreds();
-                    ParallelService.HIGH_POOL.submit(() -> {
+                    ParallelService.POOL.submit(() -> {
                         Expression expr = null;
                         for (int i = preds.size() - 1; i >= 0; i--) {
                             if (expr == null) {

@@ -71,7 +71,7 @@ public class Materialize {
             String columnName = sourceColRef.columnName;
             ColumnRef resultColRef = new ColumnRef(targetRelName, columnName);
             BufferManager.colToData.put(resultColRef, resultData);
-        }, ParallelService.HIGH_POOL);
+        }, ParallelService.POOL);
         // Update statistics in catalog
         CatalogManager.updateStats(targetRelName);
         // Unload source data if necessary
@@ -142,7 +142,7 @@ public class Materialize {
             ColumnData targetData = srcData.copyRows(tuples, tableIdx);
             // Insert into buffer pool
             BufferManager.colToData.put(targetRef, targetData);
-        }, ParallelService.HIGH_POOL);
+        }, ParallelService.POOL);
         // Update statistics in catalog
         CatalogManager.updateStats(targetRelName);
     }

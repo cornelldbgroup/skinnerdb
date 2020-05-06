@@ -46,7 +46,7 @@ public class PreprocessorUtil {
                 System.err.println("Error creating index for " + queryRef);
                 e.printStackTrace();
             }
-        }, ParallelService.HIGH_POOL);
+        }, ParallelService.POOL);
         long totalMillis = System.currentTimeMillis() - startMillis;
         log("Created all indices in " + totalMillis + " ms.");
     }

@@ -119,7 +119,7 @@ public class BasicPreprocessor implements Preprocessor {
                 String table = query.aliasToTable.get(alias);
                 preSummary.aliasToFiltered.put(alias, table);
             }
-        }, ParallelService.HIGH_POOL);
+        }, ParallelService.POOL);
         // Abort pre-processing if filtering error occurred
         if (hadError) {
             throw new Exception("Error in pre-processor.");

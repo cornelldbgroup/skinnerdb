@@ -55,7 +55,7 @@ public class Indexer {
         List<Future> futures = new ArrayList<>();
         for (TableInfo tableI : CatalogManager.currentDB.nameToTable.values()) {
             for (ColumnInfo columnInfo : tableI.nameToCol.values()) {
-                futures.add(ParallelService.HIGH_POOL.submit(() -> {
+                futures.add(ParallelService.POOL.submit(() -> {
                     try {
                         if (mode.equals(IndexingMode.ALL) ||
                                 (mode.equals(IndexingMode.ONLY_KEYS) &&
