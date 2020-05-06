@@ -289,7 +289,7 @@ public class SearchPreprocessor implements Preprocessor {
             if (ENABLE_COMPILATION && roundCtr == nextCompile) {
                 nextCompile *= 2;
 
-                int compileSetSize = 3;
+                int compileSetSize = predicates.size();
                 HashMap<FilterUCTNode, Integer> savedCalls = new HashMap<>();
                 root.initializeUtility(savedCalls, cache);
                 for (int j = 0; j < Math.min(compileSetSize,
@@ -356,7 +356,6 @@ public class SearchPreprocessor implements Preprocessor {
             futures.add(ParallelService.POOL.submit(() -> {
                 ConcurrentHashMap<List<Integer>, UnaryBoolEval> cache =
                         new ConcurrentHashMap<>();
-                List<Future> compileTasks = new ArrayList<>();
                 int startRow = nextStart;
 
                 long nextCompile = 75;
@@ -400,10 +399,6 @@ public class SearchPreprocessor implements Preprocessor {
                     if (ENABLE_COMPILATION && roundCtr == nextCompile) {
                         nextCompile *= 2;
 
-                        for (Future f : compileTasks) {
-                            f.get();
-                        }
-
                         int compileSetSize = predicates.size();
                         HashMap<FilterUCTNode, Integer> savedCalls =
                                 new HashMap<>();
@@ -423,7 +418,7 @@ public class SearchPreprocessor implements Preprocessor {
                             node.updateUtility(savedCalls, cache);
 
                             final List<Integer> preds = node.getChosenPreds();
-                            compileTasks.add(ParallelService.POOL.submit(() -> {
+                            ParallelService.POOL.submit(() -> {
                                 Expression expr = null;
                                 for (int i = preds.size() - 1; i >= 0; i--) {
                                     if (expr == null) {
@@ -439,12 +434,9 @@ public class SearchPreprocessor implements Preprocessor {
                                             expr,
                                             colMap));
                                 } catch (Exception e) {}
-                            }));
+                            });
                         }
                     }
-                }
-                for (Future f : compileTasks) {
-                    f.cancel(true);
                 }
                 return resultList;
             }));
