@@ -406,7 +406,6 @@ public class SearchPreprocessor implements Preprocessor {
                             Pair<List<Integer>, UnaryBoolEval> p = f.get();
                             cache.put(p.getKey(), p.getValue());
                         }
-                        compileTasks.clear();
 
                         int compileSetSize = predicates.size();
                         HashMap<FilterUCTNode, Integer> savedCalls =
