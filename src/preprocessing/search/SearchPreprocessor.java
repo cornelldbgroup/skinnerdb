@@ -253,7 +253,7 @@ public class SearchPreprocessor implements Preprocessor {
         final int CARDINALITY = CatalogManager.getCardinality(tableName);
         long roundCtr = 0;
         IndexFilter indexFilter = new IndexFilter(indices, dataLocations);
-        FilterUCTNode root = new FilterUCTNode(cache, roundCtr,
+        FilterUCTNode root = new FilterUCTNode(roundCtr,
                 nrCompiled, indices);
         int lastCompletedRow = 0;
         List<MutableIntList> resultList = new ArrayList<>();
@@ -265,7 +265,7 @@ public class SearchPreprocessor implements Preprocessor {
 
             final FilterState state = new FilterState(nrCompiled);
             Pair<FilterUCTNode, Boolean> sample = root.sample(roundCtr,
-                    state);
+                    state, cache);
             final FilterUCTNode selected = sample.getLeft();
             boolean playedOut = sample.getRight();
 
@@ -362,7 +362,7 @@ public class SearchPreprocessor implements Preprocessor {
                 long roundCtr = 0;
                 IndexFilter indexFilter = new IndexFilter(indices,
                         dataLocations);
-                FilterUCTNode root = new FilterUCTNode(cache, roundCtr,
+                FilterUCTNode root = new FilterUCTNode(roundCtr,
                         nrCompiled, indices);
                 List<MutableIntList> resultList = new ArrayList<>();
                 BudgetedFilter filterOp = new BudgetedFilter(compiled,
@@ -374,7 +374,7 @@ public class SearchPreprocessor implements Preprocessor {
 
                     final FilterState state = new FilterState(nrCompiled);
                     Pair<FilterUCTNode, Boolean> sample = root.sample(roundCtr,
-                            state);
+                            state, cache);
                     final FilterUCTNode selected = sample.getLeft();
                     boolean playedOut = sample.getRight();
 

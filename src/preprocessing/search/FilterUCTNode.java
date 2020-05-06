@@ -16,7 +16,6 @@ public class FilterUCTNode {
 
     private static final Random random = new Random();
     private static int numPredicates;
-    private static Map<List<Integer>, UnaryBoolEval> cache;
     private static List<Integer> order = null;
     private static List<HashIndex> indices;
 
@@ -45,8 +44,7 @@ public class FilterUCTNode {
 
     private int minBatches = 0;
 
-    public FilterUCTNode(Map<List<Integer>, UnaryBoolEval> cache,
-                         long roundCtr,
+    public FilterUCTNode(long roundCtr,
                          int numPredicates, List<HashIndex> indices) {
         this.parent = null;
         this.type = NodeType.ROOT;
@@ -54,7 +52,6 @@ public class FilterUCTNode {
         this.createdIn = roundCtr;
         // PREAMBLE - DO NOT CHANGE
 
-        this.cache = cache;
         this.numPredicates = numPredicates;
         this.indices = indices;
 
@@ -219,7 +216,9 @@ public class FilterUCTNode {
     }
 
     public Pair<FilterUCTNode, Boolean> sample(long roundCtr,
-                                               FilterState state) {
+                                               FilterState state,
+                                               ConcurrentHashMap<List<Integer>,
+                                                       UnaryBoolEval> cache) {
         if (type == NodeType.LEAF) {
             return Pair.of(this, false);
         }
@@ -340,76 +339,8 @@ public class FilterUCTNode {
             return Pair.of(this, true);
         } else {
             state.actions.add(action);
-            return child.sample(roundCtr, state);
+            return child.sample(roundCtr, state, cache);
         }
-    }
-
-    public void selectMostVisited(FilterState state) {
-        if (type == NodeType.LEAF) {
-            return;
-        }
-
-        int action = -1;
-        for (int i = 0; i < nrActions; i++) {
-            if (action < 0 || nrTries[i] > nrTries[action]) {
-                action = i;
-            }
-        }
-
-        switch (type) {
-            case ROOT: {
-                if (action == numPredicates + indexActions) {
-                    state.avoidBranching = true;
-                } else {
-                    int predicate = actionToPredicate[action];
-                    state.order[treeLevel] = predicate;
-                    order = new ArrayList<>();
-                    order.add(predicate);
-
-                    if (this.indexActions > 0 &&
-                            action >= unchosenPreds.size() &&
-                            action < unchosenPreds.size() + indexActions) {
-                        state.indexedTil = treeLevel;
-                        order = new ArrayList<>();
-                        state.cachedTil = -1;
-                        state.cachedEval = null;
-                    }
-                }
-
-                break;
-            }
-
-            case INDEX:
-            case BRANCHING: {
-                int predicate = actionToPredicate[action];
-                state.order[treeLevel] = predicate;
-                order.add(predicate);
-                if (cache.get(order) != null) {
-                    state.cachedTil = treeLevel;
-                    state.cachedEval = cache.get(order);
-                }
-
-                if (this.indexActions > 0 &&
-                        action >= unchosenPreds.size() &&
-                        action < unchosenPreds.size() + indexActions) {
-                    state.indexedTil = treeLevel;
-                    order = new ArrayList<>();
-                    state.cachedTil = -1;
-                    state.cachedEval = null;
-                }
-                break;
-            }
-
-            case ROW_PARALLEL: {
-                state.batches =
-                        minBatches + action * ROW_PARALLEL_DELTA;
-                break;
-            }
-        }
-
-        FilterUCTNode child = childNodes[action];
-        state.actions.add(action);
-        child.selectMostVisited(state);
     }
 
     private void playout(FilterState state) {
