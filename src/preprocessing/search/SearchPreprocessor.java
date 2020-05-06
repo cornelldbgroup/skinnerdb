@@ -212,7 +212,7 @@ public class SearchPreprocessor implements Preprocessor {
         }
         Collection<MutableIntList> satisfyingRows =
                 shouldFilter ?
-                        filterUCTSingleThreaded(tableName, predicates,
+                        filterUCTNaiveParallel(tableName, predicates,
                                 compiled.toImmutable(), indices,
                                 values, unaryPred, preSummary.columnMapping) :
                         Arrays.asList();
@@ -350,10 +350,13 @@ public class SearchPreprocessor implements Preprocessor {
 
         for (int batch = 0; batch < ParallelService.POOL_THREADS; batch++) {
             final int index = batch;
+            final int nextStart = 0 + parallelBatchSize * index;
+            final int nextEnd = Math.min(nextStart + parallelBatchSize,
+                    CARDINALITY);
+            if (nextStart >= CARDINALITY) break;
+
             futures.add(ParallelService.POOL.submit(() -> {
-                int nextStart = 0 + parallelBatchSize * index;
-                int nextEnd = Math.min(nextStart + parallelBatchSize,
-                        CARDINALITY);
+                int startRow = nextStart;
 
                 long nextCompile = 75;
                 long roundCtr = 0;
@@ -366,7 +369,7 @@ public class SearchPreprocessor implements Preprocessor {
                         indexFilter,
                         CARDINALITY, resultList);
 
-                while (nextStart < nextEnd) {
+                while (startRow < nextEnd) {
                     ++roundCtr;
 
                     final FilterState state = new FilterState(nrCompiled);
@@ -375,7 +378,7 @@ public class SearchPreprocessor implements Preprocessor {
                     final FilterUCTNode selected = sample.getLeft();
                     boolean playedOut = sample.getRight();
 
-                    final int start = nextStart;
+                    final int start = startRow;
                     final int end;
                     if (playedOut) {
                         state.batchSize = ROWS_PER_TIMESTEP;
@@ -385,7 +388,7 @@ public class SearchPreprocessor implements Preprocessor {
                         end = Math.min(start + state.batches *
                                 LEAF_ROWS_PER_TIMESTEP, CARDINALITY);
                     }
-                    nextStart = end;
+                    startRow = end;
                     FilterUCTNode.initialUpdateStatistics(selected, state);
                     List<Integer> outputId = initializeEpoch(resultList,
                             state.batches);
