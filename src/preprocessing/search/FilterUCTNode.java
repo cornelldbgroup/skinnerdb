@@ -16,7 +16,6 @@ public class FilterUCTNode {
 
     private static final Random random = new Random();
     private static int numPredicates;
-    private static List<Integer> order = null;
     private static List<HashIndex> indices;
 
     // Node common members
@@ -218,7 +217,8 @@ public class FilterUCTNode {
     public Pair<FilterUCTNode, Boolean> sample(long roundCtr,
                                                FilterState state,
                                                ConcurrentHashMap<List<Integer>,
-                                                       UnaryBoolEval> cache) {
+                                                       UnaryBoolEval> cache,
+                                               List<Integer> order) {
         if (type == NodeType.LEAF) {
             return Pair.of(this, false);
         }
@@ -339,7 +339,7 @@ public class FilterUCTNode {
             return Pair.of(this, true);
         } else {
             state.actions.add(action);
-            return child.sample(roundCtr, state, cache);
+            return child.sample(roundCtr, state, cache, order);
         }
     }
 

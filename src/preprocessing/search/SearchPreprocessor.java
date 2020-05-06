@@ -265,7 +265,7 @@ public class SearchPreprocessor implements Preprocessor {
 
             final FilterState state = new FilterState(nrCompiled);
             Pair<FilterUCTNode, Boolean> sample = root.sample(roundCtr,
-                    state, cache);
+                    state, cache, null);
             final FilterUCTNode selected = sample.getLeft();
             boolean playedOut = sample.getRight();
 
@@ -374,7 +374,7 @@ public class SearchPreprocessor implements Preprocessor {
 
                     final FilterState state = new FilterState(nrCompiled);
                     Pair<FilterUCTNode, Boolean> sample = root.sample(roundCtr,
-                            state, cache);
+                            state, cache, null);
                     final FilterUCTNode selected = sample.getLeft();
                     boolean playedOut = sample.getRight();
 
