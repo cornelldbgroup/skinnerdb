@@ -354,8 +354,8 @@ public class SearchPreprocessor implements Preprocessor {
             if (nextStart >= CARDINALITY) break;
 
             futures.add(ParallelService.POOL.submit(() -> {
-                ConcurrentHashMap<List<Integer>, UnaryBoolEval> cache =
-                        new ConcurrentHashMap<>();
+                Map<List<Integer>, UnaryBoolEval> cache =
+                        Collections.synchronizedMap(new HashMap<>());
                 int startRow = nextStart;
 
                 long nextCompile = 75;
