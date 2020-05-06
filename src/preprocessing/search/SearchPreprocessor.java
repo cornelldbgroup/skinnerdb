@@ -415,6 +415,7 @@ public class SearchPreprocessor implements Preprocessor {
                                     node = entry.getKey();
                                 }
                             }
+                            savedCalls.remove(node);
                             node.updateUtility(savedCalls, cache);
 
                             final List<Integer> preds = node.getChosenPreds();
