@@ -356,7 +356,8 @@ public class SearchPreprocessor implements Preprocessor {
             futures.add(ParallelService.POOL.submit(() -> {
                 ConcurrentHashMap<List<Integer>, UnaryBoolEval> cache =
                         new ConcurrentHashMap<>();
-                List<Future> compileTasks = new ArrayList<>();
+                List<Future<Pair<List<Integer>, UnaryBoolEval>>> compileTasks
+                        = new ArrayList<>();
                 int startRow = nextStart;
 
                 long nextCompile = 75;
