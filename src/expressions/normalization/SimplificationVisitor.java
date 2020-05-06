@@ -527,9 +527,17 @@ public class SimplificationVisitor extends SkinnerVisitor {
     }
 
     @SuppressWarnings("deprecation")
-    void treatDateComparison(BinaryExpression cmp) {
-        Expression left = cmp.getLeftExpression();
+    void treatDateComparison() {
+        BinaryExpression cmp;
+        if (!(opStack.peek() instanceof BinaryExpression)) {
+            return;
+        }
+        cmp = (BinaryExpression) opStack.pop();
+
         Expression right = cmp.getRightExpression();
+        Expression left = cmp.getLeftExpression();
+
+
         boolean swapped = false;
         if (isDateExpression(right) && isConstantExpression(left)) {
             swapped = true;
@@ -561,12 +569,22 @@ public class SimplificationVisitor extends SkinnerVisitor {
                         GreaterThanEquals l = new GreaterThanEquals();
                         l.setLeftExpression(column);
                         l.setRightExpression(new LongValue(yearSeconds));
-                        GreaterThan r = new GreaterThan();
+                        MinorThan r = new MinorThan();
                         r.setLeftExpression(new LongValue(nextYearSeconds));
                         r.setRightExpression(column);
                         AndExpression conjunction = new AndExpression(l, r);
-                        opStack.pop();
                         opStack.push(conjunction);
+                        return;
+                    } else if (cmp instanceof NotEqualsTo) {
+                        GreaterThanEquals l = new GreaterThanEquals();
+                        l.setLeftExpression(column);
+                        l.setRightExpression(new LongValue(nextYearSeconds));
+                        MinorThan r = new MinorThan();
+                        r.setLeftExpression(column);
+                        r.setRightExpression(new LongValue(yearSeconds));
+                        AndExpression conjunction = new AndExpression(l, r);
+                        opStack.push(conjunction);
+                        return;
                     } else if (cmp instanceof GreaterThanEquals) {
                         GreaterThanEquals gte = new GreaterThanEquals();
                         if (swapped) {
@@ -576,10 +594,9 @@ public class SimplificationVisitor extends SkinnerVisitor {
                             gte.setLeftExpression(column);
                             gte.setRightExpression(new LongValue(yearSeconds));
                         }
-
-                        opStack.pop();
                         opStack.push(gte);
-                    } else { // cmp instanceof GreaterThan
+                        return;
+                    } else if (cmp instanceof GreaterThan) {
                         GreaterThan gt = new GreaterThan();
                         if (swapped) {
                             gt.setLeftExpression(new LongValue(yearSeconds));
@@ -588,8 +605,30 @@ public class SimplificationVisitor extends SkinnerVisitor {
                             gt.setLeftExpression(column);
                             gt.setRightExpression(new LongValue(yearSeconds));
                         }
-                        opStack.pop();
                         opStack.push(gt);
+                        return;
+                    } else if (cmp instanceof MinorThanEquals) {
+                        MinorThanEquals mte = new MinorThanEquals();
+                        if (swapped) {
+                            mte.setLeftExpression(new LongValue(yearSeconds));
+                            mte.setRightExpression(column);
+                        } else {
+                            mte.setLeftExpression(column);
+                            mte.setRightExpression(new LongValue(yearSeconds));
+                        }
+                        opStack.push(mte);
+                        return;
+                    } else if (cmp instanceof MinorThan) {
+                        MinorThan mt = new MinorThan();
+                        if (swapped) {
+                            mt.setLeftExpression(new LongValue(yearSeconds));
+                            mt.setRightExpression(column);
+                        } else {
+                            mt.setLeftExpression(column);
+                            mt.setRightExpression(new LongValue(yearSeconds));
+                        }
+                        opStack.push(mt);
+                        return;
                     }
 
                     break;
@@ -597,27 +636,29 @@ public class SimplificationVisitor extends SkinnerVisitor {
             }
 
         }
+
+        opStack.push(cmp);
     }
 
     @Override
     public void visit(EqualsTo arg0) {
         EqualsTo newEquals = new EqualsTo();
         treatBinaryComparison(arg0, newEquals);
-        treatDateComparison(newEquals);
+        treatDateComparison();
     }
 
     @Override
     public void visit(GreaterThan arg0) {
         GreaterThan newGt = new GreaterThan();
         treatBinaryComparison(arg0, newGt);
-        treatDateComparison(newGt);
+        treatDateComparison();
     }
 
     @Override
     public void visit(GreaterThanEquals arg0) {
         GreaterThanEquals newGte = new GreaterThanEquals();
         treatBinaryComparison(arg0, newGte);
-        treatDateComparison(newGte);
+        treatDateComparison();
     }
 
     /**
@@ -683,18 +724,21 @@ public class SimplificationVisitor extends SkinnerVisitor {
     public void visit(MinorThan arg0) {
         MinorThan newMt = new MinorThan();
         treatBinaryComparison(arg0, newMt);
+        treatDateComparison();
     }
 
     @Override
     public void visit(MinorThanEquals arg0) {
         MinorThanEquals newMte = new MinorThanEquals();
         treatBinaryComparison(arg0, newMte);
+        treatDateComparison();
     }
 
     @Override
     public void visit(NotEqualsTo arg0) {
         NotEqualsTo newNe = new NotEqualsTo();
         treatBinaryComparison(arg0, newNe);
+        treatDateComparison();
     }
 
     @Override
