@@ -13,6 +13,7 @@ import net.sf.jsqlparser.statement.create.table.ColDataType;
 import net.sf.jsqlparser.statement.select.SubSelect;
 import query.where.WhereUtil;
 
+import java.sql.Date;
 import java.util.*;
 
 /**
@@ -527,7 +528,6 @@ public class SimplificationVisitor extends SkinnerVisitor {
 
     @SuppressWarnings("deprecation")
     void treatDateComparison() {
-        /*
         BinaryExpression cmp;
         if (!(opStack.peek() instanceof BinaryExpression)) {
             return;
@@ -638,7 +638,6 @@ public class SimplificationVisitor extends SkinnerVisitor {
         }
 
         opStack.push(cmp);
-        */
     }
 
     @Override
