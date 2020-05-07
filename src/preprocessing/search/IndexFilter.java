@@ -5,7 +5,6 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.eclipse.collections.api.set.primitive.MutableIntSet;
 import org.eclipse.collections.impl.factory.primitive.IntSets;
 
-import java.util.Arrays;
 import java.util.List;
 
 public class IndexFilter {
@@ -42,8 +41,10 @@ public class IndexFilter {
                             index.nextSmallestRowInBucket(dataLoc,
                                     end);
                     if (endIdx < 0) endIdx = index.getBucketEnd(dataLoc);
-                    predicateRows.addAll(Arrays.copyOfRange(index.data,
-                            startIdx, endIdx + 1));
+
+                    for (int r = startIdx; r <= endIdx; r++) {
+                        predicateRows.add(index.data[r]);
+                    }
                 }
                 if (i == 0) {
                     candidate = predicateRows;
@@ -64,11 +65,15 @@ public class IndexFilter {
                 if (endIdx < 0) endIdx = index.getBucketEnd(dataLoc);
 
                 if (i == 0) {
-                    candidate.addAll(Arrays.copyOfRange(index.data, startIdx,
-                            endIdx + 1));
+                    for (int r = startIdx; r <= endIdx; r++) {
+                        candidate.add(index.data[r]);
+                    }
                 } else {
-                    candidate.retainAll(Arrays.copyOfRange(index.data, startIdx,
-                            endIdx + 1));
+                    MutableIntSet data = IntSets.mutable.empty();
+                    for (int r = startIdx; r <= endIdx; r++) {
+                        data.add(index.data[r]);
+                    }
+                    candidate.retainAll(data);
                 }
             }
 
