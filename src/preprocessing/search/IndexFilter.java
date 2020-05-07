@@ -3,7 +3,9 @@ package preprocessing.search;
 import indexing.HashIndex;
 import org.apache.commons.lang3.tuple.Pair;
 import org.eclipse.collections.api.list.primitive.MutableIntList;
+import org.eclipse.collections.api.set.primitive.MutableIntSet;
 import org.eclipse.collections.impl.factory.primitive.IntLists;
+import org.eclipse.collections.impl.factory.primitive.IntSets;
 
 import java.util.List;
 
@@ -30,7 +32,7 @@ public class IndexFilter {
 
             if (dataLocs.size() > 1) {
                 // Union over all or predicates
-                MutableIntList merged = IntLists.mutable.empty();
+                MutableIntSet merged = IntSets.mutable.empty();
                 for (int dataLoc : dataLocs) {
                     int startIdx =
                             index.nextHighestRowInBucket(dataLoc, start - 1);
@@ -42,10 +44,12 @@ public class IndexFilter {
                                     end);
                     if (endIdx < 0) endIdx = index.getBucketEnd(dataLoc);
 
-                    merged = union(merged, index.data, startIdx, endIdx);
+                    for (int r = startIdx; r <= endIdx; r++) {
+                        merged.add(index.data[r]);
+                    }
                 }
                 if (i == 0) {
-                    candidate = merged;
+                    candidate = merged.toSortedList();
                 } else {
                     candidate = intersect(candidate, merged);
                 }
@@ -79,60 +83,14 @@ public class IndexFilter {
         return Pair.of(candidate, false);
     }
 
-    private MutableIntList union(MutableIntList l1, int[] l2,
-                                 int startIdx, int endIdx) {
+    private MutableIntList intersect(MutableIntList l1, MutableIntSet l2) {
         MutableIntList res = IntLists.mutable.empty();
-        int i1 = 0, i2 = startIdx;
-        int n1 = l1.size(), n2 = endIdx + 1;
-
-        int v1, v2;
-        while (i1 < n1 && i2 < n2) {
-            v1 = l1.get(i1);
-            v2 = l2[i2];
-            if (v1 == v2) {
-                i1++;
-                i2++;
-                res.add(v1);
-            } else if (v1 < v2) {
-                res.add(v1);
-                i1++;
-            } else {
-                res.add(v2);
-                i2++;
+        for (int i = 0; i < l1.size(); i++) {
+            int v = l1.get(i);
+            if (l2.contains(v)) {
+                res.add(v);
             }
         }
-
-        while (i1 < n1) {
-            res.add(l1.get(i1++));
-        }
-
-        while (i2 < n2) {
-            res.add(l2[i2++]);
-        }
-
-        return res;
-    }
-
-    private MutableIntList intersect(MutableIntList l1, MutableIntList l2) {
-        MutableIntList res = IntLists.mutable.empty();
-        int i1 = 0, i2 = 0;
-        int n1 = l1.size(), n2 = l2.size();
-
-        int v1, v2;
-        while (i1 < n1 && i2 < n2) {
-            v1 = l1.get(i1);
-            v2 = l2.get(i2);
-            if (v1 == v2) {
-                i1++;
-                i2++;
-                res.add(v1);
-            } else if (v1 < v2) {
-                i1++;
-            } else {
-                i2++;
-            }
-        }
-
         return res;
     }
 
