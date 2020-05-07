@@ -14,6 +14,9 @@ import net.sf.jsqlparser.statement.select.SubSelect;
 import query.ColumnRef;
 import query.QueryInfo;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * Verifies whether a unary predicate can be
  * evaluated using indices alone. This class
@@ -33,7 +36,8 @@ public class SinglePredicateIndexTest implements ExpressionVisitor {
 
     public HashIndex index = null;
 
-    public Number constant = null;
+    public ColumnRef column = null;
+    public List<Number> constant = new ArrayList<>();
 
     /**
      * Initialize index test for given query.
@@ -71,12 +75,12 @@ public class SinglePredicateIndexTest implements ExpressionVisitor {
 
     @Override
     public void visit(DoubleValue doubleValue) {
-        constant = doubleValue.getValue();
+        constant.add(doubleValue.getValue());
     }
 
     @Override
     public void visit(LongValue longValue) {
-        constant = (int) longValue.getValue();
+        constant.add((int) longValue.getValue());
     }
 
     @Override
@@ -113,7 +117,7 @@ public class SinglePredicateIndexTest implements ExpressionVisitor {
         if (curDic != null && code < 0) {
             canUseIndex = false;
         }
-        constant = code;
+        constant.add(code);
     }
 
     @Override
@@ -143,7 +147,8 @@ public class SinglePredicateIndexTest implements ExpressionVisitor {
 
     @Override
     public void visit(OrExpression orExpression) {
-        canUseIndex = false;
+        orExpression.getLeftExpression().accept(this);
+        orExpression.getRightExpression().accept(this);
     }
 
     @Override
@@ -157,15 +162,19 @@ public class SinglePredicateIndexTest implements ExpressionVisitor {
         Expression right = equalsTo.getRightExpression();
         left.accept(this);
         right.accept(this);
-        boolean haveConstant = left instanceof LongValue ||
+        boolean rightColumn = (left instanceof LongValue ||
                 left instanceof StringValue ||
-                right instanceof LongValue ||
-                right instanceof StringValue;
-        boolean haveColumn = left instanceof Column ||
+                left instanceof DoubleValue) &&
                 right instanceof Column;
-        if (!haveConstant || !haveColumn) {
+        boolean leftColumn = (right instanceof LongValue ||
+                right instanceof StringValue ||
+                right instanceof DoubleValue) &&
+                left instanceof Column;
+        if (!rightColumn && !leftColumn) {
             canUseIndex = false;
         }
+
+
     }
 
     @Override
@@ -225,6 +234,12 @@ public class SinglePredicateIndexTest implements ExpressionVisitor {
             }
         } else {
             // No index available
+            canUseIndex = false;
+        }
+
+        if (column == null) {
+            column = colRef;
+        } else if (!column.equals(colRef)) {
             canUseIndex = false;
         }
     }

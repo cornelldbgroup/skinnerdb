@@ -195,16 +195,22 @@ public class SearchPreprocessor implements Preprocessor {
 
 
         List<HashIndex> indices = new ArrayList<>(predicates.size());
-        List<Integer> values = new ArrayList<>(predicates.size());
+        List<List<Integer>> values = new ArrayList<>(predicates.size());
         for (Expression expression : predicates) {
             SinglePredicateIndexTest test =
                     new SinglePredicateIndexTest(queryInfo);
             expression.accept(test);
             if (test.canUseIndex) {
                 indices.add(test.index);
-                @SuppressWarnings("unchecked")
-                int dataLoc = test.index.getDataLocation(test.constant);
-                values.add(dataLoc);
+
+                List<Integer> dataLocations = new ArrayList<>();
+                for (Number number : test.constant) {
+                    @SuppressWarnings("unchecked")
+                    int dataLoc = test.index.getDataLocation(number);
+                    dataLocations.add(dataLoc);
+                }
+                values.add(dataLocations);
+
             } else {
                 indices.add(null);
                 values.add(null);
@@ -243,7 +249,7 @@ public class SearchPreprocessor implements Preprocessor {
             ImmutableList<Expression> predicates,
             ImmutableList<UnaryBoolEval> compiled,
             List<HashIndex> indices,
-            List<Integer> dataLocations,
+            List<List<Integer>> dataLocations,
             ExpressionInfo unaryPred,
             Map<ColumnRef, ColumnRef> colMap) throws Exception {
         ConcurrentHashMap<List<Integer>, UnaryBoolEval> cache =
@@ -335,7 +341,7 @@ public class SearchPreprocessor implements Preprocessor {
             ImmutableList<Expression> predicates,
             ImmutableList<UnaryBoolEval> compiled,
             List<HashIndex> indices,
-            List<Integer> dataLocations,
+            List<List<Integer>> dataLocations,
             ExpressionInfo unaryPred,
             Map<ColumnRef, ColumnRef> colMap) throws Exception {
         int nrCompiled = compiled.size();
@@ -346,11 +352,16 @@ public class SearchPreprocessor implements Preprocessor {
         int parallelBatchSize = (int) Math.ceil(CARDINALITY /
                 (double) ParallelService.POOL_THREADS);
 
+        int lastEnd = 0;
+
         for (int batch = 0; batch < ParallelService.POOL_THREADS; batch++) {
-            final int index = batch;
-            final int nextStart = 0 + parallelBatchSize * index;
-            final int nextEnd = Math.min(nextStart + parallelBatchSize,
+            final int nextStart = lastEnd;
+            final int nextEnd = Math.min(nextStart +
+                            (parallelBatchSize < ROWS_PER_TIMESTEP ?
+                                    ROWS_PER_TIMESTEP :
+                                    parallelBatchSize),
                     CARDINALITY);
+            lastEnd = nextEnd;
             if (nextStart >= CARDINALITY) break;
 
             futures.add(ParallelService.POOL.submit(() -> {

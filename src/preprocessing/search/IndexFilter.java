@@ -2,7 +2,6 @@ package preprocessing.search;
 
 import indexing.HashIndex;
 import org.apache.commons.lang3.tuple.Pair;
-import org.eclipse.collections.api.list.primitive.MutableIntList;
 import org.eclipse.collections.api.set.primitive.MutableIntSet;
 import org.eclipse.collections.impl.factory.primitive.IntSets;
 
@@ -11,30 +10,12 @@ import java.util.List;
 
 public class IndexFilter {
     private List<HashIndex> indices;
-    private List<Integer> dataLocations;
+    private List<List<Integer>> dataLocations;
 
-    public IndexFilter(List<HashIndex> indices, List<Integer> dataLocations) {
+    public IndexFilter(List<HashIndex> indices,
+                       List<List<Integer>> dataLocations) {
         this.indices = indices;
         this.dataLocations = dataLocations;
-    }
-
-    public int nextHighestRowInBucket(MutableIntList list, int target,
-                                      int start) {
-        int end = list.size() - 1;
-
-        int nextHighest = -1;
-        while (start <= end) {
-            int mid = (start + end) / 2;
-
-            if (list.get(mid) <= target) {
-                start = mid + 1;
-            } else {
-                nextHighest = mid;
-                end = mid - 1;
-            }
-        }
-
-        return nextHighest;
     }
 
     public Pair<MutableIntSet, Boolean> getCandidateRowsFromIndex(
@@ -45,25 +26,53 @@ public class IndexFilter {
         MutableIntSet candidate = IntSets.mutable.empty();
         for (int i = 0; i <= state.indexedTil; i++) {
             int pred = state.order[i];
-            int dataLoc = dataLocations.get(pred);
+            List<Integer> dataLocs = dataLocations.get(pred);
             HashIndex index = indices.get(pred);
-            int startIdx =
-                    index.nextHighestRowInBucket(dataLoc, start - 1);
-            if (startIdx < 0) {
-                return Pair.of(IntSets.mutable.empty(), true);
-            }
-            int endIdx =
-                    index.nextSmallestRowInBucket(dataLoc,
-                            end);
-            if (endIdx < 0) endIdx = index.getBucketEnd(dataLoc);
 
-            if (i == 0) {
-                candidate.addAll(Arrays.copyOfRange(index.data, startIdx,
-                        endIdx + 1));
+            if (dataLocs.size() > 1) {
+                // Union over all or predicates
+                MutableIntSet predicateRows = IntSets.mutable.empty();
+                for (int dataLoc : dataLocs) {
+                    int startIdx =
+                            index.nextHighestRowInBucket(dataLoc, start - 1);
+                    if (startIdx < 0) {
+                        continue;
+                    }
+                    int endIdx =
+                            index.nextSmallestRowInBucket(dataLoc,
+                                    end);
+                    if (endIdx < 0) endIdx = index.getBucketEnd(dataLoc);
+                    predicateRows.addAll(Arrays.copyOfRange(index.data,
+                            startIdx, endIdx + 1));
+                }
+                if (i == 0) {
+                    candidate = predicateRows;
+                } else {
+                    candidate.retainAll(predicateRows);
+                }
             } else {
-                candidate.retainAll(Arrays.copyOfRange(index.data, startIdx,
-                        endIdx + 1));
+                // Fast handling for common case of 1 equality predicate
+                int dataLoc = dataLocs.get(0);
+                int startIdx =
+                        index.nextHighestRowInBucket(dataLoc, start - 1);
+                if (startIdx < 0) {
+                    return Pair.of(IntSets.mutable.empty(), true);
+                }
+                int endIdx =
+                        index.nextSmallestRowInBucket(dataLoc,
+                                end);
+                if (endIdx < 0) endIdx = index.getBucketEnd(dataLoc);
+
+                if (i == 0) {
+                    candidate.addAll(Arrays.copyOfRange(index.data, startIdx,
+                            endIdx + 1));
+                } else {
+                    candidate.retainAll(Arrays.copyOfRange(index.data, startIdx,
+                            endIdx + 1));
+                }
             }
+
+
         }
 
         return Pair.of(candidate, false);
