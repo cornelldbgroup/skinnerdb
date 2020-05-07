@@ -5,7 +5,6 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.eclipse.collections.api.iterator.IntIterator;
 import org.eclipse.collections.api.list.ImmutableList;
 import org.eclipse.collections.api.list.primitive.MutableIntList;
-import org.eclipse.collections.api.set.primitive.MutableIntSet;
 
 import java.util.ArrayList;
 import java.util.BitSet;
@@ -34,10 +33,10 @@ public class BudgetedFilter {
 
         long startTime = System.nanoTime();
 
-        Pair<MutableIntSet, Boolean> indexScanResult =
+        Pair<MutableIntList, Boolean> indexScanResult =
                 indexFilter.getCandidateRowsFromIndex(state, start,
                         LAST_ROW);
-        MutableIntSet candidate = indexScanResult.getLeft();
+        MutableIntList candidate = indexScanResult.getLeft();
         this.earlyFinish = indexScanResult.getRight();
         if (this.earlyFinish) {
             return 0;
