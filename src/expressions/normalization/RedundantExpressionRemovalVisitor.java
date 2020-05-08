@@ -5,6 +5,7 @@ import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.LongValue;
 import net.sf.jsqlparser.expression.Parenthesis;
 import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
+import net.sf.jsqlparser.expression.operators.conditional.OrExpression;
 import net.sf.jsqlparser.expression.operators.relational.GreaterThan;
 import net.sf.jsqlparser.expression.operators.relational.GreaterThanEquals;
 import net.sf.jsqlparser.expression.operators.relational.MinorThan;
@@ -184,7 +185,6 @@ public class RedundantExpressionRemovalVisitor extends CopyVisitor {
         }
     }
 
-    /*
     @Override
     public void visit(OrExpression orExpression) {
         Map<String, Long> maxConstraint = new HashMap<>();
@@ -348,5 +348,5 @@ public class RedundantExpressionRemovalVisitor extends CopyVisitor {
 
             exprStack.push(disjunction);
         }
-    }*/
+    }
 }
