@@ -598,8 +598,8 @@ public class SimplificationVisitor extends SkinnerVisitor {
                         l.setLeftExpression(column);
                         l.setRightExpression(new LongValue(yearSeconds));
                         MinorThan r = new MinorThan();
-                        r.setLeftExpression(new LongValue(nextYearSeconds));
-                        r.setRightExpression(column);
+                        r.setLeftExpression(column);
+                        r.setRightExpression(new LongValue(nextYearSeconds));
                         AndExpression conjunction = new AndExpression(l, r);
                         opStack.push(conjunction);
                         return;
@@ -683,8 +683,8 @@ public class SimplificationVisitor extends SkinnerVisitor {
                         l.setLeftExpression(column);
                         l.setRightExpression(new LongValue(dateSeconds));
                         MinorThan r = new MinorThan();
-                        r.setLeftExpression(new LongValue(nextDateSeconds));
-                        r.setRightExpression(column);
+                        r.setLeftExpression(column);
+                        r.setRightExpression(new LongValue(nextDateSeconds));
                         AndExpression conjunction = new AndExpression(l, r);
                         opStack.push(conjunction);
                         return;
@@ -794,19 +794,60 @@ public class SimplificationVisitor extends SkinnerVisitor {
                 // Empty list -> Always false
                 opStack.push(new LongValue(0));
             } else {
-                Expression prev = null;
-                for (Expression exp : exps) {
-                    EqualsTo eq = new EqualsTo();
-                    eq.setLeftExpression(arg0.getLeftExpression());
-                    eq.setRightExpression(exp);
-                    if (prev != null) {
-                        prev = new OrExpression(prev, eq);
-                    } else {
-                        prev = eq;
+                Long previous = null;
+                boolean range = true;
+                List<Long> rangeValues = new ArrayList<>();
+                for (int i = 0; i < exps.size(); i++) {
+                    Expression curr = exps.get(i);
+                    if (!(curr instanceof LongValue)) {
+                        range = false;
+                        break;
+                    }
+
+                    rangeValues.add(((LongValue) curr).getValue());
+                }
+                Collections.sort(rangeValues);
+                for (int i = 1; i < rangeValues.size(); i++) {
+                    if (rangeValues.get(i) != rangeValues.get(i - 1) + 1) {
+                        range = false;
+                        break;
                     }
                 }
-                Parenthesis parenthesis = new Parenthesis(prev);
-                parenthesis.accept(this);
+
+                if (exps.size() == 1) {
+                    range = false;
+                }
+
+                if (range) {
+                    GreaterThanEquals lowerBound = new GreaterThanEquals();
+                    lowerBound.setLeftExpression(arg0.getLeftExpression());
+                    lowerBound.setRightExpression(new LongValue(
+                            rangeValues.get(0)));
+                    MinorThanEquals upperBound = new MinorThanEquals();
+                    upperBound.setLeftExpression(arg0.getLeftExpression());
+                    upperBound.setRightExpression(new LongValue(
+                            rangeValues.get(rangeValues.size() - 1)));
+                    AndExpression conjunction = new AndExpression(lowerBound,
+                            upperBound);
+                    Parenthesis parenthesis = new Parenthesis(conjunction);
+                    parenthesis.accept(this);
+                } else {
+                    Expression prev = null;
+                    for (Expression exp : exps) {
+                        EqualsTo eq = new EqualsTo();
+                        eq.setLeftExpression(arg0.getLeftExpression());
+                        eq.setRightExpression(exp);
+                        if (prev != null) {
+                            prev = new OrExpression(prev, eq);
+                        } else {
+                            prev = eq;
+                        }
+                    }
+                    Parenthesis parenthesis = new Parenthesis(prev);
+                    parenthesis.accept(this);
+                }
+
+
             }
         } else {
             System.err.println("Unsupported IN expression");
