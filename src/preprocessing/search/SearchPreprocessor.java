@@ -189,6 +189,9 @@ public class SearchPreprocessor implements Preprocessor {
                         expression, preSummary.columnMapping));
             }
         }
+        for (Expression expression : predicates) {
+            System.out.println(expression.toString());
+        }
 
         long end = System.nanoTime();
         PreStats.compileNanos = end - start;

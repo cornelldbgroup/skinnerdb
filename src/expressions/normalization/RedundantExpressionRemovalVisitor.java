@@ -185,33 +185,6 @@ public class RedundantExpressionRemovalVisitor extends CopyVisitor {
         }
     }
 
-    private BinaryExpression negate(Expression left) {
-        BinaryExpression nleft = null;
-        if (left instanceof GreaterThanEquals) {
-            GreaterThanEquals cmp = (GreaterThanEquals) left;
-            nleft = new MinorThan();
-            nleft.setLeftExpression(cmp.getLeftExpression());
-            nleft.setRightExpression(cmp.getRightExpression());
-        } else if (left instanceof GreaterThan) {
-            GreaterThan cmp = (GreaterThan) left;
-            nleft = new MinorThanEquals();
-            nleft.setLeftExpression(cmp.getLeftExpression());
-            nleft.setRightExpression(cmp.getRightExpression());
-        } else if (left instanceof MinorThanEquals) {
-            MinorThanEquals cmp = (MinorThanEquals) left;
-            nleft = new GreaterThan();
-            nleft.setLeftExpression(cmp.getLeftExpression());
-            nleft.setRightExpression(cmp.getRightExpression());
-        } else if (left instanceof MinorThan) {
-            MinorThan cmp = (MinorThan) left;
-            nleft = new GreaterThanEquals();
-            nleft.setLeftExpression(cmp.getLeftExpression());
-            nleft.setRightExpression(cmp.getRightExpression());
-        }
-
-        return nleft;
-    }
-
     @Override
     public void visit(OrExpression orExpression) {
         Map<String, Long> maxConstraint = new HashMap<>();
