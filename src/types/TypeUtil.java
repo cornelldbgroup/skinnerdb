@@ -60,6 +60,7 @@ public class TypeUtil {
                 // String generalizes strings in dictionary
                 return type2 == SQLtype.STRING;
             case DATE:
+            case TIMESTAMP:
                 // Int generalizes date
                 return type2 == SQLtype.INT;
             default:

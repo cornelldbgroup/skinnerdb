@@ -508,22 +508,48 @@ public class SimplificationVisitor extends SkinnerVisitor {
         }
     }
 
-    private boolean isDateExpression(Expression expr) {
+    private boolean isExtractExpression(Expression expr) {
         if (!(expr instanceof CastExpression)) {
             return false;
         }
 
-        return ((CastExpression) expr).getLeftExpression() instanceof
-                ExtractExpression;
+        CastExpression cast = (CastExpression) expr;
+        return cast.getLeftExpression() instanceof ExtractExpression;
     }
 
     private boolean isConstantExpression(Expression expr) {
+        if (expr instanceof LongValue) {
+            return true;
+        }
+
         if (!(expr instanceof CastExpression)) {
             return false;
         }
 
         Expression casted = ((CastExpression) expr).getLeftExpression();
         return casted instanceof LongValue;
+    }
+
+    private boolean isTimestampExpression(Expression expr) {
+        return expr instanceof DateTimeLiteralExpression;
+    }
+
+    private boolean isDateColumn(Expression expr) {
+        if (!(expr instanceof CastExpression)) {
+            return false;
+        }
+
+        CastExpression cast = (CastExpression) expr;
+        return cast.getType().toString().equals("DATE") &&
+                cast.getLeftExpression() instanceof Column;
+    }
+
+    public static int getNextDate(String curDate) {
+        final Date date = Date.valueOf(curDate);
+        final Calendar calendar = Calendar.getInstance();
+        calendar.setTime(date);
+        calendar.add(Calendar.DAY_OF_YEAR, 1);
+        return (int) (calendar.getTimeInMillis() / (long) 1000);
     }
 
     @SuppressWarnings("deprecation")
@@ -539,7 +565,8 @@ public class SimplificationVisitor extends SkinnerVisitor {
 
 
         boolean swapped = false;
-        if (isDateExpression(right) && isConstantExpression(left)) {
+        if ((isExtractExpression(right) && isConstantExpression(left)) ||
+                (isDateColumn(right) && isTimestampExpression(left))) {
             swapped = true;
             Expression temp = left;
             left = right;
@@ -547,13 +574,14 @@ public class SimplificationVisitor extends SkinnerVisitor {
         }
 
 
-        if (isDateExpression(left) && isConstantExpression(right)) {
+        if (isExtractExpression(left) && isConstantExpression(right)) {
             ExtractExpression extract = (ExtractExpression)
                     ((CastExpression) left).getLeftExpression();
             Expression column = extract.getExpression();
             String name = extract.getName();
-            LongValue constant =
-                    (LongValue) ((CastExpression) right).getLeftExpression();
+            LongValue constant = right instanceof CastExpression ?
+                    (LongValue) ((CastExpression) right).getLeftExpression() :
+                    (LongValue) right;
 
             switch (name) {
                 case "YEAR": {
@@ -582,51 +610,55 @@ public class SimplificationVisitor extends SkinnerVisitor {
                         MinorThan r = new MinorThan();
                         r.setLeftExpression(column);
                         r.setRightExpression(new LongValue(yearSeconds));
-                        AndExpression conjunction = new AndExpression(l, r);
-                        opStack.push(conjunction);
+                        OrExpression disjunction = new OrExpression(l, r);
+                        opStack.push(new Parenthesis(disjunction));
                         return;
                     } else if (cmp instanceof GreaterThanEquals) {
-                        GreaterThanEquals gte = new GreaterThanEquals();
+                        BinaryExpression gte;
                         if (swapped) {
-                            gte.setLeftExpression(new LongValue(yearSeconds));
-                            gte.setRightExpression(column);
+                            gte = new MinorThanEquals();
                         } else {
-                            gte.setLeftExpression(column);
-                            gte.setRightExpression(new LongValue(yearSeconds));
+                            gte = new GreaterThanEquals();
                         }
+
+                        gte.setLeftExpression(column);
+                        gte.setRightExpression(new LongValue(yearSeconds));
                         opStack.push(gte);
                         return;
                     } else if (cmp instanceof GreaterThan) {
-                        GreaterThan gt = new GreaterThan();
+                        BinaryExpression gt;
                         if (swapped) {
-                            gt.setLeftExpression(new LongValue(yearSeconds));
-                            gt.setRightExpression(column);
+                            gt = new MinorThan();
                         } else {
-                            gt.setLeftExpression(column);
-                            gt.setRightExpression(new LongValue(yearSeconds));
+                            gt = new GreaterThan();
                         }
+
+                        gt.setLeftExpression(column);
+                        gt.setRightExpression(new LongValue(yearSeconds));
                         opStack.push(gt);
                         return;
                     } else if (cmp instanceof MinorThanEquals) {
-                        MinorThanEquals mte = new MinorThanEquals();
+                        BinaryExpression mte;
                         if (swapped) {
-                            mte.setLeftExpression(new LongValue(yearSeconds));
-                            mte.setRightExpression(column);
+                            mte = new GreaterThanEquals();
                         } else {
-                            mte.setLeftExpression(column);
-                            mte.setRightExpression(new LongValue(yearSeconds));
+                            mte = new MinorThanEquals();
                         }
+
+                        mte.setLeftExpression(column);
+                        mte.setRightExpression(new LongValue(yearSeconds));
                         opStack.push(mte);
                         return;
                     } else if (cmp instanceof MinorThan) {
-                        MinorThan mt = new MinorThan();
+                        BinaryExpression mt;
                         if (swapped) {
-                            mt.setLeftExpression(new LongValue(yearSeconds));
-                            mt.setRightExpression(column);
+                            mt = new GreaterThan();
                         } else {
-                            mt.setLeftExpression(column);
-                            mt.setRightExpression(new LongValue(yearSeconds));
+                            mt = new MinorThan();
                         }
+
+                        mt.setLeftExpression(column);
+                        mt.setRightExpression(new LongValue(yearSeconds));
                         opStack.push(mt);
                         return;
                     }
@@ -634,6 +666,94 @@ public class SimplificationVisitor extends SkinnerVisitor {
                     break;
                 }
             }
+
+        } else if (isDateColumn(left) && isTimestampExpression(right)) {
+            DateTimeLiteralExpression literal =
+                    (DateTimeLiteralExpression) right;
+            switch (literal.getType()) {
+                case DATE: {
+                    String dateLiteral = literal.getValue().replaceAll("'", "");
+                    Date date = Date.valueOf(dateLiteral);
+                    int dateSeconds = (int) (date.getTime() / (long) 1000);
+                    int nextDateSeconds = getNextDate(dateLiteral);
+                    Expression column =
+                            ((CastExpression) left).getLeftExpression();
+                    if (cmp instanceof EqualsTo) {
+                        GreaterThanEquals l = new GreaterThanEquals();
+                        l.setLeftExpression(column);
+                        l.setRightExpression(new LongValue(dateSeconds));
+                        MinorThan r = new MinorThan();
+                        r.setLeftExpression(new LongValue(nextDateSeconds));
+                        r.setRightExpression(column);
+                        AndExpression conjunction = new AndExpression(l, r);
+                        opStack.push(conjunction);
+                        return;
+                    } else if (cmp instanceof NotEqualsTo) {
+                        GreaterThanEquals l = new GreaterThanEquals();
+                        l.setLeftExpression(column);
+                        l.setRightExpression(new LongValue(nextDateSeconds));
+                        MinorThan r = new MinorThan();
+                        r.setLeftExpression(column);
+                        r.setRightExpression(new LongValue(dateSeconds));
+                        OrExpression disjunction = new OrExpression(l, r);
+                        opStack.push(new Parenthesis(disjunction));
+                        return;
+                    } else if (cmp instanceof GreaterThanEquals) {
+                        BinaryExpression gte;
+                        if (swapped) {
+                            gte = new MinorThanEquals();
+                        } else {
+                            gte = new GreaterThanEquals();
+                        }
+                        gte.setLeftExpression(column);
+                        gte.setRightExpression(new LongValue(dateSeconds));
+                        opStack.push(gte);
+                        return;
+                    } else if (cmp instanceof GreaterThan) {
+                        BinaryExpression gt;
+                        if (swapped) {
+                            gt = new MinorThan();
+                        } else {
+                            gt = new GreaterThan();
+                        }
+
+                        gt.setLeftExpression(column);
+                        gt.setRightExpression(new LongValue(dateSeconds));
+                        opStack.push(gt);
+                        return;
+                    } else if (cmp instanceof MinorThanEquals) {
+                        BinaryExpression mte;
+                        if (swapped) {
+                            mte = new GreaterThanEquals();
+                        } else {
+                            mte = new MinorThanEquals();
+                        }
+
+                        mte.setLeftExpression(column);
+                        mte.setRightExpression(new LongValue(dateSeconds));
+                        opStack.push(mte);
+                        return;
+                    } else if (cmp instanceof MinorThan) {
+                        BinaryExpression mt;
+                        if (swapped) {
+                            mt = new GreaterThan();
+                        } else {
+                            mt = new MinorThan();
+                        }
+
+                        mt.setLeftExpression(column);
+                        mt.setRightExpression(new LongValue(dateSeconds));
+                        opStack.push(mt);
+                        return;
+                    }
+
+                    break;
+                }
+                case TIME:
+                case TIMESTAMP:
+                    throw new RuntimeException("not implemented");
+            }
+
 
         }
 

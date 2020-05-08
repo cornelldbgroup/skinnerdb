@@ -134,15 +134,20 @@ public class ExpressionInfo {
         VisitorUtil.tryVisit(afterNormalization, simplificationVisitor);
         Expression simplified = simplificationVisitor.opStack.pop();
 
+        RedundantExpressionRemovalVisitor redudantVisitor =
+                new RedundantExpressionRemovalVisitor();
+        VisitorUtil.tryVisit(simplified, redudantVisitor);
+        Expression redundantRemoved = redudantVisitor.exprStack.pop();
+
         if (CNF) {
             Expression cnfConverted =
-                    CNFConverter.convertToCNF(simplified);
+                    CNFConverter.convertToCNF(redundantRemoved);
             simplificationVisitor =
                     new SimplificationVisitor();
             VisitorUtil.tryVisit(cnfConverted, simplificationVisitor);
             this.finalExpression = simplificationVisitor.opStack.pop();
         } else {
-            this.finalExpression = simplified;
+            this.finalExpression = redundantRemoved;
         }
 
         log("Final:\t" + finalExpression.toString());
