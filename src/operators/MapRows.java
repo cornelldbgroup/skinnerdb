@@ -41,9 +41,9 @@ public class MapRows {
      */
     public static void execute(String sourceRel, ExpressionInfo expression,
                                Map<ColumnRef, ColumnRef> columnMapping,
-							   Map<String, ColumnRef> aggMapping,
+                               Map<String, ColumnRef> aggMapping,
                                ColumnRef groupRef, int nrGroups,
-							   ColumnRef targetRef) throws Exception {
+                               ColumnRef targetRef) throws Exception {
         // Do we map to groups?
         boolean groupBy = groupRef != null;
         // Register target column in catalog
@@ -121,13 +121,9 @@ public class MapRows {
                 ExpressionCompiler unaryCompiler = new ExpressionCompiler(
                         expression, columnMapping, null, aggMapping,
                         EvaluatorType.UNARY_DOUBLE);
-                System.out.println("");
-                System.out.println(expression.originalExpression);
-                System.out.println(expression.finalExpression);
-                System.out.println("");
                 expression.finalExpression.accept(unaryCompiler);
                 UnaryDoubleEval unaryDoubleEval =
-						unaryCompiler.getUnaryDoubleEval();
+                        unaryCompiler.getUnaryDoubleEval();
                 // Generate result data and store in buffer
                 DoubleData doubleResult = new DoubleData(outCard);
                 if (groupBy && outCard < 0) {
@@ -139,7 +135,8 @@ public class MapRows {
                 for (int srcRow = 0; srcRow < inCard; ++srcRow) {
                     // Either map row to row or row to group
                     int targetRow = !groupBy ? srcRow : groupData.data[srcRow];
-                    boolean notNull = unaryDoubleEval.evaluate(srcRow, rowResult);
+                    boolean notNull = unaryDoubleEval.evaluate(srcRow,
+                            rowResult);
                     if (!groupBy || notNull) {
                         doubleResult.isNull.set(targetRow, !notNull);
                         doubleResult.data[targetRow] = rowResult[0];
@@ -152,8 +149,13 @@ public class MapRows {
                 ExpressionCompiler unaryCompiler = new ExpressionCompiler(
                         expression, columnMapping, null, aggMapping,
                         EvaluatorType.UNARY_STRING);
+                System.out.println("");
+                System.out.println(expression.originalExpression);
+                System.out.println(expression.finalExpression);
+                System.out.println("");
                 expression.finalExpression.accept(unaryCompiler);
-                UnaryStringEval unaryStringEval = unaryCompiler.getUnaryStringEval();
+                UnaryStringEval unaryStringEval =
+                        unaryCompiler.getUnaryStringEval();
                 // Generate result data and store in buffer
                 StringData stringResult = new StringData(outCard);
                 if (groupBy && outCard < 0) {
@@ -165,7 +167,8 @@ public class MapRows {
                 for (int srcRow = 0; srcRow < inCard; ++srcRow) {
                     // Either map row to row or row to group
                     int targetRow = !groupBy ? srcRow : groupData.data[srcRow];
-                    boolean notNull = unaryStringEval.evaluate(srcRow, rowResult);
+                    boolean notNull = unaryStringEval.evaluate(srcRow,
+                            rowResult);
                     if (!groupBy || notNull) {
                         stringResult.isNull.set(targetRow, !notNull);
                         stringResult.data[targetRow] = rowResult[0];
