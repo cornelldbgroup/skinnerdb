@@ -399,6 +399,7 @@ public class TypeVisitor extends SkinnerVisitor {
     @Override
     public void visit(StringValue arg0) {
         // Treat as encoded string value is possible
+        System.out.println(arg0.getValue() + " " + output);
         if (CatalogManager.currentDB.compressed && !output) {
             int code = BufferManager.dictionary.getCode(arg0.getValue());
             // Use compressed encoding if string in dictionary
