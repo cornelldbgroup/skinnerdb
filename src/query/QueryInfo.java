@@ -418,7 +418,8 @@ public class QueryInfo {
         if (plainSelect.getGroupByColumnReferences() != null) {
             for (Expression groupExpr :
                     plainSelect.getGroupByColumnReferences()) {
-                groupByExpressions.add(new ExpressionInfo(this, groupExpr));
+                groupByExpressions.add(new ExpressionInfo(this, groupExpr,
+                        false, true));
             }
             // Verify that select clause and group-by clause
             // are consistent (each entry in the select clause
