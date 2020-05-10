@@ -426,14 +426,10 @@ public class QueryInfo {
             Set<String> groupByStrings = new HashSet<>();
             for (ExpressionInfo groupExpr : groupByExpressions) {
                 groupByStrings.add(groupExpr.finalExpression.toString());
-                System.out.println(groupExpr.afterSimplification.toString());
-                System.out.println(groupExpr.finalExpression.toString());
-                System.out.println();
             }
             for (ExpressionInfo selectExpr : selectExpressions) {
                 if (!selectExpr.resultScope.equals(ExpressionScope.PER_GROUP) &&
                         !groupByStrings.contains(selectExpr.finalExpression.toString())) {
-                    System.out.println(selectExpr.afterSimplification.toString());
                     throw new SQLexception("Error - select item " + selectExpr +
                             " is neither aggregate nor does it appear in " +
                             "group by " +

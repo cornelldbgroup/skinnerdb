@@ -35,6 +35,9 @@ public class ExpressionInfo {
      * Expression after normalizing column references.
      */
     public final Expression afterNormalization;
+    /**
+     * Expression after simplification.
+     */
     public final Expression afterSimplification;
     /**
      * Expression after inserting type cases if necessary.

@@ -193,8 +193,8 @@ public class RedundantExpressionRemovalVisitor extends CopyVisitor {
         List<Expression> disjuncts = new ArrayList<>();
 
         Stack<Expression> disjunctStack = new Stack<>();
-        disjunctStack.push(orExpression.getLeftExpression());
         disjunctStack.push(orExpression.getRightExpression());
+        disjunctStack.push(orExpression.getLeftExpression());
         while (!disjunctStack.empty()) {
             Expression original = disjunctStack.pop();
             Expression curr = original;
