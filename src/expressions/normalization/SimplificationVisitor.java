@@ -83,18 +83,7 @@ public class SimplificationVisitor extends SkinnerVisitor {
                 sumParams.add(caseClause);
             }
             newFunction.setParameters(new ExpressionList(sumParams));
-            // Need to encapsulate to treat special case of zero count
-            IsNullExpression isResultNull = new IsNullExpression();
-            isResultNull.setLeftExpression(newFunction);
-            WhenClause whenResultNull = new WhenClause();
-            whenResultNull.setWhenExpression(isResultNull);
-            whenResultNull.setThenExpression(new LongValue(0));
-            List<Expression> resultNullWhens = new ArrayList<>();
-            resultNullWhens.add(whenResultNull);
-            CaseExpression caseResultNull = new CaseExpression();
-            caseResultNull.setWhenClauses(resultNullWhens);
-            caseResultNull.setElseExpression(newFunction);
-            opStack.push(caseResultNull);
+            opStack.push(newFunction);
         } else if (fctName.equals("avg")) {
             // Sum over average input expression and cast to double
             newFunction.setName("sum");
