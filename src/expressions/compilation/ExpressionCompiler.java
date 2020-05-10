@@ -1588,6 +1588,7 @@ public class ExpressionCompiler extends SkinnerVisitor {
         for (int whenCtr = 0; whenCtr < nrWhenExprs; ++whenCtr) {
             // Evaluate when condition
             Expression whenExpr = whenExprs.get(whenCtr);
+            System.out.println(whenExpr.toString());
             WhenClause whenClause = (WhenClause) whenExpr;
             whenClause.getWhenExpression().accept(this);
             // Combine null flag and evaluation result
