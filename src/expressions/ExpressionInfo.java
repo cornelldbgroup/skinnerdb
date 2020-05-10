@@ -35,6 +35,7 @@ public class ExpressionInfo {
      * Expression after normalizing column references.
      */
     public final Expression afterNormalization;
+    public final Expression afterSimplification;
     /**
      * Expression after inserting type cases if necessary.
      */
@@ -132,11 +133,11 @@ public class ExpressionInfo {
         SimplificationVisitor simplificationVisitor =
                 new SimplificationVisitor();
         VisitorUtil.tryVisit(afterNormalization, simplificationVisitor);
-        Expression simplified = simplificationVisitor.opStack.pop();
+        this.afterSimplification = simplificationVisitor.opStack.pop();
 
         RedundantExpressionRemovalVisitor redudantVisitor =
                 new RedundantExpressionRemovalVisitor();
-        VisitorUtil.tryVisit(simplified, redudantVisitor);
+        VisitorUtil.tryVisit(afterSimplification, redudantVisitor);
         Expression redundantRemoved = redudantVisitor.exprStack.pop();
 
         if (CNF) {
