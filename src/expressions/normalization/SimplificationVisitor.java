@@ -834,14 +834,14 @@ public class SimplificationVisitor extends SkinnerVisitor {
                 } else {
                     Expression prev = null;
                     for (Expression exp : exps) {
-                        EqualsTo eq = new EqualsTo();
-                        eq.setLeftExpression(arg0.getLeftExpression());
-                        eq.setRightExpression(exp);
-                        if (prev != null) {
-                            prev = new OrExpression(prev, eq);
-                        } else {
-                            prev = eq;
-                        }
+                            EqualsTo eq = new EqualsTo();
+                            eq.setLeftExpression(arg0.getLeftExpression());
+                            eq.setRightExpression(exp);
+                            if (prev != null) {
+                                prev = new OrExpression(prev, eq);
+                            } else {
+                                prev = eq;
+                            }
                     }
                     Parenthesis parenthesis = new Parenthesis(prev);
                     parenthesis.accept(this);
