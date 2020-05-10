@@ -46,16 +46,13 @@ public class TypeVisitor extends SkinnerVisitor {
     public Map<Expression, ExpressionScope> outputScope =
             new HashMap<Expression, ExpressionScope>();
 
-    private boolean output;
-
     /**
      * Initializes query information.
      *
      * @param queryInfo information about query
      */
-    public TypeVisitor(QueryInfo queryInfo, boolean output) {
+    public TypeVisitor(QueryInfo queryInfo) {
         this.queryInfo = queryInfo;
-        this.output = output;
     }
 
     /**
@@ -399,7 +396,7 @@ public class TypeVisitor extends SkinnerVisitor {
     @Override
     public void visit(StringValue arg0) {
         // Treat as encoded string value is possible
-        if (CatalogManager.currentDB.compressed && !output) {
+        if (CatalogManager.currentDB.compressed) {
             int code = BufferManager.dictionary.getCode(arg0.getValue());
             // Use compressed encoding if string in dictionary
             if (code >= 0) {

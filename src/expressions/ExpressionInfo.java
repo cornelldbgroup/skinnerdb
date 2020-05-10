@@ -95,7 +95,7 @@ public class ExpressionInfo {
      */
     public ExpressionInfo(QueryInfo queryInfo,
                           Expression expression) throws Exception {
-        this(queryInfo, expression, false, false);
+        this(queryInfo, expression, false);
     }
 
     /**
@@ -106,7 +106,7 @@ public class ExpressionInfo {
      */
     public ExpressionInfo(QueryInfo queryInfo,
                           Expression expression,
-                          boolean CNF, boolean output) throws Exception {
+                          boolean CNF) throws Exception {
         // Store input parameters
         this.queryInfo = queryInfo;
         this.originalExpression = expression;
@@ -125,7 +125,7 @@ public class ExpressionInfo {
         this.afterNormalization = normalizationVisitor.exprStack.pop();
         log("Normalized:\t" + afterNormalization);
         // Makes implicit type casts explicit
-        TypeVisitor typeVisitor = new TypeVisitor(queryInfo, output);
+        TypeVisitor typeVisitor = new TypeVisitor(queryInfo);
         VisitorUtil.tryVisit(afterNormalization, typeVisitor);
         // Simplifies the expression by replacing certain SQL constructs
         // and resolving constant expressions.

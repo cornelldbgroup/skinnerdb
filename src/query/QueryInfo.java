@@ -300,8 +300,7 @@ public class QueryInfo {
             SelectExpressionItem exprItem = (SelectExpressionItem) selectItem;
             Expression expr = exprItem.getExpression();
             String alias = selectExprToAlias.get(expr);
-            ExpressionInfo exprInfo = new ExpressionInfo(this, expr, false,
-                    true);
+            ExpressionInfo exprInfo = new ExpressionInfo(this, expr);
             selectExpressions.add(exprInfo);
             aliasToExpression.put(alias, exprInfo.finalExpression);
             selectToAlias.put(exprInfo, alias);
