@@ -123,8 +123,6 @@ public class BudgetedFilter {
                     batchResult.add(row);
                 }
             }
-
-            if (end == LAST_ROW) break;
         }
 
         long endTime = System.nanoTime();

@@ -218,7 +218,7 @@ public class SearchPreprocessor implements Preprocessor {
         }
         Collection<MutableIntList> satisfyingRows =
                 shouldFilter ?
-                        filterUCTNaiveParallel(tableName, predicates,
+                        filterUCTSingleThreaded(tableName, predicates,
                                 compiled.toImmutable(), indices,
                                 values, unaryPred, preSummary.columnMapping) :
                         Arrays.asList();
@@ -261,12 +261,12 @@ public class SearchPreprocessor implements Preprocessor {
         IndexFilter indexFilter = new IndexFilter(indices, dataLocations);
         FilterUCTNode root = new FilterUCTNode(roundCtr,
                 nrCompiled, indices);
-        int lastCompletedRow = 0;
+        int nextStart = 0;
         List<MutableIntList> resultList = new ArrayList<>();
         BudgetedFilter filterOp = new BudgetedFilter(compiled, indexFilter,
                 CARDINALITY, resultList);
 
-        while (lastCompletedRow < CARDINALITY) {
+        while (nextStart < CARDINALITY) {
             ++roundCtr;
 
             final FilterState state = new FilterState(nrCompiled);
@@ -275,9 +275,10 @@ public class SearchPreprocessor implements Preprocessor {
             final FilterUCTNode selected = sample.getLeft();
             boolean playedOut = sample.getRight();
 
-            final int start = lastCompletedRow;
+            final int start = nextStart;
             final int end;
             if (playedOut) {
+                state.batches = 1;
                 state.batchSize = ROWS_PER_TIMESTEP;
                 end = Math.min(start + ROWS_PER_TIMESTEP, CARDINALITY);
             } else {
@@ -285,7 +286,7 @@ public class SearchPreprocessor implements Preprocessor {
                 end = Math.min(start + state.batches * LEAF_ROWS_PER_TIMESTEP,
                         CARDINALITY);
             }
-            lastCompletedRow = end;
+            nextStart = end;
             FilterUCTNode.initialUpdateStatistics(selected, state);
             List<Integer> outputId = initializeEpoch(resultList,
                     state.batches);
