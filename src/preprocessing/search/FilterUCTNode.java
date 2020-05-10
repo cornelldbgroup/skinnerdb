@@ -335,15 +335,15 @@ public class FilterUCTNode {
 
         FilterUCTNode child = childNodes[action];
         if (child == null) {
-            playout(state);
-            return Pair.of(this, true);
+            boolean validPlayout = playout(state);
+            return Pair.of(this, validPlayout);
         } else {
             state.actions.add(action);
             return child.sample(roundCtr, state, cache, order);
         }
     }
 
-    private void playout(FilterState state) {
+    private boolean playout(FilterState state) {
         switch (type) {
             case BRANCHING:
             case INDEX: {
@@ -367,7 +367,7 @@ public class FilterUCTNode {
 
             case ROW_PARALLEL: {
                 // no additional work needed
-                break;
+                return false;
             }
 
             case LEAF:
@@ -376,6 +376,7 @@ public class FilterUCTNode {
             case ROOT:
                 throw new RuntimeException("Not possible to playout from root");
         }
+        return true;
     }
 
 
