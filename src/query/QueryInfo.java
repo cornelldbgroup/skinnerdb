@@ -425,10 +425,6 @@ public class QueryInfo {
             // appears in the group-by clause).
             Set<String> groupByStrings = new HashSet<>();
             for (ExpressionInfo groupExpr : groupByExpressions) {
-                System.out.println();
-                System.out.println(groupExpr.originalExpression.toString());
-                System.out.println(groupExpr.finalExpression.toString());
-                System.out.println();
                 groupByStrings.add(groupExpr.finalExpression.toString());
             }
             for (ExpressionInfo selectExpr : selectExpressions) {
