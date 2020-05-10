@@ -205,8 +205,8 @@ public class RedundantExpressionRemovalVisitor extends CopyVisitor {
 
             if (curr instanceof OrExpression) {
                 OrExpression disjunction = (OrExpression) curr;
-                disjunctStack.push(disjunction.getLeftExpression());
                 disjunctStack.push(disjunction.getRightExpression());
+                disjunctStack.push(disjunction.getLeftExpression());
                 continue;
             } else {
                 disjuncts.add(original);
