@@ -335,18 +335,16 @@ public class RedundantExpressionRemovalVisitor extends CopyVisitor {
             visited.add(exprStack.pop());
         }
 
-        if (visited.size() == 1) {
-            exprStack.push(visited.get(0));
-        } else {
-            OrExpression disjunction =
-                    new OrExpression(visited.get(visited.size() - 2),
-                            visited.get(visited.size() - 1));
+        Expression prev = null;
 
-            for (int i = visited.size() - 3; i >= 0; i--) {
-                disjunction = new OrExpression(visited.get(i), disjunction);
+        for (Expression exp : visited) {
+            if (prev != null) {
+                prev = new OrExpression(prev, exp);
+            } else {
+                prev = exp;
             }
-
-            exprStack.push(disjunction);
         }
+
+        exprStack.push(prev);
     }
 }
