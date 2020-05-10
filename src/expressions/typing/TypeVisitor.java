@@ -609,8 +609,11 @@ public class TypeVisitor extends SkinnerVisitor {
         for (Expression expr : arg0.getWhenClauses()) {
             SQLtype thisType = outputType.get(expr);
             if (!thisType.equals(resultType)) {
-                Expression cast = newCast(expr, resultType);
-                castedWhens.add(cast);
+                WhenClause whenExpr = (WhenClause) expr;
+                Expression then = newCast(whenExpr.getThenExpression(),
+                        resultType);
+                whenExpr.setThenExpression(then);
+                castedWhens.add(whenExpr);
             } else {
                 castedWhens.add(expr);
             }
