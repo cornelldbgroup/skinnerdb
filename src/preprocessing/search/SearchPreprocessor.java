@@ -218,7 +218,7 @@ public class SearchPreprocessor implements Preprocessor {
         }
         Collection<MutableIntList> satisfyingRows =
                 shouldFilter ?
-                        filterUCTSingleThreaded(tableName, predicates,
+                        filterUCTNaiveParallel(tableName, predicates,
                                 compiled.toImmutable(), indices,
                                 values, unaryPred, preSummary.columnMapping) :
                         Arrays.asList();
@@ -393,6 +393,7 @@ public class SearchPreprocessor implements Preprocessor {
                     final int start = startRow;
                     final int end;
                     if (playedOut) {
+                        state.batches = 1;
                         state.batchSize = ROWS_PER_TIMESTEP;
                         end = Math.min(start + ROWS_PER_TIMESTEP, CARDINALITY);
                     } else {
