@@ -294,7 +294,7 @@ public class SearchPreprocessor implements Preprocessor {
             FilterUCTNode.finalUpdateStatistics(selected, state, reward);
 
             if (ENABLE_COMPILATION && roundCtr == nextCompile) {
-                nextCompile *= 2;
+                nextCompile += 100;
 
                 int compileSetSize = predicates.size();
                 HashMap<FilterUCTNode, Integer> savedCalls = new HashMap<>();
@@ -411,7 +411,7 @@ public class SearchPreprocessor implements Preprocessor {
                             reward);
 
                     if (ENABLE_COMPILATION && roundCtr == nextCompile) {
-                        nextCompile *= 2;
+                        nextCompile += 100;
 
                         int compileSetSize = predicates.size();
                         HashMap<FilterUCTNode, Integer> savedCalls =
