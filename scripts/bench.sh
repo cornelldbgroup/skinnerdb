@@ -17,7 +17,7 @@ do
     if [ $INDEX ]; then
         printf 'index all;\nbench %s %s 3\nquit' $1 "$2${DB}-$i.log" | $DIR/skinnerdb $3
     else
-        printf 'index all;\nbench %s %s 3\nquit' $1 "$2${DB}-$i.log" | $DIR/skinnerdb $3
+        printf 'bench %s %s 3\nquit' $1 "$2${DB}-$i.log" | $DIR/skinnerdb $3
     fi 
     echo "Finished: $i"
 done
