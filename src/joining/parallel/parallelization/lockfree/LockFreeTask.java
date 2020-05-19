@@ -94,20 +94,18 @@ public class LockFreeTask implements Callable<LockFreeResult>{
                 joinOrder = endPlan.getJoinOrder();
                 joinOp.isShared = true;
 
-                if (ParallelConfig.HEURISTIC_SHARING) {
+                if (ParallelConfig.HEURISTIC_SHARING && ParallelConfig.PARALLEL_SPEC == 0) {
                     int lastTable;
                     if (finishedTables.contains(finalTable)) {
                         int table = root.getSplitTableByCard(joinOrder, joinOp.cardinalities, finishedTables);
                         if (table == -1) {
                             break;
                         }
-//                        State slowState = table != lastTable ? endPlan.slowestState.get() : null;
                         State slowState = endPlan.slowestState.get();
                         reward = joinOp.execute(joinOrder, table, (int) roundCtr, endPlan.finishFlags, slowState);
                         endPlan.threadSlowStates[tid][table] = joinOp.lastState;
                     }
                     else {
-//                        State slowState = finalTable != lastTable ? endPlan.slowestState.get() : null;
                         State slowState = endPlan.slowestState.get();
                         reward = joinOp.execute(joinOrder, finalTable, (int) roundCtr, endPlan.finishFlags, slowState);
                         int largeTable = joinOp.largeTable;
@@ -124,7 +122,8 @@ public class LockFreeTask implements Callable<LockFreeResult>{
 //                        }
                     }
                 }
-                else if (ParallelConfig.HEURISTIC_STOP) {
+                else if (ParallelConfig.HEURISTIC_STOP || ParallelConfig.PARALLEL_SPEC == 11
+                        || ParallelConfig.PARALLEL_SPEC == 12) {
                     reward = joinOp.execute(joinOrder, finalTable, (int) roundCtr);
                     if (joinOp.isFinished()) {
                         break;
@@ -153,8 +152,8 @@ public class LockFreeTask implements Callable<LockFreeResult>{
                     System.out.println(tid + " shared: " + Arrays.toString(joinOrder) + " splitting " + splitTable);
                     endPlan.setJoinOrder(joinOrder);
                     endPlan.setSplitTable(splitTable);
-                    endPlan.threadSlowStates[tid][splitTable] = joinOp.lastState;
                 }
+                endPlan.threadSlowStates[tid][splitTable] = joinOp.lastState;
 
                 boolean isFinished = endPlan.setFinished(tid, joinOp.lastTable);
                 finishedTables.add(splitTable);
@@ -162,7 +161,8 @@ public class LockFreeTask implements Callable<LockFreeResult>{
                     terminated.set(true);
                     break;
                 }
-                if (ParallelConfig.HEURISTIC_STOP) {
+                if (ParallelConfig.HEURISTIC_STOP || ParallelConfig.PARALLEL_SPEC == 11 ||
+                        ParallelConfig.PARALLEL_SPEC == 12) {
                     if (splitTable == endPlan.getSplitTable()) {
                         break;
                     }

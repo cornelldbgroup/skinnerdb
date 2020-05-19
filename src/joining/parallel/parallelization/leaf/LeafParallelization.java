@@ -90,7 +90,7 @@ public class LeafParallelization extends Parallelization {
             // Count reward except for final sample
             for (int i = 0; i < nrThreads; i++) {
                 SPJoin joinOp = joinOps.get(i);
-                if (joinOp.isFinished() && joinOp.result != null) {
+                if (joinOp.lastState.isFinished() && joinOp.result != null) {
                     finish = true;
                 }
             }

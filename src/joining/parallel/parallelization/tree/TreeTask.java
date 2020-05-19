@@ -77,7 +77,7 @@ public class TreeTask implements Callable<TreeResult> {
         while (!finish.get()) {
             ++roundCtr;
             double reward;
-            reward = root.sample(roundCtr, joinOrder, spJoin, policy, true);
+            reward = root.sample(roundCtr, joinOrder, spJoin, policy, false);
             // Count reward except for final sample
             if (!spJoin.isFinished()) {
                 accReward += reward;

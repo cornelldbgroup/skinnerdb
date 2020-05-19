@@ -80,6 +80,10 @@ public class ASPNode {
      */
     public final int[] nextTable;
     /**
+     * Whether the specific action is in the thread's scope.
+     */
+    public final boolean[][] belong;
+    /**
      * Indicates whether the search space is restricted to
      * join orders that avoid Cartesian products. This
      * flag should only be activated if it is ensured
@@ -151,6 +155,7 @@ public class ASPNode {
         nrVisits = new int[nrThreads];
         nrTries = new int[nrThreads][nrActions];
         accumulatedReward = new double[nrThreads][nrActions];
+        belong = new boolean[nrThreads][nrActions];
         unjoinedTables = new ArrayList<>();
         joinedTables = new HashSet<>();
         nextTable = new int[nrTables];
@@ -173,6 +178,7 @@ public class ASPNode {
         for (int i = 0; i < nrThreads; i++) {
             this.nodeStatistics[i] = new NodeStatistics(nrActions);
             this.filteredActions[i] = new HashSet<>(recommendedActions);
+            Arrays.fill(belong[i], true);
         }
 
         this.prioritySet = new ConcurrentLinkedDeque<>();
@@ -205,6 +211,7 @@ public class ASPNode {
         nrVisits = new int[nrThreads];
         nrTries = new int[nrThreads][nrActions];
         accumulatedReward = new double[nrThreads][nrActions];
+        belong = new boolean[nrThreads][nrActions];
         query = parent.query;
         nrTables = parent.nrTables;
         unjoinedTables = new ArrayList<>();
@@ -253,6 +260,7 @@ public class ASPNode {
         for (int i = 0; i < nrThreads; i++) {
             this.nodeStatistics[i] = new NodeStatistics(nrActions);
             this.filteredActions[i] = new HashSet<>(recommendedActions);
+            Arrays.fill(belong[i], true);
         }
 
         List<Integer> priorityActions = new ArrayList<>();
@@ -382,6 +390,251 @@ public class ASPNode {
 
     }
 
+    int selectAction(long roundCtr,
+                     SelectionPolicy policy,
+                     int tid) {
+        /*
+         * We apply the UCT formula as no actions are untried.
+         * We iterate over all actions and calculate their
+         * UCT value, updating best action and best UCT value
+         * on the way. We start iterations with a randomly
+         * selected action to ensure that we pick a random
+         * action among the ones with maximal UCT value.
+         */
+        Integer priorAction = null;
+        if (!prioritySet.isEmpty()) {
+            priorAction = prioritySet.pollFirst();
+        }
+        if (priorAction != null) {
+            return priorAction;
+        }
+        int nrVisits = 0;
+        int[] nrTries = new int[nrActions];
+        double[] accumulatedReward = new double[nrActions];
+
+        // collect all statistics
+//        for (int i = 0; i < nrThreads; i++) {
+//            NodeStatistics threadStats = nodeStatistics[i];
+//            for (Integer recAction : recommendedActions) {
+//                int threadTries = threadStats.nrTries[recAction];
+//                nrTries[recAction] += threadTries;
+//                accumulatedReward[recAction] += threadStats.accumulatedReward[recAction];
+//            }
+//        }
+        NodeStatistics threadStats = nodeStatistics[tid];
+        for (Integer recAction : recommendedActions) {
+            int threadTries = threadStats.nrTries[recAction];
+            nrTries[recAction] += threadTries;
+            accumulatedReward[recAction] += threadStats.accumulatedReward[recAction];
+        }
+
+        double[] avgRewards = new double[nrActions];
+
+
+        Set<Integer> randomActions = new HashSet<>(nrActions);
+
+        for (Integer action: recommendedActions) {
+            if (belong[tid][action]) {
+                randomActions.add(action);
+            }
+        }
+
+        for (Integer action : randomActions) {
+            int nrTry = nrTries[action];
+            nrVisits += nrTry;
+            avgRewards[action] = nrTry == 0 ? 0 : accumulatedReward[action] / nrTry;
+        }
+
+        /* When using the default selection policy (UCB1):
+         * We apply the UCT formula as no actions are untried.
+         * We iterate over all actions and calculate their
+         * UCT value, updating best action and best UCT value
+         * on the way. We start iterations with a randomly
+         * selected action to ensure that we pick a random
+         * action among the ones with maximal UCT value.
+         */
+        int bestAction = -1;
+        double bestQuality = -1;
+
+//        Collections.shuffle(randomActions, ThreadLocalRandom.current());
+
+        for (Integer action : randomActions) {
+            // Calculate index of current action
+            int nrTry = nrTries[action];
+            if (nrTry == 0) {
+                return action;
+            }
+            double meanReward = avgRewards[action];
+            double exploration = Math.sqrt(Math.log(nrVisits) / nrTry);
+            // Assess the quality of the action according to policy
+            double quality = meanReward + JoinConfig.EXPLORATION_WEIGHT * exploration;
+            if (quality > bestQuality) {
+                bestAction = action;
+                bestQuality = quality;
+            }
+        }
+
+        // Otherwise: return best action.
+        return bestAction;
+
+    }
+
+    public void partitionSpace(int[] threads) {
+        int end = threads[1];
+        int start = threads[0];
+        int nrAvailable = end - start;
+
+        int[] nrTries = new int[nrActions];
+        double[] accumulatedReward = new double[nrActions];
+
+
+        // collect all statistics
+        for (int i = 0; i < nrThreads; i++) {
+            NodeStatistics threadStats = nodeStatistics[i];
+            for (Integer recAction : recommendedActions) {
+                int threadTries = threadStats.nrTries[recAction];
+                nrTries[recAction] += threadTries;
+                accumulatedReward[recAction] += threadStats.accumulatedReward[recAction];
+            }
+        }
+
+        double[] avgRewards = new double[nrActions];
+        recommendedActions.forEach(action -> {
+            int nrTry = nrTries[action];
+            avgRewards[action] = nrTry == 0 ? 0 : accumulatedReward[action] / nrTry;
+        });
+        List<Integer> sortedActions;
+        int recommendSize = recommendedActions.size();
+
+        if (nrAvailable > 1) {
+            sortedActions = recommendedActions.stream().sorted(
+                    Comparator.comparing(action -> -1 * avgRewards[action])).
+                    collect(Collectors.toList());
+            // number of actions is small
+            if (nrAvailable >= recommendSize) {
+                for (int i = end - 1; i > end - recommendSize; i--) {
+                    boolean[] threadBelong = belong[i];
+                    int actionPos = recommendSize - (end - i);
+                    int action = sortedActions.get(actionPos);
+                    for (int a = 0; a < threadBelong.length; a++) {
+                        if (a != action) {
+                            threadBelong[a] = false;
+                        }
+                    }
+                }
+                int firstAction = sortedActions.get(0);
+                for (int i = 0; i <= end - recommendSize; i++) {
+                    boolean[] threadBelong = belong[i];
+                    for (int a = 0; a < threadBelong.length; a++) {
+                        if (a != firstAction) {
+                            threadBelong[a] = false;
+                        }
+                    }
+                }
+                threads[1] = end - recommendSize + 1;
+                ASPNode node = childNodes[sortedActions.get(0)];
+                if (node != null && node.nrActions > 0) {
+                    node.partitionSpace(threads);
+                }
+            }
+            // number of threads is small
+            else {
+                boolean[] lastThread = belong[end - 1];
+                for (int i = 0; i < end - 1; i++) {
+                    boolean[] threadBelong = belong[i];
+                    int action = sortedActions.get(i);
+                    for (int a = 0; a < threadBelong.length; a++) {
+                        if (a != action) {
+                            threadBelong[a] = false;
+                        }
+                    }
+                    lastThread[action] = false;
+                }
+            }
+        }
+    }
+
+    public void partitionSpaceModel(int[] threads) {
+        int end = threads[1];
+        int start = threads[0];
+        int nrAvailable = end - start;
+
+        int[] nrTries = new int[nrActions];
+        double[] accumulatedReward = new double[nrActions];
+
+
+        // collect all statistics
+        for (int i = 0; i < nrThreads; i++) {
+            NodeStatistics threadStats = nodeStatistics[i];
+            for (Integer recAction : recommendedActions) {
+                int threadTries = threadStats.nrTries[recAction];
+                nrTries[recAction] += threadTries;
+                accumulatedReward[recAction] += threadStats.accumulatedReward[recAction];
+            }
+        }
+
+        double[] avgRewards = new double[nrActions];
+        recommendedActions.forEach(action -> {
+            int nrTry = nrTries[action];
+            avgRewards[action] = nrTry == 0 ? 0 : accumulatedReward[action] / nrTry;
+        });
+        List<Integer> sortedActions;
+        int recommendSize = recommendedActions.size();
+
+
+        if (nrAvailable > 1 && recommendSize > 1) {
+            sortedActions = recommendedActions.stream().sorted(
+                    Comparator.comparing(action -> -1 * avgRewards[action])).
+                    collect(Collectors.toList());
+
+            if (nrAvailable >= recommendSize) {
+                int threadsPerAction = nrAvailable / recommendSize;
+                int threadStart = 0;
+                int remaining = nrAvailable;
+                for (int a = 0; a < recommendSize; a++) {
+                    int nr = a == recommendSize - 1 ? remaining :
+                            Math.min((int) (Math.random() * remaining) + 1, remaining - (recommendSize - a) + 1);
+                    int action = sortedActions.get(a);
+                    remaining -= nr;
+                    for (int i = threadStart; i < threadStart + nr; i++) {
+                        boolean[] threadBelong = belong[i];
+                        for (int c = 0; c < threadBelong.length; c++) {
+                            if (c != action) {
+                                threadBelong[c] = false;
+                            }
+                        }
+                    }
+                    if (nr > 1) {
+                        threads[0] = threadStart;
+                        threads[1] = threadStart + nr;
+                        ASPNode node = childNodes[action];
+                        if (node != null && node.nrActions > 0) {
+                            node.partitionSpaceModel(threads);
+                        }
+                    }
+                    threadStart += nr;
+                    if (remaining <= 0) {
+                        break;
+                    }
+                }
+            }
+            else {
+                boolean[] lastThread = belong[end - 1];
+                for (int i = start; i < end - 1; i++) {
+                    boolean[] threadBelong = belong[i];
+                    int action = sortedActions.get(i - start);
+                    for (int a = 0; a < threadBelong.length; a++) {
+                        if (a != action) {
+                            threadBelong[a] = false;
+                        }
+                    }
+                    lastThread[action] = false;
+                }
+            }
+
+        }
+    }
+
 
     /**
      * Select most interesting action to try next. Also updates
@@ -406,16 +659,16 @@ public class ASPNode {
         if (priorAction != null) {
             return priorAction;
         }
+
+
         int nrVisits = 0;
         int[] nrTries = new int[nrActions];
         double[] accumulatedReward = new double[nrActions];
         int[] nrVisited = new int[nrActions];
         int[] nrIndexed = new int[nrActions];
 
-//        if (JoinConfig.FORGET && nextForget[tid] <= roundCtr) {
-//            nodeStatistics[tid].clear();
-//            nextForget[tid] *= 10;
-//        }
+
+
 
         // collect all statistics
         for (int i = 0; i < nrThreads; i++) {
@@ -435,15 +688,6 @@ public class ASPNode {
             int nrTry = nrTries[action];
             avgRewards[action] = nrTry == 0 ? 0 : accumulatedReward[action] / nrTry;
         });
-//        boolean hasReward = recommendedActions.stream().filter(action ->
-//                nrTries[action] == 0).findFirst().orElse(null) == null;
-//
-//        if (!hasReward) {
-//            recommendedActions.forEach(action -> {
-//                int nrTry = nrTries[action];
-//                avgRewards[action] = nrTry == 0 ? 0 : accumulatedReward[action] / nrTry;
-//            });
-//        }
         List<Integer> randomActions;
         int lastID = last[0];
 //        spJoin.writeLog(Arrays.toString(nextTable) + ": " + Arrays.toString(nrVisited) +
@@ -809,13 +1053,52 @@ public class ASPNode {
     public double sample(long roundCtr,
                          int[] joinOrder,
                          SPJoin spJoin,
+                         SelectionPolicy policy) throws Exception {
+        int tid = spJoin.tid;
+        // Check if this is a (non-extendible) leaf node
+        if (nrActions == 0) {
+            // Initialize table nodes
+            return spJoin.execute(joinOrder, (int) roundCtr);
+        }
+        else {
+            // inner node - select next action and expand tree if necessary
+            int action = selectAction(roundCtr, policy, tid);
+            if (action < 0) {
+                System.out.println(tid + " " + Arrays.toString(belong[tid]));
+                System.exit(0);
+            }
+            int table = nextTable[action];
+            joinOrder[treeLevel] = table;
+            // grow tree if possible
+            boolean canExpand = createdIn != roundCtr;
+            ASPNode child = childNodes[action];
+            // let join operator knows which space is evaluating.
+            if (canExpand && child == null) {
+                if (childNodes[action] == null) {
+                    childNodes[action] = new ASPNode(roundCtr, this, table, action);
+                }
+            }
+            // evaluate via recursive invocation or via playout
+            boolean isSample = child != null;
+            double reward = isSample ?
+                    child.sample(roundCtr, joinOrder, spJoin, policy):
+                    playout(roundCtr, joinOrder, spJoin);
+            // update UCT statistics and return reward
+//            reward = 0.01;
+            nodeStatistics[tid].updateStatistics(reward, action);
+            if (treeLevel == 0 && roundCtr < 100) {
+                avgRewards[table] = Math.max(avgRewards[table], spJoin.progress);
+            }
+            return reward;
+        }
+    }
+    public double sample(long roundCtr,
+                         int[] joinOrder,
+                         SPJoin spJoin,
                          SelectionPolicy policy,
                          boolean[] tags,
                          double[] weights,
                          int branchLevel, int[] last) throws Exception {
-        if (sid >= 0) {
-            spJoin.sid = sid;
-        }
         int tid = spJoin.tid;
         // Check if this is a (non-extendible) leaf node
         if (nrActions == 0) {
@@ -825,6 +1108,11 @@ public class ASPNode {
         else {
             // inner node - select next action and expand tree if necessary
             int action = selectAction(roundCtr, policy, tid, spJoin, last, joinOrder);
+            if (action == -1) {
+                System.out.println("tid: " + tid + "\t" + Arrays.toString(belong[tid]) + " " +
+                        Arrays.toString(recommendedActions.toArray()));
+                System.exit(0);
+            }
             int table = nextTable[action];
             joinOrder[treeLevel] = table;
             // grow tree if possible

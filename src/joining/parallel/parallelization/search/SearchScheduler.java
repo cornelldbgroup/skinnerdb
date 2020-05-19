@@ -261,7 +261,8 @@ public class SearchScheduler {
             }
         }
         int[] joinOrder = new int[nrJoined];
-        maxNode.maxJoinOrder(joinOrder, tid);
+        double[] probs = new double[nrJoined];
+        maxNode.maxJoinOrder(joinOrder, tid, probs);
         SPNode node = maxNode;
         while (node.parent != null) {
             joinOrder[node.treeLevel - 1] = node.joinedTable;

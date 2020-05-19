@@ -6,6 +6,7 @@ import joining.parallel.join.SPJoin;
 import joining.uct.SelectionPolicy;
 import query.QueryInfo;
 
+import java.math.BigDecimal;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -314,7 +315,6 @@ public class HSPNode {
             double bestQuality = -1;
             List<Integer> randomActions = new ArrayList<>(recommendedActions);
             Collections.shuffle(randomActions, ThreadLocalRandom.current());
-
             for (Integer action : randomActions) {
                 // Calculate index of current action
                 int nrTry = nrTries[action];
@@ -337,9 +337,11 @@ public class HSPNode {
         else {
             int bestAction = -1;
             double bestQuality = Integer.MAX_VALUE;
+            List<Integer> randomActions = new ArrayList<>(recommendedActions);
+            Collections.shuffle(randomActions, ThreadLocalRandom.current());
             switch (ParallelConfig.HEURISTIC_POLICY) {
                 case 0: {
-                    for(Integer recAction : recommendedActions) {
+                    for(Integer recAction : randomActions) {
                         int table = nextTable[recAction];
                         int cardinality = spJoin.cardinalities[table];
                         if (cardinality < bestQuality) {
@@ -350,9 +352,23 @@ public class HSPNode {
                     break;
                 }
                 case 1: {
-                    for(Integer recAction : recommendedActions) {
+//                    spJoin.writeLog(Arrays.toString(recommendedActions.stream().mapToDouble(recAction -> {
+//                        int table = nextTable[recAction];
+//                        int cardinality = spJoin.cardinalities[table];
+//                        return treeLevel == 0 ?
+//                                cardinality :
+//                                query.estimate(joinedTables, table);
+//                    }).toArray()) + "\n" + Arrays.toString(recommendedActions.stream().mapToDouble(recAction -> nextTable[recAction]).toArray()) +
+//                            "\n" + Arrays.toString(recommendedActions.stream().mapToInt(recAction -> {
+//                        int table = nextTable[recAction];
+//                        int cardinality = spJoin.cardinalities[table];
+//                        return cardinality;
+//                    }).toArray()));
+                    for(Integer recAction : randomActions) {
                         int table = nextTable[recAction];
-                        double selectivity = query.estimate(joinedTables, table);
+                        int cardinality = spJoin.cardinalities[table];
+                        double selectivity = treeLevel == 0 ?
+                                cardinality : query.estimate(joinedTables, table) * cardinality;
                         if (selectivity < bestQuality) {
                             bestAction = recAction;
                             bestQuality = selectivity;
@@ -471,7 +487,9 @@ public class HSPNode {
                         for (int table : unjoinedTablesShuffled) {
                             if (!newlyJoined.contains(table) &&
                                     query.connected(newlyJoined, table)) {
-                                double selectivity = query.estimate(newlyJoined, table);
+                                int cardinality = spJoin.cardinalities[table];
+                                double selectivity = treeLevel == 0 ?
+                                        cardinality : query.estimate(joinedTables, table) * cardinality;
                                 if (selectivity < bestQuality) {
                                     bestTable = table;
                                     bestQuality = selectivity;
@@ -519,10 +537,13 @@ public class HSPNode {
         else {
 //            boolean topLevel = treeLevel < ParallelConfig.TOP_LEVEL;
 //            boolean useLearning = topLevel ? tid % 2 == 0 : (tid % 4 == 0 || tid % 4 == 1);
-
-            int pos = treeLevel % nrLevels;
-            boolean useLearning = tidStr.charAt(nrLevels - pos - 1) == '0';
+//            int stride = nrTables / nrLevels;
+            int stride = ParallelConfig.TOP_LEVEL;
+            int startPos = Math.min(treeLevel / stride, nrLevels - 1);
+            boolean useLearning = tidStr.charAt(nrLevels - startPos - 1) == '0';
             // inner node - select next action and expand tree if necessary
+            spJoin.writeLog("Level: " + treeLevel + "\tPos: " + startPos + "\tBits: " + tidStr
+                    + "\tLearning: " + useLearning);
             int action = selectAction(roundCtr, policy, tid, spJoin, isLocal, useLearning);
             int table = nextTable[action];
             joinOrder[treeLevel] = table;

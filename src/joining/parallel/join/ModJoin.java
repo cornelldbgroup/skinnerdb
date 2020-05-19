@@ -67,9 +67,13 @@ public class ModJoin extends DPJoin {
      */
     public final int[] offsets;
     /**
-     * Whether it is the first evaluation
+     * The number of down operations for each table
      */
-    public final boolean[] firstEval;
+    public final int[] downOps;
+    /**
+     * The number of down operations for each table
+     */
+    public final int[] upOps;
     /**
      * Initializes join algorithm for given input query.
      *
@@ -101,7 +105,8 @@ public class ModJoin extends DPJoin {
         this.tupleIndexDelta = new int[nrJoined];
         this.nrVisits = new int[nrJoined];
         this.offsets = new int[nrJoined];
-        this.firstEval = new boolean[nrJoined];
+        this.downOps = new int[nrJoined];
+        this.upOps = new int[nrJoined];
     }
     /**
      * Calculates reward for progress during one invocation.
@@ -202,13 +207,27 @@ public class ModJoin extends DPJoin {
 //        writeLog((timer2 - timer1) + "\t" + (timer3 - timer2));
         int large = 0;
         largeTable = splitTable;
-        for (int i = 0; i < nrVisits.length; i++) {
-            if (nrVisits[i] > large && cardinalities[i] >= ParallelConfig.PARTITION_SIZE
-                    && !query.temporaryTables.contains(i)) {
-                large = nrVisits[i];
-                largeTable = i;
+        // large index
+//        for (int table = 0; table < nrJoined; table++) {
+//            if (nrVisits[table] > large && cardinalities[table] >= ParallelConfig.PARTITION_SIZE
+//                    && !query.temporaryTables.contains(table)) {
+//                large = nrVisits[table];
+//                largeTable = table;
+//            }
+//        }
+        // optimal model
+        double progress = 0;
+        for (int table = 0; table < nrJoined; table++) {
+            if (cardinalities[table] >= ParallelConfig.PARTITION_SIZE && !query.temporaryTables.contains(table)
+                    && nrVisits[table] > 0) {
+                double tableProgress = getSplitTableReward(order, table);
+                if (tableProgress > progress) {
+                    progress = tableProgress;
+                    largeTable = table;
+                }
             }
         }
+
         double reward = reward(joinOrder.order, tupleIndexDelta, offsets);
         // Get the first table whose cardinality is larger than 1.
         int firstTable = getFirstLargeTable(order);
@@ -618,10 +637,12 @@ public class ModJoin extends DPJoin {
             }
             this.nrVisits[nextTable] = preSize;
         }
+        downOps[nextTable]++;
 
         // Have reached end of current table? -> we backtrack.
         while (tupleIndices[nextTable] >= nextCardinality) {
             tupleIndices[nextTable] = 0;
+            upOps[nextTable]++;
             --curIndex;
             if (curIndex < 0) {
                 break;
@@ -680,6 +701,8 @@ public class ModJoin extends DPJoin {
         // Number of completed tuples added
         nrResultTuples = 0;
         Arrays.fill(this.nrVisits, 0);
+        Arrays.fill(this.downOps, 0);
+        Arrays.fill(this.upOps, 0);
         deepIndex = -1;
 
         // Execute join order until budget depleted or all input finished -
@@ -778,6 +801,8 @@ public class ModJoin extends DPJoin {
         // Number of completed tuples added
         nrResultTuples = 0;
         Arrays.fill(this.nrVisits, 0);
+        Arrays.fill(this.downOps, 0);
+        Arrays.fill(this.upOps, 0);
         // Execute join order until budget depleted or all input finished -
         // at each iteration start, tuple indices contain next tuple
         // combination to look at.
@@ -842,5 +867,22 @@ public class ModJoin extends DPJoin {
     @Override
     public boolean isFinished() {
         return isFinished || lastState.isFinished();
+    }
+
+    public double getSplitTableReward(int[] joinOrder, int splitTable) {
+        double progress = 0;
+        double weight = 1;
+        for (int joinIndex = 0; joinIndex < nrJoined; joinIndex++) {
+            int table = joinOrder[joinIndex];
+            int indexSize = nrVisits[table];
+            if (indexSize > 0) {
+                int downOperations = downOps[table];
+                int upOperations = upOps[table];
+                weight *= indexSize;
+                progress += weight * (table == splitTable ? (nrThreads * downOperations - indexSize * upOperations) :
+                        (downOperations - indexSize * upOperations));
+            }
+        }
+        return progress;
     }
 }

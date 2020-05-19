@@ -437,7 +437,7 @@ public class SkinnerCmd {
                     output += "PSJ_" + ParallelConfig.EXE_THREADS + caseName + ".txt";
                 }
                 else if (spec == 8) {
-                    output += "APS_" + ParallelConfig.EXE_THREADS + caseName + ".txt";
+                    output += "PSAPS_" + ParallelConfig.EXE_THREADS + caseName + ".txt";
                 }
                 else if (spec == 9) {
                     output += "SSPT_" + ParallelConfig.EXE_THREADS + caseName + ".txt";
@@ -445,6 +445,12 @@ public class SkinnerCmd {
                 else if (spec == 10) {
                     String prefix = ParallelConfig.HEURISTIC_POLICY == 0 ? "CHPS_" : "SHPS_";
                     output += prefix + ParallelConfig.EXE_THREADS + caseName + ".txt";
+                }
+                else if (spec == 11) {
+                    output += "DPL_" + ParallelConfig.EXE_THREADS + caseName + ".txt";
+                }
+                else if (spec == 12) {
+                    output += "DPM_" + ParallelConfig.EXE_THREADS + caseName + ".txt";
                 }
             } else {
                 output += "Seq_1.txt";

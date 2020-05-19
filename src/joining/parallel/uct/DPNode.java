@@ -352,7 +352,8 @@ public class DPNode {
         int nrVisits = 0;
         int[] nrTries = new int[nrActions];
         double[] accumulatedReward = new double[nrActions];
-        if (ParallelConfig.PARALLEL_SPEC == 0) {
+        if (ParallelConfig.PARALLEL_SPEC == 0 || ParallelConfig.PARALLEL_SPEC == 11
+                || ParallelConfig.PARALLEL_SPEC == 12) {
             for (int i = 0; i < nrThreads; i++) {
                 NodeStatistics threadStats = nodeStatistics[i];
                 nrVisits += threadStats.nrVisits;
@@ -558,7 +559,8 @@ public class DPNode {
                     playout(roundCtr, joinOrder, joinOp);
             // update UCT statistics and return reward
 //            reward = 0.01;
-            if (ParallelConfig.PARALLEL_SPEC == 0) {
+            if (ParallelConfig.PARALLEL_SPEC == 0 || ParallelConfig.PARALLEL_SPEC == 11
+                    || ParallelConfig.PARALLEL_SPEC == 12) {
                 if (treeLevel <= joinOp.deepIndex) {
                     nodeStatistics[tid].updateStatistics(reward, action);
                 }
@@ -628,6 +630,20 @@ public class DPNode {
         int splitLen = 5;
         int splitSize = ParallelConfig.PARTITION_SIZE;
         int splitTable = joinOrder[0];
+        if (ParallelConfig.PARALLEL_SPEC == 11) {
+            return splitTable;
+        }
+        else if (ParallelConfig.PARALLEL_SPEC == 12) {
+            int max = cardinalities[splitTable];
+            for (int i = 1; i < nrTables; i++) {
+                int table = joinOrder[i];
+                int cardinality = cardinalities[table];
+                if (cardinality > max && !query.temporaryTables.contains(table)) {
+                    splitTable = table;
+                }
+            }
+            return splitTable;
+        }
         int end = Math.min(splitLen, nrTables);
         int start = nrTables < splitLen ? 0 : 1;
         for (int i = start; i < end; i++) {

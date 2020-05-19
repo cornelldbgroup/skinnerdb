@@ -506,7 +506,6 @@ public class SyncNode {
             Future<Double> futureResult = futures.get(i);
             try {
                 double result = futureResult.get();
-//                System.out.println(i + ": " + Arrays.toString(joinOrders.get(i)) + " " + result);
                 reward += result;
             } catch (InterruptedException | ExecutionException e) {
                 e.printStackTrace();

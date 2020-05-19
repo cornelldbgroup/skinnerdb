@@ -19,7 +19,7 @@ import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.Function;
 import net.sf.jsqlparser.expression.LongValue;
 import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
-import net.sf.jsqlparser.expression.operators.relational.EqualsTo;
+import net.sf.jsqlparser.expression.operators.relational.*;
 import net.sf.jsqlparser.schema.Column;
 import net.sf.jsqlparser.schema.Table;
 import net.sf.jsqlparser.statement.select.AllColumns;
@@ -476,11 +476,16 @@ public class QueryInfo {
 							int index = aliasToIndex.get(alias);
 							TableInfo tableInfo = CatalogManager.currentDB.
 									nameToTable.get(aliasToTable.get(alias));
-							if (tableInfo.tempTable || temporaryAlias.contains(alias)) {
-								temporaryTables.add(index);
-								for (String another: curInfo.aliasesMentioned) {
-									if (!another.equals(alias)) {
-										temporaryConnection.put(index, aliasToIndex.get(another));
+							if (!(curInfo.finalExpression instanceof GreaterThanEquals ||
+									curInfo.finalExpression instanceof GreaterThan ||
+									curInfo.finalExpression instanceof MinorThanEquals ||
+									curInfo.finalExpression instanceof MinorThan)) {
+								if (tableInfo.tempTable || temporaryAlias.contains(alias)) {
+									temporaryTables.add(index);
+									for (String another: curInfo.aliasesMentioned) {
+										if (!another.equals(alias)) {
+											temporaryConnection.put(index, aliasToIndex.get(another));
+										}
 									}
 								}
 							}

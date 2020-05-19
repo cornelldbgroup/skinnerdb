@@ -26,6 +26,10 @@ public class ParallelConfig {
 	 */
 	public final static boolean CONSTRAINTS = false;
 	/**
+	 * The size of cache for each batch.
+	 */
+    public static final int MAX_CACHE_SIZE = 50000;
+    /**
 	 * Maximal number of tuples per batch during execution.
 	 */
 	public static int EXE_THREADS = 1;
@@ -78,6 +82,9 @@ public class ParallelConfig {
 	 * 7: Extended PSS
 	 * 8: New Adaptive Partition
 	 * 9: One search thread and multiple executor threads
+	 * 10: heuristics and learning
+	 * 11: DPL
+	 * 12: DPM
 	 */
 	public static int PARALLEL_SPEC = 8;
 	/**

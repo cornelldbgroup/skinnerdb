@@ -76,7 +76,7 @@ public class RootTask implements Callable<RootResult> {
         while (!finish.get()) {
             ++roundCtr;
             double reward;
-            reward = root.sample(roundCtr, joinOrder, spJoin, policy, false);
+            reward = root.sample(roundCtr, joinOrder, spJoin, policy, true);
             // Count reward except for final sample
             if (!spJoin.isFinished()) {
                 accReward += reward;
@@ -89,10 +89,10 @@ public class RootTask implements Callable<RootResult> {
                 }
                 break;
             }
-//            if (JoinConfig.FORGET && roundCtr == nextForget) {
-//                root = new SPNode(0, query, true, spJoin.nrThreads);
-//                nextForget *= 10;
-//            }
+            if (JoinConfig.FORGET && roundCtr == nextForget) {
+                root = new SPNode(0, query, true, spJoin.nrThreads);
+                nextForget *= 10;
+            }
 //            joinOp.writeLog("Episode Time: " + (end - start) + "\tReward: " + reward);
         }
         // Materialize result table

@@ -7,6 +7,7 @@ import query.QueryInfo;
 
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.IntStream;
 
 /**
@@ -114,6 +115,7 @@ public class SPNode {
      * Timeout for next forget
      */
     public final int[] nextForget;
+    private final ReentrantLock mutex = new ReentrantLock();
 
     /**
      * Initialize UCT root node.
@@ -360,9 +362,11 @@ public class SPNode {
      * @param reward         reward achieved
      */
     void updateStatistics(int selectedAction, double reward, int tid) {
+        mutex.lock();
         accumulatedReward[tid][selectedAction] += reward;
         ++nrVisits[tid];
         ++nrTries[tid][selectedAction];
+        mutex.unlock();
     }
     /**
      * Randomly complete join order with remaining tables,
@@ -468,16 +472,18 @@ public class SPNode {
         }
     }
 
-    public void maxJoinOrder(int[] joinOrder, int tid) {
+    public void maxJoinOrder(int[] joinOrder, int tid, double[] probs) {
         if (nrActions > 0) {
             int maxAction = -1;
             double maxRewad = -1;
             NodeStatistics threadStats = nodeStatistics[tid];
+            double accumulation = 0.0;
             for(Integer recAction : recommendedActions) {
                 int threadTries = threadStats.nrTries[recAction];
                 double reward = 0;
                 if (threadTries != 0) {
                     reward = threadStats.accumulatedReward[recAction] / threadTries;
+                    accumulation += threadTries;
                 }
                 if (reward > maxRewad) {
                     maxRewad = reward;
@@ -488,6 +494,12 @@ public class SPNode {
             int table = nextTable[maxAction];
             joinOrder[treeLevel] = table;
             SPNode child = childNodes[maxAction];
+            double probability = accumulation == 0 ? 1.0 / recommendedActions.size() :
+                    (threadStats.nrTries[maxAction] + 1) / (accumulation + recommendedActions.size());
+            if (probability >= 1.0) {
+                probability = 0.99;
+            }
+            probs[treeLevel] = probability;
             if (child == null) {
                 int lastTable = joinOrder[treeLevel];
                 Set<Integer> newlyJoined = new HashSet<>(joinedTables);
@@ -501,6 +513,7 @@ public class SPNode {
                         if (!newlyJoined.contains(joinedTable) &&
                                 query.connected(newlyJoined, joinedTable)) {
                             joinOrder[posCtr] = joinedTable;
+                            probs[posCtr] = 1.0 / (nrTables - newlyJoined.size());
                             newlyJoined.add(joinedTable);
                             foundTable = true;
                             break;
@@ -510,6 +523,7 @@ public class SPNode {
                         for (int joinedTable : unjoinedTablesShuffled) {
                             if (!newlyJoined.contains(joinedTable)) {
                                 joinOrder[posCtr] = joinedTable;
+                                probs[posCtr] = 1.0 / (nrTables - newlyJoined.size());
                                 newlyJoined.add(joinedTable);
                                 break;
                             }
@@ -518,7 +532,7 @@ public class SPNode {
                 }
             }
             else {
-                child.maxJoinOrder(joinOrder, tid);
+                child.maxJoinOrder(joinOrder, tid, probs);
             }
         }
     }

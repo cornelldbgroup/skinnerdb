@@ -43,16 +43,23 @@ public class ExecutorTask implements Callable<TaskResult> {
      */
     private int[][] bestJoinOrder;
     /**
+     * The probability for each prefix in the best join order assigned to
+     * each executor threads by the searching thread.
+     */
+    private double[][] bestProbs;
+    /**
      * Multiple join operators for threads
      */
     private final List<FixJoin> fixJoins;
 
-    public ExecutorTask(QueryInfo query, FixJoin spJoin, AtomicBoolean finish, int[][] bestJoinOrder,
+    public ExecutorTask(QueryInfo query, FixJoin spJoin, AtomicBoolean finish,
+                        int[][] bestJoinOrder, double[][] bestProbs,
                         List<FixJoin> fixJoins) {
         this.query = query;
         this.spJoin = spJoin;
         this.finish = finish;
         this.bestJoinOrder = bestJoinOrder;
+        this.bestProbs = bestProbs;
         this.fixJoins = fixJoins;
     }
 
@@ -104,8 +111,14 @@ public class ExecutorTask implements Callable<TaskResult> {
                 // assign the best join order to next thread.
                 if (roundCtr == lastCount + nextPeriod && nrExecutors >= 1) {
                     int[] best = new int[nrTables];
-                    root.maxJoinOrder(best, 0);
-
+                    double[] probs = new double[nrTables];
+                    root.maxJoinOrder(best, 0, probs);
+                    for (int i = 1; i < nrTables; i++) {
+                        probs[i] = probs[i-1] * probs[i];
+                    }
+                    for (int i = 0; i < nrTables - 1; i++) {
+                        probs[i] = probs[i] - probs[i+1];
+                    }
                     boolean equal = true;
                     for (int i = 0; i < nrTables; i++) {
                         if (best[i] != bestJoinOrder[nextThread][i]) {
@@ -114,7 +127,9 @@ public class ExecutorTask implements Callable<TaskResult> {
                         }
                     }
                     if (!equal) {
+//                        best = new int[]{0, 2, 3, 4, 1, 5, 6, 7};
                         System.arraycopy(best, 0, bestJoinOrder[nextThread], 0, nrTables);
+                        System.arraycopy(probs, 0, bestProbs[nextThread], 0, nrTables);
                         bestJoinOrder[nextThread][nrTables] = 2;
                         fixJoins.get(nextThread).terminate.set(true);
                         System.out.println("Assign " + Arrays.toString(best)
@@ -149,6 +164,7 @@ public class ExecutorTask implements Callable<TaskResult> {
         }
         else {
             int[] order = bestJoinOrder[tid];
+            double[] probs = bestProbs[tid];
             int[] joinOrder = new int[nrTables];
             joinOrder[0] = -1;
             while (!finish.get()) {
@@ -171,14 +187,8 @@ public class ExecutorTask implements Callable<TaskResult> {
                         break;
                     }
                 }
-                if (order[nrTables] == 1) {
-                    System.arraycopy(order, 0, joinOrder, 0, nrTables);
-                    order[nrTables] = 0;
-                }
-                else if (order[nrTables] == 2) {
-                    System.arraycopy(order, 0, joinOrder, 0, nrTables);
-                    spJoin.isFixed = true;
-                }
+                System.arraycopy(order, 0, joinOrder, 0, nrTables);
+                System.arraycopy(probs, 0, spJoin.joinProbs, 0, nrTables);
             }
             // Materialize result table
             long timer2 = System.currentTimeMillis();

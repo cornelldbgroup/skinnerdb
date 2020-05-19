@@ -80,5 +80,5 @@ public class JoinConfig {
 	/**
 	 * Whether to share offsets among different thread.
 	 */
-	public static boolean OFFSETS_SHARING = false;
+	public static boolean OFFSETS_SHARING = true;
 }

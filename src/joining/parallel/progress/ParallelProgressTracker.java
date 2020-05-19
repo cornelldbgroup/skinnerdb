@@ -305,12 +305,7 @@ public class ParallelProgressTracker {
 
         // Update table offset considering last fully treated tuple
         int lastTreatedTuple = state.tupleIndices[firstTable] - 1;
-        if (JoinConfig.OFFSETS_SHARING) {
-            tableOffset[firstTable] = Math.max(lastTreatedTuple, tableOffset[firstTable]);
-        }
-        else {
-            tableOffsetMaps[threadID][0][firstTable] = Math.max(lastTreatedTuple, tableOffsetMaps[threadID][0][firstTable]);
-        }
+        tableOffsetMaps[threadID][0][firstTable] = Math.max(lastTreatedTuple, tableOffsetMaps[threadID][0][firstTable]);
     }
 
     /**
@@ -426,7 +421,7 @@ public class ParallelProgressTracker {
         // Integrate progress from join orders with same prefix
         ThreadProgress curPrefixProgress = sharedProgress;
         int upperLevel = Math.min(THRESHOLD, nrTables);
-        releaseReadLock(firstTable);
+        requireReadLock(firstTable);
         for (int joinCtr = 0; joinCtr < upperLevel; ++joinCtr) {
             int table = order[joinCtr];
             curPrefixProgress = curPrefixProgress.childNodes[table];

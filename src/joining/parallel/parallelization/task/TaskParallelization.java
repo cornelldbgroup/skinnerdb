@@ -77,13 +77,14 @@ public class TaskParallelization extends Parallelization {
         List<String>[] logs = new List[nrThreads];
         // best join orders
         int[][] best = new int[nrThreads][nrTables + 1];
+        double[][] probs = new double[nrThreads][nrTables];
         int nrExecutors = Math.min(ParallelConfig.NR_EXECUTORS + 1, nrThreads);
         for (int i = 0; i < nrExecutors; i++) {
             logs[i] = new ArrayList<>();
         }
         for (int i = 0; i < nrExecutors; i++) {
             FixJoin spJoin = spJoins.get(i);
-            ExecutorTask executorTask = new ExecutorTask(query, spJoin, end, best, spJoins);
+            ExecutorTask executorTask = new ExecutorTask(query, spJoin, end, best, probs, spJoins);
             tasks.add(executorTask);
         }
         long executionStart = System.currentTimeMillis();

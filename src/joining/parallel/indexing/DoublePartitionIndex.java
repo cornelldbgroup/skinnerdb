@@ -179,7 +179,7 @@ public class DoublePartitionIndex extends PartitionIndex {
                 }
             });
         }
-        nrKeys = this.cardinality;
+        nrKeys = this.keyToPositions.size();
     }
 
 

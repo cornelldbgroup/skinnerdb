@@ -143,7 +143,12 @@ public class SubJoin extends SPJoin {
         }
         int[] offsets;
         if (JoinConfig.OFFSETS_SHARING) {
-            offsets = Arrays.copyOf(tracker.tableOffset, nrJoined);
+            offsets = new int[nrJoined];
+            for (int table = 0; table < nrJoined; table++) {
+                for (int i = 0; i < nrThreads; i++) {
+                    offsets[table] = Math.max(offsets[table], tracker.tableOffsetMaps[i][0][table]);
+                }
+            }
         }
         else {
             offsets = tracker.tableOffsetMaps[tid][0];
@@ -292,13 +297,17 @@ public class SubJoin extends SPJoin {
      * @return				next join index
      */
     int proposeNextInScope(int[] joinOrder, List<List<JoinPartitionIndexWrapper>> indexWrappersList,
-                           int curIndex, int[] tupleIndices) {
+                           int curIndex, int[] tupleIndices, boolean eval) {
         int nextTable = joinOrder[curIndex];
         int nextCardinality = cardinalities[nextTable];
         List<JoinPartitionIndexWrapper> indexWrappers = indexWrappersList.get(curIndex);
+        int priorTable = -1;
         // If there is no equi-predicates.
         if (indexWrappers.isEmpty()) {
             tupleIndices[nextTable]++;
+            if (query.temporaryTables.contains(nextTable) && !eval) {
+                priorTable = query.temporaryConnection.get(nextTable);
+            }
         }
         else {
             boolean first = true;
@@ -344,8 +353,7 @@ public class SubJoin extends SPJoin {
         }
         // Have reached end of current table? -> we backtrack.
         while (tupleIndices[nextTable] >= nextCardinality) {
-            if (query.temporaryTables.contains(nextTable)) {
-                int priorTable = query.temporaryConnection.get(nextTable);
+            if (priorTable >= 0) {
                 while (nextTable != priorTable) {
                     tupleIndices[nextTable] = 0;
                     --curIndex;
@@ -353,6 +361,7 @@ public class SubJoin extends SPJoin {
                     nextCardinality = cardinalities[nextTable];
                 }
                 tupleIndices[nextTable] += 1;
+                priorTable = -1;
             }
             else {
                 tupleIndices[nextTable] = 0;
@@ -423,7 +432,7 @@ public class SubJoin extends SPJoin {
                     result.add(tupleIndices);
 //                    writeLog("INFO:Bingo: " + Arrays.toString(tupleIndices));
                     joinIndex = proposeNextInScope(
-                            plan.joinOrder.order, joinIndices, joinIndex, tupleIndices);
+                            plan.joinOrder.order, joinIndices, joinIndex, tupleIndices, true);
                 } else {
                     // No complete result row -> complete further
                     joinIndex++;
@@ -433,7 +442,7 @@ public class SubJoin extends SPJoin {
                 // At least one of applicable predicates evaluates to false -
                 // try next tuple in same table.
                 joinIndex = proposeNextInScope(
-                        plan.joinOrder.order, joinIndices, joinIndex, tupleIndices);
+                        plan.joinOrder.order, joinIndices, joinIndex, tupleIndices, false);
             }
             --remainingBudget;
         }
