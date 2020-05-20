@@ -9,12 +9,14 @@ import java.util.Map.Entry;
 
 import java.util.Random;
 
+import net.sf.jsqlparser.expression.BinaryExpression;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.Function;
 import net.sf.jsqlparser.expression.NotExpression;
 import net.sf.jsqlparser.expression.StringValue;
 import net.sf.jsqlparser.expression.operators.relational.EqualsTo;
 import net.sf.jsqlparser.expression.operators.relational.ExpressionList;
+import net.sf.jsqlparser.expression.operators.relational.GreaterThan;
 import net.sf.jsqlparser.schema.Column;
 import net.sf.jsqlparser.statement.select.PlainSelect;
 import query.where.WhereUtil;
@@ -46,33 +48,30 @@ public class TransformQueries {
 			List<Expression> newPreds = new ArrayList<>();
 			for (Expression oldPred : oldPreds) {
 				boolean predReplaced = false;
-				if (oldPred instanceof EqualsTo) {
-					EqualsTo equals = (EqualsTo)oldPred;
-					Expression left = equals.getLeftExpression();
-					Expression right = equals.getRightExpression();
+				if (random.nextDouble()<changeProb) {
+					// Extract from binary expressions
 					Expression constExpr = null;
 					Expression columnExpr = null;
-					if (left instanceof Column && 
-							right instanceof StringValue) {
-						constExpr = right;
-						columnExpr = left;
-					} else if (left instanceof StringValue && 
-							right instanceof Column) {
-						constExpr = left;
-						columnExpr = right;
+					if (oldPred instanceof BinaryExpression) {
+						BinaryExpression binary = (BinaryExpression)oldPred;
+						Expression left = binary.getLeftExpression();
+						Expression right = binary.getRightExpression();
+						if (left instanceof Column && 
+								right instanceof StringValue) {
+							constExpr = right;
+							columnExpr = left;
+						} else if (left instanceof StringValue && 
+								right instanceof Column) {
+							constExpr = left;
+							columnExpr = right;
+						}						
 					}
 					if (constExpr != null) {
-						if (constExpr instanceof StringValue) {
-							if (random.nextDouble()<changeProb) {
-								/*
-								EqualsTo notEquals = new EqualsTo();
-								notEquals.setNot();
-								notEquals.setLeftExpression(columnExpr);
-								String constStr = ((StringValue) constExpr).getValue();
-								StringValue notValue = new StringValue(constStr + "XXX");
-								notEquals.setRightExpression(notValue);
-								newPreds.add(notEquals);
-								*/
+						if (oldPred instanceof GreaterThan) {
+							
+						} else if (oldPred instanceof EqualsTo) {
+							EqualsTo equals = (EqualsTo)oldPred;
+							if (constExpr instanceof StringValue) {
 								Function eqlFun = new Function();
 								eqlFun.setName("eqlFun");
 								List<Expression> eqlList = new ArrayList<>();
@@ -87,10 +86,11 @@ public class TransformQueries {
 								} else {
 									newPreds.add(eqlFun);
 								}
-								predReplaced = true;
+								predReplaced = false;
 							}
-						}
+						}						
 					}
+
 				}
 				if (!predReplaced) {
 					newPreds.add(oldPred);
