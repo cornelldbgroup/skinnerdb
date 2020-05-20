@@ -11,7 +11,7 @@ import buffer.BufferManager;
 import catalog.CatalogManager;
 import catalog.info.ColumnInfo;
 import catalog.info.TableInfo;
-import com.sun.tools.javadoc.Start;
+//import com.sun.tools.javadoc.Start;
 import compression.Compressor;
 import config.*;
 import data.ColumnData;
