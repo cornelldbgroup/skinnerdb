@@ -101,4 +101,20 @@ public class JoinStats {
      * A list of all generated tuples for sub queries.
      */
     public static List<String> subAllTuples;
+    /**
+     * Size of temporary tables and indexes.
+     */
+    public static List<Long> temporaryTableIndexSize;
+    /**
+     * Size of uct tree.
+     */
+    public static List<Long> uctTreeSize;
+    /**
+     * Size of progress tracker.
+     */
+    public static List<Long> progressTrackerSize;
+    /**
+     * Size of join algorithm.
+     */
+    public static List<Long> algorithmSize;
 }

@@ -537,4 +537,14 @@ public class SPNode {
         }
     }
 
+    public long getSize(boolean isLocal) {
+        long size = isLocal ? nodeStatistics.length * nrActions * 12 : nrActions * 12;
+        for (SPNode node: childNodes) {
+            if (node != null) {
+                size += node.getSize(isLocal);
+            }
+        }
+        return size;
+    }
+
 }

@@ -11,7 +11,6 @@ import buffer.BufferManager;
 import catalog.CatalogManager;
 import catalog.info.ColumnInfo;
 import catalog.info.TableInfo;
-import com.sun.tools.javadoc.Start;
 import compression.Compressor;
 import config.*;
 import data.ColumnData;
@@ -34,14 +33,8 @@ import net.sf.jsqlparser.statement.select.Select;
 import print.RelationPrinter;
 import query.ColumnRef;
 import query.SQLexception;
-import statistics.JoinStats;
-import statistics.PostStats;
-import statistics.PreStats;
 import statistics.QueryStats;
 import tools.Configuration;
-import types.SQLtype;
-
-import javax.swing.plaf.synth.ColorType;
 
 /**
  * Runs Skinner command line console.
@@ -414,7 +407,8 @@ public class SkinnerCmd {
             String queries = Configuration.getProperty(benchmark, "../imdb/queries");
             String newInput = "bench " + queries + " ";
             String warmup = StartupConfig.WARMUP_RUN ? "warmup/" : "";
-            String output = "./" + warmup + benchmark.toLowerCase() + "/";
+            String memory = StartupConfig.Memory ? "memory/" : "";
+            String output = "./" + warmup + memory + benchmark.toLowerCase() + "/";
             String caseName = GeneralConfig.TEST_CASE > 0 ? "_" + GeneralConfig.TEST_CASE : "";
             if (GeneralConfig.isParallel) {
                 int spec = ParallelConfig.PARALLEL_SPEC;

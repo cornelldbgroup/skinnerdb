@@ -1,8 +1,10 @@
 package joining.parallel.parallelization.lockfree;
 
+import buffer.BufferManager;
 import config.JoinConfig;
 import config.LoggingConfig;
 import config.ParallelConfig;
+import config.StartupConfig;
 import expressions.compilation.KnaryBoolEval;
 import joining.parallel.plan.LeftDeepPartitionPlan;
 import joining.progress.ProgressTracker;
@@ -106,6 +108,8 @@ public class LockFreeParallelization extends Parallelization {
         long executionEnd = System.currentTimeMillis();
         JoinStats.exeTime = executionEnd - executionStart;
         JoinStats.subExeTime.add(JoinStats.exeTime);
+
+
         futures.forEach(futureResult -> {
             try {
                 LockFreeResult result = futureResult.get();
@@ -130,6 +134,13 @@ public class LockFreeParallelization extends Parallelization {
             LogUtils.writeLogs(logs, "verbose/lockFree/" + QueryStats.queryName);
         }
 
+        long size = resultList.size();
+        // memory consumption
+        if (StartupConfig.Memory) {
+            JoinStats.uctTreeSize.add(root.getSize());
+            JoinStats.progressTrackerSize.add(((ModJoin)dpJoins.get(0)).tracker.getSize());
+            JoinStats.algorithmSize.add(size * nrTables * 4);
+        }
         System.out.println("Result Set: " + resultList.size());
     }
 }

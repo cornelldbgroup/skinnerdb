@@ -2,10 +2,8 @@ package joining.parallel.parallelization.task;
 
 import config.LoggingConfig;
 import config.ParallelConfig;
-import joining.parallel.join.FixJoin;
-import joining.parallel.join.SPJoin;
-import joining.parallel.join.SubJoin;
-import joining.parallel.join.ThreadResult;
+import config.StartupConfig;
+import joining.parallel.join.*;
 import joining.parallel.parallelization.Parallelization;
 import joining.parallel.parallelization.search.SearchResult;
 import joining.parallel.parallelization.search.SearchScheduler;
@@ -148,10 +146,12 @@ public class TaskParallelization extends Parallelization {
         JoinStats.nrSamples = nrSamples;
         JoinStats.nrTuples = nrTuples;
 
+
         // Write log to the local file.
         if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
             LogUtils.writeLogs(logs, "verbose/task/" + QueryStats.queryName);
         }
+
         System.out.println("Result Set: " + resultList.size());
     }
 }

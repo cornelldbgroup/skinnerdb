@@ -28,7 +28,7 @@ public class ParallelConfig {
 	/**
 	 * The size of cache for each batch.
 	 */
-    public static final int MAX_CACHE_SIZE = 50000;
+    public static final int MAX_CACHE_SIZE = Integer.MAX_VALUE;
     /**
 	 * Maximal number of tuples per batch during execution.
 	 */
