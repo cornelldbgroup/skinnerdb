@@ -472,6 +472,25 @@ public class ParallelProgressTracker {
         return state;
     }
 
+    public long getSize() {
+        return getChildProgressSize(sharedProgress);
+    }
+
+    public long getChildProgressSize(ThreadProgress progress) {
+        long n = 0;
+        for (ThreadState state: progress.latestStates) {
+            if (state != null) {
+                n += (state.tableTupleIndexEpoch.length * 3) * 4;
+            }
+        }
+        for (ThreadProgress childProgress : progress.childNodes) {
+            if (childProgress != null) {
+                n += getChildProgressSize(childProgress);
+            }
+        }
+        return n;
+    }
+
     public int[] getSpace() {
         int lower = getLowerSpace();
         int upper = getUpperSpace();

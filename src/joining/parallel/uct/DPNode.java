@@ -676,4 +676,14 @@ public class DPNode {
         return splitTable;
     }
 
+    public long getSize() {
+        long size = nodeStatistics.length * nrActions * 12;
+        for (DPNode node: childNodes) {
+            if (node != null) {
+                size += node.getSize();
+            }
+        }
+        return size;
+    }
+
 }

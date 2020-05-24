@@ -138,6 +138,9 @@ public class Master {
 //						resultRel, tempResult);
 //			}
 			System.out.println(Arrays.toString(PostStats.subPostMillis.toArray()));
+			if (StartupConfig.Memory) {
+				JoinStats.temporaryTableIndexSize.add(BufferManager.getTempDataSize(subQueryResults));
+			}
 //			RelationPrinter.print(resultRel);
 			// Clean up intermediate results except result table
 			subQueryResults.add(resultRel);
@@ -157,6 +160,10 @@ public class Master {
 		JoinStats.subAllSamples = new ArrayList<>();
 		JoinStats.subAllTuples = new ArrayList<>();
 		PostStats.subPostMillis = new ArrayList<>();
+		JoinStats.temporaryTableIndexSize = new ArrayList<>();
+		JoinStats.uctTreeSize = new ArrayList<>();
+		JoinStats.progressTrackerSize = new ArrayList<>();
+		JoinStats.algorithmSize = new ArrayList<>();
 		JoinStats.nrTuples = 0;
 		JoinStats.nrSamples = 0;
 	}

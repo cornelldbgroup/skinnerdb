@@ -87,7 +87,10 @@ public class FixJoin extends SPJoin {
     public final double[] joinProbs;
 
 
+    public final long[] maxSizes;
+
     public int nrTuples = 0;
+
     /**
      * Initializes join algorithm for given input query.
      *
@@ -102,6 +105,7 @@ public class FixJoin extends SPJoin {
         this.planCache = new HashMap<>();
         this.progressCache = new HashMap[ParallelConfig.NR_BATCHES];
         this.statsCache = new HashMap[ParallelConfig.NR_BATCHES];
+        this.maxSizes = new long[ParallelConfig.NR_BATCHES];
         for (int i = 0; i < ParallelConfig.NR_BATCHES; i++) {
             this.progressCache[i] = new HashMap<>();
             this.statsCache[i] = new HashMap<>();
@@ -979,6 +983,8 @@ public class FixJoin extends SPJoin {
                             if (finalIndexStart + 1 == nrTables) {
                                 this.threadResultsList[bid] = threadResults;
                             }
+                            long max = this.maxSizes[bid];
+                            this.maxSizes[bid] = Math.max(max, allResultCounts);
                         }
 
                         // For the remaining tables, we cannot get tuples from a list.
@@ -1082,6 +1088,8 @@ public class FixJoin extends SPJoin {
 //                            long timer1 = System.currentTimeMillis();
 //                            System.out.println("Start: " + threadIndex + ": " +
 //                                    allResultCounts + " " + timer0 + " " + timer1 + " " + (timer1 - timer0) + " " + this.nrTuples);
+                            long max = this.maxSizes[bid];
+                            this.maxSizes[bid] = Math.max(max, allResultCounts);
                         }
                         this.threadResultsList[bid] = threadResults;
 //                        long startY = System.currentTimeMillis();

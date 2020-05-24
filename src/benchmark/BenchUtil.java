@@ -102,7 +102,8 @@ public class BenchUtil {
 				+ "Iterations\tLookups\tNrIndexEntries\tnrUniqueLookups\t"
 				+ "NrUctNodes\tNrPlans\tJoinCard\tNrSamples\tAvgReward\t"
 				+ "MaxReward\tTotalWork\tResultCard\tSubFilter\tSubIndex\t"
-				+ "SubPre\tSubJoin\tSubMaterial\tSubPost\tAllSamples\tAllTuples\tAllCases");
+				+ "SubPre\tSubJoin\tSubMaterial\tSubPost\tAllSamples\tAllTuples\tAllCases\t"
+				+ "DataSize\tUctSize\tStateSize\tJoinSize");
 	}
 	/**
 	 * Writes out statistics concerning last query execution
@@ -141,7 +142,11 @@ public class BenchUtil {
 		benchOut.print(Arrays.toString(PostStats.subPostMillis.toArray()) + "\t");
 		benchOut.print(Arrays.toString(JoinStats.subAllSamples.toArray()) + "\t");
 		benchOut.print(Arrays.toString(JoinStats.subAllTuples.toArray()) + "\t");
-		benchOut.println(Arrays.toString(JoinStats.subAllExeTime.toArray()));
+		benchOut.print(Arrays.toString(JoinStats.subAllExeTime.toArray()) + "\t");
+		benchOut.print(Arrays.toString(JoinStats.temporaryTableIndexSize.toArray()) + "\t");
+		benchOut.print(Arrays.toString(JoinStats.uctTreeSize.toArray()) + "\t");
+		benchOut.print(Arrays.toString(JoinStats.progressTrackerSize.toArray()) + "\t");
+		benchOut.println(Arrays.toString(JoinStats.algorithmSize.toArray()));
 		benchOut.flush();
 	}
 }

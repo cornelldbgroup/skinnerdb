@@ -7,6 +7,7 @@ import catalog.CatalogManager;
 import catalog.info.ColumnInfo;
 import catalog.info.TableInfo;
 import config.LoggingConfig;
+import config.StartupConfig;
 import data.ColumnData;
 import data.Dictionary;
 import data.DoubleData;
@@ -16,6 +17,8 @@ import data.StringData;
 import diskio.DiskUtil;
 import diskio.PathUtil;
 import indexing.Index;
+import joining.parallel.indexing.DoublePartitionIndex;
+import joining.parallel.indexing.IntPartitionIndex;
 import query.ColumnRef;
 import types.JavaType;
 import types.TypeUtil;
@@ -207,7 +210,7 @@ public class BufferManager {
 		for (TableInfo table : CatalogManager.currentDB.nameToTable.values()) {
 			if (table.tempTable && !except.contains(table.name)) {
 				String tableName = table.name;
-				for (ColumnInfo colInfo : table.nameToCol.values()) {					
+				for (ColumnInfo colInfo : table.nameToCol.values()) {
 					ColumnRef colRef = new ColumnRef(
 							tableName, colInfo.name);
 					unloadColumn(colRef);
@@ -251,5 +254,30 @@ public class BufferManager {
 		if (LoggingConfig.BUFFER_VERBOSE) {
 			System.out.println(text);
 		}
+	}
+
+	public static long getTempDataSize(Set<String> except) {
+		int size = 0;
+		for (TableInfo table : CatalogManager.currentDB.nameToTable.values()) {
+			if (table.tempTable && !except.contains(table.name)) {
+				String tableName = table.name;
+				for (ColumnInfo colInfo : table.nameToCol.values()) {
+					ColumnRef colRef = new ColumnRef(
+							tableName, colInfo.name);
+					Index index = colToIndex.get(colRef);
+					if (index instanceof DoublePartitionIndex) {
+						int positions = index.positions == null ? 0 : index.positions.length * 4;
+						size += index.cardinality * 8 + positions +
+								((DoublePartitionIndex) index).keyToPositions.size() * 12;
+					}
+					else if (index instanceof IntPartitionIndex) {
+						int positions = index.positions == null ? 0 : index.positions.length * 4;
+						size += index.cardinality * 4 + positions +
+								((IntPartitionIndex) index).keyToPositions.size() * 8;
+					}
+				}
+			}
+		}
+		return size;
 	}
 }

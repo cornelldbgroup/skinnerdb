@@ -2,7 +2,9 @@ package joining.parallel.parallelization.task;
 
 import config.JoinConfig;
 import config.ParallelConfig;
+import config.StartupConfig;
 import joining.parallel.join.FixJoin;
+import joining.parallel.join.ModJoin;
 import joining.parallel.join.SPJoin;
 import joining.parallel.join.SubJoin;
 import joining.parallel.parallelization.tree.TreeResult;
@@ -13,6 +15,7 @@ import joining.uct.SelectionPolicy;
 import joining.uct.UctNode;
 import logs.LogUtils;
 import query.QueryInfo;
+import statistics.JoinStats;
 import statistics.QueryStats;
 
 import java.util.ArrayList;
@@ -155,6 +158,11 @@ public class ExecutorTask implements Callable<TaskResult> {
                 spJoin.roundCtr = roundCtr;
                 spJoin.statsInstance.nrTuples = subJoin.statsInstance.nrTuples;
             }
+            // memory consumption
+            if (StartupConfig.Memory) {
+                JoinStats.uctTreeSize.add(root.getSize(true));
+                JoinStats.progressTrackerSize.add(subJoin.tracker.getSize());
+            }
             // Materialize result table
             long timer2 = System.currentTimeMillis();
             System.out.println("Thread " + tid + " " + (timer2 - timer1) + "\t Round: " + roundCtr);
@@ -195,6 +203,13 @@ public class ExecutorTask implements Callable<TaskResult> {
             spJoin.roundCtr = roundCtr;
             System.out.println("Thread " + tid + " " + (timer2 - timer1) + "\t Round: " + roundCtr);
             Set<ResultTuple> tuples = spJoin.result.tuples;
+            if (StartupConfig.Memory) {
+                long size = 0;
+                for (long batchSize: spJoin.maxSizes) {
+                    size += batchSize;
+                }
+                JoinStats.algorithmSize.add(Math.max(size, tuples.size()) * nrTables * 4 + 2000000);
+            }
             return new TaskResult(tuples, spJoin.logs, tid);
         }
     }
