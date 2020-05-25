@@ -474,7 +474,7 @@ public class FilterUCTNode {
             utility.put(curr,
                     saved - (this.chosenPreds.size() - curr.chosenPreds.size())
                             * curr.numRows);
-            for (int a = 0; a < nrActions; ++a) {
+            for (int a = 0; a < curr.nrActions; ++a) {
                 if (curr.childNodes[a] != null &&
                         !cache.contains(curr.childNodes[a])) {
                     children.push(curr.childNodes[a]);
