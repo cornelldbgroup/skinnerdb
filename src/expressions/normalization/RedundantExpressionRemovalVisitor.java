@@ -11,11 +11,17 @@ import net.sf.jsqlparser.expression.operators.relational.GreaterThanEquals;
 import net.sf.jsqlparser.expression.operators.relational.MinorThan;
 import net.sf.jsqlparser.expression.operators.relational.MinorThanEquals;
 import net.sf.jsqlparser.schema.Column;
+import net.sf.jsqlparser.util.cnfexpression.MultiAndExpression;
+import net.sf.jsqlparser.util.cnfexpression.MultiOrExpression;
 
 import java.util.*;
 
 public class RedundantExpressionRemovalVisitor extends CopyVisitor {
+    private boolean shouldConvertToMulti;
 
+    public RedundantExpressionRemovalVisitor(boolean multiConversion) {
+        this.shouldConvertToMulti = multiConversion;
+    }
 
     @Override
     public void visit(AndExpression andExpression) {
@@ -170,18 +176,21 @@ public class RedundantExpressionRemovalVisitor extends CopyVisitor {
             visited.add(exprStack.pop());
         }
 
-        if (visited.size() == 1) {
-            exprStack.push(visited.get(0));
+        if (shouldConvertToMulti) {
+            MultiAndExpression and = new MultiAndExpression(visited);
+            exprStack.push(and);
         } else {
-            AndExpression conjunction =
-                    new AndExpression(visited.get(visited.size() - 2),
-                            visited.get(visited.size() - 1));
+            Expression prev = null;
 
-            for (int i = visited.size() - 3; i >= 0; i--) {
-                conjunction = new AndExpression(visited.get(i), conjunction);
+            for (Expression exp : visited) {
+                if (prev != null) {
+                    prev = new AndExpression(prev, exp);
+                } else {
+                    prev = exp;
+                }
             }
 
-            exprStack.push(conjunction);
+            exprStack.push(prev);
         }
     }
 
@@ -335,16 +344,21 @@ public class RedundantExpressionRemovalVisitor extends CopyVisitor {
             visited.add(exprStack.pop());
         }
 
-        Expression prev = null;
+        if (shouldConvertToMulti) {
+            MultiOrExpression expression = new MultiOrExpression(visited);
+            exprStack.push(expression);
+        } else {
+            Expression prev = null;
 
-        for (Expression exp : visited) {
-            if (prev != null) {
-                prev = new OrExpression(prev, exp);
-            } else {
-                prev = exp;
+            for (Expression exp : visited) {
+                if (prev != null) {
+                    prev = new OrExpression(prev, exp);
+                } else {
+                    prev = exp;
+                }
             }
-        }
 
-        exprStack.push(prev);
+            exprStack.push(prev);
+        }
     }
 }

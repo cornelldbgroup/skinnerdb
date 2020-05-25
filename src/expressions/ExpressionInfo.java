@@ -139,7 +139,7 @@ public class ExpressionInfo {
         this.afterSimplification = simplificationVisitor.opStack.pop();
 
         RedundantExpressionRemovalVisitor redudantVisitor =
-                new RedundantExpressionRemovalVisitor();
+                new RedundantExpressionRemovalVisitor(false);
         VisitorUtil.tryVisit(afterSimplification, redudantVisitor);
         Expression redundantRemoved = redudantVisitor.exprStack.pop();
 
