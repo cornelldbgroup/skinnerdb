@@ -451,7 +451,7 @@ public class FilterUCTNode {
                                       UnaryBoolEval> cache) {
         FilterUCTNode parent = this.parent;
         while (parent != null) {
-            if (parent.parent == null || cache.contains(parent.chosenPreds)) {
+            if (parent.parent == null || cache.contains(parent.chosenPreds) || !utility.containsKey(parent)) {
                 break;
             }
 
@@ -463,7 +463,8 @@ public class FilterUCTNode {
         Stack<FilterUCTNode> children = new Stack<>();
         for (int a = 0; a < nrActions; ++a) {
             if (this.childNodes[a] != null &&
-                    !cache.contains(this.childNodes[a])) {
+                    !cache.contains(this.childNodes[a]) &&
+                    utility.containsKey(this.childNodes[a])) {
                 children.push(this.childNodes[a]);
             }
         }
