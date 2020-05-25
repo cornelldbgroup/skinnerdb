@@ -184,7 +184,7 @@ public class RedundantExpressionRemovalVisitor extends CopyVisitor {
 
             for (Expression exp : visited) {
                 if (prev != null) {
-                    prev = new AndExpression(prev, exp);
+                    prev = new AndExpression(exp, prev);
                 } else {
                     prev = exp;
                 }
@@ -352,7 +352,7 @@ public class RedundantExpressionRemovalVisitor extends CopyVisitor {
 
             for (Expression exp : visited) {
                 if (prev != null) {
-                    prev = new OrExpression(prev, exp);
+                    prev = new OrExpression(exp, prev);
                 } else {
                     prev = exp;
                 }
