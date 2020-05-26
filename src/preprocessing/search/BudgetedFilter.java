@@ -5,13 +5,11 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.eclipse.collections.api.iterator.IntIterator;
 import org.eclipse.collections.api.list.ImmutableList;
 import org.eclipse.collections.api.list.primitive.MutableIntList;
-import parallel.ParallelService;
 
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Collection;
 import java.util.List;
-import java.util.concurrent.Future;
 
 public class BudgetedFilter {
     private List<MutableIntList> resultList;
@@ -89,55 +87,55 @@ public class BudgetedFilter {
                                     FilterState state) {
         long startTime = System.nanoTime();
 
-        List<Future> tasks = new ArrayList<>(state.batches);
+        //List<Future> tasks = new ArrayList<>(state.batches);
         for (int t = 0; t < state.batches; t++) {
             final int b = t;
-            tasks.add(ParallelService.POOL.submit(() -> {
-                final int start = begin + b * state.batchSize;
-                final int end = Math.min(start + state.batchSize, LAST_ROW);
-                final MutableIntList batchResult = result.get(b);
+            //tasks.add(ParallelService.POOL.submit(() -> {
+            final int start = begin + b * state.batchSize;
+            final int end = Math.min(start + state.batchSize, LAST_ROW);
+            final MutableIntList batchResult = result.get(b);
 
-                if (state.cachedEval != null) {
-                    ROW_LOOP:
-                    for (int row = start; row < end; row++) {
-                        if (state.cachedEval.evaluate(row) <= 0) {
+            if (state.cachedEval != null) {
+                ROW_LOOP:
+                for (int row = start; row < end; row++) {
+                    if (state.cachedEval.evaluate(row) <= 0) {
+                        continue ROW_LOOP;
+                    }
+
+                    for (int i = state.cachedTil + 1;
+                         i < state.order.length; i++) {
+                        UnaryBoolEval expr =
+                                compiled.get(state.order[i]);
+                        if (expr.evaluate(row) <= 0) {
                             continue ROW_LOOP;
                         }
-
-                        for (int i = state.cachedTil + 1;
-                             i < state.order.length; i++) {
-                            UnaryBoolEval expr =
-                                    compiled.get(state.order[i]);
-                            if (expr.evaluate(row) <= 0) {
-                                continue ROW_LOOP;
-                            }
-                        }
-
-                        batchResult.add(row);
                     }
-                } else {
-                    ROW_LOOP:
-                    for (int row = start; row < end; row++) {
-                        for (int predIndex : state.order) {
-                            UnaryBoolEval expr = compiled.get(predIndex);
-                            if (expr.evaluate(row) <= 0) {
-                                continue ROW_LOOP;
-                            }
-                        }
 
-                        batchResult.add(row);
-                    }
+                    batchResult.add(row);
                 }
-            }));
+            } else {
+                ROW_LOOP:
+                for (int row = start; row < end; row++) {
+                    for (int predIndex : state.order) {
+                        UnaryBoolEval expr = compiled.get(predIndex);
+                        if (expr.evaluate(row) <= 0) {
+                            continue ROW_LOOP;
+                        }
+                    }
+
+                    batchResult.add(row);
+                }
+            }
+            // }));
         }
 
-        for (Future task : tasks) {
+        /*for (Future task : tasks) {
             try {
                 task.get();
             } catch (Exception e) {
                 e.printStackTrace();
             }
-        }
+        }*/
 
         long endTime = System.nanoTime();
         return endTime - startTime;
