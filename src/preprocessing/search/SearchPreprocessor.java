@@ -26,8 +26,10 @@ import query.QueryInfo;
 import statistics.PreStats;
 
 import java.util.*;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingQueue;
 
 import static operators.Filter.*;
 import static preprocessing.PreprocessorUtil.*;
@@ -218,11 +220,10 @@ public class SearchPreprocessor implements Preprocessor {
         }
         Collection<MutableIntList> satisfyingRows =
                 shouldFilter ?
-                        filterUCTNaiveParallel(tableName, predicates,
+                        filterUCTParallel(tableName, predicates,
                                 compiled.toImmutable(), indices,
                                 values, unaryPred, preSummary.columnMapping) :
                         Arrays.asList();
-
         // Materialize relevant rows and columns
         String filteredName = NamingConfig.FILTERED_PRE + alias;
         List<String> columnNames = new ArrayList<>();
@@ -337,6 +338,124 @@ public class SearchPreprocessor implements Preprocessor {
         return resultList;
     }
 
+    private Collection<MutableIntList> filterUCTParallel(
+            String tableName,
+            ImmutableList<Expression> predicates,
+            ImmutableList<UnaryBoolEval> compiled,
+            List<HashIndex> indices,
+            List<List<Integer>> dataLocations,
+            ExpressionInfo unaryPred,
+            Map<ColumnRef, ColumnRef> colMap) throws Exception {
+        ConcurrentHashMap<List<Integer>, UnaryBoolEval> cache =
+                new ConcurrentHashMap<>();
+        Set<List<Integer>> toCompile = new HashSet<>();
+        int nrCompiled = compiled.size();
+        long nextCompile = 75;
+        final int CARDINALITY = CatalogManager.getCardinality(tableName);
+        long roundCtr = 0;
+        IndexFilter indexFilter = new IndexFilter(indices, dataLocations);
+        FilterUCTNode root = new FilterUCTNode(roundCtr,
+                nrCompiled, indices);
+        final BlockingQueue<ExecutionResult>
+                completedSimulations =
+                new LinkedBlockingQueue<>();
+        int currentSimulations = 0;
+        int lastCompletedRow = 0;
+        List<MutableIntList> resultList = new ArrayList<>();
+        BudgetedFilter filterOp = new BudgetedFilter(compiled, indexFilter,
+                CARDINALITY, resultList);
+
+        while (lastCompletedRow < CARDINALITY) {
+            if (currentSimulations == MAX_SIMULATIONS) {
+                ExecutionResult result = completedSimulations.take();
+                currentSimulations--;
+                FilterUCTNode.finalUpdateStatistics(result.selected, result.state, result.reward);
+                continue;
+            }
+
+            ++roundCtr;
+            currentSimulations++;
+
+            final FilterState state = new FilterState(nrCompiled);
+            Pair<FilterUCTNode, Boolean> sample = root.sample(roundCtr,
+                    state, cache, null);
+            final FilterUCTNode selected = sample.getLeft();
+            boolean playedOut = sample.getRight();
+
+            final int start = lastCompletedRow;
+            final int end;
+            if (playedOut) {
+                state.batchSize = ROWS_PER_TIMESTEP;
+                end = Math.min(start + ROWS_PER_TIMESTEP, CARDINALITY);
+            } else {
+                state.batchSize = LEAF_ROWS_PER_TIMESTEP;
+                end = Math.min(start + state.batches * LEAF_ROWS_PER_TIMESTEP,
+                        CARDINALITY);
+            }
+            lastCompletedRow = end;
+            FilterUCTNode.initialUpdateStatistics(selected, state);
+            List<Integer> outputId = initializeEpoch(resultList,
+                    state.batches);
+            ParallelService.POOL.submit(() -> {
+                double reward = filterOp.execute(start, outputId, state);
+                try {
+                    completedSimulations.put(new ExecutionResult(selected,
+                            reward, state, end - start));
+                } catch (Exception e) {}
+            });
+
+            if (ENABLE_COMPILATION && roundCtr == nextCompile) {
+                nextCompile += 100;
+
+                int compileSetSize = predicates.size();
+                HashMap<FilterUCTNode, Integer> savedCalls =
+                        new HashMap<>();
+                root.initializeUtility(savedCalls, cache);
+                for (int j = 0; j < Math.min(compileSetSize,
+                        savedCalls.size()); j++) {
+
+                    FilterUCTNode node = null;
+                    int maxSavedCalls = -1;
+                    for (Map.Entry<FilterUCTNode, Integer> entry :
+                            savedCalls.entrySet()) {
+                        if (entry.getValue() > maxSavedCalls) {
+                            maxSavedCalls = entry.getValue();
+                            node = entry.getKey();
+                        }
+                    }
+                    savedCalls.remove(node);
+                    node.updateUtility(savedCalls, cache);
+
+                    final List<Integer> preds = node.getChosenPreds();
+                    ParallelService.POOL.submit(() -> {
+                        Expression expr = null;
+                        for (int i = preds.size() - 1; i >= 0; i--) {
+                            if (expr == null) {
+                                expr = predicates.get(preds.get(i));
+                            } else {
+                                expr = new AndExpression(expr,
+                                        predicates.get(preds.get(i)));
+                            }
+                        }
+
+                        try {
+                            cache.put(preds, compilePred(unaryPred,
+                                    expr, colMap));
+                        } catch (Exception e) {}
+                    });
+                }
+            }
+        }
+
+
+        while (currentSimulations > 0) {
+            completedSimulations.take();
+            currentSimulations--;
+        }
+
+        return resultList;
+    }
+
     private Collection<MutableIntList> filterUCTNaiveParallel(
             String tableName,
             ImmutableList<Expression> predicates,
@@ -446,8 +565,7 @@ public class SearchPreprocessor implements Preprocessor {
 
                                 try {
                                     cache.put(preds, compilePred(unaryPred,
-                                            expr,
-                                            colMap));
+                                            expr, colMap));
                                 } catch (Exception e) {}
                             });
                         }
