@@ -10,7 +10,6 @@ public class FilterState {
     public final int[] order;
     public boolean avoidBranching;
     public List<Integer> actions;
-
     public int indexedTil;
 
     public UnaryBoolEval cachedEval;
@@ -18,6 +17,8 @@ public class FilterState {
 
     public int batches;
     public int batchSize;
+    public int start;
+    public int end;
 
     public FilterState(int numPredicates) {
         this.order = new int[numPredicates];
