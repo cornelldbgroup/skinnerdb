@@ -369,18 +369,19 @@ public class SearchPreprocessor implements Preprocessor {
         while (nextStart < CARDINALITY) {
             if (currentSimulations >= MAX_SIMULATIONS) {
                 ExecutionResult result = completedSimulations.take();
-                currentSimulations -= result.state.batches;
+                currentSimulations--;
                 FilterUCTNode.finalUpdateStatistics(result.selected, result.state, result.reward);
                 continue;
             }
 
             ++roundCtr;
+            currentSimulations++;
+
             final FilterState state = new FilterState(nrCompiled);
             Pair<FilterUCTNode, Boolean> sample = root.sample(roundCtr,
                     state, cache, null);
             final FilterUCTNode selected = sample.getLeft();
             boolean playedOut = sample.getRight();
-            currentSimulations += state.batches;
 
             final int start = nextStart;
             final int end;
@@ -451,8 +452,8 @@ public class SearchPreprocessor implements Preprocessor {
 
 
         while (currentSimulations > 0) {
-            ExecutionResult result = completedSimulations.take();
-            currentSimulations -= result.state.batches;
+            completedSimulations.take();
+            currentSimulations--;
         }
 
         return resultList;

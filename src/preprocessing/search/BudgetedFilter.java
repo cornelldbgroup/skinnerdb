@@ -89,7 +89,7 @@ public class BudgetedFilter {
                                     FilterState state) {
         long startTime = System.nanoTime();
 
-        List<Future> tasks = new ArrayList<>();
+        List<Future> tasks = new ArrayList<>(state.batches);
         for (int t = 0; t < state.batches; t++) {
             final int b = t;
             tasks.add(ParallelService.POOL.submit(() -> {
