@@ -361,21 +361,20 @@ public class SearchPreprocessor implements Preprocessor {
                 completedSimulations =
                 new LinkedBlockingQueue<>();
         int currentSimulations = 0;
-        int lastCompletedRow = 0;
+        int nextStart = 0;
         List<MutableIntList> resultList = new ArrayList<>();
         BudgetedFilter filterOp = new BudgetedFilter(compiled, indexFilter,
                 CARDINALITY, resultList);
 
-        while (lastCompletedRow < CARDINALITY) {
-            if (currentSimulations == MAX_SIMULATIONS) {
+        while (nextStart < CARDINALITY) {
+            if (currentSimulations >= MAX_SIMULATIONS) {
                 ExecutionResult result = completedSimulations.take();
-                currentSimulations--;
+                currentSimulations -= result.state.batches;
                 FilterUCTNode.finalUpdateStatistics(result.selected, result.state, result.reward);
                 continue;
             }
 
             ++roundCtr;
-
             final FilterState state = new FilterState(nrCompiled);
             Pair<FilterUCTNode, Boolean> sample = root.sample(roundCtr,
                     state, cache, null);
@@ -383,7 +382,7 @@ public class SearchPreprocessor implements Preprocessor {
             boolean playedOut = sample.getRight();
             currentSimulations += state.batches;
 
-            final int start = lastCompletedRow;
+            final int start = nextStart;
             final int end;
             if (playedOut) {
                 state.batchSize = ROWS_PER_TIMESTEP;
@@ -393,7 +392,7 @@ public class SearchPreprocessor implements Preprocessor {
                 end = Math.min(start + state.batches * LEAF_ROWS_PER_TIMESTEP,
                         CARDINALITY);
             }
-            lastCompletedRow = end;
+            nextStart = end;
             FilterUCTNode.initialUpdateStatistics(selected, state);
             List<Integer> outputId = initializeEpoch(resultList,
                     state.batches);
