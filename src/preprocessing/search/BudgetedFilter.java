@@ -87,10 +87,7 @@ public class BudgetedFilter {
                                     FilterState state) {
         long startTime = System.nanoTime();
 
-        //List<Future> tasks = new ArrayList<>(state.batches);
-        for (int t = 0; t < state.batches; t++) {
-            final int b = t;
-            //tasks.add(ParallelService.POOL.submit(() -> {
+        for (int b = 0; b < state.batches; b++) {
             final int start = begin + b * state.batchSize;
             final int end = Math.min(start + state.batchSize, LAST_ROW);
             final MutableIntList batchResult = result.get(b);
@@ -126,16 +123,7 @@ public class BudgetedFilter {
                     batchResult.add(row);
                 }
             }
-            // }));
         }
-
-        /*for (Future task : tasks) {
-            try {
-                task.get();
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }*/
 
         long endTime = System.nanoTime();
         return endTime - startTime;

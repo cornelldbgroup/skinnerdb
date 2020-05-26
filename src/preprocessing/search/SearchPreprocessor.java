@@ -370,7 +370,6 @@ public class SearchPreprocessor implements Preprocessor {
             if (currentSimulations >= MAX_SIMULATIONS) {
                 ExecutionResult result = completedSimulations.take();
                 currentSimulations--;
-                System.out.println("Ending: " + result.state.start + "-" + result.state.end);
                 FilterUCTNode.finalUpdateStatistics(result.selected, result.state, result.reward);
                 continue;
             }
@@ -396,7 +395,6 @@ public class SearchPreprocessor implements Preprocessor {
             }
             state.start = start;
             state.end = end;
-            System.out.println("Starting: " + start + "-" + end);
             nextStart = end;
             FilterUCTNode.initialUpdateStatistics(selected, state);
             List<Integer> outputId = initializeEpoch(resultList,
@@ -456,8 +454,7 @@ public class SearchPreprocessor implements Preprocessor {
 
 
         while (currentSimulations > 0) {
-            ExecutionResult result = completedSimulations.take();
-            System.out.println("Ending: " + result.state.start + "-" + result.state.end);
+            completedSimulations.take();
             currentSimulations--;
         }
 
