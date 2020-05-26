@@ -329,7 +329,8 @@ public class SearchPreprocessor implements Preprocessor {
                         try {
                             cache.put(preds, compilePred(unaryPred, expr,
                                     colMap));
-                        } catch (Exception e) {}
+                        } catch (Exception e) {
+                        }
                     });
                 }
             }
@@ -374,13 +375,13 @@ public class SearchPreprocessor implements Preprocessor {
             }
 
             ++roundCtr;
-            currentSimulations++;
 
             final FilterState state = new FilterState(nrCompiled);
             Pair<FilterUCTNode, Boolean> sample = root.sample(roundCtr,
                     state, cache, null);
             final FilterUCTNode selected = sample.getLeft();
             boolean playedOut = sample.getRight();
+            currentSimulations += state.batches;
 
             final int start = lastCompletedRow;
             final int end;
@@ -401,7 +402,8 @@ public class SearchPreprocessor implements Preprocessor {
                 try {
                     completedSimulations.put(new ExecutionResult(selected,
                             reward, state, end - start));
-                } catch (Exception e) {}
+                } catch (Exception e) {
+                }
             });
 
             if (ENABLE_COMPILATION && roundCtr == nextCompile) {
@@ -441,7 +443,8 @@ public class SearchPreprocessor implements Preprocessor {
                         try {
                             cache.put(preds, compilePred(unaryPred,
                                     expr, colMap));
-                        } catch (Exception e) {}
+                        } catch (Exception e) {
+                        }
                     });
                 }
             }
@@ -449,8 +452,8 @@ public class SearchPreprocessor implements Preprocessor {
 
 
         while (currentSimulations > 0) {
-            completedSimulations.take();
-            currentSimulations--;
+            ExecutionResult result = completedSimulations.take();
+            currentSimulations -= result.state.batches;
         }
 
         return resultList;
@@ -566,7 +569,8 @@ public class SearchPreprocessor implements Preprocessor {
                                 try {
                                     cache.put(preds, compilePred(unaryPred,
                                             expr, colMap));
-                                } catch (Exception e) {}
+                                } catch (Exception e) {
+                                }
                             });
                         }
                     }
