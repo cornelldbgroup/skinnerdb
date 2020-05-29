@@ -1,1 +1,1 @@
-SELECT mulheresmil_1.nome_da_sit_matricula_situacao_detalhada AS nome_da_sit_matricula_situacao_detalhada FROM mulheresmil_1 GROUP BY mulheresmil_1.nome_da_sit_matricula_situacao_detalhada LIMIT 26;
+SELECT mulheresmil_1.nome_da_sit_matricula_situacao_detalhada AS nome_da_sit_matricula_situacao_detalhada FROM mulheresmil_1;
