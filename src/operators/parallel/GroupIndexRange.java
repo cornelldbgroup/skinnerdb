@@ -32,6 +32,22 @@ public class GroupIndexRange {
      * A list of groups;
      */
     public Group[] groups;
+    /**
+     * First tuple index in range.
+     */
+    public int firstValue;
+    /**
+     * Last tuple index in range.
+     */
+    public int lastValue;
+    /**
+     * Last tuple index in range.
+     */
+    public int lastID;
+    /**
+     * Add more id.
+     */
+    public int addID;
 
     /**
      * Initialize range for first and

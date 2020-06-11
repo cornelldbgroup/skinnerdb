@@ -17,7 +17,7 @@ public class OperatorUtils {
      */
     public static List<RowRange> split(int cardinality) {
         List<RowRange> batches = new ArrayList<>();
-        int batchSize = Math.max(ParallelConfig.PARALLEL_SIZE, cardinality / 100);
+        int batchSize = Math.max(ParallelConfig.PARALLEL_SIZE, cardinality / 300);
         for (int batchCtr = 0; batchCtr * batchSize < cardinality;
              ++batchCtr) {
             int startIdx = batchCtr * batchSize;

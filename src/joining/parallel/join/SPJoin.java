@@ -121,6 +121,10 @@ public abstract class SPJoin {
      * The flag whether the space is re-partitioned.
      */
     public int nextDetect;
+    /**
+     * Statistics to store visit number
+     */
+    public final long[] visits;
 
     ExpressionCompiler compiler;
     KnaryBoolEval boolEval;
@@ -155,6 +159,7 @@ public abstract class SPJoin {
         this.result = new JoinResult(nrJoined);
         this.predToEval = predToEval;
         this.nrVisited = new int[nrJoined];
+        this.visits = new long[nrJoined];
         this.nrIndexed = new int[nrJoined];
         this.constraintsStats = new HashMap<>();
         query.constraints.forEach(pair -> constraintsStats.put(pair, new int[2]));

@@ -23,6 +23,7 @@ import preprocessing.Context;
 import query.ColumnRef;
 import types.SQLtype;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -200,7 +201,6 @@ public class ParallelAvgAggregate {
 			case INT:
 			{
 				IntData intSrc = (IntData)srcData;
-				System.out.println("groupBy");
 				int[] positions = index.positions;
 				int[] gids = index.groupIds;
 				IntStream.range(0, gids.length).parallel().forEach(gid -> {
@@ -222,25 +222,24 @@ public class ParallelAvgAggregate {
 				break;
 			}
 			case DOUBLE: {
-				DoubleData intSrc = (DoubleData)srcData;
-				System.out.println("groupBy");
+				DoubleData doubleSrc = (DoubleData)srcData;
 				int[] positions = index.positions;
 				int[] gids = index.groupIds;
-				IntStream.range(0, gids.length).parallel().forEach(gid -> {
+				Arrays.parallelSetAll(target.data, gid -> {
 					int pos = gids[gid];
 					int groupCard = positions[pos];
-					double data = 0;
+					double value = 0;
 					for (int i = pos + 1; i <= pos + groupCard; i++) {
 						int rid = positions[i];
-						data += intSrc.data[rid];
+						value += doubleSrc.data[rid];
 					}
-					if (data != 0) {
-						data = data / groupCard;
+					if (value != 0) {
+						value = value / groupCard;
 					}
 					if (evaluator != null) {
-						data = evaluator.evaluate(data);
+						value = evaluator.evaluate(value);
 					}
-					target.data[gid] = data;
+					return value;
 				});
 				break;
 			}

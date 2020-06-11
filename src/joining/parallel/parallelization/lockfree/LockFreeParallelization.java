@@ -59,11 +59,21 @@ public class LockFreeParallelization extends Parallelization {
         int nrTables = query.nrJoined;
         int nrSplits = query.equiJoinPreds.size() + nrTables;
         Map<Integer, LeftDeepPartitionPlan> planCache = new ConcurrentHashMap<>();
-        if (JoinConfig.NEWTRACKER && nrThreads > 1) {
+        if (JoinConfig.NEWTRACKER && nrThreads > 1 && ParallelConfig.PARALLEL_SPEC == 0) {
             ParallelProgressTracker tracker = new ParallelProgressTracker(nrTables, nrThreads, nrSplits);
             for (int i = 0; i < nrThreads; i++) {
                 ModJoin modJoin = new ModJoin(query, context, budget, nrThreads, i, predToEval, predToComp, planCache);
                 modJoin.tracker = tracker;
+                dpJoins.add(modJoin);
+            }
+        }
+        else if (ParallelConfig.PARALLEL_SPEC == 13) {
+            for (int i = 0; i < nrThreads; i++) {
+                ModJoin modJoin = new ModJoin(query, context, budget, nrThreads, i, predToEval, predToComp, planCache);
+                modJoin.trackers = new ProgressTracker[nrTables];
+                for (int table = 0; table < nrTables; table++) {
+                    modJoin.trackers[table] = new ProgressTracker(nrTables, modJoin.cardinalities);
+                }
                 dpJoins.add(modJoin);
             }
         }
@@ -138,7 +148,12 @@ public class LockFreeParallelization extends Parallelization {
         // memory consumption
         if (StartupConfig.Memory) {
             JoinStats.uctTreeSize.add(root.getSize());
-            JoinStats.progressTrackerSize.add(((ModJoin)dpJoins.get(0)).tracker.getSize());
+            if (ParallelConfig.PARALLEL_SPEC == 0 && nrThreads == 1) {
+                JoinStats.progressTrackerSize.add(((ModJoin)dpJoins.get(0)).oldTracker.getSize());
+            }
+            else {
+                JoinStats.progressTrackerSize.add(((ModJoin)dpJoins.get(0)).tracker.getSize());
+            }
             JoinStats.algorithmSize.add(size * nrTables * 4);
         }
         System.out.println("Result Set: " + resultList.size());

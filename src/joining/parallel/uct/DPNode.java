@@ -353,7 +353,7 @@ public class DPNode {
         int[] nrTries = new int[nrActions];
         double[] accumulatedReward = new double[nrActions];
         if (ParallelConfig.PARALLEL_SPEC == 0 || ParallelConfig.PARALLEL_SPEC == 11
-                || ParallelConfig.PARALLEL_SPEC == 12) {
+                || ParallelConfig.PARALLEL_SPEC == 12 || ParallelConfig.PARALLEL_SPEC == 13) {
             for (int i = 0; i < nrThreads; i++) {
                 NodeStatistics threadStats = nodeStatistics[i];
                 nrVisits += threadStats.nrVisits;
@@ -392,7 +392,9 @@ public class DPNode {
             double meanReward = accumulatedReward[action] / nrTry;
             double exploration = Math.sqrt(Math.log(nrVisits) / nrTry);
             // Assess the quality of the action according to policy
-            double quality = meanReward + JoinConfig.PARALLEL_WEIGHT * exploration;
+            double quality = meanReward;
+            exploration *= (nrThreads == 1 ? JoinConfig.EXPLORATION_WEIGHT : JoinConfig.PARALLEL_WEIGHT);
+            quality += exploration;
 //            double quality = meanReward + JoinConfig.EXPLORATION_WEIGHT * exploration;
             if (quality > bestQuality) {
                 bestAction = action;
@@ -560,7 +562,7 @@ public class DPNode {
             // update UCT statistics and return reward
 //            reward = 0.01;
             if (ParallelConfig.PARALLEL_SPEC == 0 || ParallelConfig.PARALLEL_SPEC == 11
-                    || ParallelConfig.PARALLEL_SPEC == 12) {
+                    || ParallelConfig.PARALLEL_SPEC == 12 || ParallelConfig.PARALLEL_SPEC == 13) {
                 if (treeLevel <= joinOp.deepIndex) {
                     nodeStatistics[tid].updateStatistics(reward, action);
                 }
@@ -677,7 +679,8 @@ public class DPNode {
     }
 
     public long getSize() {
-        long size = nodeStatistics.length * nrActions * 12;
+        long size = nodeStatistics.length * nrActions * 12 + 16 +
+                (unjoinedTables.size() + joinedTables.size() + recommendedActions.size() + nextTable.length) * 4 ;
         for (DPNode node: childNodes) {
             if (node != null) {
                 size += node.getSize();

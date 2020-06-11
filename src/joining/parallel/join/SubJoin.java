@@ -135,8 +135,8 @@ public class SubJoin extends SPJoin {
 //        long timer1 = System.currentTimeMillis();
         // Execute from ing state, save progress, return progress
         int leftTable = order[0];
-//        int firstTable = getFirstLargeTable(order);
-        int firstTable = leftTable;
+        int firstTable = getFirstLargeTable(order);
+//        int firstTable = leftTable;
         State state = tracker.continueFromSP(joinOrder, tid, firstTable);
         if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
             writeLog("Round: " + roundCtr + "\t" + "Join: " + Arrays.toString(order));
@@ -153,22 +153,29 @@ public class SubJoin extends SPJoin {
         else {
             offsets = tracker.tableOffsetMaps[tid][0];
         }
-//        writeLog("Start: " + state.toString());
+        if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
+            writeLog("Start: " + state.toString() + "\t" + "Offset: " + Arrays.toString(offsets));
+        }
 //        writeLog("Offset: " + Arrays.toString(offsets));
 //        long timer2 = System.currentTimeMillis();
         // move the indices into correct position
         boolean forward = false;
         for (int i = 0; i < nrJoined; i++) {
             int table = order[i];
+            int offset = offsets[table];
             if (!forward) {
-                if (state.tupleIndices[table] < offsets[table]) {
+                if (state.tupleIndices[table] < offset) {
                     forward = true;
+                    state.tupleIndices[table] = offset;
                 }
             }
             else {
-                state.tupleIndices[table] = 0;
+                state.tupleIndices[table] = offset;
             }
             plan.joinIndices.get(i).forEach(index ->index.reset(state.tupleIndices));
+        }
+        if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
+            writeLog("After: " + state.toString());
         }
         executeWithBudget(plan, state, offsets);
 //        long timer3 = System.currentTimeMillis();
@@ -195,13 +202,32 @@ public class SubJoin extends SPJoin {
                 sortedJoin.forEach(joinStats::remove);
             }
         }
+        int prefixSum = 0;
+        for (int i = nrJoined - 1; i >= 0; i--) {
+            int table = order[i];
+            prefixSum += nrVisited[table];
+            visits[table] += prefixSum;
+        }
 //        long timer4 = System.currentTimeMillis();
 
         // progress in the left table.
         double reward = reward(joinOrder.order, tupleIndexDelta, offsets, state.tupleIndices);
-//        writeLog("Delta: "  + Arrays.toString(tupleIndexDelta) + "\tOffsets: " + Arrays.toString(offsets));
+        if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
+            double[] saving = new double[nrJoined];
+            double weight = 1;
+            for (int pos = 0; pos < nrJoined; ++pos) {
+                // Scale down weight by cardinality of current table
+                int curTable = order[pos];
+                int curCard = cardinalities[curTable];
+                //int remainingCard = cardinalities[curTable];
+                weight *= 1.0 / curCard;
+                // Fully processed tuples from this table
+                saving[curTable] = nrVisited[curTable] * weight;
 
-//        writeLog("End: "  + state.toString() + "\tReward: " + reward + "\tProgress: " + this.progress);
+            }
+            writeLog("Visit: "  + Arrays.toString(nrVisited) + "\tSave: " + Arrays.toString(saving));
+            writeLog("End: "  + state.toString() + "\tReward: " + reward + "\tProgress: " + this.progress);
+        }
         // Get the first table whose cardinality is larger than 1.
         state.roundCtr = 0;
         for (int table: query.temporaryTables) {
@@ -397,8 +423,36 @@ public class SubJoin extends SPJoin {
 //        int joinIndex = state.lastIndex;
         int joinIndex = 1;
         System.arraycopy(state.tupleIndices, 0, tupleIndices, 0, nrTables);
+
+        for (int i = 0; i < nrTables; i++) {
+            int table = plan.joinOrder.order[i];
+            joinIndex = i;
+            if (query.temporaryTables.contains(table)) {
+                tupleIndices[table] = offsets[table];
+            }
+            if (!evaluateInScope(joinIndices.get(i), applicablePreds.get(i),
+                    tupleIndices, table)) {
+                for (int back = joinIndex + 1; back < nrTables; back++) {
+                    int backTable = plan.joinOrder.order[back];
+                    tupleIndices[backTable] = offsets[backTable];
+                }
+                joinIndex = proposeNextInScope(
+                        plan.joinOrder.order, joinIndices, joinIndex, tupleIndices, true);
+                break;
+            }
+            else if (joinIndex == nrTables - 1){
+                ++nrResultTuples;
+                result.add(tupleIndices);
+                joinIndex = proposeNextInScope(
+                        plan.joinOrder.order, joinIndices, joinIndex, tupleIndices, false);
+//                writeLog("INFO:Bingo: " + Arrays.toString(tupleIndices));
+            }
+        }
+
+
         int remainingBudget = budget;
         // Number of completed tuples added
+        Arrays.fill(nrVisited, 0);
         nrResultTuples = 0;
         // Execute join order until budget depleted or all input finished -
         // at each iteration start, tuple indices contain next tuple
@@ -408,14 +462,11 @@ public class SubJoin extends SPJoin {
             //log("Indices:\t" + Arrays.toString(tupleIndices));
             // Get next table in join order
             int nextTable = plan.joinOrder.order[joinIndex];
-//            if (tupleIndices[nextTable] == 0) {
-//                int size = nrIndexed(plan.joinOrder.order, joinIndices.get(joinIndex), joinIndex, tupleIndices);
-//                nrIndexed[nextTable] = size;
-//                nrVisited[nextTable]++;
-//            }
+            nrVisited[nextTable]++;
             // Integrate table offset
-            tupleIndices[nextTable] = Math.max(
-                    offsets[nextTable], tupleIndices[nextTable]);
+            int offset = offsets[nextTable];
+            nrVisited[nextTable] += (offset > tupleIndices[nextTable] ? offset - tupleIndices[nextTable] : 0);
+            tupleIndices[nextTable] = Math.max(offset, tupleIndices[nextTable]);
             // Evaluate all applicable predicates on joined tuples
             KnaryBoolEval unaryPred = unaryPreds[nextTable];
             lastIndex = Math.max(lastIndex, joinIndex);

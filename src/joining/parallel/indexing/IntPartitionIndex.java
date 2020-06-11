@@ -98,12 +98,12 @@ public class IntPartitionIndex extends PartitionIndex {
                 keyToPositions = HashIntIntMaps.newMutableMap(nrKeys);
             }
             sequentialIndex(colRef, keyToNr);
-//            groupIds = new int[keyToPositions.size()];
-//            int id = 0;
-//            for (Integer pos: keyToPositions.values()) {
-//                groupIds[id] = pos;
-//                id++;
-//            }
+            groupIds = new int[keyToPositions.size()];
+            int id = 0;
+            for (Integer pos: keyToPositions.values()) {
+                groupIds[id] = pos;
+                id++;
+            }
         }
         else if (policy == IndexPolicy.Sparse) {
             keyToPositions = origin.keyToPositions;

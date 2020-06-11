@@ -94,7 +94,8 @@ public class LockFreeTask implements Callable<LockFreeResult>{
                 joinOrder = endPlan.getJoinOrder();
                 joinOp.isShared = true;
 
-                if (ParallelConfig.HEURISTIC_SHARING && ParallelConfig.PARALLEL_SPEC == 0) {
+                if (ParallelConfig.HEURISTIC_SHARING && (ParallelConfig.PARALLEL_SPEC == 0 ||
+                        ParallelConfig.PARALLEL_SPEC == 13)) {
                     int lastTable;
                     if (finishedTables.contains(finalTable)) {
                         int table = root.getSplitTableByCard(joinOrder, joinOp.cardinalities, finishedTables);

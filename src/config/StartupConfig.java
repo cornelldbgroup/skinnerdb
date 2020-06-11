@@ -14,9 +14,9 @@ public class StartupConfig {
 	/**
 	 * Whether to have extra run for warm up.
 	 */
-	public static final boolean WARMUP_RUN = false;
+	public static final boolean WARMUP_RUN = true;
 	/**
 	 * Whether to test memory.
 	 */
-    public static boolean Memory = true;
+    public static boolean Memory = false;
 }

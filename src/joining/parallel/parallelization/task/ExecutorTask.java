@@ -4,27 +4,17 @@ import config.JoinConfig;
 import config.ParallelConfig;
 import config.StartupConfig;
 import joining.parallel.join.FixJoin;
-import joining.parallel.join.ModJoin;
-import joining.parallel.join.SPJoin;
 import joining.parallel.join.SubJoin;
-import joining.parallel.parallelization.tree.TreeResult;
-import joining.parallel.uct.ASPNode;
 import joining.parallel.uct.SPNode;
 import joining.result.ResultTuple;
 import joining.uct.SelectionPolicy;
-import joining.uct.UctNode;
-import logs.LogUtils;
 import query.QueryInfo;
 import statistics.JoinStats;
-import statistics.QueryStats;
-
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicIntegerArray;
 
 public class ExecutorTask implements Callable<TaskResult> {
     /**
@@ -165,7 +155,8 @@ public class ExecutorTask implements Callable<TaskResult> {
             }
             // Materialize result table
             long timer2 = System.currentTimeMillis();
-            System.out.println("Thread " + tid + " " + (timer2 - timer1) + "\t Round: " + roundCtr);
+            System.out.println("Thread " + tid + " " + (timer2 - timer1)
+                    + "\tRound: " + roundCtr + "\tOrder: " + Arrays.toString(joinOrder));
             Set<ResultTuple> tuples = subJoin.result.tuples;
 //            spJoin.threadResultsList = subJoin.threadResultsList;
             return new TaskResult(tuples, subJoin.logs, tid);
@@ -201,7 +192,8 @@ public class ExecutorTask implements Callable<TaskResult> {
             // Materialize result table
             long timer2 = System.currentTimeMillis();
             spJoin.roundCtr = roundCtr;
-            System.out.println("Thread " + tid + " " + (timer2 - timer1) + "\t Round: " + roundCtr);
+            System.out.println("Thread " + tid + " " + (timer2 - timer1)
+                    + "\tRound: " + roundCtr + "\tOrder: " + Arrays.toString(joinOrder));
             Set<ResultTuple> tuples = spJoin.result.tuples;
             if (StartupConfig.Memory) {
                 long size = 0;

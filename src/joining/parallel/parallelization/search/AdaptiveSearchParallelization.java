@@ -2,6 +2,8 @@ package joining.parallel.parallelization.search;
 
 import config.LoggingConfig;
 import config.ParallelConfig;
+import config.StartupConfig;
+import joining.parallel.join.ModJoin;
 import joining.parallel.join.SPJoin;
 import joining.parallel.join.SubJoin;
 import joining.parallel.parallelization.Parallelization;
@@ -37,7 +39,7 @@ public class AdaptiveSearchParallelization extends Parallelization {
     /**
      * Multiple join operators for threads
      */
-    private List<SPJoin> spJoins = new ArrayList<>();
+    private List<SubJoin> spJoins = new ArrayList<>();
 
     /**
      * initialization of parallelization
@@ -83,7 +85,7 @@ public class AdaptiveSearchParallelization extends Parallelization {
             logs[i] = new ArrayList<>();
         }
         for (int i = 0; i < nrThreads; i++) {
-            SPJoin spJoin = spJoins.get(i);
+            SubJoin spJoin = spJoins.get(i);
             AdaptiveSearchTask adaptiveSearchTask = new AdaptiveSearchTask(query, root, spJoin, spJoins, end);
             tasks.add(adaptiveSearchTask);
         }
@@ -126,6 +128,14 @@ public class AdaptiveSearchParallelization extends Parallelization {
             }
         }
 
-        System.out.println("Result Set: " + resultList.size());
+        long size = resultList.size();
+        // memory consumption
+        if (StartupConfig.Memory) {
+            JoinStats.uctTreeSize.add(root.getSize(true));
+            JoinStats.progressTrackerSize.add(spJoins.get(0).tracker.getSize());
+            JoinStats.algorithmSize.add(size * nrTables * 4);
+        }
+
+        System.out.println("Result Set: " + size);
     }
 }

@@ -151,6 +151,108 @@ public class ParallelGroupBy {
     }
 
     /**
+     * Iterates over rows of input colunms (must have the
+     * same cardinality) and calculates consecutive
+     * group values that are stored in target column.
+     *
+     * @param sourceRefs	source column references
+     * @param targetRef		store group ID in that column
+     * @return				number of groups
+     * @throws Exception
+     */
+    public static int sortedExecute(Collection<ColumnRef> sourceRefs,
+                                                       ColumnRef targetRef) throws Exception {
+        // Register result column
+        String targetTbl = targetRef.aliasName;
+        String targetCol = targetRef.columnName;
+        ColumnInfo targetInfo = new ColumnInfo(targetCol,
+                SQLtype.INT, false, false, false, false);
+        CatalogManager.currentDB.nameToTable.get(targetTbl).addColumn(targetInfo);
+        // Generate result column and load it into buffer
+        String firstSourceTbl = sourceRefs.iterator().next().aliasName;
+        int cardinality = CatalogManager.getCardinality(firstSourceTbl);
+        IntData groupData = new IntData(cardinality);
+        BufferManager.colToData.put(targetRef, groupData);
+        // Get data of source columns
+        List<ColumnData> sourceCols = new ArrayList<>();
+        for (ColumnRef srcRef : sourceRefs) {
+            sourceCols.add(BufferManager.getData(srcRef));
+        }
+
+        IntData firstData = (IntData) sourceCols.get(0);
+        // assume the grouping column is int column
+        long sort1 = System.currentTimeMillis();
+        int[] srcData = firstData.data;
+        int[] firstSortedData = IntStream.range(0, cardinality)
+                .boxed().parallel().sorted((o1, o2) -> {
+                    int d1 = srcData[o1];
+                    int d2 = srcData[o2];
+                    return d1 - d2;
+                }).mapToInt(ele -> ele).toArray();
+        long sort2 = System.currentTimeMillis();
+        System.out.println("Sort: " + (sort2 - sort1));
+
+        int nextGroupID = 0;
+
+        if (sourceCols.size() == 1) {
+            List<GroupIndexRange> batches = split(cardinality);
+            int nrBatches = batches.size();
+            batches.parallelStream().forEach(batch -> {
+                int nextGroupIDInBatch = 0;
+                int lastValue = -1;
+                // Evaluate predicate for each table row
+                int first = batch.firstTuple;
+                int last = batch.lastTuple;
+                for (int rowCtr = first; rowCtr <= last; ++rowCtr) {
+                    int index = firstSortedData[rowCtr];
+                    int value = srcData[index];
+                    groupData.data[index] = nextGroupIDInBatch;
+                    if (value != lastValue && rowCtr != last) {
+                        nextGroupIDInBatch++;
+                        lastValue = value;
+                    }
+                }
+                batch.firstValue = srcData[first];
+                batch.lastValue = srcData[last];
+                batch.lastID = nextGroupIDInBatch;
+            });
+
+            int lastValue = batches.get(0).lastValue;
+            int lastID = batches.get(0).lastID;
+            for (int i = 1; i < nrBatches; i++) {
+                GroupIndexRange batch = batches.get(i);
+                if (batch.firstValue != lastValue) {
+                    lastID++;
+                }
+                batch.addID = lastID;
+                lastID += batch.lastID;
+            }
+
+            batches.parallelStream().forEach(batch -> {
+                int addID = batch.addID;
+                if (addID != 0) {
+                    // Evaluate predicate for each table row
+                    int first = batch.firstTuple;
+                    int last = batch.lastTuple;
+                    for (int rowCtr = first; rowCtr <= last; ++rowCtr) {
+                        int index = firstSortedData[rowCtr];
+                        groupData.data[index] += addID;
+                    }
+                }
+            });
+        }
+        else {
+
+        }
+
+
+        // Update catalog statistics
+        CatalogManager.updateStats(targetTbl);
+        // Retrieve data for
+        return nextGroupID;
+    }
+
+    /**
      * Splits table with given cardinality into tuple batches
      * according to the configuration for joining.parallel processing.
      *
@@ -158,7 +260,7 @@ public class ParallelGroupBy {
      */
     static List<GroupIndexRange> split(int cardinality) {
         List<GroupIndexRange> batches = new ArrayList<>();
-        int batchSize = Math.max(ParallelConfig.PRE_INDEX_SIZE, cardinality / 100);
+        int batchSize = Math.max(ParallelConfig.PARALLEL_SIZE, cardinality / 300);
         for (int batchCtr = 0; batchCtr * batchSize < cardinality;
              ++batchCtr) {
             int startIdx = batchCtr * batchSize;

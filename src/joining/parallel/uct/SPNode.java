@@ -299,16 +299,6 @@ public class SPNode {
                 nrTries[recAction] += threadTries;
                 accumulatedReward[recAction] += threadStats.accumulatedReward[recAction];
             }
-
-//            for (int i = 0; i < nrThreads; i++) {
-//                NodeStatistics threadStats = nodeStatistics[i];
-//                nrVisits += threadStats.nrVisits;
-//                for(Integer recAction : recommendedActions) {
-//                    int threadTries = threadStats.nrTries[recAction];
-//                    nrTries[recAction] += threadTries;
-//                    accumulatedReward[recAction] += threadStats.accumulatedReward[recAction];
-//                }
-//            }
         }
         else {
             nrVisits += this.nrVisits[tid];
@@ -539,6 +529,7 @@ public class SPNode {
 
     public long getSize(boolean isLocal) {
         long size = isLocal ? nodeStatistics.length * nrActions * 12 : nrActions * 12;
+        size += 16 + (unjoinedTables.size() + joinedTables.size() + recommendedActions.size() + nextTable.length) * 4 ;
         for (SPNode node: childNodes) {
             if (node != null) {
                 size += node.getSize(isLocal);

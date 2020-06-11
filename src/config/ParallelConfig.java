@@ -28,13 +28,14 @@ public class ParallelConfig {
 	/**
 	 * The size of cache for each batch.
 	 */
-    public static final int MAX_CACHE_SIZE = Integer.MAX_VALUE;
+//    public static int MAX_CACHE_SIZE = Integer.MAX_VALUE;
+	public static final int MAX_CACHE_SIZE = 2000000;
     /**
 	 * Maximal number of tuples per batch during execution.
 	 */
 	public static int EXE_THREADS = 1;
 	/**
-	 * Maximal number of tuples per batch during execution.
+	 * Maximal number of executors in the task parallel.
 	 */
 	public static int NR_EXECUTORS = 1;
 	/**
@@ -85,8 +86,10 @@ public class ParallelConfig {
 	 * 10: heuristics and learning
 	 * 11: DPL
 	 * 12: DPM
+	 * 13：DPOP
+	 * 14: CAPS
 	 */
-	public static int PARALLEL_SPEC = 8;
+	public static int PARALLEL_SPEC = 14;
 	/**
 	 * Number of batches.
 	 */

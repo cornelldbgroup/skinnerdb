@@ -121,10 +121,15 @@ public class ParallelMapRows {
                 else {
                     List<RowRange> batches = OperatorUtils.split(inCard);
                     int nrBatches = batches.size();
-                    IntStream.range(0, inCard).parallel().forEach(e -> {
+                    IntStream.range(0, nrBatches).parallel().forEach(b -> {
+                        RowRange range = batches.get(b);
+                        int start = range.firstTuple;
+                        int last = range.lastTuple;
                         int[] rowResult = new int[1];
-                        boolean notNull = unaryIntEval.evaluate(e, rowResult);
-                        intResult.data[e] = rowResult[0];
+                        for (int rid = start; rid <= last; rid++) {
+                            boolean notNull = unaryIntEval.evaluate(rid, rowResult);
+                            intResult.data[rid] = rowResult[0];
+                        }
                     });
                 }
             }
@@ -191,10 +196,15 @@ public class ParallelMapRows {
                 else {
                     List<RowRange> batches = OperatorUtils.split(inCard);
                     int nrBatches = batches.size();
-                    IntStream.range(0, inCard).parallel().forEach(e -> {
+                    IntStream.range(0, nrBatches).parallel().forEach(b -> {
+                        RowRange range = batches.get(b);
+                        int start = range.firstTuple;
+                        int last = range.lastTuple;
                         double[] rowResult = new double[1];
-                        boolean notNull = unaryDoubleEval.evaluate(e, rowResult);
-                        doubleResult.data[e] = rowResult[0];
+                        for (int rid = start; rid <= last; rid++) {
+                            boolean notNull = unaryDoubleEval.evaluate(rid, rowResult);
+                            doubleResult.data[rid] = rowResult[0];
+                        }
                     });
                 }
             }

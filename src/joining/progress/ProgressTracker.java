@@ -4,6 +4,8 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
+import joining.parallel.progress.ThreadProgress;
+import joining.parallel.progress.ThreadState;
 import joining.plan.JoinOrder;
 import query.QueryInfo;
 
@@ -146,5 +148,20 @@ public class ProgressTracker {
 		*/
         //state.lastIndex = Math.min(state.lastIndex, firstChange);
         return state;
+    }
+
+    public long getSize() {
+        return getChildProgressSize(sharedProgress);
+    }
+
+    public long getChildProgressSize(Progress progress) {
+        long n = 12;
+
+        for (Progress childProgress : progress.childNodes) {
+            if (childProgress != null) {
+                n += getChildProgressSize(childProgress);
+            }
+        }
+        return n;
     }
 }

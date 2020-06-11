@@ -188,7 +188,7 @@ public class NonEquiNode {
             NonEquiNode equals = left;
             NonEquiNode nonEquals = right;
             // special case: when it starts from 0
-            if (tupleIndices[nextTable] == 0 && curIndex(tupleIndices)) {
+            if (tupleIndices[nextTable] == 0 && equals.curIndex(tupleIndices)) {
                 // whether there exist a row satisfying all predicates?
                 if (nonEquals.evaluate(tupleIndices, nextTable, cardinality)) {
                     tupleIndices[nextTable] = cardinality;
@@ -212,14 +212,14 @@ public class NonEquiNode {
                 tupleIndices[nextTable] = cardinality;
                 return true;
             }
-            tupleIndices[nextTable]--;
+            tupleIndices[nextTable] = Math.max(1, nextTuple - 1);
             return false;
         }
         else if (operator == Operator.NotExist) {
             NonEquiNode equals = left;
             NonEquiNode nonEquals = right;
             // special case: when it starts from 0
-            if (tupleIndices[nextTable] == 0 && curIndex(tupleIndices)) {
+            if (tupleIndices[nextTable] == 0 && equals.curIndex(tupleIndices)) {
                 // whether there exist a row satisfying all predicates?
                 if (nonEquals.evaluate(tupleIndices, nextTable, cardinality)) {
                     tupleIndices[nextTable] = cardinality;
@@ -243,7 +243,7 @@ public class NonEquiNode {
                 tupleIndices[nextTable] = cardinality;
                 return false;
             }
-            tupleIndices[nextTable]--;
+            tupleIndices[nextTable] = Math.max(1, nextTuple - 1);
             return false;
         }
         else if (operator == Operator.EqualsExist) {
@@ -258,7 +258,7 @@ public class NonEquiNode {
             int rightTuple = tupleIndices[rightTable];
             Number constant = leftIndex.getNumber(leftTuple);
             boolean evaluation = rightIndex.evaluate(rightTuple, constant, operator);
-            tupleIndices[nextTable] = cardinality - 1;
+            tupleIndices[nextTable] = cardinality;
             return evaluation;
         }
         else {

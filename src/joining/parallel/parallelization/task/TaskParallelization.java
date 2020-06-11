@@ -73,12 +73,13 @@ public class TaskParallelization extends Parallelization {
         List<ExecutorTask> tasks = new ArrayList<>();
         // logs list
         List<String>[] logs = new List[nrThreads];
-        // best join orders
-        int[][] best = new int[nrThreads][nrTables + 1];
-        double[][] probs = new double[nrThreads][nrTables];
         int nrExecutors = Math.min(ParallelConfig.NR_EXECUTORS + 1, nrThreads);
+        // best join orders
+        int[][] best = new int[nrExecutors][nrTables + 1];
+        double[][] probs = new double[nrExecutors][nrTables];
         for (int i = 0; i < nrExecutors; i++) {
             logs[i] = new ArrayList<>();
+            best[i][0] = -1;
         }
         for (int i = 0; i < nrExecutors; i++) {
             FixJoin spJoin = spJoins.get(i);
@@ -89,7 +90,6 @@ public class TaskParallelization extends Parallelization {
         List<Future<TaskResult>> futures = executorService.invokeAll(tasks);
 //        TaskResult result = executorService.invokeAny(tasks);
         long executionEnd = System.currentTimeMillis();
-        JoinStats.subExeTime.clear();
         JoinStats.exeTime = executionEnd - executionStart;
         JoinStats.subExeTime.add(JoinStats.exeTime);
         futures.forEach(futureResult -> {

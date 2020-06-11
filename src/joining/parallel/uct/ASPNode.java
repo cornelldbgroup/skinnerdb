@@ -97,7 +97,7 @@ public class ASPNode {
      * restrict focus on such actions if heuristic flag
      * is activated.
      */
-    final Set<Integer> recommendedActions;
+    public final Set<Integer> recommendedActions;
     /**
      * Contains actions that are consistent with the "avoid
      * Cartesian products" heuristic. UCT algorithm will
@@ -554,7 +554,7 @@ public class ASPNode {
         }
     }
 
-    public void partitionSpaceModel(int[] threads) {
+    public void partitionSpaceModel(int[] threads, long[] visits) {
         int end = threads[1];
         int start = threads[0];
         int nrAvailable = end - start;
@@ -582,39 +582,81 @@ public class ASPNode {
         int recommendSize = recommendedActions.size();
 
 
+
         if (nrAvailable > 1 && recommendSize > 1) {
             sortedActions = recommendedActions.stream().sorted(
                     Comparator.comparing(action -> -1 * avgRewards[action])).
                     collect(Collectors.toList());
 
             if (nrAvailable >= recommendSize) {
-                int threadsPerAction = nrAvailable / recommendSize;
-                int threadStart = 0;
-                int remaining = nrAvailable;
-                for (int a = 0; a < recommendSize; a++) {
-                    int nr = a == recommendSize - 1 ? remaining :
-                            Math.min((int) (Math.random() * remaining) + 1, remaining - (recommendSize - a) + 1);
-                    int action = sortedActions.get(a);
-                    remaining -= nr;
-                    for (int i = threadStart; i < threadStart + nr; i++) {
-                        boolean[] threadBelong = belong[i];
-                        for (int c = 0; c < threadBelong.length; c++) {
-                            if (c != action) {
-                                threadBelong[c] = false;
+                if (treeLevel == 0) {
+                    int[] nums = new int[nrActions];
+                    Arrays.fill(nums, 1);
+                    long all = 0;
+                    for (Integer action : sortedActions) {
+                        int table = nextTable[action];
+                        all += visits[table];
+                    }
+                    int remaining = nrAvailable - recommendSize;
+                    int sum = 0;
+                    for (int a = 0; a < recommendSize; a++) {
+                        int action = sortedActions.get(a);
+                        int table = nextTable[action];
+                        int nr = (int) Math.round(remaining * (visits[table] + 0.0) / all);
+                        nr = Math.min(nr, remaining - sum);
+                        sum += nr;
+                        nums[action] += nr;
+                        if (sum >= remaining) {
+                            break;
+                        }
+                    }
+                    int threadStart = 0;
+                    for (int a = 0; a < recommendSize; a++) {
+                        int action = sortedActions.get(a);
+                        int nr = nums[action];
+                        for (int i = threadStart; i < threadStart + nr; i++) {
+                            boolean[] threadBelong = belong[i];
+                            for (int c = 0; c < threadBelong.length; c++) {
+                                if (c != action) {
+                                    threadBelong[c] = false;
+                                }
                             }
                         }
-                    }
-                    if (nr > 1) {
-                        threads[0] = threadStart;
-                        threads[1] = threadStart + nr;
-                        ASPNode node = childNodes[action];
-                        if (node != null && node.nrActions > 0) {
-                            node.partitionSpaceModel(threads);
+                        if (nr > 1) {
+                            threads[0] = threadStart;
+                            threads[1] = threadStart + nr;
+                            ASPNode node = childNodes[action];
+                            if (node != null && node.nrActions > 0) {
+                                node.partitionSpaceModel(threads, visits);
+                            }
                         }
+                        threadStart += nr;
                     }
-                    threadStart += nr;
-                    if (remaining <= 0) {
-                        break;
+                }
+                else {
+                    int threadsPerAction = nrAvailable / recommendSize;
+                    int extraBound = nrAvailable - recommendSize * threadsPerAction;
+                    int threadStart = 0;
+                    for (int a = 0; a < recommendSize; a++) {
+                        int nr = a < extraBound ? threadsPerAction + 1 : threadsPerAction;
+                        int action = sortedActions.get(a);
+                        for (int i = threadStart; i < threadStart + nr; i++) {
+                            boolean[] threadBelong = belong[i];
+                            for (int c = 0; c < threadBelong.length; c++) {
+                                if (c != action) {
+                                    threadBelong[c] = false;
+                                }
+                            }
+                        }
+                        if (nr > 1) {
+                            threads[0] = threadStart;
+                            threads[1] = threadStart + nr;
+                            ASPNode node = childNodes[action];
+                            if (node != null && node.nrActions > 0) {
+                                node.partitionSpaceModel(threads, visits);
+                            }
+                        }
+                        threadStart += nr;
                     }
                 }
             }
@@ -629,6 +671,156 @@ public class ASPNode {
                         }
                     }
                     lastThread[action] = false;
+                }
+            }
+
+        }
+    }
+
+    public void partitionSpaceUtility(int[] threads, double[] utilities, int[] threadPerTable, int[] best) {
+        int end = threads[1];
+        int start = threads[0];
+        int nrAvailable = end - start;
+
+        int[] nrTries = new int[nrActions];
+        double[] accumulatedReward = new double[nrActions];
+
+
+        // collect all statistics
+        for (int i = 0; i < nrThreads; i++) {
+            NodeStatistics threadStats = nodeStatistics[i];
+            for (Integer recAction : recommendedActions) {
+                int threadTries = threadStats.nrTries[recAction];
+                nrTries[recAction] += threadTries;
+                accumulatedReward[recAction] += threadStats.accumulatedReward[recAction];
+            }
+        }
+
+        double[] avgRewards = new double[nrActions];
+        recommendedActions.forEach(action -> {
+            int nrTry = nrTries[action];
+            avgRewards[action] = nrTry == 0 ? 0 : accumulatedReward[action] / nrTry;
+        });
+        List<Integer> sortedActions;
+        int recommendSize = recommendedActions.size();
+
+        if (nrAvailable > 1 && recommendSize > 1) {
+            if (nrAvailable >= recommendSize) {
+                if (treeLevel == 0) {
+                    sortedActions = recommendedActions.stream().sorted(
+                            Comparator.comparing(action -> -1 * utilities[nextTable[action]])).
+                            collect(Collectors.toList());
+                    int[] nums = new int[nrActions];
+                    Arrays.fill(nums, 1);
+                    double all = 0;
+                    for (Integer action : sortedActions) {
+                        int table = nextTable[action];
+                        all += utilities[table];
+                    }
+                    int remaining = nrAvailable - recommendSize;
+                    int sum = 0;
+                    for (int a = 0; a < recommendSize; a++) {
+                        int action = sortedActions.get(a);
+                        int table = nextTable[action];
+                        int nr = (int) Math.round(remaining * (utilities[table] + 0.0) / all);
+                        nr = Math.min(nr, remaining - sum);
+                        sum += nr;
+                        nums[action] += nr;
+                        if (sum >= remaining) {
+                            break;
+                        }
+                    }
+                    // record number of threads
+                    for (int a = 0; a < recommendSize; a++) {
+                        int action = sortedActions.get(a);
+                        int table = nextTable[action];
+                        threadPerTable[table] = nums[action];
+                    }
+                    int threadStart = 0;
+                    for (int a = 0; a < recommendSize; a++) {
+                        int action = sortedActions.get(a);
+                        int nr = nums[action];
+                        for (int i = threadStart; i < threadStart + nr; i++) {
+                            boolean[] threadBelong = belong[i];
+                            Arrays.fill(threadBelong, true);
+                            for (int c = 0; c < threadBelong.length; c++) {
+                                if (c != action) {
+                                    threadBelong[c] = false;
+                                }
+                            }
+                        }
+                        if (nr > 1) {
+                            threads[0] = threadStart;
+                            threads[1] = threadStart + nr;
+                            ASPNode node = childNodes[action];
+                            if (node != null && node.nrActions > 0) {
+                                node.partitionSpaceUtility(threads, utilities, threadPerTable, best);
+                            }
+                        }
+                        threadStart += nr;
+                    }
+                }
+                else {
+                    sortedActions = recommendedActions.stream().sorted(
+                            Comparator.comparing(action -> -1 * avgRewards[action])).
+                            collect(Collectors.toList());
+                    int threadsPerAction = nrAvailable / recommendSize;
+                    int extraBound = nrAvailable - recommendSize * threadsPerAction;
+                    int threadStart = 0;
+                    for (int a = 0; a < recommendSize; a++) {
+                        int nr = a < extraBound ? threadsPerAction + 1 : threadsPerAction;
+                        int action = sortedActions.get(a);
+                        for (int i = threadStart; i < threadStart + nr; i++) {
+                            boolean[] threadBelong = belong[i];
+                            Arrays.fill(threadBelong, true);
+                            for (int c = 0; c < threadBelong.length; c++) {
+                                if (c != action) {
+                                    threadBelong[c] = false;
+                                }
+                            }
+                        }
+                        if (nr > 1) {
+                            threads[0] = threadStart;
+                            threads[1] = threadStart + nr;
+                            ASPNode node = childNodes[action];
+                            if (node != null && node.nrActions > 0) {
+                                node.partitionSpaceUtility(threads, utilities, threadPerTable, best);
+                            }
+                        }
+                        threadStart += nr;
+                    }
+                }
+            }
+            else {
+                if (treeLevel == 0) {
+                    Arrays.fill(threadPerTable, 1);
+                    int[] rank = new int[nrTables];
+                    for (int i = 0; i < nrTables; i++) {
+                        int table = best[i];
+                        rank[table] = i;
+                    }
+                    sortedActions = recommendedActions.stream().sorted(
+                            Comparator.comparing(action -> rank[nextTable[action]])).
+                            collect(Collectors.toList());
+                    System.out.println(Arrays.toString(sortedActions.toArray()));
+                }
+                else {
+                    sortedActions = recommendedActions.stream().sorted(
+                            Comparator.comparing(action -> -1 * avgRewards[action])).
+                            collect(Collectors.toList());
+                }
+//                boolean[] lastThread = belong[end - 1];
+//                Arrays.fill(lastThread, true);
+                for (int i = start; i < end; i++) {
+                    boolean[] threadBelong = belong[i];
+                    Arrays.fill(threadBelong, true);
+                    int action = sortedActions.get(i - start);
+                    for (int a = 0; a < threadBelong.length; a++) {
+                        if (a != action) {
+                            threadBelong[a] = false;
+                        }
+                    }
+//                    lastThread[action] = false;
                 }
             }
 
@@ -1348,4 +1540,111 @@ public class ASPNode {
         return threadsConstraints;
     }
 
+
+    public double bestJoinOrder(int[] joinOrder, int tid) {
+        if (nrActions > 0) {
+            int maxAction = -1;
+            double maxRewad = -1;
+            NodeStatistics threadStats = nodeStatistics[tid];
+            for(Integer recAction : recommendedActions) {
+                int threadTries = threadStats.nrTries[recAction];
+                double reward = 0;
+                if (threadTries != 0) {
+                    reward = threadStats.accumulatedReward[recAction] / threadTries;
+                }
+                if (reward > maxRewad) {
+                    maxRewad = reward;
+                    maxAction = recAction;
+                }
+            }
+
+            int table = nextTable[maxAction];
+            joinOrder[treeLevel] = table;
+            ASPNode child = childNodes[maxAction];
+
+            if (child == null) {
+                int lastTable = joinOrder[treeLevel];
+                Set<Integer> newlyJoined = new HashSet<>(joinedTables);
+                newlyJoined.add(lastTable);
+                // Iterate over join order positions to fill
+                List<Integer> unjoinedTablesShuffled = new ArrayList<>(unjoinedTables);
+                Collections.shuffle(unjoinedTablesShuffled, ThreadLocalRandom.current());
+                for (int posCtr = treeLevel + 1; posCtr < nrTables; ++posCtr) {
+                    boolean foundTable = false;
+                    for (int joinedTable : unjoinedTablesShuffled) {
+                        if (!newlyJoined.contains(joinedTable) &&
+                                query.connected(newlyJoined, joinedTable)) {
+                            joinOrder[posCtr] = joinedTable;
+                            newlyJoined.add(joinedTable);
+                            foundTable = true;
+                            break;
+                        }
+                    }
+                    if (!foundTable) {
+                        for (int joinedTable : unjoinedTablesShuffled) {
+                            if (!newlyJoined.contains(joinedTable)) {
+                                joinOrder[posCtr] = joinedTable;
+                                newlyJoined.add(joinedTable);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            else {
+                child.bestJoinOrder(joinOrder, tid);
+            }
+            return maxRewad;
+        }
+        return 0;
+    }
+
+    public int nodesInLevel(int leftTable) {
+        int action = -1;
+        for (Integer recAction: recommendedActions) {
+            if (nextTable[recAction] == leftTable) {
+                action = recAction;
+                break;
+            }
+        }
+        if (action >= 0) {
+            ASPNode node = childNodes[action];
+            while (true) {
+                int size = node.recommendedActions.size();
+                if (size > 1) {
+                    return size;
+                }
+                else {
+                    int singleAction = node.recommendedActions.iterator().next();
+                    node = node.childNodes[singleAction];
+                }
+            }
+        }
+        else {
+            return 0;
+        }
+    }
+
+    /**
+     * Recursively calculate the memory consumption for the UCT tree
+     *
+     * @param isLocal   whether to look up statistics in the local memory.
+     * @return          size for each node.
+     */
+    public long getSize(boolean isLocal) {
+        int availableThread = 0;
+        for (NodeStatistics statistics: nodeStatistics) {
+            if (statistics.nrVisits > 1) {
+                availableThread++;
+            }
+        }
+        long size = isLocal ? availableThread * nrActions * 12 : nrActions * 12;
+        size += 16 + (unjoinedTables.size() + joinedTables.size() + recommendedActions.size() + nextTable.length) * 4 ;
+        for (ASPNode node: childNodes) {
+            if (node != null) {
+                size += node.getSize(isLocal);
+            }
+        }
+        return size;
+    }
 }

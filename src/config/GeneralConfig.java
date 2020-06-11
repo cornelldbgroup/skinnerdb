@@ -32,4 +32,8 @@ public class GeneralConfig {
 	 * Whether it is the test case.
 	 */
 	public static boolean ISTESTCASE = false;
+	/**
+	 * Whether to test cache.
+	 */
+	public static boolean TESTCACHE = false;
 }

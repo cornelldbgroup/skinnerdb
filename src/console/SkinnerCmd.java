@@ -413,7 +413,7 @@ public class SkinnerCmd {
             if (GeneralConfig.isParallel) {
                 int spec = ParallelConfig.PARALLEL_SPEC;
                 if (spec == 0) {
-                    output += "DPDasync_" + ParallelConfig.EXE_THREADS + caseName + ".txt";
+                    output += "DPOP_" + ParallelConfig.EXE_THREADS + caseName + ".txt";
                 } else if (spec == 1) {
                     output += "DPDsync_" + ParallelConfig.EXE_THREADS + caseName + ".txt";
                 } else if (spec == 2) {
@@ -431,10 +431,15 @@ public class SkinnerCmd {
                     output += "PSJ_" + ParallelConfig.EXE_THREADS + caseName + ".txt";
                 }
                 else if (spec == 8) {
-                    output += "PSAPS_" + ParallelConfig.EXE_THREADS + caseName + ".txt";
+                    output += "SPS_" + ParallelConfig.EXE_THREADS + caseName + ".txt";
                 }
                 else if (spec == 9) {
-                    output += "SSPT_" + ParallelConfig.EXE_THREADS + caseName + ".txt";
+                    if (GeneralConfig.TESTCACHE) {
+                        output += "SSPT_" + ParallelConfig.NR_EXECUTORS + caseName + ".txt";
+                    }
+                    else {
+                        output += "SSPT_" + ParallelConfig.EXE_THREADS + caseName + ".txt";
+                    }
                 }
                 else if (spec == 10) {
                     String prefix = ParallelConfig.HEURISTIC_POLICY == 0 ? "CHPS_" : "SHPS_";
@@ -445,6 +450,12 @@ public class SkinnerCmd {
                 }
                 else if (spec == 12) {
                     output += "DPM_" + ParallelConfig.EXE_THREADS + caseName + ".txt";
+                }
+                else if (spec == 13) {
+                    output += "DPOP_" + ParallelConfig.EXE_THREADS + caseName + ".txt";
+                }
+                else if (spec == 14) {
+                    output += "CAPS_" + ParallelConfig.EXE_THREADS + caseName + ".txt";
                 }
             } else {
                 output += "Seq_1.txt";
@@ -512,6 +523,8 @@ public class SkinnerCmd {
 		GeneralConfig.isParallel = Integer.parseInt(Configuration.getProperty("ISPARALLEL", "0")) == 1;
         // the number of test case
         GeneralConfig.TEST_CASE = Integer.parseInt(Configuration.getProperty("TEST_CASE", "1"));
+        // batch size
+        ParallelConfig.NR_BATCHES = Integer.parseInt(Configuration.getProperty("NRBATCHES", "60"));
         if (GeneralConfig.isParallel) {
 			ParallelConfig.PARALLEL_SPEC = Integer.parseInt(Configuration.getProperty("PARALLEL_SPEC", "0"));
         }
@@ -534,23 +547,22 @@ public class SkinnerCmd {
             BufferManager.loadDictionary();
         }
         Indexer.indexAll(StartupConfig.INDEX_CRITERIA);
-        // q18, q01
+
         if (args.length > 1) {
             // initialize a thread pool
             String command = Configuration.getProperty("COMMAND");
             if (ParallelConfig.PARALLEL_SPEC == 9) {
+                if (args.length == 4) {
+                    ParallelConfig.NR_EXECUTORS = Integer.parseInt(args[3]);
+                    GeneralConfig.TESTCACHE = true;
+                    System.out.println("nrExecutors: " + ParallelConfig.NR_EXECUTORS);
+                }
                 ThreadPool.initThreadsPool(2, ParallelConfig.PRE_THREADS);
             }
             else {
                 ThreadPool.initThreadsPool(ParallelConfig.EXE_THREADS, ParallelConfig.PRE_THREADS);
             }
-            GeneralConfig.TEST_CASE = args.length == 3 ? Integer.parseInt(args[2]) : 0;
-//            processInput("exec ./tpch/skinnerqueries/q03.sql");
-//            processInput("exec ./jcch/queries/q02.sql");
-//            processInput("exec ./jcch/queries/q17.sql");
-//            processInput("exec ../imdb/queries/33c.sql");
-//            processInput("exec /Users/tracy/Documents/Research/skinnerdb/imdb/queries/33c.sql");
-//            processInput("exp");
+            GeneralConfig.TEST_CASE = args.length >= 3 ? Integer.parseInt(args[2]) : 0;
             processInput(command);
         } else {
             if (ParallelConfig.PARALLEL_SPEC == 9) {

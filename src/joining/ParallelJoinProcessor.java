@@ -159,6 +159,18 @@ public class ParallelJoinProcessor {
                         JoinConfig.BUDGET_PER_EPISODE, query, context);
                 parallelization.execute(resultTuples);
             }
+            // DPM
+            else if (ParallelConfig.PARALLEL_SPEC == 13) {
+                Parallelization parallelization = new LockFreeParallelization(ParallelConfig.EXE_THREADS,
+                        JoinConfig.BUDGET_PER_EPISODE, query, context);
+                parallelization.execute(resultTuples);
+            }
+            // CAPS
+            else if (ParallelConfig.PARALLEL_SPEC == 14) {
+                Parallelization parallelization = new AdaptiveSearchParallelization(ParallelConfig.EXE_THREADS,
+                        JoinConfig.BUDGET_PER_EPISODE, query, context);
+                parallelization.execute(resultTuples);
+            }
             subExes.add(JoinStats.subExeTime.remove(JoinStats.subExeTime.size() - 1));
             subSamples.add(JoinStats.nrSamples);
             subTuples.add(JoinStats.nrTuples);

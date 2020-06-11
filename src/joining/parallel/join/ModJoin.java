@@ -38,6 +38,10 @@ public class ModJoin extends DPJoin {
      */
     public ParallelProgressTracker tracker;
     /**
+     * Avoids redundant evaluation work by tracking evaluation progress.
+     */
+    public ProgressTracker[] trackers;
+    /**
      * Avoids redundant evaluation work by using old progress tracker.
      */
     public ProgressTracker oldTracker;
@@ -152,15 +156,7 @@ public class ModJoin extends DPJoin {
                 return 1;
             }
         }
-//        order = new int[]{8, 2, 5, 7, 3, 9, 1, 6, 4, 0};
-//        order = QueryStats.optimal;
-//        System.out.println(Arrays.toString(order));
-//        for (int table : order) {
-//            if (cardinalities[table] > 1000) {
-//                splitTable = table;
-//                break;
-//            }
-//        }
+//        order = new int[]{3, 0, 1, 4, 5, 2};
 
         this.roundCtr = roundCtr;
         slowest = false;
@@ -177,14 +173,19 @@ public class ModJoin extends DPJoin {
         // Execute from ing state, save progress, return progress
 
         State state;
-        if (JoinConfig.NEWTRACKER && nrThreads > 1) {
+        if (JoinConfig.NEWTRACKER && ParallelConfig.PARALLEL_SPEC == 0 && nrThreads > 1) {
             state = tracker.continueFrom(joinOrder, splitHash, tid, isShared, this);
             System.arraycopy(tracker.tableOffset, 0, offsets, 0, nrJoined);
+        }
+        else if (ParallelConfig.PARALLEL_SPEC == 13) {
+            state = trackers[splitTable].continueFrom(joinOrder);
+            System.arraycopy(trackers[splitTable].tableOffset, 0, offsets, 0, nrJoined);
         }
         else {
             state = oldTracker.continueFrom(joinOrder);
             System.arraycopy(oldTracker.tableOffset, 0, offsets, 0, nrJoined);
         }
+
 //        writeLog("Round: " + roundCtr + "\tJoin Order: " + Arrays.toString(order) + "\tSplit: " + splitTable);
 //        writeLog("Start: " + state.toString());
 //        writeLog("Offset: " + Arrays.toString(offsets));
@@ -196,6 +197,7 @@ public class ModJoin extends DPJoin {
                 if (state.tupleIndices[table] < offsets[table]) {
                     state.tupleIndices[table] = offsets[table];
                     forward = true;
+                    state.lastIndex = Math.min(state.lastIndex, i);
                 }
             }
             else {
@@ -232,16 +234,19 @@ public class ModJoin extends DPJoin {
         // Get the first table whose cardinality is larger than 1.
         int firstTable = getFirstLargeTable(order);
         if (!state.isFinished()) {
-            if (JoinConfig.NEWTRACKER && nrThreads > 1) {
+            if (JoinConfig.NEWTRACKER && ParallelConfig.PARALLEL_SPEC == 0 && nrThreads > 1) {
                 state.roundCtr = 0;
                 slowest = tracker.updateProgress(joinOrder, splitHash, state, tid, roundCtr, splitTable, firstTable);
+            }
+            else if (ParallelConfig.PARALLEL_SPEC == 13) {
+                trackers[splitTable].updateProgress(joinOrder, state);
             }
             else {
                 oldTracker.updateProgress(joinOrder, state);
             }
         }
 //        writeLog("Visit: " + Arrays.toString(nrVisits) + "\tLarge: " + largeTable + "\tSlow: " + slowest);
-//        writeLog("End: " + state.toString() + "\tReward: " + reward);
+//        writeLog("End: " + state.toString() + "\tReward: " + reward + "\tLevel: " + deepIndex);
         lastState = state;
         state.tid = tid;
         lastTable = splitTable;
@@ -281,9 +286,13 @@ public class ModJoin extends DPJoin {
 //        long timer1 = System.currentTimeMillis();
         int splitHash = nrThreads == 1 ? 0 : plan.splitStrategies[splitTable];
         State state;
-        if (JoinConfig.NEWTRACKER && nrThreads > 1) {
+        if (JoinConfig.NEWTRACKER && ParallelConfig.PARALLEL_SPEC == 0 && nrThreads > 1) {
             state = tracker.continueFrom(joinOrder, splitHash, tid, isShared, this);
             System.arraycopy(tracker.tableOffset, 0, offsets, 0, nrJoined);
+        }
+        else if (ParallelConfig.PARALLEL_SPEC == 13) {
+            state = trackers[splitTable].continueFrom(joinOrder);
+            System.arraycopy(trackers[splitTable].tableOffset, 0, offsets, 0, nrJoined);
         }
         else {
             state = oldTracker.continueFrom(joinOrder);
@@ -307,6 +316,7 @@ public class ModJoin extends DPJoin {
                 if (state.tupleIndices[table] < offsets[table]) {
                     state.tupleIndices[table] = offsets[table];
                     forward = true;
+                    state.lastIndex = Math.min(state.lastIndex, i);
                 }
             }
             else {
@@ -328,9 +338,12 @@ public class ModJoin extends DPJoin {
         // Get the first table whose cardinality is larger than 1.
         int firstTable = getFirstLargeTable(order);
         if (!state.isFinished()) {
-            if (JoinConfig.NEWTRACKER && nrThreads > 1) {
+            if (JoinConfig.NEWTRACKER && ParallelConfig.PARALLEL_SPEC == 0 && nrThreads > 1) {
                 state.roundCtr = 0;
                 slowest = tracker.updateProgress(joinOrder, splitHash, state, tid, roundCtr, splitTable, firstTable);
+            }
+            else if (ParallelConfig.PARALLEL_SPEC == 13) {
+                trackers[splitTable].updateProgress(joinOrder, state);
             }
             else {
                 oldTracker.updateProgress(joinOrder, state);
@@ -687,15 +700,28 @@ public class ModJoin extends DPJoin {
         for (int i = 0; i < nrTables; i++) {
             int table = plan.joinOrder.order[i];
             joinIndex = i;
+            if (query.temporaryTables.contains(table)) {
+                tupleIndices[table] = offsets[table];
+            }
             if (!evaluateInScope(joinIndices.get(i), applicablePreds.get(i),
                     tupleIndices, splitTable, table, tid)) {
+                for (int back = joinIndex + 1; back < nrTables; back++) {
+                    int backTable = plan.joinOrder.order[back];
+                    tupleIndices[backTable] = offsets[backTable];
+                }
+                joinIndex = proposeNextInScope(
+                        plan.joinOrder.order, splitTable, joinIndices.get(joinIndex), joinIndex, tupleIndices, tid);
                 break;
             }
+            else if (joinIndex == nrTables - 1){
+                ++nrResultTuples;
+                result.add(tupleIndices);
+                joinIndex = proposeNextInScope(
+                        plan.joinOrder.order, splitTable, joinIndices.get(joinIndex), joinIndex, tupleIndices, tid);
+//                writeLog("INFO:Bingo: " + Arrays.toString(tupleIndices));
+            }
         }
-        for (int i = joinIndex + 1; i < nrTables; i++) {
-            int table = plan.joinOrder.order[i];
-            tupleIndices[table] = 0;
-        }
+
         int remainingBudget = budget;
 //        int remainingBudget = Integer.MAX_VALUE;
         // Number of completed tuples added
@@ -733,7 +759,9 @@ public class ModJoin extends DPJoin {
                     // Complete result row -> add to result
                     ++nrResultTuples;
                     result.add(tupleIndices);
+
 //                    writeLog("INFO:Bingo: " + Arrays.toString(tupleIndices));
+
                     joinIndex = proposeNextInScope(
                             plan.joinOrder.order, splitTable, joinIndices.get(joinIndex), joinIndex, tupleIndices, tid);
                 } else {
@@ -785,18 +813,32 @@ public class ModJoin extends DPJoin {
         for (int i = 0; i < nrTables; i++) {
             int table = plan.joinOrder.order[i];
             joinIndex = i;
+            if (query.temporaryTables.contains(table)) {
+                tupleIndices[table] = offsets[table];
+            }
             if (!evaluateFinalInScope(joinIndices.get(i), applicablePreds.get(i),
-                    tupleIndices, splitTable, table, tid, splitIndex, i)) {
+                    tupleIndices, splitTable, table, tid, splitIndex, i) ) {
+                for (int back = joinIndex + 1; back < nrTables; back++) {
+                    int backTable = plan.joinOrder.order[back];
+                    tupleIndices[backTable] = offsets[backTable];
+                }
+                joinIndex = proposeFinalNextInScope(
+                        plan.joinOrder.order, splitTable,
+                        joinIndices.get(joinIndex), joinIndex,
+                        tupleIndices, tid, splitIndex, joinIndices);
                 break;
             }
+            else if (joinIndex == nrTables - 1){
+                ++nrResultTuples;
+                result.add(tupleIndices);
+                joinIndex = proposeFinalNextInScope(
+                        plan.joinOrder.order, splitTable,
+                        joinIndices.get(joinIndex), joinIndex,
+                        tupleIndices, tid, splitIndex, joinIndices);
+            }
         }
-        for (int i = joinIndex + 1; i < nrTables; i++) {
-            int table = plan.joinOrder.order[i];
-            tupleIndices[table] = 0;
-        }
-        if (tid == 1) {
-            nrResultTuples = 0;
-        }
+
+
         int remainingBudget = budget;
         // Number of completed tuples added
         nrResultTuples = 0;

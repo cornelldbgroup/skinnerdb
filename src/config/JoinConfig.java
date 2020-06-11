@@ -76,7 +76,7 @@ public class JoinConfig {
 	 * If this flag is activated. There is only one thread
 	 * can update to a left-most table.
 	 */
-	public static boolean PROGRESS_SHARING = false;
+	public static boolean PROGRESS_SHARING = true;
 	/**
 	 * Whether to share offsets among different thread.
 	 */

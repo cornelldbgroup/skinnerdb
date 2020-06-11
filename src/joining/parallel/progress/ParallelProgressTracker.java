@@ -210,8 +210,8 @@ public class ParallelProgressTracker {
         boolean slowest = !state.isFinished();
         int upperLevel = Math.min(THRESHOLD, nrTables);
         boolean isFast = false;
-
-        roundCtr = requireWriteLock(firstTable, roundCtr);
+        int leftTable = joinOrder.order[0];
+        roundCtr = requireWriteLock(leftTable, roundCtr);
         for (int joinCtr = 0; joinCtr < upperLevel; ++joinCtr) {
             int table = joinOrder.order[joinCtr];
             int stateIndex = state.tupleIndices[table];
@@ -219,22 +219,24 @@ public class ParallelProgressTracker {
                 curPrefixProgress.childNodes[table] = new ThreadProgress(nrTables, nrThreads,false);
             }
             curPrefixProgress = curPrefixProgress.childNodes[table];
-            ThreadState tableState = curPrefixProgress.latestStates[threadID];
 
-            if (tableState == null) {
-                state.roundCtr = roundCtr;
-                curPrefixProgress.latestStates[threadID] = new ThreadState(stateIndex, 0, roundCtr,
-                        state.lastIndex, threadID, nrSplits);
-            }
-            else {
-                if (JoinConfig.PROGRESS_SHARING) {
+            if (JoinConfig.PROGRESS_SHARING) {
+                ThreadState tableState = curPrefixProgress.latestStates[0];
+                if (tableState == null) {
+                    state.roundCtr = roundCtr;
+                    curPrefixProgress.latestStates[0] = new ThreadState(stateIndex, 0, roundCtr,
+                            state.lastIndex, 0, 1);
+                }
+                else {
                     if (isFast) {
-                        curPrefixProgress.latestStates[threadID].
-                                updateProgress(state, stateIndex, 0, roundCtr, state.lastIndex);
+                        int[][] epochData = tableState.tableTupleIndexEpoch;
+                        epochData[0][0] = stateIndex;
+                        epochData[0][1] = roundCtr;
+                        epochData[0][2] = state.lastIndex;
+                        state.roundCtr = roundCtr;
                     }
                     else {
-                        int fast = curPrefixProgress.latestStates[threadID].
-                                updateProgress(state, stateIndex, roundCtr);
+                        int fast = tableState.updateProgress(state, stateIndex, roundCtr);
                         if (fast < 0) {
                             break;
                         }
@@ -243,25 +245,20 @@ public class ParallelProgressTracker {
                         }
                     }
                 }
+            }
+            else {
+                ThreadState tableState = curPrefixProgress.latestStates[threadID];
+                if (tableState == null) {
+                    state.roundCtr = roundCtr;
+                    curPrefixProgress.latestStates[threadID] = new ThreadState(stateIndex, 0, roundCtr,
+                            state.lastIndex, threadID, 1);
+                }
                 else {
-                    curPrefixProgress.latestStates[threadID].
-                            updateProgress(state, stateIndex, 0, roundCtr, state.lastIndex);
+                    tableState.updateProgress(state, stateIndex, 0, roundCtr, state.lastIndex);
                 }
             }
-
-//            if (checking) {
-//                int slowestFlag = curPrefixProgress.isSlowest(splitKey, threadID, stateIndex);
-//                if (slowestFlag == 1) {
-//                    slowest = true;
-//                    checking = false;
-//                }
-//                else if (slowestFlag == -1) {
-//                    slowest = false;
-//                    checking = false;
-//                }
-//            }
         }
-        releaseWriteLock(firstTable);
+        releaseWriteLock(leftTable);
         // Update progress for lower level.
         if (THRESHOLD < nrTables) {
             int intermediateTable = joinOrder.order[THRESHOLD];
@@ -328,6 +325,7 @@ public class ParallelProgressTracker {
         boolean otherSplitKey = previousSplitKey != splitKey;
         boolean slowSet = false;
         int slowestID = -1;
+        state.lastIndex = nrTables;
         for (int joinCtr = 0; joinCtr < upperLevel; ++joinCtr) {
             int table = order[joinCtr];
             curPrefixProgress = curPrefixProgress.childNodes[table];
@@ -341,10 +339,12 @@ public class ParallelProgressTracker {
             if (hasProgress && !otherSplitKey) {
                 threadState.fastForward(state, table, splitKey, joinCtr);
                 if (state.roundCtr < 0) {
+                    state.lastIndex = joinCtr;
                     return state;
                 }
             }
             else {
+                state.lastIndex = Math.min(state.lastIndex, joinCtr);
                 if (previousSplitKey >= 0) {
                     if (slowestID >= 0 && curPrefixProgress.latestStates[slowestID] != null) {
                         int slowestProgress = curPrefixProgress.latestStates[slowestID].getProgress(previousSplitKey);
@@ -421,30 +421,50 @@ public class ParallelProgressTracker {
         // Integrate progress from join orders with same prefix
         ThreadProgress curPrefixProgress = sharedProgress;
         int upperLevel = Math.min(THRESHOLD, nrTables);
-        requireReadLock(firstTable);
+        int leftTable = joinOrder.order[0];
+        requireReadLock(leftTable);
         for (int joinCtr = 0; joinCtr < upperLevel; ++joinCtr) {
             int table = order[joinCtr];
             curPrefixProgress = curPrefixProgress.childNodes[table];
-            if (curPrefixProgress == null || curPrefixProgress.latestStates[threadID] == null) {
-                releaseReadLock(firstTable);
-                return state;
-            }
-            // get a thread state
-            ThreadState threadState = curPrefixProgress.latestStates[threadID];
-            // if the state contains the progress for a given key
-            if (threadState.hasProgress(0)) {
-                threadState.fastForward(state, table, 0, joinCtr);
-                if (state.roundCtr < 0) {
-                    releaseReadLock(firstTable);
+            if (JoinConfig.PROGRESS_SHARING) {
+                if (curPrefixProgress == null || curPrefixProgress.latestStates[0] == null) {
+                    releaseReadLock(leftTable);
+                    return state;
+                }
+                // get a thread state
+                ThreadState threadState = curPrefixProgress.latestStates[0];
+                // if the state contains the progress for a given key
+                if (threadState.hasProgress(0)) {
+                    threadState.fastForward(state, table, 0, joinCtr);
+                    if (state.roundCtr < 0) {
+                        releaseReadLock(leftTable);
+                        return state;
+                    }
+                }
+                else {
+                    releaseReadLock(leftTable);
                     return state;
                 }
             }
             else {
-                releaseReadLock(firstTable);
-                return state;
+                if (curPrefixProgress == null || curPrefixProgress.latestStates[threadID] == null) {
+                    return state;
+                }
+                // get a thread state
+                ThreadState threadState = curPrefixProgress.latestStates[threadID];
+                // if the state contains the progress for a given key
+                if (threadState.hasProgress(0)) {
+                    threadState.fastForward(state, table, 0, joinCtr);
+                    if (state.roundCtr < 0) {
+                        return state;
+                    }
+                }
+                else {
+                    return state;
+                }
             }
         }
-        releaseReadLock(firstTable);
+        releaseReadLock(leftTable);
         if (THRESHOLD >= nrTables) {
             return state;
         }
@@ -480,7 +500,8 @@ public class ParallelProgressTracker {
         long n = 0;
         for (ThreadState state: progress.latestStates) {
             if (state != null) {
-                n += (state.tableTupleIndexEpoch.length * 3) * 4;
+                n += (state.tableTupleIndexEpoch.length * 3 * 4);
+//                n += (state.tableTupleIndexEpoch.length * (nrTables + 1) * 4);
             }
         }
         for (ThreadProgress childProgress : progress.childNodes) {
