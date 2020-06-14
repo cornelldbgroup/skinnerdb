@@ -23,6 +23,12 @@ public class DummyIntIndex extends IntIndex {
 	public int nextTuple(int value, int prevTuple) {
 		return prevTuple+1;
 	}
+
+	@Override
+	public int nextTuple(int value, int prevTuple, int priorIndex, int tid) {
+		return 0;
+	}
+
 	/**
 	 * Return default value.
 	 */

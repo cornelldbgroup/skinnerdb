@@ -18,7 +18,7 @@ public class ParallelConfig {
 	 */
 	public final static int PRE_BATCH_SIZE = 1000;
 	/**
-	 * Number of executed threads during execution.
+	 * Number of threads in the join phase.
 	 */
-	public static int EXE_THREADS = 1;
+	public static int JOIN_THREADS = 1;
 }

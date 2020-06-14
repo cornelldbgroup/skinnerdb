@@ -40,22 +40,22 @@ public class DPTask implements Callable<Set<ResultTuple>> {
     /**
      * The flag that represents the termination signal.
      */
-    private final AtomicBoolean finish;
+    private final AtomicBoolean joinFinished;
 
     /**
      * Initialization of thread task.
      *
-     * @param query     query to process
-     * @param root      root of UCT tree
-     * @param joinOp    join operator
-     * @param finish    finish flag
+     * @param query         query to process
+     * @param root          root of UCT tree
+     * @param joinOp        join operator
+     * @param joinFinished  finish flag
      */
     public DPTask(QueryInfo query, UctNode root, DPJoin joinOp,
-                        AtomicBoolean finish) {
+                        AtomicBoolean joinFinished) {
         this.query = query;
         this.root = root;
         this.joinOp = joinOp;
-        this.finish = finish;
+        this.joinFinished = joinFinished;
     }
 
     @Override
@@ -100,8 +100,9 @@ public class DPTask implements Callable<Set<ResultTuple>> {
         // Iterate until join result was generated
         double accReward = 0;
         double maxReward = Double.NEGATIVE_INFINITY;
-        while (!finish.get()) {
+        while (!joinFinished.get()) {
             ++roundCtr;
+            joinOp.roundCtr = (int) roundCtr;
             double reward = root.sample(roundCtr, joinOrder, policy);
             // Count reward except for final sample
             if (!joinOp.isFinished()) {
@@ -126,7 +127,7 @@ public class DPTask implements Callable<Set<ResultTuple>> {
                     break;
             }
             // Consider memory loss
-            if (JoinConfig.FORGET && roundCtr==nextForget) {
+            if (JoinConfig.FORGET && roundCtr == nextForget) {
                 root = new UctNode(roundCtr, query, true, joinOp);
                 nextForget *= 10;
             }

@@ -13,6 +13,7 @@ import config.LoggingConfig;
 import config.NamingConfig;
 import expressions.VisitorUtil;
 import joining.JoinProcessor;
+import joining.ParallelJoinProcessor;
 import net.sf.jsqlparser.schema.Table;
 import net.sf.jsqlparser.statement.select.PlainSelect;
 import postprocessing.PostProcessor;
@@ -83,7 +84,8 @@ public class Master {
 			// Filter, projection, and indexing for join phase
 			Context context = Preprocessor.process(subQueryInfo);
 			// Join filtered tables
-			JoinProcessor.process(subQueryInfo, context);
+//			JoinProcessor.process(subQueryInfo, context);
+			ParallelJoinProcessor.process(subQueryInfo, context);
 			// Determine result table name and properties
 			boolean lastSubQuery = subQueryCtr==nrSubQueries-1;
 			boolean tempResult = lastSubQuery?finalTempResult:true;

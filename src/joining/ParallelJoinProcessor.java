@@ -67,14 +67,14 @@ public class ParallelJoinProcessor {
             return;
         }
         // the number of threads
-        int nrThreads = ParallelConfig.EXE_THREADS;
-        // Initialize multi-way join operator for each thread
+        int nrThreads = ParallelConfig.JOIN_THREADS;
+        // initialize multi-way join operator for each thread
         DPJoin[] joinOps = new DPJoin[nrThreads];
-        // Initialize UCT join order search tree for each thread
+        // initialize UCT join order search tree for each thread
         UctNode[] roots = new UctNode[nrThreads];
         for (int tid = 0; tid < nrThreads; tid++) {
             joinOps[tid] = new DPJoin(query, context,
-                    JoinConfig.BUDGET_PER_EPISODE);
+                    JoinConfig.BUDGET_PER_EPISODE, tid);
             roots[tid] = new UctNode(0, query,
                     JoinConfig.AVOID_CARTESIANS, joinOps[tid]);
         }
@@ -87,13 +87,12 @@ public class ParallelJoinProcessor {
         }
         // submit tasks to the thread pool
         long executionStart = System.currentTimeMillis();
-        List<Future<Set<ResultTuple>>> futures = executorService.invokeAll(tasks);
+        List<Future<Set<ResultTuple>>> joinThreadResults = executorService.invokeAll(tasks);
         long executionEnd = System.currentTimeMillis();
 
         // merge results for all threads
-        long roundCtr = 0;
         Set<ResultTuple> tuples = new LinkedHashSet<>();
-        futures.forEach(futureResult -> {
+        joinThreadResults.forEach(futureResult -> {
             try {
                 Set<ResultTuple> result = futureResult.get();
                 tuples.addAll(result);

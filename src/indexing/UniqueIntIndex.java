@@ -38,6 +38,12 @@ public class UniqueIntIndex extends IntIndex {
 		int onlyRow = keyToRow.getOrDefault(value, cardinality);
 		return onlyRow>prevTuple?onlyRow:cardinality;
 	}
+
+	@Override
+	public int nextTuple(int value, int prevTuple, int priorIndex, int tid) {
+		return 0;
+	}
+
 	@Override
 	public int nrIndexed(int value) {
 		return keyToRow.containsKey(value)?1:0;

@@ -5,6 +5,7 @@ import com.koloboke.collect.map.DoubleIntMap;
 import com.koloboke.collect.map.hash.HashDoubleIntMaps;
 
 import config.LoggingConfig;
+import config.ParallelConfig;
 import data.DoubleData;
 import statistics.JoinStats;
 
@@ -130,6 +131,71 @@ public class DoubleIndex extends Index {
 		// No suitable tuple found
 		return cardinality;
 	}
+
+	/**
+	 * Returns index of next tuple with given value
+	 * or cardinality of indexed table if no such
+	 * tuple exists in the thread's partition.
+	 *
+	 * @param value			indexed value
+	 * @param prevTuple		index of last tuple
+	 * @param priorIndex	index of last tuple in the prior table
+	 * @param tid			thread id
+	 * @return 	index of next tuple or cardinality
+	 */
+	public int nextTuple(double value, int prevTuple, int priorIndex, int tid) {
+		int nrThreads = ParallelConfig.JOIN_THREADS;
+		// make sure the first tuple doesn't always start from thread 0.
+		tid = (priorIndex + tid) % nrThreads;
+		// get start position for indexed values
+		int firstPos = keyToPositions.getOrDefault(value, -1);
+		// no indexed values?
+		if (firstPos < 0) {
+			return cardinality;
+		}
+		// can we return the first indexed value?
+		int nrVals = positions[firstPos];
+
+		int firstOffset = tid + 1;
+		if (firstOffset > nrVals) {
+			return cardinality;
+		}
+		int firstTuple = positions[firstPos + firstOffset];
+		if (firstTuple > prevTuple) {
+			return firstTuple;
+		}
+		// get number of indexed values in the partition
+		int lastOffset = (nrVals - 1) / nrThreads * nrThreads + tid + 1;
+		// if the offset is beyond the array?
+		if (lastOffset > nrVals) {
+			lastOffset -= nrThreads;
+		}
+		int threadVals = (lastOffset - firstOffset) / nrThreads + 1;
+		// update index-related statistics
+		// restrict search range via binary search in the partition
+		int lowerBound = 0;
+		int upperBound = threadVals - 1;
+		while (upperBound - lowerBound > 1) {
+			int middle = lowerBound + (upperBound - lowerBound) / 2;
+			int middleOffset = firstPos + middle * nrThreads + tid + 1;
+			if (positions[middleOffset] > prevTuple) {
+				upperBound = middle;
+			} else {
+				lowerBound = middle;
+			}
+		}
+		// get next tuple
+		for (int pos = lowerBound; pos <= upperBound; ++pos) {
+			int offset = firstPos + pos * nrThreads + tid + 1;
+			int nextTuple = positions[offset];
+			if (nextTuple > prevTuple) {
+				return nextTuple;
+			}
+		}
+		// no suitable tuple found
+		return cardinality;
+	}
+
 	/**
 	 * Returns the number of entries indexed
 	 * for the given value.
