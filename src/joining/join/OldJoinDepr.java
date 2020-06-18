@@ -22,10 +22,6 @@ import statistics.JoinStats;
 
 public class OldJoinDepr extends MultiWayJoin {
     /**
-     * Number of steps per episode.
-     */
-    public final int budget;
-    /**
      * Re-initialized in each invocation:
      * stores the remaining budget for
      * the current iteration.
@@ -54,11 +50,6 @@ public class OldJoinDepr extends MultiWayJoin {
      */
     final KnaryBoolEval[] unaryPreds;
     /**
-     * Contains after each invocation the delta of the tuple
-     * indices when comparing start state and final state.
-     */
-    public final int[] tupleIndexDelta;
-    /**
      * Counts number of log entries made.
      */
     int logCtr = 0;
@@ -71,8 +62,7 @@ public class OldJoinDepr extends MultiWayJoin {
      */
     public OldJoinDepr(QueryInfo query, Context preSummary, 
     		int budget) throws Exception {
-        super(query, preSummary);
-        this.budget = budget;
+        super(query, preSummary, budget);
         this.planCache = new HashMap<>();
         this.tracker = new ProgressTracker(nrJoined, cardinalities);
         // Collect unary predicates
@@ -86,7 +76,6 @@ public class OldJoinDepr extends MultiWayJoin {
             	unaryPreds[aliasIdx] = eval;
         	}
         }
-        this.tupleIndexDelta = new int[nrJoined];
         log("preSummary before join: " + preSummary.toString());
     }
     /**

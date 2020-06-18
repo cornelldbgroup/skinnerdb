@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 
 import catalog.CatalogManager;
+import config.JoinConfig;
 import config.LoggingConfig;
 import expressions.ExpressionInfo;
 import expressions.compilation.EvaluatorType;
@@ -40,6 +41,11 @@ public abstract class MultiWayJoin {
      */
     public final int[] cardinalities;
     /**
+     * Contains after each invocation the delta of the tuple
+     * indices when comparing start state and final state.
+     */
+    public final int[] tupleIndexDelta;
+    /**
      * Summarizes pre-processing steps.
      */
     protected final Context preSummary;
@@ -53,6 +59,10 @@ public abstract class MultiWayJoin {
      */
     public final JoinResult result;
     /**
+     * Number of steps per episode.
+     */
+    public final int budget;
+    /**
      * This constructor only serves for testing purposes.
      * It initializes most field to null pointers.
      * 
@@ -64,7 +74,9 @@ public abstract class MultiWayJoin {
     	this.nrJoined = query.nrJoined;
     	this.preSummary = null;
     	this.cardinalities = null;
+    	this.tupleIndexDelta = null;
     	this.result = null;
+    	this.budget = 0;
     	predToEval = null;
     }
     /**
@@ -73,13 +85,16 @@ public abstract class MultiWayJoin {
      * 
      * @param query			query to process
      * @param preSummary	summarizes pre-processing steps
+     * @param budget		budget per episode
      */
-    public MultiWayJoin(QueryInfo query, Context preSummary) throws Exception {
+    public MultiWayJoin(QueryInfo query, Context preSummary, int budget) throws Exception {
         this.query = query;
         this.nrJoined = query.nrJoined;
         this.preSummary = preSummary;
+        this.budget = budget;
         // Retrieve table cardinalities
         this.cardinalities = new int[nrJoined];
+        this.tupleIndexDelta = new int[nrJoined];
         for (Entry<String,Integer> entry : 
         	query.aliasToIndex.entrySet()) {
         	String alias = entry.getKey();
@@ -105,6 +120,32 @@ public abstract class MultiWayJoin {
         	KnaryBoolEval boolEval = (KnaryBoolEval)compiler.getBoolEval();
         	predToEval.put(pred, boolEval);        		
         }
+    }
+
+    /**
+     * Calculates reward for progress during one invocation.
+     *
+     * @param joinOrder			join order followed
+     * @param tupleIndexDelta	difference in tuple indices
+     * @param tableOffsets		table offsets (number of tuples fully processed)
+     * @param nrResultTuples	number of results found in the learning sample
+     * @return					reward between 0 and 1, proportional to progress
+     */
+    double reward(int[] joinOrder, int[] tupleIndexDelta, int[] tableOffsets, int nrResultTuples) {
+        double progress = 0;
+        double weight = 1;
+        for (int pos = 0; pos < nrJoined; ++pos) {
+            // Scale down weight by cardinality of current table
+            int curTable = joinOrder[pos];
+            int remainingCard = cardinalities[curTable] -
+                    (tableOffsets[curTable]);
+            //int remainingCard = cardinalities[curTable];
+            weight *= 1.0 / remainingCard;
+            // Fully processed tuples from this table
+            progress += tupleIndexDelta[curTable] * weight;
+        }
+        return JoinConfig.INPUT_REWARD_WEIGHT * progress +
+                JoinConfig.OUTPUT_REWARD_WEIGHT * nrResultTuples / (double)budget;
     }
     /**
      * Executes given join order for a given number of steps.

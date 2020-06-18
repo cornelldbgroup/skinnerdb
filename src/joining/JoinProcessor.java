@@ -46,15 +46,8 @@ public class JoinProcessor {
 			Context context) throws Exception {
         // Initialize statistics
 		long startMillis = System.currentTimeMillis();
-        JoinStats.nrTuples = 0;
-        JoinStats.nrFastBacktracks = 0;
-        JoinStats.nrIndexLookups = 0;
-        JoinStats.nrIndexEntries = 0;
-        JoinStats.nrUniqueIndexLookups = 0;
-        JoinStats.nrIterations = 0;
-        JoinStats.nrUctNodes = 0;
-        JoinStats.nrPlansTried = 0;
-        JoinStats.nrSamples = 0;
+        JoinStats.initializeJoinStats();
+
 		// Initialize logging for new query
 		nrLogEntries = 0;
 		// Can we skip the join phase?
@@ -193,13 +186,29 @@ public class JoinProcessor {
 			System.out.println("Table cards.:\t" +
 					Arrays.toString(joinOp.cardinalities));
 		}
+
 		// Materialize result table
-		Collection<ResultTuple> tuples = joinOp.result.getTuples();
+		materialize(query, context, joinOp.result.tuples);
+		// Measure execution time for join phase
+		JoinStats.joinMillis = System.currentTimeMillis() - startMillis;
+	}
+
+	/**
+	 * Materialize join results into the temperary result table.
+	 *
+	 * @param query			query to process
+	 * @param context		query execution context
+	 * @param tuples		join results
+	 */
+	public static void materialize(QueryInfo query,
+								   Context context,
+								   Collection<ResultTuple> tuples) throws Exception {
+		// Materialize result table
 		int nrTuples = tuples.size();
 		log("Materializing join result with " + nrTuples + " tuples ...");
 		String targetRelName = NamingConfig.DEFAULT_JOINED_NAME;
-		Materialize.execute(tuples, query.aliasToIndex, 
-				query.colsForPostProcessing, 
+		Materialize.execute(tuples, query.aliasToIndex,
+				query.colsForPostProcessing,
 				context.columnMapping, targetRelName);
 		// Update processing context
 		context.joinedTable = NamingConfig.DEFAULT_JOINED_NAME;
@@ -212,9 +221,8 @@ public class JoinProcessor {
 		// Store number of join result tuples
 		JoinStats.skinnerJoinCard = CatalogManager.
 				getCardinality(NamingConfig.DEFAULT_JOINED_NAME);
-		// Measure execution time for join phase
-		JoinStats.joinMillis = System.currentTimeMillis() - startMillis;
 	}
+
 	/**
 	 * Print out log entry if the maximal number of log
 	 * entries has not been reached yet.

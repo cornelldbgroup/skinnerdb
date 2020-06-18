@@ -77,4 +77,19 @@ public class JoinStats {
      * Number of tuples in join result (before post-processing).
      */
     public static int skinnerJoinCard = 0;
+
+    /**
+     * Initialize some join statistics.
+     */
+    public static void initializeJoinStats() {
+        JoinStats.nrTuples = 0;
+        JoinStats.nrFastBacktracks = 0;
+        JoinStats.nrIndexLookups = 0;
+        JoinStats.nrIndexEntries = 0;
+        JoinStats.nrUniqueIndexLookups = 0;
+        JoinStats.nrIterations = 0;
+        JoinStats.nrUctNodes = 0;
+        JoinStats.nrPlansTried = 0;
+        JoinStats.nrSamples = 0;
+    }
 }

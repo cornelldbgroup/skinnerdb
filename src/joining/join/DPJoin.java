@@ -2,6 +2,7 @@ package joining.join;
 
 import config.JoinConfig;
 import config.LoggingConfig;
+import config.ParallelConfig;
 import config.PreConfig;
 import expressions.ExpressionInfo;
 import expressions.compilation.KnaryBoolEval;
@@ -31,10 +32,6 @@ import java.util.Map;
 
 public class DPJoin extends MultiWayJoin {
     /**
-     * Number of steps per episode.
-     */
-    public final int budget;
-    /**
      * Re-initialized in each invocation:
      * stores the remaining budget for
      * the current iteration.
@@ -51,6 +48,11 @@ public class DPJoin extends MultiWayJoin {
      */
     public int nrResultTuples;
     /**
+     * Number of (complete and partial) tuples considered
+     * during the last invocation.
+     */
+    public int nrTuples;
+    /**
      * Avoids redundant planning work by storing left deep plans.
      */
     final Map<JoinOrder, LeftDeepPlan> planCache;
@@ -62,11 +64,6 @@ public class DPJoin extends MultiWayJoin {
      * Associates each table index with unary predicates.
      */
     final KnaryBoolEval[] unaryPreds;
-    /**
-     * Contains after each invocation the delta of the tuple
-     * indices when comparing start state and final state.
-     */
-    public final int[] tupleIndexDelta;
     /**
      * Counts number of log entries made.
      */
@@ -81,9 +78,21 @@ public class DPJoin extends MultiWayJoin {
      */
     public int splitTable;
     /**
-     * The counter the represent the oder of join sample.
+     * The counter the represent the order of join sample.
      */
     public int roundCtr;
+    /**
+     * The number of down operations for each table
+     */
+    public final int[] downOps;
+    /**
+     * The number of down operations for each table
+     */
+    public final int[] upOps;
+    /**
+     * The number of visits for each table during one sample.
+     */
+    public final int[] nrVisits;
     /**
      * Initializes join algorithm for given input query.
      *
@@ -93,8 +102,7 @@ public class DPJoin extends MultiWayJoin {
      */
     public DPJoin(QueryInfo query, Context preSummary,
                    int budget, int tid) throws Exception {
-        super(query, preSummary);
-        this.budget = budget;
+        super(query, preSummary, budget);
         this.planCache = new HashMap<>();
         int nrSplits = query.equiJoinPreds.size();
         this.tracker = new NewProgressTracker(nrJoined, cardinalities, nrSplits);
@@ -109,34 +117,13 @@ public class DPJoin extends MultiWayJoin {
                 unaryPreds[aliasIdx] = eval;
             }
         }
-        this.tupleIndexDelta = new int[nrJoined];
         this.tid = tid;
+        this.downOps = new int[nrJoined];
+        this.upOps = new int[nrJoined];
+        this.nrVisits = new int[nrJoined];
         log("preSummary before join: " + preSummary.toString());
     }
-    /**
-     * Calculates reward for progress during one invocation.
-     *
-     * @param joinOrder			join order followed
-     * @param tupleIndexDelta	difference in tuple indices
-     * @param tableOffsets		table offsets (number of tuples fully processed)
-     * @return					reward between 0 and 1, proportional to progress
-     */
-    double reward(int[] joinOrder, int[] tupleIndexDelta, int[] tableOffsets) {
-        double progress = 0;
-        double weight = 1;
-        for (int pos = 0; pos < nrJoined; ++pos) {
-            // Scale down weight by cardinality of current table
-            int curTable = joinOrder[pos];
-            int remainingCard = cardinalities[curTable] -
-                    (tableOffsets[curTable]);
-            //int remainingCard = cardinalities[curTable];
-            weight *= 1.0 / remainingCard;
-            // Fully processed tuples from this table
-            progress += tupleIndexDelta[curTable] * weight;
-        }
-        return JoinConfig.INPUT_REWARD_WEIGHT * progress +
-                JoinConfig.OUTPUT_REWARD_WEIGHT * nrResultTuples / (double)budget;
-    }
+
     /**
      * Executes a given join order for a given budget of steps
      * (i.e., predicate evaluations). Result tuples are added
@@ -175,7 +162,7 @@ public class DPJoin extends MultiWayJoin {
         int[] offsets = new int[nrJoined];
         executeWithBudget(plan, state, offsets);
         double reward = reward(joinOrder.order,
-                tupleIndexDelta, offsets);
+                tupleIndexDelta, offsets, nrResultTuples);
         tracker.updateProgress(joinOrder, state, splitTable, roundCtr);
         return reward;
     }
@@ -386,7 +373,6 @@ public class DPJoin extends MultiWayJoin {
         // at each iteration start, tuple indices contain next tuple
         // combination to look at.
         while (remainingBudget > 0 && joinIndex >= 0) {
-            ++JoinStats.nrIterations;
             // Update maximal join index
             maxJoinIndex = Math.max(maxJoinIndex, joinIndex);
             //log("Offsets:\t" + Arrays.toString(offsets));
@@ -404,7 +390,6 @@ public class DPJoin extends MultiWayJoin {
                     unaryPred.evaluate(tupleIndices)>0) &&
                     evaluateAll(applicablePreds.get(joinIndex),
                             tupleIndices)) {
-                ++JoinStats.nrTuples;
                 // Does current table represent sub-query in
                 // not exists clause?
                 int newJoinIndex = joinIndex;
@@ -434,7 +419,7 @@ public class DPJoin extends MultiWayJoin {
                         tupleIndices[nextTable] = proposeNext(
                                 joinIndices.get(joinIndex),
                                 nextTable, tupleIndices);
-                        JoinStats.nrTuples++;
+                        nrTuples++;
                     }
                 }
                 indexedTuple[nextTable] = true;
@@ -513,9 +498,34 @@ public class DPJoin extends MultiWayJoin {
         }
         // Save final state
         state.lastIndex = joinIndex;
-        for (int tableCtr = 0; tableCtr < nrTables; ++tableCtr) {
-            state.tupleIndices[tableCtr] = tupleIndices[tableCtr];
+        System.arraycopy(tupleIndices, 0, state.tupleIndices, 0, nrTables);
+    }
+
+
+    /**
+     * Optimize the split table choices
+     * based on the progress in the indexes
+     *
+     * @param joinOrder         table join order
+     * @param splitTable        table to split
+     * @return                  utility reward for different split table choices
+     */
+    public double splitTableReward(int[] joinOrder, int splitTable) {
+        double progress = 0;
+        double weight = 1;
+        int nrThreads = ParallelConfig.JOIN_THREADS;
+        for (int joinIndex = 0; joinIndex < nrJoined; joinIndex++) {
+            int table = joinOrder[joinIndex];
+            int indexSize = nrVisits[table];
+            if (indexSize > 0) {
+                int downOperations = downOps[table];
+                int upOperations = upOps[table];
+                weight *= indexSize;
+                progress += weight * (table == splitTable ? (nrThreads * downOperations - indexSize * upOperations) :
+                        (downOperations - indexSize * upOperations));
+            }
         }
+        return progress;
     }
 
     @Override
@@ -534,4 +544,5 @@ public class DPJoin extends MultiWayJoin {
             System.out.println(logCtr + "\t" + logEntry);
         }
     }
+
 }

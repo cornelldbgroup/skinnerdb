@@ -106,11 +106,8 @@ public class DoubleIndex extends Index {
 		}
 		// Get number of indexed values
 		int nrVals = positions[firstPos];
-		// Update index-related statistics
-		JoinStats.nrIndexEntries += nrVals;
-		if (nrVals==1) {
-			JoinStats.nrUniqueIndexLookups += 1;
-		}
+		currentMatchedTuples = nrVals;
+
 		// Restrict search range via binary search
 		int lowerBound = firstPos + 1;
 		int upperBound = firstPos + nrVals;
@@ -155,6 +152,7 @@ public class DoubleIndex extends Index {
 		}
 		// can we return the first indexed value?
 		int nrVals = positions[firstPos];
+		currentMatchedTuples = nrVals;
 
 		int firstOffset = tid + 1;
 		if (firstOffset > nrVals) {

@@ -23,10 +23,6 @@ import statistics.JoinStats;
 
 public class OldJoin extends MultiWayJoin {
     /**
-     * Number of steps per episode.
-     */
-    public final int budget;
-    /**
      * Re-initialized in each invocation:
      * stores the remaining budget for
      * the current iteration.
@@ -55,11 +51,6 @@ public class OldJoin extends MultiWayJoin {
      */
     final KnaryBoolEval[] unaryPreds;
     /**
-     * Contains after each invocation the delta of the tuple
-     * indices when comparing start state and final state.
-     */
-    public final int[] tupleIndexDelta;
-    /**
      * Counts number of log entries made.
      */
     int logCtr = 0;
@@ -72,8 +63,7 @@ public class OldJoin extends MultiWayJoin {
      */
     public OldJoin(QueryInfo query, Context preSummary, 
     		int budget) throws Exception {
-        super(query, preSummary);
-        this.budget = budget;
+        super(query, preSummary, budget);
         this.planCache = new HashMap<>();
         this.tracker = new ProgressTracker(nrJoined, cardinalities);
         // Collect unary predicates
@@ -87,7 +77,6 @@ public class OldJoin extends MultiWayJoin {
             	unaryPreds[aliasIdx] = eval;
         	}
         }
-        this.tupleIndexDelta = new int[nrJoined];
         log("preSummary before join: " + preSummary.toString());
     }
     /**
@@ -245,7 +234,6 @@ public class OldJoin extends MultiWayJoin {
 	 * 
 	 * @param plan			join order and associated meta-data
 	 * @param cardinalities	
-	 * @param order			join order to execute
 	 * @param tupleIndices	current tuple indices
 	 * @param joinIndex		current join order position
 	 * @param singleSteps	whether to increase indices by one
@@ -511,6 +499,8 @@ public class OldJoin extends MultiWayJoin {
             state.tupleIndices[tableCtr] = tupleIndices[tableCtr];
         }
     }
+
+
     @Override
     public boolean isFinished() {
     	return tracker.isFinished;
@@ -527,4 +517,6 @@ public class OldJoin extends MultiWayJoin {
     		System.out.println(logCtr + "\t" + logEntry);
     	}
     }
+
+
 }

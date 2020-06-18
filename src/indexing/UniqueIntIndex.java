@@ -3,6 +3,7 @@ package indexing;
 import com.koloboke.collect.map.IntIntMap;
 import com.koloboke.collect.map.hash.HashIntIntMaps;
 
+import config.ParallelConfig;
 import data.IntData;
 
 /**
@@ -32,6 +33,8 @@ public class UniqueIntIndex extends IntIndex {
 				keyToRow.put(key, row);
 			}
 		}
+		// the number of matched tuples is always 1.
+		currentMatchedTuples = 1;
 	}
 	@Override
 	public int nextTuple(int value, int prevTuple) {
@@ -41,7 +44,11 @@ public class UniqueIntIndex extends IntIndex {
 
 	@Override
 	public int nextTuple(int value, int prevTuple, int priorIndex, int tid) {
-		return 0;
+		int nrThreads = ParallelConfig.JOIN_THREADS;
+		tid = (priorIndex + tid) % nrThreads;
+		int onlyRow = tid == 0 ? keyToRow.getOrDefault(value, cardinality)
+				: cardinality;
+		return onlyRow > prevTuple?onlyRow : cardinality;
 	}
 
 	@Override

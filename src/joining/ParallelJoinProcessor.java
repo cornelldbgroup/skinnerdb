@@ -30,7 +30,7 @@ import static threads.ThreadPool.executorService;
  * @author Ziyun Wei
  *
  */
-public class ParallelJoinProcessor {
+public class ParallelJoinProcessor extends JoinProcessor {
     /**
      * The number of join-related log entries
      * generated for the current query.
@@ -46,20 +46,12 @@ public class ParallelJoinProcessor {
      */
     public static void process(QueryInfo query,
                                Context context) throws Exception {
-        // Initialize statistics
+        // initialize statistics
         long startMillis = System.currentTimeMillis();
-        JoinStats.nrTuples = 0;
-        JoinStats.nrFastBacktracks = 0;
-        JoinStats.nrIndexLookups = 0;
-        JoinStats.nrIndexEntries = 0;
-        JoinStats.nrUniqueIndexLookups = 0;
-        JoinStats.nrIterations = 0;
-        JoinStats.nrUctNodes = 0;
-        JoinStats.nrPlansTried = 0;
-        JoinStats.nrSamples = 0;
-        // Initialize logging for new query
+        JoinStats.initializeJoinStats();
+        // initialize logging for new query
         nrLogEntries = 0;
-        // Can we skip the join phase?
+        // can we skip the join phase?
         if (query.nrJoined == 1 && PreConfig.PRE_FILTER) {
             String alias = query.aliases[0];
             String table = context.aliasToFiltered.get(alias);
@@ -80,10 +72,10 @@ public class ParallelJoinProcessor {
         }
         // initialize thread tasks
         List<DPTask> tasks = new ArrayList<>(nrThreads);
-        // finish flag shared by multiple threads.
-        AtomicBoolean finish = new AtomicBoolean(false);
+        // finish flag shared by multiple threads
+        AtomicBoolean joinFinished = new AtomicBoolean(false);
         for (int tid = 0; tid < nrThreads; tid++) {
-            tasks.add(new DPTask(query, roots[tid], joinOps[tid], finish));
+            tasks.add(new DPTask(query, roots[tid], joinOps[tid], joinFinished));
         }
         // submit tasks to the thread pool
         long executionStart = System.currentTimeMillis();
@@ -119,36 +111,8 @@ public class ParallelJoinProcessor {
 //        }
 
         // Materialize result table
-        int nrTuples = tuples.size();
-        log("Materializing join result with " + nrTuples + " tuples ...");
-        String targetRelName = NamingConfig.DEFAULT_JOINED_NAME;
-        Materialize.execute(tuples, query.aliasToIndex,
-                query.colsForPostProcessing,
-                context.columnMapping, targetRelName);
-        // Update processing context
-        context.joinedTable = NamingConfig.DEFAULT_JOINED_NAME;
-        context.columnMapping.clear();
-        for (ColumnRef postCol : query.colsForPostProcessing) {
-            String newColName = postCol.aliasName + "." + postCol.columnName;
-            ColumnRef newRef = new ColumnRef(targetRelName, newColName);
-            context.columnMapping.put(postCol, newRef);
-        }
-        // Store number of join result tuples
-        JoinStats.skinnerJoinCard = CatalogManager.
-                getCardinality(NamingConfig.DEFAULT_JOINED_NAME);
+        materialize(query, context, tuples);
         // Measure execution time for join phase
         JoinStats.joinMillis = System.currentTimeMillis() - startMillis;
-    }
-    /**
-     * Print out log entry if the maximal number of log
-     * entries has not been reached yet.
-     *
-     * @param logEntry	log entry to print
-     */
-    static void log(String logEntry) {
-        if (nrLogEntries < LoggingConfig.MAX_JOIN_LOGS) {
-            ++nrLogEntries;
-            System.out.println(logEntry);
-        }
     }
 }
