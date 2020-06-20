@@ -5,7 +5,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import catalog.CatalogManager;
 import config.JoinConfig;
 import config.LoggingConfig;
 import config.PreConfig;
@@ -14,8 +13,8 @@ import expressions.compilation.KnaryBoolEval;
 import indexing.UniqueIntIndex;
 import joining.plan.JoinOrder;
 import joining.plan.LeftDeepPlan;
-import joining.progress.ProgressTracker;
-import joining.progress.State;
+import joining.progress.hash.HashProgressTracker;
+import joining.progress.hash.State;
 import joining.result.ResultTuple;
 import preprocessing.Context;
 import query.QueryInfo;
@@ -45,7 +44,7 @@ public class OldJoin extends MultiWayJoin {
     /**
      * Avoids redundant evaluation work by tracking evaluation progress.
      */
-    public final ProgressTracker tracker;
+    public final HashProgressTracker tracker;
     /**
      * Associates each table index with unary predicates.
      */
@@ -65,7 +64,7 @@ public class OldJoin extends MultiWayJoin {
     		int budget) throws Exception {
         super(query, preSummary, budget);
         this.planCache = new HashMap<>();
-        this.tracker = new ProgressTracker(nrJoined, cardinalities);
+        this.tracker = new HashProgressTracker(nrJoined, cardinalities);
         // Collect unary predicates
         this.unaryPreds = new KnaryBoolEval[nrJoined];
         for (ExpressionInfo unaryExpr : query.wherePredicates) {
@@ -146,7 +145,7 @@ public class OldJoin extends MultiWayJoin {
 	 * Evaluates list of given predicates on current tuple
 	 * indices and returns true iff all predicates evaluate
 	 * to true.
-	 * 
+	 *
 	 * @param preds				predicates to evaluate
 	 * @param tupleIndices		(partial) tuples
 	 * @return					true iff all predicates evaluate to true
@@ -213,7 +212,7 @@ public class OldJoin extends MultiWayJoin {
 	 * @param joinIndex			current join index
 	 * @param nextCardinality	cardinality of current table
 	 */
-	private void jumpForExists(LeftDeepPlan plan, 
+	protected void jumpForExists(LeftDeepPlan plan,
 			int[] tupleIndices, int joinIndex, 
 			int nextCardinality) {
 		if (plan.existsFlags[joinIndex] != 0) {
@@ -231,6 +230,60 @@ public class OldJoin extends MultiWayJoin {
 	 * find a table with more tuples left to examine.
 	 * Reset tuple indices on the way and return updated
 	 * join index.
+	 *
+	 * @param plan				join order and associated meta-data
+	 * @param cardinalities		cardinalities for each table
+	 * @param tupleIndices		current tuple indices
+	 * @param joinIndex			current join order position
+	 * @return					updated join order position
+	 */
+	protected int backtrackForNoMatch(LeftDeepPlan plan, int[] cardinalities,
+							int[] tupleIndices, int joinIndex) {
+		int curJoinIdx = joinIndex;
+		int[] joinOrder = plan.joinOrder.order;
+		int nextTable = joinOrder[curJoinIdx];
+		int nextCardinality = cardinalities[nextTable];
+		int nrTables = joinOrder.length;
+		List<List<JoinIndexWrapper>> joinIndices = plan.joinIndices;
+		int minNextJoinIdx = Integer.MAX_VALUE;
+		// Is fast backtracking enabled?
+		if (JoinConfig.FAST_BACKTRACK) {
+			for (JoinIndexWrapper joinWrap :
+					joinIndices.get(curJoinIdx)) {
+				if (joinWrap.lastProposed >= nextCardinality) {
+					for (int i=0; i<nrTables; ++i) {
+						if (plan.joinOrder.order[i] ==
+								joinWrap.priorTable) {
+							minNextJoinIdx = Math.min(
+									i, minNextJoinIdx);
+						}
+					}
+				}
+			}
+		}
+		if (minNextJoinIdx > -1 &&
+				minNextJoinIdx < Integer.MAX_VALUE &&
+				minNextJoinIdx < joinIndex-1) {
+			// Exploit fast back-tracking
+			for (int i = minNextJoinIdx + 1; i <= joinIndex; ++i) {
+				int table = plan.joinOrder.order[i];
+				tupleIndices[table] = 0;
+				indexedTuple[table] = false;
+			}
+			joinIndex = minNextJoinIdx;
+			nextTable = plan.joinOrder.order[joinIndex];
+			nextCardinality = cardinalities[nextTable];
+			tupleIndices[nextTable] = proposeNext(
+					joinIndices.get(joinIndex),
+					nextTable, tupleIndices);
+		}
+		return joinIndex;
+	}
+	/**
+	 * "Backtrack", meaning decrease join index until we
+	 * find a table with more tuples left to examine.
+	 * Reset tuple indices on the way and return updated
+	 * join index.
 	 * 
 	 * @param plan			join order and associated meta-data
 	 * @param cardinalities	
@@ -239,7 +292,7 @@ public class OldJoin extends MultiWayJoin {
 	 * @param singleSteps	whether to increase indices by one
 	 * @return				updated join order position
 	 */
-	private int backtrack(LeftDeepPlan plan, int[] cardinalities, 
+	protected int backtrack(LeftDeepPlan plan, int[] cardinalities,
 			int[] tupleIndices, int joinIndex, boolean singleSteps) {
 		int nextTable = plan.joinOrder.order[joinIndex];
 		int nextCardinality = cardinalities[nextTable];
@@ -290,7 +343,7 @@ public class OldJoin extends MultiWayJoin {
 	 * @param singleSteps		whether to advance tuples slowly
 	 * @return					updated join index
 	 */
-	int increaseDepth(LeftDeepPlan plan, int[] cardinalities, 
+	protected int increaseDepth(LeftDeepPlan plan, int[] cardinalities,
 			int[] tupleIndices, int joinIndex, boolean singleSteps) {
 		// Get current join order table
 		int nextTable = plan.joinOrder.order[joinIndex];
@@ -324,7 +377,7 @@ public class OldJoin extends MultiWayJoin {
      * @param offsets last fully treated index for each table
      * @param state   last tuple visited in each base table before start
      */
-    private void executeWithBudget(LeftDeepPlan plan, State state, int[] offsets) {
+    protected void executeWithBudget(LeftDeepPlan plan, State state, int[] offsets) {
         // Extract variables for convenient access
         int nrTables = query.nrJoined;
         int[] tupleIndices = new int[nrTables];
@@ -500,6 +553,30 @@ public class OldJoin extends MultiWayJoin {
         }
     }
 
+	/**
+	 * Initialize some fields required for the join phase.
+	 *
+	 * @param plan			left-deep query plan fixing join order
+	 */
+    protected void initializeJoinFields(LeftDeepPlan plan) {
+		// Which tables use indices with unique values?
+		int nrTables = plan.joinOrder.nrJoinedTables;
+		uniqueIndex = new boolean[nrTables];
+		for (int joinCtr=0; joinCtr<nrTables; ++joinCtr) {
+			int table = plan.joinOrder.order[joinCtr];
+			for (JoinIndexWrapper wrap : plan.joinIndices.get(joinCtr)) {
+				if (wrap.nextIndex instanceof UniqueIntIndex) {
+					uniqueIndex[table] = true;
+				}
+			}
+		}
+		// Whether tuple at this position comes from index.
+		indexedTuple = new boolean[nrTables];
+		// Maximal join index during current execution
+		maxJoinIndex = 0;
+		// Number of completed tuples added
+		nrResultTuples = 0;
+	}
 
     @Override
     public boolean isFinished() {

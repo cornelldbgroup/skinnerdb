@@ -1,8 +1,6 @@
-package joining.progress;
+package joining.progress.hash;
 
 import java.util.Arrays;
-
-import joining.join.JoinMove;
 
 /**
  * Captures processing state for a specific join order.

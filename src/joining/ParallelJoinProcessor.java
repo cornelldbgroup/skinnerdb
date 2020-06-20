@@ -25,7 +25,12 @@ import java.util.concurrent.locks.ReentrantLock;
 import static threads.ThreadPool.executorService;
 
 /**
- * Controls the join phase in parallel.
+ * Controls the join phase in parallel:
+ * 1) initialize join statistics
+ * 2) initialize UCT nodes and join operators for each thread
+ * 3) for each thread, it dynamically splits a table and
+ *    run UCT algorithms within the partition.
+ * 4) aggregate join results
  *
  * @author Ziyun Wei
  *

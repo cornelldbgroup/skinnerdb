@@ -1,4 +1,4 @@
-package joining.progress;
+package joining.progress.hash;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -8,7 +8,6 @@ import java.util.Set;
 
 import joining.plan.JoinOrder;
 import joining.result.ResultTuple;
-import query.QueryInfo;
 
 /**
  * Keeps track of progress made in evaluating different
@@ -18,7 +17,7 @@ import query.QueryInfo;
  *
  * @author immanueltrummer
  */
-public class ProgressTracker {
+public class HashProgressTracker {
     /**
      * Number of tables in the query.
      */
@@ -53,7 +52,7 @@ public class ProgressTracker {
      * @param nrTables 		number of tables joined
      * @param cardinalities	cardinality of each table
      */
-    public ProgressTracker(int nrTables, int[] cardinalities) {
+    public HashProgressTracker(int nrTables, int[] cardinalities) {
         this.nrTables = nrTables;
         this.cardinalities = cardinalities;
         sharedProgress = new Progress(nrTables);

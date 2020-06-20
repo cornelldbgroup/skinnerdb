@@ -1,4 +1,4 @@
-package joining.progress;
+package joining.progress.hash;
 
 /**
  * Captures evaluation progress made for one specific table

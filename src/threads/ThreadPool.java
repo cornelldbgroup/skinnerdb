@@ -5,6 +5,9 @@ import java.util.concurrent.Executors;
 
 /**
  * Threads pool for joining.parallel execution.
+ * Initialize one static thread pool for join phase.
+ * Multiple queries can reuse the thread pool
+ * without re-initializing it.
  *
  * @author Ziyun Wei
  *

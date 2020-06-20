@@ -18,8 +18,8 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * The thread task for data parallel.
- * In the task, a thread will run learning samples
+ * The worker task for data parallel.
+ * In the task, a worker will run learning samples
  * and collect results within the partition of the split table.
  *
  * @author Ziyun Wei
@@ -43,7 +43,7 @@ public class DPTask implements Callable<Set<ResultTuple>> {
     private final AtomicBoolean joinFinished;
 
     /**
-     * Initialization of thread task.
+     * Initialization of worker task.
      *
      * @param query         query to process
      * @param root          root of UCT tree

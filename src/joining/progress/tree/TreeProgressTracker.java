@@ -1,6 +1,7 @@
-package joining.progress;
+package joining.progress.tree;
 
 import joining.plan.JoinOrder;
+import joining.progress.hash.State;
 
 /**
  * Keeps track of progress made in evaluating different
@@ -12,7 +13,7 @@ import joining.plan.JoinOrder;
  *
  * @author Ziyun Wei
  */
-public class NewProgressTracker{
+public class TreeProgressTracker {
     /**
      * Number of tables in the query.
      */
@@ -24,7 +25,7 @@ public class NewProgressTracker{
     /**
      * Stores progress made for each join order prefix.
      */
-    final NewProgress sharedProgress;
+    final ProgressNode sharedProgress;
     /**
      * For each table the last tuple that was fully treated.
      */
@@ -45,10 +46,10 @@ public class NewProgressTracker{
      * @param cardinalities cardinality of each table
      * @param nrSplitTables number of tables to split
      */
-    public NewProgressTracker(int nrTables, int[] cardinalities, int nrSplitTables) {
+    public TreeProgressTracker(int nrTables, int[] cardinalities, int nrSplitTables) {
         this.nrTables = nrTables;
         this.cardinalities = cardinalities;
-        this.sharedProgress = new NewProgress(nrTables);
+        this.sharedProgress = new ProgressNode(nrTables);
         this.tableOffset = new int[nrSplitTables][nrTables];
         this.nrSplitTables = nrSplitTables;
     }
@@ -66,23 +67,23 @@ public class NewProgressTracker{
         // Update termination flag
         isFinished = state.isFinished();
         // Update state for all join order prefixes
-        NewProgress curPrefixProgress = sharedProgress;
+        ProgressNode curPrefixProgress = sharedProgress;
         // Iterate over position in join order
         int nrJoinedTables = joinOrder.nrJoinedTables;
         // the time stamp we have seen along with the join path.
-        int seenTimeStamp = 0;
+        int nodeTimeStamp = 0;
         for (int joinCtr = 0; joinCtr < nrJoinedTables; ++joinCtr) {
             int table = joinOrder.order[joinCtr];
             if (curPrefixProgress.childNodes[table] == null) {
-                curPrefixProgress.childNodes[table] = new NewProgress(nrTables);
+                curPrefixProgress.childNodes[table] = new ProgressNode(nrTables);
             }
             curPrefixProgress = curPrefixProgress.childNodes[table];
             if (curPrefixProgress.latestState == null) {
-                curPrefixProgress.latestState = new NewState(nrSplitTables);
+                curPrefixProgress.latestState = new NodeState(nrSplitTables);
             }
             int latestTupleIndex = state.tupleIndices[table];
-            seenTimeStamp = curPrefixProgress.latestState.fastForward(
-                    seenTimeStamp, splitTable, roundCtr, latestTupleIndex);
+            nodeTimeStamp = curPrefixProgress.latestState.updateProgress(
+                    nodeTimeStamp, splitTable, roundCtr, latestTupleIndex);
         }
         // Update table offset considering last fully treated tuple -
         // consider first table and all following tables in join order
@@ -113,19 +114,19 @@ public class NewProgressTracker{
         int[] order = joinOrder.order;
         State state = new State(nrTables);
         // the time stamp we have seen along with the join path.
-        int seenTimeStamp = 0;
+        int nodeTimeStamp = 0;
         // Integrate progress from join orders with same prefix
-        NewProgress curPrefixProgress = sharedProgress;
+        ProgressNode curPrefixProgress = sharedProgress;
         for (int joinCtr = 0; joinCtr < nrJoinedTables; ++joinCtr) {
             int table = order[joinCtr];
             curPrefixProgress = curPrefixProgress.childNodes[table];
             if (curPrefixProgress == null) {
                 break;
             }
-            seenTimeStamp = curPrefixProgress.latestState.continueFrom(
-                    state, seenTimeStamp, splitTable, table);
+            nodeTimeStamp = curPrefixProgress.latestState.continueFrom(
+                    state, nodeTimeStamp, splitTable, table);
             // the current progress is out-of-date
-            if (seenTimeStamp < 0) {
+            if (nodeTimeStamp < 0) {
                 break;
             }
         }

@@ -5,7 +5,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import catalog.CatalogManager;
 import config.LoggingConfig;
 import config.PreConfig;
 import expressions.ExpressionInfo;
@@ -13,8 +12,8 @@ import expressions.compilation.KnaryBoolEval;
 import indexing.UniqueIntIndex;
 import joining.plan.JoinOrder;
 import joining.plan.LeftDeepPlan;
-import joining.progress.ProgressTracker;
-import joining.progress.State;
+import joining.progress.hash.HashProgressTracker;
+import joining.progress.hash.State;
 import joining.result.ResultTuple;
 import preprocessing.Context;
 import query.QueryInfo;
@@ -44,7 +43,7 @@ public class OldJoinDepr extends MultiWayJoin {
     /**
      * Avoids redundant evaluation work by tracking evaluation progress.
      */
-    public final ProgressTracker tracker;
+    public final HashProgressTracker tracker;
     /**
      * Associates each table index with unary predicates.
      */
@@ -64,7 +63,7 @@ public class OldJoinDepr extends MultiWayJoin {
     		int budget) throws Exception {
         super(query, preSummary, budget);
         this.planCache = new HashMap<>();
-        this.tracker = new ProgressTracker(nrJoined, cardinalities);
+        this.tracker = new HashProgressTracker(nrJoined, cardinalities);
         // Collect unary predicates
         this.unaryPreds = new KnaryBoolEval[nrJoined];
         for (ExpressionInfo unaryExpr : query.wherePredicates) {
