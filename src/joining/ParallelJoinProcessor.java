@@ -6,6 +6,7 @@ import joining.join.DPJoin;
 import joining.join.OldJoin;
 import joining.result.ResultTuple;
 import joining.tasks.DPTask;
+import joining.tasks.SplitTableCoordinator;
 import joining.uct.SelectionPolicy;
 import joining.uct.UctNode;
 import operators.Materialize;
@@ -69,6 +70,8 @@ public class ParallelJoinProcessor extends JoinProcessor {
         DPJoin[] joinOps = new DPJoin[nrThreads];
         // initialize UCT join order search tree for each thread
         UctNode[] roots = new UctNode[nrThreads];
+        // initialize split table coordinator
+        SplitTableCoordinator coordinator = new SplitTableCoordinator(nrThreads, query.nrJoined);
         for (int tid = 0; tid < nrThreads; tid++) {
             joinOps[tid] = new DPJoin(query, context,
                     JoinConfig.BUDGET_PER_EPISODE, tid);
@@ -80,7 +83,7 @@ public class ParallelJoinProcessor extends JoinProcessor {
         // finish flag shared by multiple threads
         AtomicBoolean joinFinished = new AtomicBoolean(false);
         for (int tid = 0; tid < nrThreads; tid++) {
-            tasks.add(new DPTask(query, roots[tid], joinOps[tid], joinFinished));
+            tasks.add(new DPTask(query, roots[tid], joinOps[tid], joinFinished, coordinator));
         }
         // submit tasks to the thread pool
         long executionStart = System.currentTimeMillis();

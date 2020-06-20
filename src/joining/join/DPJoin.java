@@ -66,6 +66,10 @@ public class DPJoin extends OldJoin {
      */
     public final int[] nrVisits;
     /**
+     * Last state after a episode.
+     */
+    public State lastState;
+    /**
      * Initializes join algorithm for given input query.
      *
      * @param query			query to process
@@ -128,10 +132,15 @@ public class DPJoin extends OldJoin {
 //        int[] offsets = tracker.tableOffset;
 
         int[] offsets = new int[nrJoined];
+        Arrays.fill(downOps, 0);
+        Arrays.fill(upOps, 0);
+        Arrays.fill(nrVisits, 0);
+
         executeWithBudget(plan, state, offsets);
         double reward = reward(joinOrder.order,
                 tupleIndexDelta, offsets, nrResultTuples);
         tracker.updateProgress(joinOrder, state, splitTable, roundCtr);
+        lastState = state;
         return reward;
     }
     /**

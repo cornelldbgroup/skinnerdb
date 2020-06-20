@@ -41,6 +41,10 @@ public class DPTask implements Callable<Set<ResultTuple>> {
      * The flag that represents the termination signal.
      */
     private final AtomicBoolean joinFinished;
+    /**
+     * The coordinator that decides the choice of split table.
+     */
+    private final SplitTableCoordinator coordinator;
 
     /**
      * Initialization of worker task.
@@ -49,13 +53,15 @@ public class DPTask implements Callable<Set<ResultTuple>> {
      * @param root          root of UCT tree
      * @param joinOp        join operator
      * @param joinFinished  finish flag
+     * @param coordinator   split table coordinator
      */
     public DPTask(QueryInfo query, UctNode root, DPJoin joinOp,
-                        AtomicBoolean joinFinished) {
+                        AtomicBoolean joinFinished, SplitTableCoordinator coordinator) {
         this.query = query;
         this.root = root;
         this.joinOp = joinOp;
         this.joinFinished = joinFinished;
+        this.coordinator = coordinator;
     }
 
     @Override
@@ -103,7 +109,17 @@ public class DPTask implements Callable<Set<ResultTuple>> {
         while (!joinFinished.get()) {
             ++roundCtr;
             joinOp.roundCtr = (int) roundCtr;
-            double reward = root.sample(roundCtr, joinOrder, policy);
+            int finalTable = coordinator.getSplitTable();
+            double reward;
+            if (finalTable != -1) {
+                joinOrder = coordinator.getJoinOrder();
+                joinOp.splitTable = finalTable;
+                reward = joinOp.execute(joinOrder);
+                coordinator.optimizeSplitTable(joinOp);
+            }
+            else {
+                reward = root.sample(roundCtr, joinOrder, policy);
+            }
             // Count reward except for final sample
             if (!joinOp.isFinished()) {
                 accReward += reward;
