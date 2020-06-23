@@ -37,7 +37,11 @@ public class NodeState {
      * @param lastIndex             last position index in join order
      * @return                      the time stamp considering the current node.
      */
-    public int updateProgress(int nodeTimeStamp, int splitTable, int roundCtr, int latestTupleIndex, int lastIndex) {
+    public int updateProgress(int nodeTimeStamp,
+                              int splitTable,
+                              int roundCtr,
+                              int latestTupleIndex,
+                              int lastIndex) {
         Progress progressInformation = progressForSplitTables[splitTable];
         if (progressInformation == null) {
             progressForSplitTables[splitTable] =

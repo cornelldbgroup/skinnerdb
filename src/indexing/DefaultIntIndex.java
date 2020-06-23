@@ -9,6 +9,7 @@ import com.koloboke.collect.map.hash.HashIntIntMaps;
 import config.LoggingConfig;
 import config.ParallelConfig;
 import data.IntData;
+import joining.join.DPJoin;
 import statistics.JoinStats;
 
 /**
@@ -189,7 +190,7 @@ public class DefaultIntIndex extends IntIndex {
 		int firstPos = keyToPositions.getOrDefault(value, -1);
 		// No indexed values?
 		if (firstPos < 0) {
-			JoinStats.nrUniqueIndexLookups += 1;
+//			JoinStats.nrUniqueIndexLookups += 1;
 			return cardinality;
 		}
 		// Can we return first indexed value?
@@ -199,7 +200,6 @@ public class DefaultIntIndex extends IntIndex {
 		}
 		// Get number of indexed values
 		int nrVals = positions[firstPos];
-		currentMatchedTuples = nrVals;
 
 		// Restrict search range via binary search
 		int lowerBound = firstPos + 1;
@@ -233,6 +233,58 @@ public class DefaultIntIndex extends IntIndex {
 		return cardinality;
 	}
 
+	@Override
+	public int nextTuple(int value, int prevTuple, DPJoin dpJoin) {
+		// Get start position for indexed values
+		int firstPos = keyToPositions.getOrDefault(value, -1);
+		// No indexed values?
+		if (firstPos < 0) {
+//			JoinStats.nrUniqueIndexLookups += 1;
+			return cardinality;
+		}
+		// Can we return first indexed value?
+		int firstTuple = positions[firstPos+1];
+		if (firstTuple>prevTuple) {
+			return firstTuple;
+		}
+		// Get number of indexed values
+		int nrVals = positions[firstPos];
+
+		// Restrict search range via binary search
+		int lowerBound = firstPos + 1;
+		// Exploit lookup cache if possible
+		int lastPos = dpJoin.lastPos;
+		int lastValue = dpJoin.lastValue;
+		int lastTuple = dpJoin.lastTuple;
+		if (lastPos != -1 && lastValue == value &&
+				lastTuple <= prevTuple) {
+			lowerBound = lastPos + 1;
+		}
+		int upperBound = firstPos + nrVals;
+		while (upperBound-lowerBound>1) {
+			int middle = lowerBound + (upperBound-lowerBound)/2;
+			if (positions[middle] > prevTuple) {
+				upperBound = middle;
+			} else {
+				lowerBound = middle;
+			}
+		}
+		// Get next tuple
+		for (int pos=lowerBound; pos<=upperBound; ++pos) {
+			if (positions[pos] > prevTuple) {
+				// Cache details about lookup
+				dpJoin.lastValue = value;
+				dpJoin.lastPos = pos;
+				dpJoin.lastTuple = positions[pos];
+				// Return tuple at position
+				return lastTuple;
+			}
+		}
+		// No suitable tuple found
+		dpJoin.lastPos = -1;
+		return cardinality;
+	}
+
 	/**
 	 * Returns index of next tuple with given value
 	 * or cardinality of indexed table if no such
@@ -241,11 +293,12 @@ public class DefaultIntIndex extends IntIndex {
 	 * @param value			indexed value
 	 * @param prevTuple		index of last tuple
 	 * @param priorIndex	index of last tuple in the prior table
-	 * @param tid			thread id
+	 * @param dpJoin		join operator that calls this function
 	 * @return 	index of next tuple or cardinality
 	 */
-	public int nextTuple(int value, int prevTuple, int priorIndex, int tid) {
+	public int nextTuple(int value, int prevTuple, int priorIndex, DPJoin dpJoin) {
 		int nrThreads = ParallelConfig.JOIN_THREADS;
+		int tid = dpJoin.tid;
 		// make sure the first tuple doesn't always start from thread 0.
 		tid = (priorIndex + tid) % nrThreads;
 		// get start position for indexed values
@@ -256,7 +309,7 @@ public class DefaultIntIndex extends IntIndex {
 		}
 		// can we return the first indexed value?
 		int nrVals = positions[firstPos];
-		currentMatchedTuples = nrVals;
+		dpJoin.lastNrVals = nrVals;
 
 		int firstOffset = tid + 1;
 		if (firstOffset > nrVals) {

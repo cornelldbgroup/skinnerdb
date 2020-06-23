@@ -1,13 +1,12 @@
 package joining.tasks;
 
 import config.JoinConfig;
+import config.LoggingConfig;
 import joining.join.DPJoin;
-import joining.join.MultiWayJoin;
-import joining.join.OldJoin;
 import joining.result.ResultTuple;
 import joining.uct.SelectionPolicy;
 import joining.uct.UctNode;
-import preprocessing.Context;
+
 import query.QueryInfo;
 import visualization.TreePlotter;
 
@@ -109,11 +108,12 @@ public class DPTask implements Callable<Set<ResultTuple>> {
         while (!joinFinished.get()) {
             ++roundCtr;
             joinOp.roundCtr = (int) roundCtr;
-            int finalTable = coordinator.getSplitTable();
+            // retrieve the split table from the coordinator
+            int splitTable = coordinator.getSplitTable();
             double reward;
-            if (finalTable != -1) {
+            if (splitTable != -1) {
                 joinOrder = coordinator.getJoinOrder();
-                joinOp.splitTable = finalTable;
+                joinOp.splitTable = splitTable;
                 reward = joinOp.execute(joinOrder);
                 coordinator.optimizeSplitTable(joinOp);
             }
@@ -187,6 +187,8 @@ public class DPTask implements Callable<Set<ResultTuple>> {
      * @param logEntry	log entry to print
      */
     static void log(String logEntry) {
-        System.out.println(logEntry);
+        if (LoggingConfig.PRINT_JOIN_LOGS) {
+            System.out.println(logEntry);
+        }
     }
 }

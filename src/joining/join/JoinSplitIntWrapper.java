@@ -30,9 +30,9 @@ public class JoinSplitIntWrapper extends JoinIndexWrapper {
      */
     final int splitTableID;
     /**
-     * Identification for the current thread.
+     * The join operator that initializes this wrapper.
      */
-    final int tid;
+    final DPJoin dpJoin;
     /**
      * Initializes wrapper providing access to integer index
      * on column that appears in equi-join predicate.
@@ -42,23 +42,26 @@ public class JoinSplitIntWrapper extends JoinIndexWrapper {
      * @param joinCols		pair of columns in equi-join predicate
      * @param order			join order
      * @param splitTableID	table to split
+     * @param dpJoin	    join operator that creates the wrapper
      */
     public JoinSplitIntWrapper(QueryInfo queryInfo,
                                   Context preSummary, Set<ColumnRef> joinCols,
-                                  int[] order, int splitTableID, int tid) throws Exception {
+                                  int[] order, int splitTableID, DPJoin dpJoin) throws Exception {
         super(queryInfo, preSummary, joinCols, order);
         priorIntData = (IntData)priorData;
         nextIntIndex = (IntIndex)nextIndex;
         this.splitTableID = splitTableID;
-        this.tid = tid;
+        this.dpJoin = dpJoin;
     }
     @Override
     public int nextIndex(int[] tupleIndices) {
         int priorTuple = tupleIndices[priorTable];
         int priorVal = priorIntData.data[priorTuple];
         int curTuple = tupleIndices[nextTable];
-//        lastProposed = nextIntIndex.nextTuple(priorVal, curTuple);
-        lastProposed = nextIntIndex.nextTuple(priorVal, curTuple, priorTuple, tid);
+        int splitTable = dpJoin.splitTable;
+        lastProposed = splitTable == nextTable ?
+                nextIntIndex.nextTuple(priorVal, curTuple, priorTuple, dpJoin) :
+                nextIntIndex.nextTuple(priorVal, curTuple);
         return lastProposed;
     }
     @Override

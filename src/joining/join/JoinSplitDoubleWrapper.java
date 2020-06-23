@@ -1,9 +1,7 @@
 package joining.join;
 
 import data.DoubleData;
-import data.IntData;
 import indexing.DoubleIndex;
-import indexing.IntIndex;
 import preprocessing.Context;
 import query.ColumnRef;
 import query.QueryInfo;
@@ -13,7 +11,8 @@ import java.util.Set;
 /**
  * Uses index on join column to identify next
  * tuple to satisfy binary equality condition
- * on two integer columns. The join column is split column.
+ * on two integer columns. The join column is
+ * the split column.
  *
  * @author Ziyun Wei
  *
@@ -32,9 +31,9 @@ public class JoinSplitDoubleWrapper extends JoinIndexWrapper  {
      */
     final int splitTableID;
     /**
-     * Identification for the current thread.
+     * The join operator that initializes this wrapper.
      */
-    final int tid;
+    final DPJoin dpJoin;
     /**
      * Initializes wrapper providing access to integer index
      * on column that appears in equi-join predicate.
@@ -43,15 +42,17 @@ public class JoinSplitDoubleWrapper extends JoinIndexWrapper  {
      * @param preSummary	maps query columns to intermediate result columns
      * @param joinCols		pair of columns in equi-join predicate
      * @param order			join order
+     * @param splitTableID	table to split
+     * @param dpJoin	    join operator that creates the wrapper
      */
     public JoinSplitDoubleWrapper(QueryInfo queryInfo,
                           Context preSummary, Set<ColumnRef> joinCols,
-                          int[] order, int splitTableID, int tid) throws Exception {
+                          int[] order, int splitTableID, DPJoin dpJoin) throws Exception {
         super(queryInfo, preSummary, joinCols, order);
         priorDoubleData = (DoubleData)priorData;
         nextDoubleIndex = (DoubleIndex)nextIndex;
         this.splitTableID = splitTableID;
-        this.tid = tid;
+        this.dpJoin = dpJoin;
     }
 
     @Override
@@ -59,10 +60,13 @@ public class JoinSplitDoubleWrapper extends JoinIndexWrapper  {
         int priorTuple = tupleIndices[priorTable];
         double priorVal = priorDoubleData.data[priorTuple];
         int curTuple = tupleIndices[nextTable];
-//        lastProposed = nextDoubleIndex.nextTuple(priorVal, curTuple);
-        nextDoubleIndex.nextTuple(priorVal, curTuple, priorTuple, tid);
+        int splitTable = dpJoin.splitTable;
+        lastProposed = splitTable == nextTable ?
+                nextDoubleIndex.nextTuple(priorVal, curTuple, priorTuple, dpJoin) :
+                nextDoubleIndex.nextTuple(priorVal, curTuple);
         return lastProposed;
     }
+
     @Override
     public int nrIndexed(int[] tupleIndices) {
         int priorTuple = tupleIndices[priorTable];

@@ -147,11 +147,11 @@ public class LeftDeepPlan {
 	 * @param preSummary	summarizes pre-processing
 	 * @param evalMap		maps Boolean expressions to evaluators
 	 * @param order			join order
-	 * @param tid			thread id
+	 * @param dpJoin		join operator that init
 	 * @throws Exception
 	 */
 	public LeftDeepPlan(QueryInfo query, Context preSummary,
-						Map<Expression, KnaryBoolEval> evalMap, int[] order, int tid)
+						Map<Expression, KnaryBoolEval> evalMap, int[] order, DPJoin dpJoin)
 			throws Exception {
 		// Count generated plan
 		int nrTables = query.nrJoined;
@@ -199,11 +199,11 @@ public class LeftDeepPlan {
 						switch (TypeUtil.toJavaType(firstInfo.type)) {
 							case INT:
 								joinIndices.get(joinCtr).add(new JoinSplitIntWrapper(
-										query, preSummary, joinCols, order, eid, tid));
+										query, preSummary, joinCols, order, eid, dpJoin));
 								break;
 							case DOUBLE:
 								joinIndices.get(joinCtr).add(new JoinSplitDoubleWrapper(
-										query, preSummary, joinCols, order, eid, tid));
+										query, preSummary, joinCols, order, eid, dpJoin));
 								break;
 							default:
 								throw new SQLexception("Error - no support for equality "
@@ -215,12 +215,12 @@ public class LeftDeepPlan {
 					else {
 						switch (TypeUtil.toJavaType(firstInfo.type)) {
 							case INT:
-								joinIndices.get(joinCtr).add(new JoinIntWrapper(
-										query, preSummary, joinCols, order));
+								joinIndices.get(joinCtr).add(new JoinDPIntWrapper(
+										query, preSummary, joinCols, order, dpJoin));
 								break;
 							case DOUBLE:
-								joinIndices.get(joinCtr).add(new JoinDoubleWrapper(
-										query, preSummary, joinCols, order));
+								joinIndices.get(joinCtr).add(new JoinDPDoubleWrapper(
+										query, preSummary, joinCols, order, dpJoin));
 								break;
 							default:
 								throw new SQLexception("Error - no support for equality "

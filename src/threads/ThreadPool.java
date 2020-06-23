@@ -22,7 +22,7 @@ public class ThreadPool {
      *
      * @param nrThreads	    Number of threads for join phase.
      */
-    public static void initThreadsPool(int nrThreads, int preThreads) {
+    public static void initThreadsPool(int nrThreads) {
         if (nrThreads > 0) {
             executorService = Executors.newFixedThreadPool(nrThreads);
 //            executorService = Executors.newFixedThreadPool(nrThreads,

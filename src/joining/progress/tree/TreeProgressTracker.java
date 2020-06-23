@@ -72,6 +72,7 @@ public class TreeProgressTracker {
         int nrJoinedTables = joinOrder.nrJoinedTables;
         // the time stamp we have seen along with the join path.
         int nodeTimeStamp = 0;
+        int lastIndex = state.lastIndex;
         for (int joinCtr = 0; joinCtr < nrJoinedTables; ++joinCtr) {
             int table = joinOrder.order[joinCtr];
             if (curPrefixProgress.childNodes[table] == null) {
@@ -83,7 +84,7 @@ public class TreeProgressTracker {
             }
             int latestTupleIndex = state.tupleIndices[table];
             nodeTimeStamp = curPrefixProgress.latestState.updateProgress(
-                    nodeTimeStamp, splitTable, roundCtr, latestTupleIndex);
+                    nodeTimeStamp, splitTable, roundCtr, latestTupleIndex, lastIndex);
         }
         // Update table offset considering last fully treated tuple -
         // consider first table and all following tables in join order

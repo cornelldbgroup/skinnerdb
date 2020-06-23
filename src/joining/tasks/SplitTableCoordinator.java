@@ -50,9 +50,9 @@ public class SplitTableCoordinator {
         threadStates = new State[nrThreads][nrTables];
     }
     /**
-     * Set the join order to another converged join order
+     * Set the join order to another converged join order.
      *
-     * @param joinOrder     optimal join order
+     * @param joinOrder     converged join order
      */
     public void setJoinOrder(int[] joinOrder) {
         System.arraycopy(joinOrder, 0,
@@ -61,32 +61,33 @@ public class SplitTableCoordinator {
     /**
      * Optimize the split table for the converged join order.
      * First, re-optimize the split table based on the statistics.
-     * Then if the current thread is the slowest thread,
+     * Then if the thread calling this function is the slowest thread,
      * update the split table to the current optimal one.
      *
      * @param dpJoin        join operator
      */
     public void optimizeSplitTable(DPJoin dpJoin) {
-        State lastState = dpJoin.lastState;
+        State lastState = dpJoin.lastEndState;
         int tid = dpJoin.tid;
         int lastSplitTable = dpJoin.splitTable;
         int optimalTable = -1;
         int nrTables = joinOrder.length;
-        double reward = 0;
+        double maxTableReward = 0;
         // optimize the split table for the join order
         for (int table = 0; table < nrTables; table++) {
-            if (dpJoin.nrVisits[table] > 0) {
+            if (dpJoin.nrMatchedTuples[table] > 0) {
                 double tableReward = dpJoin.splitTableReward(joinOrder, table);
-                if (tableReward > reward) {
-                    reward = tableReward;
+                if (tableReward > maxTableReward) {
+                    maxTableReward = tableReward;
                     optimalTable = table;
                 }
             }
         }
+        // if the optimized table is different from the current split table
         if (optimalTable != lastSplitTable) {
-            // whether the current thread is the slowest one
             threadStates[tid][splitTable] = lastState;
             boolean isSlowest = true;
+            // check whether the current thread is the slowest one
             for (int i = 0; i < threadStates.length; i++) {
                 if (tid != i) {
                     State threadState = threadStates[i][splitTable];
@@ -99,6 +100,7 @@ public class SplitTableCoordinator {
                 }
             }
             if (isSlowest) {
+                // update the optimal split table
                 int finalOptimalTable = optimalTable;
                 slowestState.updateAndGet(previousState -> {
                     if (isAhead(joinOrder, previousState, lastState)) {
@@ -122,7 +124,6 @@ public class SplitTableCoordinator {
      * @return				true iff the right state is ahead
      */
     boolean isAhead(int[] order, State leftState, State rightState) {
-        //nrCompared = Math.min(nrCompared, otherState.lastIndex);
         // Whichever state had higher progress in the first table
         // (in shared prefix in join order) wins.
         if (leftState.isFinished()) {
@@ -132,10 +133,12 @@ public class SplitTableCoordinator {
             return true;
         }
         for (int table : order) {
-            if (leftState.tupleIndices[table] > rightState.tupleIndices[table]) {
+            if (leftState.tupleIndices[table]
+                    > rightState.tupleIndices[table]) {
                 // this state is ahead
                 return false;
-            } else if (rightState.tupleIndices[table] > leftState.tupleIndices[table]) {
+            } else if (rightState.tupleIndices[table]
+                    > leftState.tupleIndices[table]) {
                 // other state is ahead
                 return true;
             }
@@ -144,7 +147,7 @@ public class SplitTableCoordinator {
         return false;
     }
     /**
-     * Set the finish flag to True for
+     * Set the finished flag to True for
      * given thread id and split table.
      * Then check Whether all threads
      * finish on the split table

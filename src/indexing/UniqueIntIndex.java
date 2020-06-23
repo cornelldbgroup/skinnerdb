@@ -5,6 +5,7 @@ import com.koloboke.collect.map.hash.HashIntIntMaps;
 
 import config.ParallelConfig;
 import data.IntData;
+import joining.join.DPJoin;
 
 /**
  * Indexes integer values in columns with unique values.
@@ -33,9 +34,8 @@ public class UniqueIntIndex extends IntIndex {
 				keyToRow.put(key, row);
 			}
 		}
-		// the number of matched tuples is always 1.
-		currentMatchedTuples = 1;
 	}
+
 	@Override
 	public int nextTuple(int value, int prevTuple) {
 		int onlyRow = keyToRow.getOrDefault(value, cardinality);
@@ -43,11 +43,20 @@ public class UniqueIntIndex extends IntIndex {
 	}
 
 	@Override
-	public int nextTuple(int value, int prevTuple, int priorIndex, int tid) {
+	public int nextTuple(int value, int prevTuple, DPJoin dpJoin) {
+		int onlyRow = keyToRow.getOrDefault(value, cardinality);
+		dpJoin.lastNrVals = 1;
+		return onlyRow>prevTuple?onlyRow:cardinality;
+	}
+
+	@Override
+	public int nextTuple(int value, int prevTuple, int priorIndex, DPJoin dpJoin) {
 		int nrThreads = ParallelConfig.JOIN_THREADS;
+		int tid = dpJoin.tid;
 		tid = (priorIndex + tid) % nrThreads;
 		int onlyRow = tid == 0 ? keyToRow.getOrDefault(value, cardinality)
 				: cardinality;
+		dpJoin.lastNrVals = 1;
 		return onlyRow > prevTuple?onlyRow : cardinality;
 	}
 

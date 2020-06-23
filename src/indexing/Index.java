@@ -20,11 +20,6 @@ public abstract class Index {
 	 */
 	public int[] positions;
 	/**
-	 * After one propose next, record how many tuples matched
-	 * with the prior table.
-	 */
-	public int currentMatchedTuples = 0;
-	/**
 	 * Initialize for given cardinality of indexed table.
 	 * 
 	 * @param cardinality	number of rows to index

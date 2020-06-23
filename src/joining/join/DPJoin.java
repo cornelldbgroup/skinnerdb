@@ -62,13 +62,33 @@ public class DPJoin extends OldJoin {
      */
     public final int[] upOps;
     /**
-     * The number of visits for each table during one sample.
+     * After one proposeNext call, record how many tuples matched
+     * with the prior table.
      */
-    public final int[] nrVisits;
+    public final int[] nrMatchedTuples;
+    /**
+     * Cache value of last index access.
+     */
+    public int lastValue = -1;
+    /**
+     * Cache position returned during last
+     * index access.
+     */
+    public int lastPos = -1;
+    /**
+     * Cache tuple returned during
+     * last index access.
+     */
+    public int lastTuple = -1;
+    /**
+     * Cache tuple returned during
+     * last index access.
+     */
+    public int lastNrVals = -1;
     /**
      * Last state after a episode.
      */
-    public State lastState;
+    public State lastEndState;
     /**
      * Initializes join algorithm for given input query.
      *
@@ -93,7 +113,7 @@ public class DPJoin extends OldJoin {
         this.tid = tid;
         this.downOps = new int[nrJoined];
         this.upOps = new int[nrJoined];
-        this.nrVisits = new int[nrJoined];
+        this.nrMatchedTuples = new int[nrJoined];
         log("preSummary before join: " + preSummary.toString());
     }
     /**
@@ -106,6 +126,7 @@ public class DPJoin extends OldJoin {
      */
     @Override
     public double execute(int[] order) throws Exception {
+        order = new int[]{3, 1, 2, 0};
         log("Context:\t" + preSummary.toString());
         log("Join order:\t" + Arrays.toString(order));
         log("Aliases:\t" + Arrays.toString(query.aliases));
@@ -121,7 +142,7 @@ public class DPJoin extends OldJoin {
         JoinOrder joinOrder = new JoinOrder(order);
         LeftDeepPlan plan = planCache.get(joinOrder);
         if (plan == null) {
-            plan = new LeftDeepPlan(query, preSummary, predToEval, order, tid);
+            plan = new LeftDeepPlan(query, preSummary, predToEval, order, this);
             planCache.put(joinOrder, plan);
         }
         log(plan.toString());
@@ -132,15 +153,22 @@ public class DPJoin extends OldJoin {
 //        int[] offsets = tracker.tableOffset;
 
         int[] offsets = new int[nrJoined];
+        // initialize join statistics
         Arrays.fill(downOps, 0);
         Arrays.fill(upOps, 0);
-        Arrays.fill(nrVisits, 0);
-
+        Arrays.fill(nrMatchedTuples, 0);
+        lastPos = -1;
+        lastTuple = -1;
+        lastNrVals = -1;
+        lastValue = -1;
+        if (lastEndState != null && state.isAhead(order, lastEndState, nrJoined)) {
+            System.out.println("wrong");
+        }
         executeWithBudget(plan, state, offsets);
         double reward = reward(joinOrder.order,
                 tupleIndexDelta, offsets, nrResultTuples);
         tracker.updateProgress(joinOrder, state, splitTable, roundCtr);
-        lastState = state;
+        lastEndState = state;
         return reward;
     }
     /**
@@ -206,6 +234,7 @@ public class DPJoin extends OldJoin {
                 tupleIndices[nextTable] = proposeNext(
                         joinIndices.get(joinIndex),
                         nextTable, tupleIndices);
+                downOps[nextTable]++;
                 // If activated: fully resolve anti-joins
                 // by examining whether no tuple matches.
                 if (JoinConfig.SIMPLE_ANTI_JOIN &&
@@ -216,6 +245,7 @@ public class DPJoin extends OldJoin {
                         tupleIndices[nextTable] = proposeNext(
                                 joinIndices.get(joinIndex),
                                 nextTable, tupleIndices);
+                        downOps[nextTable]++;
                         nrTuples++;
                     }
                 }
@@ -227,6 +257,7 @@ public class DPJoin extends OldJoin {
                 if (curNoMatch && (PreConfig.PRE_FILTER ||
                         unaryPred == null)) {
                     joinIndex = backtrackForNoMatch(plan, cardinalities, tupleIndices, joinIndex);
+                    upOps[nextTable]++;
                 }
                 // Special treatment for tables representing
                 // sub-queries within not exists expressions.
@@ -276,7 +307,7 @@ public class DPJoin extends OldJoin {
         int nrThreads = ParallelConfig.JOIN_THREADS;
         for (int joinIndex = 0; joinIndex < nrJoined; joinIndex++) {
             int table = joinOrder[joinIndex];
-            int indexSize = nrVisits[table];
+            int indexSize = nrMatchedTuples[table];
             if (indexSize > 0) {
                 int downOperations = downOps[table];
                 int upOperations = upOps[table];

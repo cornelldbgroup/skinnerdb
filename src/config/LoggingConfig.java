@@ -57,6 +57,11 @@ public class LoggingConfig {
 	 */
 	public final static int MAX_JOIN_LOGS = 0;
 	/**
+	 * Whether to generate logging output when running
+	 * join phase for multi-threads.
+	 */
+	public final static boolean PRINT_JOIN_LOGS = false;
+	/**
 	 * Whether to generate debugging output during post-processing.
 	 */
 	public final static boolean POST_PROCESSING_VERBOSE = false;

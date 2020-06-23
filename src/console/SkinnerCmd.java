@@ -14,6 +14,7 @@ import catalog.info.TableInfo;
 import compression.Compressor;
 import config.GeneralConfig;
 import config.NamingConfig;
+import config.ParallelConfig;
 import config.StartupConfig;
 import ddl.TableCreator;
 import diskio.LoadCSV;
@@ -28,6 +29,7 @@ import net.sf.jsqlparser.statement.select.PlainSelect;
 import net.sf.jsqlparser.statement.select.Select;
 import print.RelationPrinter;
 import query.SQLexception;
+import threads.ThreadPool;
 
 /**
  * Runs Skinner command line console.
@@ -362,6 +364,7 @@ public class SkinnerCmd {
 		PathUtil.initSchemaPaths(dbDir);
 		CatalogManager.loadDB(PathUtil.schemaPath);
 		PathUtil.initDataPaths(CatalogManager.currentDB);
+		ThreadPool.initThreadsPool(ParallelConfig.JOIN_THREADS);
 		// Load data and/or dictionary
 		if (GeneralConfig.inMemory) {
 			// In-memory data processing
@@ -371,20 +374,21 @@ public class SkinnerCmd {
 			// string dictionary is still loaded.
 			BufferManager.loadDictionary();
 		}
-		// Command line processing
-		System.out.println("Enter 'help' for help and 'quit' to exit");
-		Scanner scanner = new Scanner(System.in);
-		boolean continueProcessing = true;
-		while (continueProcessing) {
-			System.out.print("> ");
-			String input = scanner.nextLine();
-			try {
-				continueProcessing = processInput(input);								
-			} catch (Exception e) {
-				System.err.println("Error processing command: ");
-				e.printStackTrace();
-			}
-		}
-		scanner.close();
+		processInput("exec ./jcch/queries/q02.sql");
+//		// Command line processing
+//		System.out.println("Enter 'help' for help and 'quit' to exit");
+//		Scanner scanner = new Scanner(System.in);
+//		boolean continueProcessing = true;
+//		while (continueProcessing) {
+//			System.out.print("> ");
+//			String input = scanner.nextLine();
+//			try {
+//				continueProcessing = processInput(input);
+//			} catch (Exception e) {
+//				System.err.println("Error processing command: ");
+//				e.printStackTrace();
+//			}
+//		}
+//		scanner.close();
 	}
 }
