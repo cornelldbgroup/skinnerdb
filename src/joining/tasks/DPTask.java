@@ -2,6 +2,7 @@ package joining.tasks;
 
 import config.JoinConfig;
 import config.LoggingConfig;
+import config.ParallelConfig;
 import joining.join.DPJoin;
 import joining.result.ResultTuple;
 import joining.uct.SelectionPolicy;
@@ -68,6 +69,7 @@ public class DPTask implements Callable<Set<ResultTuple>> {
         // Initialize counters and variables
         int[] joinOrder = new int[query.nrJoined];
         long roundCtr = 0;
+        int tid = joinOp.tid;
         // copy UCT root
         UctNode root = this.root;
         // Initialize exploration weight
@@ -111,9 +113,9 @@ public class DPTask implements Callable<Set<ResultTuple>> {
             // retrieve the split table from the coordinator
             int splitTable = coordinator.getSplitTable();
             double reward;
+            joinOp.splitTable = splitTable;
             if (splitTable != -1) {
                 joinOrder = coordinator.getJoinOrder();
-                joinOp.splitTable = splitTable;
                 reward = joinOp.execute(joinOrder);
                 coordinator.optimizeSplitTable(joinOp);
             }
@@ -125,23 +127,20 @@ public class DPTask implements Callable<Set<ResultTuple>> {
                 accReward += reward;
                 maxReward = Math.max(reward, maxReward);
             }
-            switch (JoinConfig.EXPLORATION_POLICY) {
-                case REWARD_AVERAGE:
-                    double avgReward = accReward/roundCtr;
-                    JoinConfig.EXPLORATION_WEIGHT = avgReward;
-                    log("Avg. reward: " + avgReward);
+            else {
+                splitTable = joinOp.splitTable;
+                if (coordinator.firstFinished
+                        .compareAndSet(false, true)) {
+                    System.out.println(tid + " finishes with: " +
+                            Arrays.toString(joinOrder) + " splitting " + splitTable);
+                }
+                boolean isFinished = coordinator.setAndCheckFinished(tid, splitTable);
+                if (isFinished) {
+                    joinFinished.set(true);
                     break;
-                case SCALE_DOWN:
-                    if (roundCtr == nextScaleDown) {
-                        JoinConfig.EXPLORATION_WEIGHT /= 10.0;
-                        nextScaleDown *= 10;
-                    }
-                    break;
-                case STATIC:
-                case ADAPT_TO_SAMPLE:
-                    // Nothing to do
-                    break;
+                }
             }
+
             // Consider memory loss
             if (JoinConfig.FORGET && roundCtr == nextForget) {
                 root = new UctNode(roundCtr, query, true, joinOp);
@@ -153,8 +152,8 @@ public class DPTask implements Callable<Set<ResultTuple>> {
             log("Table offsets:\t" + Arrays.toString(joinOp.tracker.tableOffset));
             log("Table cardinalities:\t" + Arrays.toString(joinOp.cardinalities));
             // Generate plots if activated
-            if (query.explain && plotCtr<query.plotAtMost &&
-                    roundCtr % query.plotEvery==0) {
+            if (query.explain && plotCtr < query.plotAtMost &&
+                    roundCtr % query.plotEvery == 0) {
                 String plotName = "ucttree" + plotCtr + ".pdf";
                 String plotPath = Paths.get(query.plotDir, plotName).toString();
                 TreePlotter.plotTree(root, plotPath);

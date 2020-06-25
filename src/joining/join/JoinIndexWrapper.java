@@ -133,6 +133,16 @@ public abstract class JoinIndexWrapper {
 	 * @return	number of indexed tuples in next table
 	 */
 	public abstract int nrIndexed(int[] tupleIndices);
+	/**
+	 * Check whether the current row is in
+	 * the thread's scope.
+	 *
+	 * @param tupleIndices	current tuple indices
+	 * @return	binary result of "in scope" evaluation.
+	 */
+	public boolean inScope(int[] tupleIndices) {
+		return true;
+	}
 	
 	@Override
 	public String toString() {

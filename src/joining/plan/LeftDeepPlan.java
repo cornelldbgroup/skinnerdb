@@ -48,6 +48,12 @@ public class LeftDeepPlan {
 	 */
 	public final int[] existsFlags;
 	/**
+	 * For each table that is potential to be split table,
+	 * save the representative predicate id because the split
+	 * method is related to the prior table
+	 */
+	public final int[] predForTables;
+	/**
 	 * Determines the join order positions at which to
 	 * evaluate specific equality and other predicates.
 	 * 
@@ -64,6 +70,7 @@ public class LeftDeepPlan {
 		++JoinStats.nrPlansTried;
 		int nrTables = query.nrJoined;
 		this.joinOrder = new JoinOrder(order);
+		predForTables = null;
 		// Initialize remaining predicates
 		List<ExpressionInfo> remainingEquiPreds = new ArrayList<>();
 		remainingEquiPreds.addAll(query.equiJoinPreds);
@@ -168,6 +175,7 @@ public class LeftDeepPlan {
 		// Initialize applicable predicates
 		joinIndices = new ArrayList<>();
 		applicablePreds = new ArrayList<>();
+		predForTables = new int[nrTables];
 		for (int tableCtr = 0; tableCtr < nrTables; ++tableCtr) {
 			joinIndices.add(new ArrayList<>());
 			applicablePreds.add(new ArrayList<>());
@@ -196,6 +204,7 @@ public class LeftDeepPlan {
 					if (isFirst) {
 						// predicate id
 						int eid = query.equiJoinPreds.indexOf(equiPred);
+						predForTables[nextTable] = eid;
 						switch (TypeUtil.toJavaType(firstInfo.type)) {
 							case INT:
 								joinIndices.get(joinCtr).add(new JoinSplitIntWrapper(

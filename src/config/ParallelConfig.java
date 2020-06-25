@@ -20,5 +20,5 @@ public class ParallelConfig {
 	/**
 	 * Number of threads in the join phase.
 	 */
-	public static int JOIN_THREADS = 1;
+	public static int JOIN_THREADS = 4;
 }

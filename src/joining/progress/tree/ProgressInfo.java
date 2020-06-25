@@ -11,7 +11,7 @@ package joining.progress.tree;
  *
  * @author Ziyun Wei
  */
-public class Progress {
+public class ProgressInfo {
     /**
      * The time stamp when the node is updated.
      */
@@ -32,7 +32,7 @@ public class Progress {
      * @param tupleIndex    last tuple index in the joined table of the last learning sample
      * @param lastIndex     last position index of the last learning sample
      */
-    Progress(int timeStamp, int tupleIndex, int lastIndex) {
+    ProgressInfo(int timeStamp, int tupleIndex, int lastIndex) {
         this.timeStamp = timeStamp;
         this.tupleIndex = tupleIndex;
         this.lastIndex = lastIndex;

@@ -144,7 +144,7 @@ public class UctNode {
     public UctNode(long roundCtr, QueryInfo query, 
     		boolean useHeuristic, MultiWayJoin joinOp) {
     	// Count node generation
-    	++JoinStats.nrUctNodes;
+//    	++JoinStats.nrUctNodes;
         this.query = query;
         this.nrTables = query.nrJoined;
         createdIn = roundCtr;
@@ -186,7 +186,7 @@ public class UctNode {
      */
     public UctNode(long roundCtr, UctNode parent, int joinedTable) {
     	// Count node generation
-    	++JoinStats.nrUctNodes;
+//    	++JoinStats.nrUctNodes;
         createdIn = roundCtr;
         treeLevel = parent.treeLevel + 1;
         nrActions = parent.nrActions - 1;

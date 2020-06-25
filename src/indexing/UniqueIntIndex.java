@@ -27,6 +27,7 @@ public class UniqueIntIndex extends IntIndex {
 		super(intData.cardinality);
 		int[] data = intData.data;
 		keyToRow = HashIntIntMaps.newMutableMap();
+		threadForRows = new byte[cardinality];
 		for (int row=0; row<cardinality; ++row) {
 			// Don't index null values
 			if (!intData.isNull.get(row)) {

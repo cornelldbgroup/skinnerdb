@@ -36,6 +36,7 @@ public class DoubleIndex extends Index {
 		super(doubleData.cardinality);
 		long startMillis = System.currentTimeMillis();
 		// Extract info
+		int nrThreads = ParallelConfig.JOIN_THREADS;
 		this.doubleData = doubleData;
 		double[] data = doubleData.data;
 		// Count number of occurrences for each value
@@ -66,12 +67,14 @@ public class DoubleIndex extends Index {
 		log("Prefix sum:\t" + prefixSum);
 		// Generate position information
 		positions = new int[prefixSum];
+		threadForRows = new byte[cardinality];
 		for (int i=0; i<cardinality; ++i) {
 			if (!doubleData.isNull.get(i)) {
 				double key = data[i];
 				int startPos = keyToPositions.get(key);
 				positions[startPos] += 1;
 				int offset = positions[startPos];
+				threadForRows[i] = (byte) ((offset - 1) % nrThreads);
 				int pos = startPos + offset;
 				positions[pos] = i;				
 			}

@@ -126,7 +126,6 @@ public class DPJoin extends OldJoin {
      */
     @Override
     public double execute(int[] order) throws Exception {
-        order = new int[]{3, 1, 2, 0};
         log("Context:\t" + preSummary.toString());
         log("Join order:\t" + Arrays.toString(order));
         log("Aliases:\t" + Arrays.toString(query.aliases));
@@ -138,7 +137,11 @@ public class DPJoin extends OldJoin {
                 return 1;
             }
         }
-        // Lookup or generate left-deep query plan
+        // set default split table
+        if (splitTable < 0) {
+            splitTable = getSplitTableByCard(order);
+        }
+        // lookup or generate left-deep query plan
         JoinOrder joinOrder = new JoinOrder(order);
         LeftDeepPlan plan = planCache.get(joinOrder);
         if (plan == null) {
@@ -146,8 +149,9 @@ public class DPJoin extends OldJoin {
             planCache.put(joinOrder, plan);
         }
         log(plan.toString());
-        // Execute from starting state, save progress, return progress
-        State state = tracker.continueFrom(joinOrder, splitTable);
+        int splitTableId = plan.predForTables[splitTable];
+        // execute from starting state, save progress, return progress
+        State state = tracker.continueFrom(joinOrder, splitTableId);
 
 //        // TODO: table offset over all threads
 //        int[] offsets = tracker.tableOffset;
@@ -161,15 +165,43 @@ public class DPJoin extends OldJoin {
         lastTuple = -1;
         lastNrVals = -1;
         lastValue = -1;
-        if (lastEndState != null && state.isAhead(order, lastEndState, nrJoined)) {
-            System.out.println("wrong");
-        }
+
         executeWithBudget(plan, state, offsets);
+
         double reward = reward(joinOrder.order,
                 tupleIndexDelta, offsets, nrResultTuples);
-        tracker.updateProgress(joinOrder, state, splitTable, roundCtr);
+        tracker.updateProgress(joinOrder, state, splitTableId, roundCtr);
         lastEndState = state;
         return reward;
+    }
+    /**
+     * Evaluates list of given predicates on current tuple
+     * indices and returns true iff all predicates evaluate
+     * to true.
+     *
+     * @param preds				predicates to evaluate
+     * @param tupleIndices		(partial) tuples
+     * @param indexWrappers	    list of join index wrappers
+     * @param nextTable	        the current joining table
+     *
+     * @return					true iff all predicates evaluate to true
+     */
+    boolean evaluateAll(List<KnaryBoolEval> preds,
+                        List<JoinIndexWrapper> indexWrappers,
+                        int[] tupleIndices, int nextTable) {
+        if (splitTable == nextTable) {
+            for (JoinIndexWrapper pred : indexWrappers) {
+                if (!pred.inScope(tupleIndices)) {
+                    return false;
+                }
+            }
+        }
+        for (KnaryBoolEval pred : preds) {
+            if (pred.evaluate(tupleIndices) <= 0) {
+                return false;
+            }
+        }
+        return true;
     }
     /**
      * Executes a given join order for a given budget of steps
@@ -213,7 +245,8 @@ public class DPJoin extends OldJoin {
             if ((PreConfig.PRE_FILTER || unaryPred == null ||
                     unaryPred.evaluate(tupleIndices)>0) &&
                     evaluateAll(applicablePreds.get(joinIndex),
-                            tupleIndices)) {
+                            joinIndices.get(joinIndex),
+                            tupleIndices, nextTable)) {
                 nrTuples++;
                 // Does current table represent sub-query in
                 // not exists clause?
@@ -317,5 +350,38 @@ public class DPJoin extends OldJoin {
             }
         }
         return progress;
+    }
+
+    @Override
+    public boolean isFinished() {
+        return lastEndState.lastIndex < 0;
+    }
+
+    /**
+     * Get the split table candidate
+     * based on cardinalities of tables.
+     *
+     * @param joinOrder     join order
+     *
+     * @return              the default split table
+     */
+    public int getSplitTableByCard(int[] joinOrder) {
+        if (ParallelConfig.JOIN_THREADS == 1) {
+            return 0;
+        }
+        int splitLen = 5;
+        int splitSize = ParallelConfig.PRE_BATCH_SIZE;
+        int splitTable = joinOrder[0];
+        int end = Math.min(splitLen, nrJoined);
+        int start = nrJoined < splitLen ? 0 : 1;
+        for (int i = start; i < end; i++) {
+            int table = joinOrder[i];
+            int cardinality = cardinalities[table];
+            if (cardinality >= splitSize && query.existsFlags[table] != 0) {
+                splitTable = table;
+                break;
+            }
+        }
+        return splitTable;
     }
 }

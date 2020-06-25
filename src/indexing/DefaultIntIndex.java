@@ -100,6 +100,7 @@ public class DefaultIntIndex extends IntIndex {
 		long startMillis = System.currentTimeMillis();
 		// Extract info
 		this.intData = intData;
+		int nrThreads = ParallelConfig.JOIN_THREADS;
 		int[] data = intData.data;
 		// Count for each key the number of occurrences
 		/*
@@ -156,12 +157,14 @@ public class DefaultIntIndex extends IntIndex {
 		log("Prefix sum:\t" + prefixSum);
 		// Generate position information
 		positions = new int[prefixSum];
+		threadForRows = new byte[cardinality];
 		for (int i=0; i<cardinality; ++i) {
 			if (!intData.isNull.get(i)) {
 				int key = data[i];
 				int startPos = keyToPositions.get(key);
 				positions[startPos] += 1;
 				int offset = positions[startPos];
+				threadForRows[i] = (byte) ((offset - 1) % nrThreads);
 				int pos = startPos + offset;
 				positions[pos] = i;				
 			}

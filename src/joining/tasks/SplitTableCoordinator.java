@@ -3,6 +3,7 @@ package joining.tasks;
 import joining.join.DPJoin;
 import joining.progress.hash.State;
 
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -32,6 +33,10 @@ public class SplitTableCoordinator {
      */
     public final AtomicReference<State> slowestState;
     /**
+     * The flag that represents the first thread to finish.
+     */
+    public final AtomicBoolean firstFinished;
+    /**
      * The threads' last state for each split table.
      */
     public final State[][] threadStates;
@@ -47,6 +52,7 @@ public class SplitTableCoordinator {
         finishFlags = new boolean[nrThreads][nrTables];
         splitTable = -1;
         slowestState = new AtomicReference<>(new State(nrTables));
+        firstFinished = new AtomicBoolean(false);
         threadStates = new State[nrThreads][nrTables];
     }
     /**

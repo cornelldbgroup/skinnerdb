@@ -1,6 +1,7 @@
 package indexing;
 
 import config.LoggingConfig;
+import config.ParallelConfig;
 
 /**
  * Common superclass of all indexing structures.
@@ -20,6 +21,13 @@ public abstract class Index {
 	 */
 	public int[] positions;
 	/**
+	 * After indexing: contains the thread id that
+	 * owns the row. By recording this, evaluating whether
+	 * the row belongs to a certain can be sloved in
+	 * constant time.
+	 */
+	public byte[] threadForRows;
+	/**
 	 * Initialize for given cardinality of indexed table.
 	 * 
 	 * @param cardinality	number of rows to index
@@ -36,5 +44,19 @@ public abstract class Index {
 		if (LoggingConfig.INDEXING_VERBOSE) {
 			System.out.println(logText);
 		}
+	}
+	/**
+	 * Check whether the current row is in
+	 * the thread's scope.
+	 *
+	 * @param priorIndex    index in the prior table.
+	 * @param curIndex      index of joining table.
+	 * @param tid           thread id
+	 * @return              binary result of "in scope" evaluation.
+	 */
+	public boolean inScope(int priorIndex, int curIndex, int tid) {
+		int nrThreads = ParallelConfig.JOIN_THREADS;
+		tid = (priorIndex + tid) % nrThreads;
+		return threadForRows[curIndex] == tid;
 	}
 }

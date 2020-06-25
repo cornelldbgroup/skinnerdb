@@ -61,7 +61,7 @@ public class JoinSplitIntWrapper extends JoinIndexWrapper {
         int splitTable = dpJoin.splitTable;
         lastProposed = splitTable == nextTable ?
                 nextIntIndex.nextTuple(priorVal, curTuple, priorTuple, dpJoin) :
-                nextIntIndex.nextTuple(priorVal, curTuple);
+                nextIntIndex.nextTuple(priorVal, curTuple, dpJoin);
         return lastProposed;
     }
     @Override
@@ -69,5 +69,13 @@ public class JoinSplitIntWrapper extends JoinIndexWrapper {
         int priorTuple = tupleIndices[priorTable];
         int priorVal = priorIntData.data[priorTuple];
         return nextIntIndex.nrIndexed(priorVal);
+    }
+    @Override
+    public boolean inScope(int[] tupleIndices) {
+        int priorTuple = tupleIndices[priorTable];
+        int curTuple = tupleIndices[nextTable];
+        int splitTable = dpJoin.splitTable;
+        int tid = dpJoin.tid;
+        return splitTable != nextTable || nextIntIndex.inScope(priorTuple, curTuple, tid);
     }
 }

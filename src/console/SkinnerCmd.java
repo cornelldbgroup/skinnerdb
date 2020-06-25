@@ -374,7 +374,7 @@ public class SkinnerCmd {
 			// string dictionary is still loaded.
 			BufferManager.loadDictionary();
 		}
-		processInput("exec ./jcch/queries/q02.sql");
+		processInput("bench ./jcch/queries/ benchtest.log");
 //		// Command line processing
 //		System.out.println("Enter 'help' for help and 'quit' to exit");
 //		Scanner scanner = new Scanner(System.in);
@@ -390,5 +390,6 @@ public class SkinnerCmd {
 //			}
 //		}
 //		scanner.close();
+		ThreadPool.close();
 	}
 }

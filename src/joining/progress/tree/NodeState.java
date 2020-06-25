@@ -16,14 +16,14 @@ public class NodeState {
      * time stamp, tuple index and join index
      * for each split table.
      */
-    public Progress[] progressForSplitTables;
+    public ProgressInfo[] progressForSplitTables;
     /**
      * Initializes the state for all potential split tables.
      *
      * @param nrSplitTables	 the number of different split tables.
      */
     public NodeState(int nrSplitTables) {
-        progressForSplitTables = new Progress[nrSplitTables];
+        progressForSplitTables = new ProgressInfo[nrSplitTables];
     }
     /**
      * Update tuple index and join index in the current node.
@@ -42,10 +42,10 @@ public class NodeState {
                               int roundCtr,
                               int latestTupleIndex,
                               int lastIndex) {
-        Progress progressInformation = progressForSplitTables[splitTable];
+        ProgressInfo progressInformation = progressForSplitTables[splitTable];
         if (progressInformation == null) {
             progressForSplitTables[splitTable] =
-                    new Progress(roundCtr, latestTupleIndex, lastIndex);
+                    new ProgressInfo(roundCtr, latestTupleIndex, lastIndex);
             return roundCtr;
         }
         // retrieve the time stamp in the progress for the split table
@@ -66,7 +66,7 @@ public class NodeState {
             progressInformation.timeStamp = roundCtr;
             nodeTimeStamp = roundCtr;
         }
-        // otherwise return the
+        // otherwise return the time stamp directly
         else {
             nodeTimeStamp = timeStamp;
         }
@@ -84,7 +84,7 @@ public class NodeState {
      *                      -1 means the node is out-of-date
      */
     public int continueFrom(State state, int nodeTimeStamp, int splitTable, int table) {
-        Progress progressInformation = progressForSplitTables[splitTable];
+        ProgressInfo progressInformation = progressForSplitTables[splitTable];
         if (progressInformation == null) {
             return -1;
         }
