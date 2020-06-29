@@ -1,6 +1,6 @@
 package indexing;
 
-import joining.join.DPJoin;
+import joining.join.IndexAccessInfo;
 
 /**
  * Common super class for all indices indexing
@@ -37,10 +37,10 @@ public abstract class IntIndex extends Index {
 	 *
 	 * @param value			indexed value
 	 * @param prevTuple		index of last tuple
-	 * @param dpJoin		join operator that calls this function
+	 * @param accessInfo	index access information
 	 * @return 	index of next tuple or cardinality
 	 */
-	public abstract int nextTuple(int value, int prevTuple, DPJoin dpJoin);
+	public abstract int nextTuple(int value, int prevTuple, IndexAccessInfo accessInfo);
 	/**
 	 * Returns index of next tuple with given value
 	 * or cardinality of indexed table if no such
@@ -49,10 +49,12 @@ public abstract class IntIndex extends Index {
 	 * @param value			indexed value
 	 * @param prevTuple		index of last tuple
 	 * @param priorIndex	index of last tuple in the prior table
-	 * @param dpJoin		join operator that calls this function
+	 * @param tid			thread id
+	 * @param accessInfo	index access information
 	 * @return 	index of next tuple or cardinality
 	 */
-	public abstract int nextTuple(int value, int prevTuple, int priorIndex, DPJoin dpJoin);
+	public abstract int nextTuple(int value, int prevTuple, int priorIndex, int tid,
+								  IndexAccessInfo accessInfo);
 	/**
 	 * Returns the number of entries indexed
 	 * for the given value.

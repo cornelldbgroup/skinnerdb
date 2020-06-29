@@ -48,25 +48,25 @@ public class NodeState {
                     new ProgressInfo(roundCtr, latestTupleIndex, lastIndex);
             return roundCtr;
         }
-        // retrieve the time stamp in the progress for the split table
+        // Retrieve the time stamp in the progress for the split table
         int timeStamp = progressInformation.timeStamp;
-        // retrieve the tuple index in the progress for the split table
+        // Retrieve the tuple index in the progress for the split table
         int tupleIndex = progressInformation.tupleIndex;
-        // the according progress has been written by other join samples
-        // if tuple index is different, the new index is definitely more advanced
+        // According progress has been written by other join samples
+        // If tuple index is different, the new index is definitely more advanced
         // because the previous join starts from the saved tuple index
         if (tupleIndex != latestTupleIndex) {
             progressInformation.timeStamp = roundCtr;
             progressInformation.tupleIndex = latestTupleIndex;
             nodeTimeStamp = roundCtr;
         }
-        // if the time stamp that we have seen is larger than saved the time stamp,
+        // If the time stamp that we have seen is larger than saved the time stamp,
         // it means the saved progress is out-of-date.
         else if (nodeTimeStamp > timeStamp) {
             progressInformation.timeStamp = roundCtr;
             nodeTimeStamp = roundCtr;
         }
-        // otherwise return the time stamp directly
+        // Otherwise return the time stamp directly
         else {
             nodeTimeStamp = timeStamp;
         }
@@ -88,11 +88,11 @@ public class NodeState {
         if (progressInformation == null) {
             return -1;
         }
-        // retrieve the time stamp in the progress for the split table
+        // Retrieve the time stamp in the progress for the split table
         int timeStamp = progressInformation.timeStamp;
-        // the according progress has been written by other join samples
+        // According progress has been written by other join samples
         int tupleIndex = progressInformation.tupleIndex;
-        // if the current progress is up-to-date
+        // If the current progress is up-to-date
         if (nodeTimeStamp <= timeStamp) {
             state.tupleIndices[table] = tupleIndex;
             nodeTimeStamp = timeStamp;

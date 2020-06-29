@@ -10,6 +10,7 @@ import config.LoggingConfig;
 import config.ParallelConfig;
 import data.IntData;
 import joining.join.DPJoin;
+import joining.join.IndexAccessInfo;
 import statistics.JoinStats;
 
 /**
@@ -237,7 +238,7 @@ public class DefaultIntIndex extends IntIndex {
 	}
 
 	@Override
-	public int nextTuple(int value, int prevTuple, DPJoin dpJoin) {
+	public int nextTuple(int value, int prevTuple, IndexAccessInfo accessInfo) {
 		// Get start position for indexed values
 		int firstPos = keyToPositions.getOrDefault(value, -1);
 		// No indexed values?
@@ -256,9 +257,9 @@ public class DefaultIntIndex extends IntIndex {
 		// Restrict search range via binary search
 		int lowerBound = firstPos + 1;
 		// Exploit lookup cache if possible
-		int lastPos = dpJoin.lastPos;
-		int lastValue = dpJoin.lastValue;
-		int lastTuple = dpJoin.lastTuple;
+		int lastPos = accessInfo.lastPos;
+		int lastValue = accessInfo.lastValue;
+		int lastTuple = accessInfo.lastTuple;
 		if (lastPos != -1 && lastValue == value &&
 				lastTuple <= prevTuple) {
 			lowerBound = lastPos + 1;
@@ -274,34 +275,25 @@ public class DefaultIntIndex extends IntIndex {
 		}
 		// Get next tuple
 		for (int pos=lowerBound; pos<=upperBound; ++pos) {
-			if (positions[pos] > prevTuple) {
+			int newTuple = positions[pos];
+			if (newTuple > prevTuple) {
 				// Cache details about lookup
-				dpJoin.lastValue = value;
-				dpJoin.lastPos = pos;
-				dpJoin.lastTuple = positions[pos];
+				accessInfo.lastValue = value;
+				accessInfo.lastPos = pos;
+				accessInfo.lastTuple = newTuple;
 				// Return tuple at position
-				return lastTuple;
+				return newTuple;
 			}
 		}
 		// No suitable tuple found
-		dpJoin.lastPos = -1;
+		accessInfo.lastPos = -1;
 		return cardinality;
 	}
 
-	/**
-	 * Returns index of next tuple with given value
-	 * or cardinality of indexed table if no such
-	 * tuple exists in the thread's partition.
-	 *
-	 * @param value			indexed value
-	 * @param prevTuple		index of last tuple
-	 * @param priorIndex	index of last tuple in the prior table
-	 * @param dpJoin		join operator that calls this function
-	 * @return 	index of next tuple or cardinality
-	 */
-	public int nextTuple(int value, int prevTuple, int priorIndex, DPJoin dpJoin) {
+	@Override
+	public int nextTuple(int value, int prevTuple, int priorIndex, int tid,
+						 IndexAccessInfo accessInfo) {
 		int nrThreads = ParallelConfig.JOIN_THREADS;
-		int tid = dpJoin.tid;
 		// make sure the first tuple doesn't always start from thread 0.
 		tid = (priorIndex + tid) % nrThreads;
 		// get start position for indexed values
@@ -312,7 +304,7 @@ public class DefaultIntIndex extends IntIndex {
 		}
 		// can we return the first indexed value?
 		int nrVals = positions[firstPos];
-		dpJoin.lastNrVals = nrVals;
+		accessInfo.lastNrVals = nrVals;
 
 		int firstOffset = tid + 1;
 		if (firstOffset > nrVals) {

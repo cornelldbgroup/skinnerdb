@@ -7,7 +7,7 @@ import com.koloboke.collect.map.hash.HashDoubleIntMaps;
 import config.LoggingConfig;
 import config.ParallelConfig;
 import data.DoubleData;
-import joining.join.DPJoin;
+import joining.join.IndexAccessInfo;
 import statistics.JoinStats;
 
 /**
@@ -141,10 +141,11 @@ public class DoubleIndex extends Index {
 	 *
 	 * @param value			indexed value
 	 * @param prevTuple		index of last tuple
-	 * @param dpJoin		join operator that calls this function
+	 * @param accessInfo	index access information
+	 *
 	 * @return 	index of next tuple or cardinality
 	 */
-	public int nextTuple(double value, int prevTuple, DPJoin dpJoin) {
+	public int nextTuple(double value, int prevTuple, IndexAccessInfo accessInfo) {
 		// Get start position for indexed values
 		int firstPos = keyToPositions.getOrDefault(value, -1);
 		// No indexed values?
@@ -159,7 +160,7 @@ public class DoubleIndex extends Index {
 		}
 		// Get number of indexed values
 		int nrVals = positions[firstPos];
-		dpJoin.lastNrVals = nrVals;
+		accessInfo.lastNrVals = nrVals;
 
 		// Restrict search range via binary search
 		int lowerBound = firstPos + 1;
@@ -190,12 +191,13 @@ public class DoubleIndex extends Index {
 	 * @param value			indexed value
 	 * @param prevTuple		index of last tuple
 	 * @param priorIndex	index of last tuple in the prior table
-	 * @param dpJoin		join operator that calls this function
+	 * @param tid			thread id
+	 * @param accessInfo	index access information
 	 * @return 	index of next tuple or cardinality
 	 */
-	public int nextTuple(double value, int prevTuple, int priorIndex, DPJoin dpJoin) {
+	public int nextTuple(double value, int prevTuple, int priorIndex, int tid,
+						 IndexAccessInfo accessInfo) {
 		int nrThreads = ParallelConfig.JOIN_THREADS;
-		int tid = dpJoin.tid;
 		// make sure the first tuple doesn't always start from thread 0.
 		tid = (priorIndex + tid) % nrThreads;
 		// get start position for indexed values
@@ -206,7 +208,7 @@ public class DoubleIndex extends Index {
 		}
 		// can we return the first indexed value?
 		int nrVals = positions[firstPos];
-		dpJoin.lastNrVals = nrVals;
+		accessInfo.lastNrVals = nrVals;
 
 		int firstOffset = tid + 1;
 		if (firstOffset > nrVals) {

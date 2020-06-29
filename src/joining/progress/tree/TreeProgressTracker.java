@@ -114,7 +114,7 @@ public class TreeProgressTracker {
         int nrJoinedTables = joinOrder.nrJoinedTables;
         int[] order = joinOrder.order;
         State state = new State(nrTables);
-        // the time stamp we have seen along with the join path.
+        // Time stamp we have seen along with the join path.
         int nodeTimeStamp = 0;
         // Integrate progress from join orders with same prefix
         ProgressNode curPrefixProgress = sharedProgress;
@@ -126,7 +126,7 @@ public class TreeProgressTracker {
             }
             nodeTimeStamp = curPrefixProgress.latestState.continueFrom(
                     state, nodeTimeStamp, splitTable, table);
-            // the current progress is out-of-date
+            // Current progress is out-of-date
             if (nodeTimeStamp < 0) {
                 break;
             }

@@ -203,16 +203,16 @@ public class LeftDeepPlan {
 
 					if (isFirst) {
 						// predicate id
-						int eid = query.equiJoinPreds.indexOf(equiPred);
-						predForTables[nextTable] = eid;
+						int predId = query.equiJoinPreds.indexOf(equiPred);
+						predForTables[nextTable] = predId;
 						switch (TypeUtil.toJavaType(firstInfo.type)) {
 							case INT:
 								joinIndices.get(joinCtr).add(new JoinSplitIntWrapper(
-										query, preSummary, joinCols, order, eid, dpJoin));
+										query, preSummary, joinCols, order, predId, dpJoin));
 								break;
 							case DOUBLE:
 								joinIndices.get(joinCtr).add(new JoinSplitDoubleWrapper(
-										query, preSummary, joinCols, order, eid, dpJoin));
+										query, preSummary, joinCols, order, predId, dpJoin));
 								break;
 							default:
 								throw new SQLexception("Error - no support for equality "
@@ -253,7 +253,7 @@ public class LeftDeepPlan {
 					generalPredsIter.remove();
 				}
 			}
-		} // over join positions
+		} // Over join positions
 		// Initialize exists flags
 		existsFlags = new int[nrTables];
 		for (int joinCtr=0; joinCtr<nrTables; ++joinCtr) {

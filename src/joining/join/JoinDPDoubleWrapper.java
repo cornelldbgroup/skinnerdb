@@ -42,7 +42,7 @@ public class JoinDPDoubleWrapper extends JoinDoubleWrapper {
         int priorTuple = tupleIndices[priorTable];
         double priorVal = priorDoubleData.data[priorTuple];
         int curTuple = tupleIndices[nextTable];
-        lastProposed = nextDoubleIndex.nextTuple(priorVal, curTuple, dpJoin);
+        lastProposed = nextDoubleIndex.nextTuple(priorVal, curTuple, dpJoin.accessInfo);
         return lastProposed;
     }
 }

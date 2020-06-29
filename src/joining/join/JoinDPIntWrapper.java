@@ -42,7 +42,7 @@ public class JoinDPIntWrapper extends JoinIntWrapper {
         int priorTuple = tupleIndices[priorTable];
         int priorVal = priorIntData.data[priorTuple];
         int curTuple = tupleIndices[nextTable];
-        lastProposed = nextIntIndex.nextTuple(priorVal, curTuple, dpJoin);
+        lastProposed = nextIntIndex.nextTuple(priorVal, curTuple, dpJoin.accessInfo);
         return lastProposed;
     }
 }

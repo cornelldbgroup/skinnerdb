@@ -62,8 +62,9 @@ public class JoinSplitDoubleWrapper extends JoinIndexWrapper  {
         int curTuple = tupleIndices[nextTable];
         int splitTable = dpJoin.splitTable;
         lastProposed = splitTable == nextTable ?
-                nextDoubleIndex.nextTuple(priorVal, curTuple, priorTuple, dpJoin) :
-                nextDoubleIndex.nextTuple(priorVal, curTuple, dpJoin);
+                nextDoubleIndex.nextTuple(priorVal, curTuple, priorTuple,
+                        dpJoin.tid, dpJoin.accessInfo) :
+                nextDoubleIndex.nextTuple(priorVal, curTuple, dpJoin.accessInfo);
         return lastProposed;
     }
 

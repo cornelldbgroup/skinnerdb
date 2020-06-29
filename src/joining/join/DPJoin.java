@@ -54,11 +54,13 @@ public class DPJoin extends OldJoin {
      */
     public int roundCtr;
     /**
-     * The number of down operations for each table
+     * The number of down operations for each table.
+     * Down operation means one proposeNext function call.
      */
     public final int[] downOps;
     /**
-     * The number of down operations for each table
+     * The number of down operations for each table.
+     * Up operation means one backTrack function call.
      */
     public final int[] upOps;
     /**
@@ -67,24 +69,9 @@ public class DPJoin extends OldJoin {
      */
     public final int[] nrMatchedTuples;
     /**
-     * Cache value of last index access.
+     * Cached the index access information for more efficient joining.
      */
-    public int lastValue = -1;
-    /**
-     * Cache position returned during last
-     * index access.
-     */
-    public int lastPos = -1;
-    /**
-     * Cache tuple returned during
-     * last index access.
-     */
-    public int lastTuple = -1;
-    /**
-     * Cache tuple returned during
-     * last index access.
-     */
-    public int lastNrVals = -1;
+    public final IndexAccessInfo accessInfo;
     /**
      * Last state after a episode.
      */
@@ -114,6 +101,7 @@ public class DPJoin extends OldJoin {
         this.downOps = new int[nrJoined];
         this.upOps = new int[nrJoined];
         this.nrMatchedTuples = new int[nrJoined];
+        this.accessInfo = new IndexAccessInfo();
         log("preSummary before join: " + preSummary.toString());
     }
     /**
@@ -137,11 +125,11 @@ public class DPJoin extends OldJoin {
                 return 1;
             }
         }
-        // set default split table
+        // Set default split table
         if (splitTable < 0) {
             splitTable = getSplitTableByCard(order);
         }
-        // lookup or generate left-deep query plan
+        // Lookup or generate left-deep query plan
         JoinOrder joinOrder = new JoinOrder(order);
         LeftDeepPlan plan = planCache.get(joinOrder);
         if (plan == null) {
@@ -150,21 +138,19 @@ public class DPJoin extends OldJoin {
         }
         log(plan.toString());
         int splitTableId = plan.predForTables[splitTable];
-        // execute from starting state, save progress, return progress
+        // Execute from starting state, save progress, return progress
         State state = tracker.continueFrom(joinOrder, splitTableId);
 
 //        // TODO: table offset over all threads
 //        int[] offsets = tracker.tableOffset;
 
         int[] offsets = new int[nrJoined];
-        // initialize join statistics
+        // Initialize join statistics
         Arrays.fill(downOps, 0);
         Arrays.fill(upOps, 0);
         Arrays.fill(nrMatchedTuples, 0);
-        lastPos = -1;
-        lastTuple = -1;
-        lastNrVals = -1;
-        lastValue = -1;
+
+        accessInfo.reset();
 
         executeWithBudget(plan, state, offsets);
 
@@ -293,7 +279,7 @@ public class DPJoin extends OldJoin {
                     upOps[nextTable]++;
                 }
                 // Special treatment for tables representing
-                // sub-queries within not exists expressions.
+                // Sub-queries within not exists expressions.
                 int newJoinIndex = joinIndex;
                 if (query.existsFlags[nextTable] < 0) {
                     // No matching tuples in NOT EXISTS sub-query?
@@ -345,7 +331,8 @@ public class DPJoin extends OldJoin {
                 int downOperations = downOps[table];
                 int upOperations = upOps[table];
                 weight *= indexSize;
-                progress += weight * (table == splitTable ? (nrThreads * downOperations - indexSize * upOperations) :
+                progress += weight * (table == splitTable ?
+                        (nrThreads * downOperations - indexSize * upOperations) :
                         (downOperations - indexSize * upOperations));
             }
         }
@@ -354,7 +341,7 @@ public class DPJoin extends OldJoin {
 
     @Override
     public boolean isFinished() {
-        return lastEndState.lastIndex < 0;
+        return tracker.isFinished || lastEndState.lastIndex < 0;
     }
 
     /**
@@ -377,7 +364,7 @@ public class DPJoin extends OldJoin {
         for (int i = start; i < end; i++) {
             int table = joinOrder[i];
             int cardinality = cardinalities[table];
-            if (cardinality >= splitSize && query.existsFlags[table] != 0) {
+            if (cardinality >= splitSize && query.existsFlags[table] == 0) {
                 splitTable = table;
                 break;
             }

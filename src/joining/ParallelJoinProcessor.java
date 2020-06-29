@@ -1,27 +1,19 @@
 package joining;
 
-import catalog.CatalogManager;
 import config.*;
 import joining.join.DPJoin;
-import joining.join.OldJoin;
 import joining.result.ResultTuple;
-import joining.tasks.DPTask;
-import joining.tasks.SplitTableCoordinator;
-import joining.uct.SelectionPolicy;
+import joining.joinThreadTask.JoinPartitionsTask;
+import joining.joinThreadTask.SplitTableCoordinator;
 import joining.uct.UctNode;
-import operators.Materialize;
 import preprocessing.Context;
-import query.ColumnRef;
 import query.QueryInfo;
 import statistics.JoinStats;
-import visualization.TreePlotter;
 
-import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.locks.ReentrantLock;
 
 import static threads.ThreadPool.executorService;
 
@@ -52,25 +44,25 @@ public class ParallelJoinProcessor extends JoinProcessor {
      */
     public static void process(QueryInfo query,
                                Context context) throws Exception {
-        // initialize statistics
+        // Initialize statistics
         long startMillis = System.currentTimeMillis();
         JoinStats.initializeJoinStats();
-        // initialize logging for new query
+        // Initialize logging for new query
         nrLogEntries = 0;
-        // can we skip the join phase?
+        // Can we skip the join phase?
         if (query.nrJoined == 1 && PreConfig.PRE_FILTER) {
             String alias = query.aliases[0];
             String table = context.aliasToFiltered.get(alias);
             context.joinedTable = table;
             return;
         }
-        // the number of threads
+        // The number of threads
         int nrThreads = ParallelConfig.JOIN_THREADS;
-        // initialize multi-way join operator for each thread
+        // Initialize multi-way join operator for each thread
         DPJoin[] joinOps = new DPJoin[nrThreads];
-        // initialize UCT join order search tree for each thread
+        // Initialize UCT join order search tree for each thread
         UctNode[] roots = new UctNode[nrThreads];
-        // initialize split table coordinator
+        // Initialize split table coordinator
         SplitTableCoordinator coordinator = new SplitTableCoordinator(nrThreads, query.nrJoined);
         for (int tid = 0; tid < nrThreads; tid++) {
             joinOps[tid] = new DPJoin(query, context,
@@ -78,19 +70,19 @@ public class ParallelJoinProcessor extends JoinProcessor {
             roots[tid] = new UctNode(0, query,
                     JoinConfig.AVOID_CARTESIANS, joinOps[tid]);
         }
-        // initialize thread tasks
-        List<DPTask> tasks = new ArrayList<>(nrThreads);
-        // finish flag shared by multiple threads
+        // Initialize thread tasks
+        List<JoinPartitionsTask> tasks = new ArrayList<>(nrThreads);
+        // Finished flag shared by multiple threads
         AtomicBoolean joinFinished = new AtomicBoolean(false);
         for (int tid = 0; tid < nrThreads; tid++) {
-            tasks.add(new DPTask(query, roots[tid], joinOps[tid], joinFinished, coordinator));
+            tasks.add(new JoinPartitionsTask(query, roots[tid], joinOps[tid], joinFinished, coordinator));
         }
-        // submit tasks to the thread pool
+        // Submit tasks to the thread pool
         long executionStart = System.currentTimeMillis();
         List<Future<Set<ResultTuple>>> joinThreadResults = executorService.invokeAll(tasks);
         long executionEnd = System.currentTimeMillis();
 
-        // merge results for all threads
+        // Merge results for all threads
         Set<ResultTuple> tuples = new LinkedHashSet<>();
         joinThreadResults.forEach(futureResult -> {
             try {
