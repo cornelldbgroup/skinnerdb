@@ -33,7 +33,7 @@ public class JoinSplitDoubleWrapper extends JoinIndexWrapper  {
     /**
      * The join operator that initializes this wrapper.
      */
-    final DPJoin dpJoin;
+    final DataParallelJoin dpJoin;
     /**
      * Initializes wrapper providing access to integer index
      * on column that appears in equi-join predicate.
@@ -47,7 +47,7 @@ public class JoinSplitDoubleWrapper extends JoinIndexWrapper  {
      */
     public JoinSplitDoubleWrapper(QueryInfo queryInfo,
                           Context preSummary, Set<ColumnRef> joinCols,
-                          int[] order, int splitTableID, DPJoin dpJoin) throws Exception {
+                          int[] order, int splitTableID, DataParallelJoin dpJoin) throws Exception {
         super(queryInfo, preSummary, joinCols, order);
         priorDoubleData = (DoubleData)priorData;
         nextDoubleIndex = (DoubleIndex)nextIndex;

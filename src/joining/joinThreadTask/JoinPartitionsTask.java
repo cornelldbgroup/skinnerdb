@@ -2,7 +2,8 @@ package joining.joinThreadTask;
 
 import config.JoinConfig;
 import config.LoggingConfig;
-import joining.join.DPJoin;
+import joining.join.DataParallelJoin;
+import joining.progress.hash.State;
 import joining.result.ResultTuple;
 import joining.uct.SelectionPolicy;
 import joining.uct.UctNode;
@@ -41,7 +42,7 @@ public class JoinPartitionsTask implements Callable<Set<ResultTuple>> {
     /**
      * Join executor.
      */
-    private final DPJoin joinOp;
+    private final DataParallelJoin joinOp;
     /**
      * The flag that represents the termination signal.
      */
@@ -49,7 +50,7 @@ public class JoinPartitionsTask implements Callable<Set<ResultTuple>> {
     /**
      * The coordinator that decides the choice of split table.
      */
-    private final SplitTableCoordinator coordinator;
+    private final DPJoinCoordinator coordinator;
 
     /**
      * Initialization of worker task.
@@ -60,8 +61,8 @@ public class JoinPartitionsTask implements Callable<Set<ResultTuple>> {
      * @param joinFinished  finish flag
      * @param coordinator   split table coordinator
      */
-    public JoinPartitionsTask(QueryInfo query, UctNode root, DPJoin joinOp,
-                              AtomicBoolean joinFinished, SplitTableCoordinator coordinator) {
+    public JoinPartitionsTask(QueryInfo query, UctNode root, DataParallelJoin joinOp,
+                              AtomicBoolean joinFinished, DPJoinCoordinator coordinator) {
         this.query = query;
         this.root = root;
         this.joinOp = joinOp;
@@ -71,6 +72,7 @@ public class JoinPartitionsTask implements Callable<Set<ResultTuple>> {
 
     @Override
     public Set<ResultTuple> call() throws Exception {
+        long timer1 = System.currentTimeMillis();
         // Initialize counters and variables
         int[] joinOrder = new int[query.nrJoined];
         long roundCtr = 0;
@@ -116,37 +118,38 @@ public class JoinPartitionsTask implements Callable<Set<ResultTuple>> {
             ++roundCtr;
             joinOp.roundCtr = (int) roundCtr;
             // Retrieve the split table from the coordinator
-            int splitTable = coordinator.getSplitTable();
+            int splitTable = coordinator.getSplitTable(joinOp);
             double reward;
             joinOp.splitTable = splitTable;
             if (splitTable != -1) {
                 joinOrder = coordinator.getJoinOrder();
-                reward = joinOp.execute(joinOrder);
+                State slowState = coordinator.slowestState.get();
+                joinOp.log("Slow State: " + slowState.toString());
+                reward = joinOp.execute(joinOrder, slowState);
                 coordinator.optimizeSplitTable(joinOp);
             }
             else {
                 reward = root.sample(roundCtr, joinOrder, policy);
             }
+            // Save the last end state for the thread
+            splitTable = joinOp.splitTable;
+            coordinator.threadStates[tid][splitTable] = joinOp.lastEndState;
             // Count reward except for final sample
             if (!joinOp.isFinished()) {
                 accReward += reward;
                 maxReward = Math.max(reward, maxReward);
             }
             else {
-                splitTable = joinOp.splitTable;
                 if (coordinator.firstFinished
                         .compareAndSet(false, true)) {
                     System.out.println(tid + " finishes with: " +
                             Arrays.toString(joinOrder) + " splitting " + splitTable);
+                    coordinator.setJoinOrder(joinOrder);
+                    coordinator.setSplitTable(splitTable);
                 }
-                if (!joinOp.tracker.isFinished) {
-                    boolean isFinished = coordinator.setAndCheckFinished(tid, splitTable);
-                    if (isFinished) {
-                        joinFinished.set(true);
-                        break;
-                    }
-                }
-                else {
+                boolean isFinished = coordinator.setAndCheckFinished(tid, splitTable);
+                if (isFinished) {
+                    joinFinished.set(true);
                     break;
                 }
             }
@@ -156,11 +159,6 @@ public class JoinPartitionsTask implements Callable<Set<ResultTuple>> {
                 root = new UctNode(roundCtr, query, true, joinOp);
                 nextForget *= 10;
             }
-            // Generate logging entries if activated
-            log("Selected join order " + Arrays.toString(joinOrder));
-            log("Obtained reward:\t" + reward);
-            log("Table offsets:\t" + Arrays.toString(joinOp.tracker.tableOffset));
-            log("Table cardinalities:\t" + Arrays.toString(joinOp.cardinalities));
             // Generate plots if activated
             if (query.explain && plotCtr < query.plotAtMost &&
                     roundCtr % query.plotEvery == 0) {
@@ -171,14 +169,8 @@ public class JoinPartitionsTask implements Callable<Set<ResultTuple>> {
             }
         }
         // Output most frequently used join order
-        root.sample(roundCtr, joinOrder, SelectionPolicy.MAX_VISIT);
-        System.out.print("MFJO: ");
-        for (int joinCtr=0; joinCtr<query.nrJoined; ++joinCtr) {
-            int table = joinOrder[joinCtr];
-            String alias = query.aliases[table];
-            System.out.print(alias + " ");
-        }
-        System.out.println();
+        long timer2 = System.currentTimeMillis();
+        System.out.println("Thread " + tid + ": " + (timer2 - timer1) + "\t Round: " + roundCtr);
         // Draw final plot if activated
         if (query.explain) {
             String plotName = "ucttreefinal.pdf";
@@ -187,17 +179,5 @@ public class JoinPartitionsTask implements Callable<Set<ResultTuple>> {
         }
 
         return joinOp.result.tuples;
-    }
-
-    /**
-     * Print out log entry if the maximal number of log
-     * entries has not been reached yet.
-     *
-     * @param logEntry	log entry to print
-     */
-    static void log(String logEntry) {
-        if (LoggingConfig.PRINT_JOIN_LOGS) {
-            System.out.println(logEntry);
-        }
     }
 }

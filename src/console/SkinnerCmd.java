@@ -24,6 +24,7 @@ import indexing.Indexer;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.create.table.CreateTable;
+import net.sf.jsqlparser.statement.create.view.CreateView;
 import net.sf.jsqlparser.statement.drop.Drop;
 import net.sf.jsqlparser.statement.select.PlainSelect;
 import net.sf.jsqlparser.statement.select.Select;
@@ -211,6 +212,17 @@ public class SkinnerCmd {
 				PlainSelect plainSelect = (PlainSelect)select.getSelectBody();
 				boolean printResult = plainSelect.getIntoTables() == null;
 				try {
+					// Warm up run
+					if (StartupConfig.WARM_UP) {
+						Master.executeSelect(plainSelect, false,
+								-1, -1, null, queryName, benchOut);
+						BufferManager.unloadTempData();
+						CatalogManager.removeTempTables();
+						sqlStatement = CCJSqlParserUtil.parse(input);
+						select = (Select) sqlStatement;
+						plainSelect = (PlainSelect) select.getSelectBody();
+					}
+
 					Master.executeSelect(plainSelect, false, 
 							-1, -1, null, queryName, benchOut);
 					// Display query result if no target tables specified
@@ -375,7 +387,7 @@ public class SkinnerCmd {
 			BufferManager.loadDictionary();
 		}
 //		processInput("bench ./jcch/queries/ benchtest.log");
-//		processInput("exec ./jcch/queries/q09.sql");
+//		processInput("exec ./jcch/queries/q16.sql");
 		// Command line processing
 		System.out.println("Enter 'help' for help and 'quit' to exit");
 		Scanner scanner = new Scanner(System.in);

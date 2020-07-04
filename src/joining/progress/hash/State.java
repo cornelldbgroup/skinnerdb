@@ -15,6 +15,10 @@ public class State {
 	 */
 	public int lastIndex;
 	/**
+	 * The thread that creates the state.
+	 */
+	public int tid;
+	/**
 	 * Last move of join index.
 	 */
 	//public JoinMove lastMove;
@@ -112,6 +116,7 @@ public class State {
 	}
 	@Override
 	public String toString() {
-		return "Last index " + lastIndex + " on " + Arrays.toString(tupleIndices);
+		return "Last index " + lastIndex + " on " +
+				Arrays.toString(tupleIndices) + " from thread " + tid;
 	}
 }

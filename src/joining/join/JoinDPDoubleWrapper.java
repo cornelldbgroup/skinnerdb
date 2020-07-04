@@ -20,7 +20,7 @@ public class JoinDPDoubleWrapper extends JoinDoubleWrapper {
     /**
      * The join operator that initializes this wrapper.
      */
-    final DPJoin dpJoin;
+    final DataParallelJoin dpJoin;
     /**
      * Initializes wrapper providing access to double index
      * on column that appears in equi-join predicate.
@@ -32,7 +32,7 @@ public class JoinDPDoubleWrapper extends JoinDoubleWrapper {
      * @param dpJoin	 join operator that creates the wrapper
      */
     public JoinDPDoubleWrapper(QueryInfo queryInfo, Context preSummary,
-                               Set<ColumnRef> joinCols, int[] order, DPJoin dpJoin) throws Exception {
+                               Set<ColumnRef> joinCols, int[] order, DataParallelJoin dpJoin) throws Exception {
         super(queryInfo, preSummary, joinCols, order);
         this.dpJoin = dpJoin;
     }

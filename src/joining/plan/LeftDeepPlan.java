@@ -158,7 +158,7 @@ public class LeftDeepPlan {
 	 * @throws Exception
 	 */
 	public LeftDeepPlan(QueryInfo query, Context preSummary,
-						Map<Expression, KnaryBoolEval> evalMap, int[] order, DPJoin dpJoin)
+						Map<Expression, KnaryBoolEval> evalMap, int[] order, DataParallelJoin dpJoin)
 			throws Exception {
 		// Count generated plan
 		int nrTables = query.nrJoined;

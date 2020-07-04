@@ -1,11 +1,7 @@
 package joining.uct;
 
-import config.ParallelConfig;
-import joining.join.DPJoin;
-import joining.join.MultiWayJoin;
+import joining.join.DataParallelJoin;
 import query.QueryInfo;
-
-import java.util.Set;
 
 /**
  * Represents node in UCT search tree for data parallel.
@@ -16,7 +12,7 @@ public class DPNode extends UctNode {
     /**
      * Evaluates a given join order and accumulates results.
      */
-    final DPJoin joinOp;
+    final DataParallelJoin joinOp;
     /**
      * Initialize UCT root node.
      *
@@ -25,7 +21,7 @@ public class DPNode extends UctNode {
      * @param useHeuristic 	whether to avoid Cartesian products
      * @param joinOp		multi-way join operator allowing fast join order switching
      */
-    public DPNode(long roundCtr, QueryInfo query, boolean useHeuristic, DPJoin joinOp) {
+    public DPNode(long roundCtr, QueryInfo query, boolean useHeuristic, DataParallelJoin joinOp) {
         super(roundCtr, query, useHeuristic, joinOp);
         this.joinOp = joinOp;
     }

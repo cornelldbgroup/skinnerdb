@@ -1,6 +1,6 @@
 package joining.joinThreadTask;
 
-import joining.join.DPJoin;
+import joining.join.DataParallelJoin;
 import joining.progress.hash.State;
 
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -14,7 +14,7 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * @author Ziyun Wei
  */
-public class SplitTableCoordinator {
+public class DPJoinCoordinator {
     /**
      * Order of tables for the last learning phase.
      */
@@ -47,7 +47,7 @@ public class SplitTableCoordinator {
      * @param nrThreads     number of threads
      * @param nrTables      number of joining tables
      */
-    public SplitTableCoordinator(int nrThreads, int nrTables) {
+    public DPJoinCoordinator(int nrThreads, int nrTables) {
         joinOrder = new int[nrTables];
         finishFlags = new boolean[nrThreads][nrTables];
         splitTable = -1;
@@ -65,6 +65,14 @@ public class SplitTableCoordinator {
                 this.joinOrder, 0, joinOrder.length);
     }
     /**
+     * Record the split table at tbe end of the episode.
+     *
+     * @param splitTable     last table to split
+     */
+    public void setSplitTable(int splitTable) {
+        this.splitTable = splitTable;
+    }
+    /**
      * Optimize the split table for the converged join order.
      * First, re-optimize the split table based on the statistics.
      * Then if the thread calling this function is the slowest thread,
@@ -72,7 +80,7 @@ public class SplitTableCoordinator {
      *
      * @param dpJoin        join operator
      */
-    public void optimizeSplitTable(DPJoin dpJoin) {
+    public void optimizeSplitTable(DataParallelJoin dpJoin) {
         State lastState = dpJoin.lastEndState;
         int tid = dpJoin.tid;
         int lastSplitTable = dpJoin.splitTable;
@@ -81,43 +89,42 @@ public class SplitTableCoordinator {
         double maxTableReward = 0;
         // Optimize the split table for the join order
         for (int table = 0; table < nrTables; table++) {
-            if (dpJoin.nrMatchedTuples[table] > 0) {
-                double tableReward = dpJoin.splitTableReward(joinOrder, table);
+            if (dpJoin.downOps[table] > 0) {
+//                double tableReward = dpJoin.splitTableReward(joinOrder, table);
+                double tableReward = dpJoin.splitReward(joinOrder, table);
                 if (tableReward > maxTableReward) {
                     maxTableReward = tableReward;
                     optimalTable = table;
                 }
             }
         }
-        // If the optimized table is different from the current split table
-        if (optimalTable != lastSplitTable) {
-            threadStates[tid][splitTable] = lastState;
-            boolean isSlowest = true;
-            // Check whether the current thread is the slowest one
-            for (int i = 0; i < threadStates.length; i++) {
-                if (tid != i) {
-                    State threadState = threadStates[i][splitTable];
-                    if (threadState == null
-                            || (threadState.lastIndex >= 0
-                            && threadState.isAhead(joinOrder, lastState, nrTables))) {
-                        isSlowest = false;
-                        break;
-                    }
+        // Find the slowest thread
+        boolean isSlowest = true;
+        // Check whether the current thread is the slowest one
+        for (int i = 0; i < threadStates.length; i++) {
+            if (tid != i) {
+                State threadState = threadStates[i][lastSplitTable];
+                if (threadState == null
+                        || (threadState.lastIndex >= 0
+                        && threadState.isAhead(joinOrder, lastState, nrTables))) {
+                    isSlowest = false;
+                    break;
                 }
             }
-            if (isSlowest) {
-                // Update the optimal split table
-                final int finalOptimalTable = optimalTable;
-                slowestState.updateAndGet(previousState -> {
-                    if (previousState.isAhead(joinOrder, lastState, nrTables)) {
-                        this.splitTable = finalOptimalTable;
-                        return lastState;
-                    }
-                    else {
-                        return previousState;
-                    }
-                });
-            }
+        }
+        if (isSlowest) {
+//            dpJoin.log("The thread is slow: " + lastState.toString());
+            // Update the optimal split table
+            final int finalOptimalTable = optimalTable;
+            slowestState.updateAndGet(previousState -> {
+                if (previousState.isAhead(joinOrder, lastState, nrTables)) {
+                    this.splitTable = finalOptimalTable;
+                    return lastState;
+                }
+                else {
+                    return previousState;
+                }
+            });
         }
     }
     /**
@@ -142,9 +149,14 @@ public class SplitTableCoordinator {
     /**
      * Get current optimal split table.
      *
-     * @return      optimal split table
+     * @param dpJoin        join operator
+     * @return              optimal split table
      */
-    public int getSplitTable() {
+    public int getSplitTable(DataParallelJoin dpJoin) {
+        int tid = dpJoin.tid;
+        if (splitTable != -1 && finishFlags[tid][splitTable]) {
+            return dpJoin.getSplitTableByCard(joinOrder, splitTable, finishFlags[tid]);
+        }
         return splitTable;
     }
     /**

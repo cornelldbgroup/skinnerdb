@@ -18,7 +18,11 @@ public class ParallelConfig {
 	 */
 	public final static int PRE_BATCH_SIZE = 1000;
 	/**
+	 * Minimal admissible table that can be selected to split.
+	 */
+	public final static int MIN_SPLIT_SIZE = 50000;
+	/**
 	 * Number of threads in the join phase.
 	 */
-	public static int JOIN_THREADS = 1;
+	public static int JOIN_THREADS = 30;
 }

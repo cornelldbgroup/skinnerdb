@@ -76,7 +76,6 @@ public class OldJoin extends MultiWayJoin {
             	unaryPreds[aliasIdx] = eval;
         	}
         }
-        log("preSummary before join: " + preSummary.toString());
     }
     /**
      * Calculates reward for progress during one invocation.
@@ -594,6 +593,4 @@ public class OldJoin extends MultiWayJoin {
     		System.out.println(logCtr + "\t" + logEntry);
     	}
     }
-
-
 }

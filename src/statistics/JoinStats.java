@@ -82,6 +82,9 @@ public class JoinStats {
      * Initialize some join statistics.
      */
     public static void initializeJoinStats() {
+        JoinStats.pureJoinMillis = 0;
+        JoinStats.joinMillis = 0;
+
         JoinStats.nrTuples = 0;
         JoinStats.nrFastBacktracks = 0;
         JoinStats.nrIndexLookups = 0;
@@ -91,5 +94,10 @@ public class JoinStats {
         JoinStats.nrUctNodes = 0;
         JoinStats.nrPlansTried = 0;
         JoinStats.nrSamples = 0;
+
+        JoinStats.avgReward = -1;
+        JoinStats.maxReward = -1;
+        JoinStats.totalWork = 0;
+        JoinStats.skinnerJoinCard = 0;
     }
 }

@@ -1,7 +1,5 @@
 package indexing;
 
-import java.util.Arrays;
-
 import com.koloboke.collect.map.IntIntCursor;
 import com.koloboke.collect.map.IntIntMap;
 import com.koloboke.collect.map.hash.HashIntIntMaps;
@@ -9,9 +7,7 @@ import com.koloboke.collect.map.hash.HashIntIntMaps;
 import config.LoggingConfig;
 import config.ParallelConfig;
 import data.IntData;
-import joining.join.DPJoin;
 import joining.join.IndexAccessInfo;
-import statistics.JoinStats;
 
 /**
  * Indexes integer values (not necessarily unique).

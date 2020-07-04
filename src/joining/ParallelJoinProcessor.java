@@ -1,15 +1,19 @@
 package joining;
 
+import catalog.CatalogManager;
 import config.*;
-import joining.join.DPJoin;
+import joining.join.DataParallelJoin;
 import joining.result.ResultTuple;
 import joining.joinThreadTask.JoinPartitionsTask;
-import joining.joinThreadTask.SplitTableCoordinator;
+import joining.joinThreadTask.DPJoinCoordinator;
 import joining.uct.UctNode;
 import preprocessing.Context;
 import query.QueryInfo;
 import statistics.JoinStats;
 
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -59,13 +63,13 @@ public class ParallelJoinProcessor extends JoinProcessor {
         // The number of threads
         int nrThreads = ParallelConfig.JOIN_THREADS;
         // Initialize multi-way join operator for each thread
-        DPJoin[] joinOps = new DPJoin[nrThreads];
+        DataParallelJoin[] joinOps = new DataParallelJoin[nrThreads];
         // Initialize UCT join order search tree for each thread
         UctNode[] roots = new UctNode[nrThreads];
         // Initialize split table coordinator
-        SplitTableCoordinator coordinator = new SplitTableCoordinator(nrThreads, query.nrJoined);
+        DPJoinCoordinator coordinator = new DPJoinCoordinator(nrThreads, query.nrJoined);
         for (int tid = 0; tid < nrThreads; tid++) {
-            joinOps[tid] = new DPJoin(query, context,
+            joinOps[tid] = new DataParallelJoin(query, context,
                     JoinConfig.BUDGET_PER_EPISODE, tid);
             roots[tid] = new UctNode(0, query,
                     JoinConfig.AVOID_CARTESIANS, joinOps[tid]);
@@ -94,9 +98,21 @@ public class ParallelJoinProcessor extends JoinProcessor {
         });
         // Measure pure join processing time (without materialization)
         JoinStats.pureJoinMillis = executionEnd - executionStart;
-
+        System.out.println("Join Time: " + JoinStats.pureJoinMillis);
+        if (LoggingConfig.WRITE_JOIN_LOGS) {
+            // logs list
+            List<String>[] logs = new List[nrThreads];
+            for (int tid = 0; tid < nrThreads; tid++) {
+                logs[tid] = joinOps[tid].logs;
+            }
+            writeLogs(logs, "test");
+        }
 //        // TODO: Update statistics
-//        JoinStats.nrSamples = roundCtr;
+        JoinStats.nrSamples = 0;
+        for (int tid = 0; tid < nrThreads; tid++) {
+            JoinStats.nrSamples = Math.max(JoinStats.nrSamples, joinOps[tid].roundCtr);
+        }
+        System.out.println("Round Ctr: " + JoinStats.nrSamples);
 //        JoinStats.avgReward = accReward/roundCtr;
 //        JoinStats.maxReward = maxReward;
 //        JoinStats.totalWork = 0;
@@ -114,5 +130,51 @@ public class ParallelJoinProcessor extends JoinProcessor {
         materialize(query, context, tuples);
         // Measure execution time for join phase
         JoinStats.joinMillis = System.currentTimeMillis() - startMillis;
+        // Store number of join result tuples
+        JoinStats.skinnerJoinCard = CatalogManager.
+                getCardinality(NamingConfig.DEFAULT_JOINED_NAME);
+    }
+    /**
+     * Write logs into local files.
+     *
+     * @param logs      A list of logs for multiple threads.
+     * @param path      log directory path.
+     */
+    public static void writeLogs(List<String>[] logs, String path) {
+        List<Thread> threads = new ArrayList<>();
+        int nrThreads = logs.length;
+        String PATH = "./logs/" + path;
+        File directory = new File(PATH);
+        if (!directory.exists()){
+            directory.mkdirs();
+        }
+        for(int i = 0; i < nrThreads; i++) {
+            List<String> threadLogs = logs[i];
+            int tid = i;
+            Thread T1 = new Thread(() -> {
+                try {
+                    FileWriter writer = new FileWriter("./logs/" + path + "/" + tid +".txt");
+                    threadLogs.forEach(log -> {
+                        try {
+                            writer.write(log + "\n");
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    });
+                    writer.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            });
+            T1.start();
+            threads.add(T1);
+        }
+        for (int i = 0; i < nrThreads; i++) {
+            try {
+                threads.get(i).join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
     }
 }
