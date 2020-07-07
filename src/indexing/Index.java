@@ -28,6 +28,12 @@ public abstract class Index {
 	 */
 	public byte[] threadForRows;
 	/**
+	 * After indexing: contains the group id for
+	 * each row. By recording this, grouping rows for
+	 * single column can be processed efficiently.
+	 */
+	public int[] groupForRows;
+	/**
 	 * Initialize for given cardinality of indexed table.
 	 * 
 	 * @param cardinality	number of rows to index

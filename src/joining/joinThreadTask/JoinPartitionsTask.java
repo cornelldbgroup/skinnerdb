@@ -127,13 +127,13 @@ public class JoinPartitionsTask implements Callable<Set<ResultTuple>> {
                 joinOp.log("Slow State: " + slowState.toString());
                 reward = joinOp.execute(joinOrder, slowState);
                 coordinator.optimizeSplitTable(joinOp);
+                coordinator.threadStates[tid][splitTable] = joinOp.lastEndState;
             }
             else {
                 reward = root.sample(roundCtr, joinOrder, policy);
             }
             // Save the last end state for the thread
             splitTable = joinOp.splitTable;
-            coordinator.threadStates[tid][splitTable] = joinOp.lastEndState;
             // Count reward except for final sample
             if (!joinOp.isFinished()) {
                 accReward += reward;

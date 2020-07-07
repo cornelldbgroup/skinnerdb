@@ -387,22 +387,22 @@ public class SkinnerCmd {
 			BufferManager.loadDictionary();
 		}
 //		processInput("bench ./jcch/queries/ benchtest.log");
-//		processInput("exec ./jcch/queries/q16.sql");
+		processInput("exec ./jcch/queries/q10.sql");
 		// Command line processing
-		System.out.println("Enter 'help' for help and 'quit' to exit");
-		Scanner scanner = new Scanner(System.in);
-		boolean continueProcessing = true;
-		while (continueProcessing) {
-			System.out.print("> ");
-			String input = scanner.nextLine();
-			try {
-				continueProcessing = processInput(input);
-			} catch (Exception e) {
-				System.err.println("Error processing command: ");
-				e.printStackTrace();
-			}
-		}
-		scanner.close();
+//		System.out.println("Enter 'help' for help and 'quit' to exit");
+//		Scanner scanner = new Scanner(System.in);
+//		boolean continueProcessing = true;
+//		while (continueProcessing) {
+//			System.out.print("> ");
+//			String input = scanner.nextLine();
+//			try {
+//				continueProcessing = processInput(input);
+//			} catch (Exception e) {
+//				System.err.println("Error processing command: ");
+//				e.printStackTrace();
+//			}
+//		}
+//		scanner.close();
 		ThreadPool.close();
 	}
 }
