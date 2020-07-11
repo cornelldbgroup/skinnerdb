@@ -5,6 +5,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import buffer.BufferManager;
 import catalog.CatalogManager;
@@ -65,7 +66,41 @@ public class GroupBy {
 		}
 		// Update catalog statistics
 		CatalogManager.updateStats(targetTbl);
-		// Retrieve data for 
+		return nextGroupID;
+	}
+
+	public static int parallelExecute(Collection<ColumnRef> sourceRefs,
+							  ColumnRef targetRef) throws Exception {
+		// Register result column
+		String targetTbl = targetRef.aliasName;
+		String targetCol = targetRef.columnName;
+		ColumnInfo targetInfo = new ColumnInfo(targetCol,
+				SQLtype.INT, false, false, false, false);
+		CatalogManager.currentDB.nameToTable.get(targetTbl).addColumn(targetInfo);
+		// Generate result column and load it into buffer
+		String firstSourceTbl = sourceRefs.iterator().next().aliasName;
+		int cardinality = CatalogManager.getCardinality(firstSourceTbl);
+		IntData groupData = new IntData(cardinality);
+		BufferManager.colToData.put(targetRef, groupData);
+		// Get data of source columns
+		List<ColumnData> sourceCols = new ArrayList<ColumnData>();
+		for (ColumnRef srcRef : sourceRefs) {
+			sourceCols.add(BufferManager.getData(srcRef));
+		}
+		// Fill result column
+		Map<Group, Integer> groupToID = new ConcurrentHashMap<>();
+		int nextGroupID = 0;
+		for (int rowCtr=0; rowCtr<cardinality; ++rowCtr) {
+			Group curGroup = new Group(rowCtr, sourceCols);
+			if (!groupToID.containsKey(curGroup)) {
+				groupToID.put(curGroup, nextGroupID);
+				++nextGroupID;
+			}
+			int groupID = groupToID.get(curGroup);
+			groupData.data[rowCtr] = groupID;
+		}
+		// Update catalog statistics
+		CatalogManager.updateStats(targetTbl);
 		return nextGroupID;
 	}
 }

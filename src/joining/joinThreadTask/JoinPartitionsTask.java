@@ -139,7 +139,7 @@ public class JoinPartitionsTask implements Callable<Set<ResultTuple>> {
                 accReward += reward;
                 maxReward = Math.max(reward, maxReward);
             }
-            else {
+            else if (splitTable >= 0) {
                 if (coordinator.firstFinished
                         .compareAndSet(false, true)) {
                     System.out.println(tid + " finishes with: " +
@@ -152,6 +152,10 @@ public class JoinPartitionsTask implements Callable<Set<ResultTuple>> {
                     joinFinished.set(true);
                     break;
                 }
+            }
+            else {
+                joinFinished.set(true);
+                break;
             }
 
             // Consider memory loss

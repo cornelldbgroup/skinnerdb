@@ -22,6 +22,7 @@ import preprocessing.Preprocessor;
 import query.ColumnRef;
 import query.QueryInfo;
 import query.SQLexception;
+import statistics.PostStats;
 import unnesting.UnnestingVisitor;
 
 /**

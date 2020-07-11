@@ -58,7 +58,8 @@ public class BenchUtil {
 	 */
 	public static void writeBenchHeader(PrintWriter benchOut) {
 		benchOut.println("Query\tMillis\tPreMillis\tJoinMillis\tPostMillis\t"
-				+ "PreNoIndexMillis\tJoinNoMatMillis\tTuples\tnrFbacks\t" 
+				+ "PreNoIndexMillis\tJoinNoMatMillis\tGroupByMillis\tAggregateMillis\t"
+				+ "HavingMillis\tOrderMillis\tTuples\tnrFbacks\t"
 				+ "Iterations\tLookups\tNrIndexEntries\tnrUniqueLookups\t"
 				+ "NrUctNodes\tNrPlans\tJoinCard\tNrSamples\tAvgReward\t"
 				+ "MaxReward\tTotalWork");
@@ -87,6 +88,10 @@ public class BenchUtil {
 		benchOut.print(PostStats.postMillis + "\t");
 		benchOut.print(PreStats.filterProjectMillis + "\t");
 		benchOut.print(JoinStats.pureJoinMillis + "\t");
+		benchOut.print(PostStats.groupbyMillis + "\t");
+		benchOut.print(PostStats.aggregateMillis + "\t");
+		benchOut.print(PostStats.havingMillis + "\t");
+		benchOut.print(PostStats.orderMillis + "\t");
 		benchOut.print(JoinStats.nrTuples + "\t");
 		benchOut.print(JoinStats.nrFastBacktracks + "\t");
 		benchOut.print(JoinStats.nrIterations + "\t");

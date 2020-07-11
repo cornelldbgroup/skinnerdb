@@ -10,16 +10,10 @@ import data.LongData;
 import data.StringData;
 import expressions.ExpressionInfo;
 import expressions.compilation.*;
+import indexing.DefaultIntIndex;
 import indexing.DoubleIndex;
 import indexing.Index;
 import indexing.IntIndex;
-import joining.parallel.indexing.DoublePartitionIndex;
-import joining.parallel.indexing.IntPartitionIndex;
-import net.sf.jsqlparser.expression.LongValue;
-import operators.OperationTest;
-import operators.OperatorUtils;
-import predicate.OperationNode;
-import predicate.Operator;
 import query.ColumnRef;
 import types.JavaType;
 import types.SQLtype;
@@ -193,11 +187,8 @@ public class ParallelMapRows {
      * @param targetRef     store results in this target column
      * @throws Exception
      */
-    public static void executeIndex(String sourceRel,
-                               ExpressionInfo expression,
-                               Index index,
-                               ColumnRef targetRef) throws Exception {
-        // Do we map to groups?
+    public static void executeWithIndex(String sourceRel, ExpressionInfo expression,
+                                        Index index, ColumnRef targetRef) throws Exception {
         // Register target column in catalog
         SQLtype resultType = expression.resultType;
         JavaType jResultType = TypeUtil.toJavaType(resultType);
@@ -213,7 +204,7 @@ public class ParallelMapRows {
         OperationTest operationTest = new OperationTest();
         expression.finalExpression.accept(operationTest);
         OperationNode operationNode = operationTest.operationNodes.pop();
-        // check more mappings
+        // Check more mappings
         OperationNode evaluator = operationNode.operator == Operator.Variable ? null : operationNode;
         int[] positions = index.positions;
         int[] gids = index.groupForRows;
@@ -226,9 +217,9 @@ public class ParallelMapRows {
 //                intResult.isNull.set(0, outCard - 1);
                 BufferManager.colToData.put(targetRef, intResult);
                 IntStream.range(0, gids.length).parallel().forEach(gid -> {
-                    int pos = index.groupIds[gid];
+                    int pos = index.groupForRows[gid];
                     int rid = positions[pos + 1];
-                    int data = ((IntIndex)index).intData.data[rid];
+                    int data = ((DefaultIntIndex)index).intData.data[rid];
                     if (evaluator != null) {
                         data = (int) evaluator.evaluate(data);
                     }

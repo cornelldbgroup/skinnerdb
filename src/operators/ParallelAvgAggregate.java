@@ -7,19 +7,12 @@ import catalog.info.TableInfo;
 import data.ColumnData;
 import data.DoubleData;
 import data.IntData;
-import data.LongData;
 import expressions.ExpressionInfo;
 import indexing.Index;
-import operators.OperationTest;
-import operators.OperatorUtils;
-import predicate.OperationNode;
-import predicate.Operator;
 import query.ColumnRef;
 import types.SQLtype;
 
 import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
 import java.util.stream.IntStream;
 
 /**
@@ -39,13 +32,11 @@ public class ParallelAvgAggregate {
 	 * @param targetRef		store results in this column
 	 * @throws Exception
 	 */
-	public static void executeIndex(ColumnRef sourceRef,
-                                    Index index,
-                                    ColumnRef targetRef, ExpressionInfo expr) throws Exception {
+	public static void executeWithIndex(ColumnRef sourceRef, Index index,
+										ColumnRef targetRef, ExpressionInfo expr) throws Exception {
 		// Get information about source column
 		SQLtype srcType = CatalogManager.getColumn(sourceRef).type;
 		ColumnData srcData = BufferManager.getData(sourceRef);
-		// Create row to group assignments
 		// Generate target column
 		int targetCard = index.groupForRows.length;
 		DoubleData target = new DoubleData(targetCard);
@@ -61,7 +52,7 @@ public class ParallelAvgAggregate {
 		OperationTest operationTest = new OperationTest();
 		expr.finalExpression.accept(operationTest);
 		OperationNode operationNode = operationTest.operationNodes.pop();
-		// check more mappings
+		// Check more mappings
 		OperationNode evaluator = operationNode.operator == Operator.Variable ? null : operationNode;
 
 		// Update catalog statistics on result table

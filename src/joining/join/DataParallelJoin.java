@@ -513,7 +513,7 @@ public class DataParallelJoin extends OldJoin {
 
     @Override
     public void log(String line) {
-        if (LoggingConfig.WRITE_JOIN_LOGS) {
+        if (LoggingConfig.WRITE_DPJOIN_LOGS) {
             logs.add(line);
         }
     }

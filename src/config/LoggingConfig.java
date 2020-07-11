@@ -60,7 +60,7 @@ public class LoggingConfig {
 	 * Whether to write logging output when running
 	 * join phase with multiple threads.
 	 */
-	public final static boolean WRITE_JOIN_LOGS = true;
+	public final static boolean WRITE_DPJOIN_LOGS = true;
 	/**
 	 * Whether to generate debugging output during post-processing.
 	 */

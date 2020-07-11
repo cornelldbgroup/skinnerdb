@@ -99,7 +99,7 @@ public class ParallelJoinProcessor extends JoinProcessor {
         // Measure pure join processing time (without materialization)
         JoinStats.pureJoinMillis = executionEnd - executionStart;
         System.out.println("Join Time: " + JoinStats.pureJoinMillis);
-        if (LoggingConfig.WRITE_JOIN_LOGS) {
+        if (LoggingConfig.WRITE_DPJOIN_LOGS) {
             // logs list
             List<String>[] logs = new List[nrThreads];
             for (int tid = 0; tid < nrThreads; tid++) {

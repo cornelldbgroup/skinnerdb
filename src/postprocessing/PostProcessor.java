@@ -124,7 +124,7 @@ public class PostProcessor {
 				// Need to generate select item data -
 				// selector must be based on group-by columns.
 				String srcRel = context.joinedTable;
-				ParallelMapRows.executeIndex(srcRel, selInfo, index, resultRef);
+				ParallelMapRows.executeWithIndex(srcRel, selInfo, index, resultRef);
 			} else {
 				// Need to generate data - selector is
 				// complex expression based on previously
@@ -163,7 +163,7 @@ public class PostProcessor {
 //                                groupRef, true, targetRef);
 						break;
 					case AVG:
-						ParallelAvgAggregate.executeIndex(sourceRef, index, resultRef, selInfo);
+						ParallelAvgAggregate.executeWithIndex(sourceRef, index, resultRef, selInfo);
 						break;
 					default:
 						throw new Exception("Error - aggregate " + aggInfo +
@@ -554,14 +554,20 @@ public class PostProcessor {
 		// Determine whether query has ORDER BY clause
 		boolean hasOrder = !query.orderByExpressions.isEmpty();
 
-		if (index != null && joinCard == index.cardinality && !hasHaving) {
+		if (index != null && joinCard == index.cardinality
+				&& !hasHaving && index.groupForRows != null) {
 			processFullTable(query, context, resultRelName, tempResult, index);
 		}
 		else {
+			long startMillis = System.currentTimeMillis();
 			// Execute group by
 			groupBy(query, context);
+			long groupEnd = System.currentTimeMillis();
+			PostStats.groupbyMillis = groupEnd - startMillis;
 			// Calculate aggregates
 			aggregate(query, context);
+			long aggregateEnd = System.currentTimeMillis();
+			PostStats.aggregateMillis = aggregateEnd - groupEnd;
 			// Different treatment for queries with/without HAVING
 			if (hasHaving) {
 				// Having clause specified - insertinto intermediate result table
@@ -599,6 +605,7 @@ public class PostProcessor {
 				}
 			}
 		}
+		long orderStart = System.currentTimeMillis();
 		// Sort result table if applicable
 		if (hasOrder) {
 			String orderTbl = NamingConfig.ORDER_NAME;
@@ -609,6 +616,8 @@ public class PostProcessor {
 			}
 			OrderBy.execute(orderRefs, query.orderByAsc, resultRelName);			
 		}
+		long orderEnd = System.currentTimeMillis();
+		PostStats.orderMillis = orderEnd - orderStart;
 	}
 	/**
 	 * Generate debugging output if activated.
@@ -631,6 +640,7 @@ public class PostProcessor {
 	 */
 	public static void process(QueryInfo query, Context context,
 			String resultRel, boolean tempResult) throws Exception {
+		PostStats.initializePostStats();
 		// Start counter
 		long startMillis = System.currentTimeMillis();
 		// Store full result in preliminary table if limit specified 
