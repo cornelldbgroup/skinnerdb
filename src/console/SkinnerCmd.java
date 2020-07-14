@@ -212,17 +212,17 @@ public class SkinnerCmd {
 				PlainSelect plainSelect = (PlainSelect)select.getSelectBody();
 				boolean printResult = plainSelect.getIntoTables() == null;
 				try {
-					// Warm up run
+					// Warm up run.
 					if (StartupConfig.WARM_UP) {
 						Master.executeSelect(plainSelect, false,
-								-1, -1, null, queryName, benchOut);
+								-1, -1, null, queryName, null);
 						BufferManager.unloadTempData();
 						CatalogManager.removeTempTables();
 						sqlStatement = CCJSqlParserUtil.parse(input);
 						select = (Select) sqlStatement;
 						plainSelect = (PlainSelect) select.getSelectBody();
 					}
-
+					// Run the query after the warm up.
 					Master.executeSelect(plainSelect, false, 
 							-1, -1, null, queryName, benchOut);
 					// Display query result if no target tables specified
@@ -387,7 +387,8 @@ public class SkinnerCmd {
 			BufferManager.loadDictionary();
 		}
 //		processInput("bench ./jcch/queries/ benchtest.log");
-//		processInput("exec ./jcch/queries/q10.sql");
+//		processInput("index all");
+//		processInput("exec ./jcch/queries/q18.sql");
 		// Command line processing
 		System.out.println("Enter 'help' for help and 'quit' to exit");
 		Scanner scanner = new Scanner(System.in);

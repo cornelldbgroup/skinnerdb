@@ -79,6 +79,7 @@ public class DoubleIndex extends Index {
 				positions[pos] = i;				
 			}
 		}
+		this.nrKeys = nrKeys;
 		// Output statistics for performance tuning
 		if (LoggingConfig.INDEXING_VERBOSE) {
 			long totalMillis = System.currentTimeMillis() - startMillis;

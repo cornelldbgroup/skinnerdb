@@ -166,6 +166,7 @@ public class DefaultIntIndex extends IntIndex {
 				positions[pos] = i;				
 			}
 		}
+		this.nrKeys = nrKeys;
 		// Output statistics for performance tuning
 		if (LoggingConfig.INDEXING_VERBOSE) {
 			long totalMillis = System.currentTimeMillis() - startMillis;
@@ -341,8 +342,6 @@ public class DefaultIntIndex extends IntIndex {
 		// no suitable tuple found
 		return cardinality;
 	}
-
-
 	/**
 	 * Returns the number of entries indexed
 	 * for the given value.

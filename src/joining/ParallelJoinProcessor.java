@@ -96,6 +96,7 @@ public class ParallelJoinProcessor extends JoinProcessor {
                 e.printStackTrace();
             }
         });
+        System.out.println("Results: " + tuples.size());
         // Measure pure join processing time (without materialization)
         JoinStats.pureJoinMillis = executionEnd - executionStart;
         System.out.println("Join Time: " + JoinStats.pureJoinMillis);

@@ -91,14 +91,16 @@ public class PostProcessor {
 	 *
 	 * @param queryInfo		query to process
 	 * @param context		query processing context
+	 * @param targetRel		target relation name
+	 * @param tempResult	whether it is temporary result
+	 * @param index			index corresponding to group column
+	 * @param hasHaving		whether to have having clause
+	 * @param hasHaving		whether to have order clause
 	 * @throws Exception
 	 */
-	static void processFullTable(QueryInfo queryInfo,
-								 Context context,
-								 String targetRel,
-								 boolean tempResult,
-								 Index index)
-			throws Exception {
+	static void processOriginalTable(QueryInfo queryInfo, Context context,
+									 String targetRel, boolean tempResult,
+									 Index index, boolean hasHaving, boolean hasOrder) throws Exception {
 		// Generate table for holding aggregation input
 		String aggSrcTbl = NamingConfig.AGG_SRC_TBL_NAME;
 		TableInfo aggSrcTblInfo = new TableInfo(aggSrcTbl, true);
@@ -109,10 +111,18 @@ public class PostProcessor {
 		CatalogManager.currentDB.nameToTable.put(aggTbl, aggTblInfo);
 		// Iterate over aggregates for processing
 		int aggInputCtr = 0;
+		int aggCtr = 0;
 		// Generate table holding result
-		TableInfo targetInfo = new TableInfo(targetRel, tempResult);
+		TableInfo targetInfo = null;
+		if (hasHaving) {
+			targetInfo = new TableInfo(NamingConfig.RESULT_NO_HAVING, tempResult);
+		}
+		else {
+			targetInfo = new TableInfo(targetRel, tempResult);
+		}
 		CatalogManager.currentDB.addTable(targetInfo);
 
+		// Iterate over selected expressions
 		for (ExpressionInfo selInfo : queryInfo.selectExpressions) {
 			String colName = queryInfo.selectToAlias.get(selInfo);
 			String resultName = targetInfo.name;
@@ -136,7 +146,6 @@ public class PostProcessor {
 					// No need to regenerate base column
 					ColumnRef queryRef = aggInput.columnsMentioned.iterator().next();
 					sourceRef = context.columnMapping.get(queryRef);
-
 				} else {
 					// Input is complex expression - generate data
 					String joinRel = context.joinedTable;
@@ -163,7 +172,7 @@ public class PostProcessor {
 //                                groupRef, true, targetRef);
 						break;
 					case AVG:
-						ParallelAvgAggregate.executeWithIndex(sourceRef, index, resultRef, selInfo);
+						ParallelAvgAggregate.executeWithIndex(sourceRef, resultRef, index, selInfo);
 						break;
 					default:
 						throw new Exception("Error - aggregate " + aggInfo +
@@ -171,6 +180,66 @@ public class PostProcessor {
 				}
 				long timer1 = System.currentTimeMillis();
 				System.out.println("AggColumn: " + aggInfo + "\t" + (timer1 - timer0));
+			}
+		}
+
+		if (hasHaving) {
+			// Treat aggregates in HAVING clause
+			for (AggInfo aggInfo: queryInfo.aggregates) {
+				// Retrieve or generate source data
+				ColumnRef sourceRef = null;
+				ExpressionInfo aggInput = aggInfo.aggInput;
+				if (aggInput.finalExpression instanceof Column) {
+					// No need to regenerate base column
+					ColumnRef queryRef = aggInput.columnsMentioned.iterator().next();
+					sourceRef = context.columnMapping.get(queryRef);
+				} else {
+					// Input is complex expression - generate data
+					String joinRel = context.joinedTable;
+					String sourceCol = NamingConfig.AGG_SRC_COL_PRE + aggInputCtr;
+					sourceRef = new ColumnRef(aggSrcTbl, sourceCol);
+					++aggInputCtr;
+					MapRows.execute(joinRel, aggInput,
+							context.columnMapping, null,
+							null, -1, sourceRef);
+				}
+				// Determine target column for aggregation
+				String targetCol = NamingConfig.AGG_COL_PRE + aggCtr;
+				++aggCtr;
+				ColumnRef targetRef = new ColumnRef(aggTbl, targetCol);
+				// Update context
+				context.aggToData.put(aggInfo.toString(), targetRef);
+				context.columnMapping.put(targetRef, targetRef);
+				// Process aggregate
+				switch (aggInfo.aggFunction) {
+					case SUM:
+						ParallelSumAggregate.execute(sourceRef, targetRef, index, aggInfo.aggInput);
+						break;
+					default:
+						throw new Exception("Error - aggregate " + aggInfo +
+								" should have been rewritten");
+				}
+			}
+			// Get groups satisfying HAVING clause
+			List<Integer> havingGroups = havingRows(queryInfo, context);
+			// Prepare sorting if ORDER BY clause is specified
+			if (hasOrder) {
+				addPerGroupOrderTbl(queryInfo, context,
+						NamingConfig.ORDER_NO_HAVING, true);
+			}
+			// Filter result to having groups
+			TableInfo noHavingResInfo = CatalogManager.getTable(
+					NamingConfig.RESULT_NO_HAVING);
+			Materialize.execute(NamingConfig.RESULT_NO_HAVING,
+					noHavingResInfo.columnNames, havingGroups,
+					null, targetRel, tempResult);
+			// Filter order table to having groups if applicable
+			if (hasOrder) {
+				TableInfo noHavingOrderInfo = CatalogManager.getTable(
+						NamingConfig.ORDER_NO_HAVING);
+				Materialize.execute(NamingConfig.ORDER_NO_HAVING,
+						noHavingOrderInfo.columnNames, havingGroups,
+						null, NamingConfig.ORDER_NAME, true);
 			}
 		}
 		// Update statistics on result table
@@ -204,6 +273,8 @@ public class PostProcessor {
 		// Iterate over aggregates for processing
 		int aggInputCtr = 0;
 		int aggCtr = 0;
+		int nrGroups = context.nrGroups;
+		ColumnRef groupRef = context.groupRef;
 		for (AggInfo aggInfo : queryInfo.aggregates) {
 			// Debugging output
 			log("Treating aggregate nr. " + aggCtr + ": " + aggInfo);
@@ -234,24 +305,26 @@ public class PostProcessor {
 			context.aggToData.put(aggInfo.toString(), targetRef);
 			context.columnMapping.put(targetRef, targetRef);
 			// Process aggregate
-			int nrGroups = context.nrGroups;
-			ColumnRef groupRef = context.groupRef;
 			switch (aggInfo.aggFunction) {
-			case SUM:
-				SumAggregate.execute(sourceRef, nrGroups, 
-						groupRef, targetRef);
-				break;
-			case MIN:
-				MinMaxAggregate.execute(sourceRef, nrGroups, 
-						groupRef, false, targetRef);
-				break;
-			case MAX:
-				MinMaxAggregate.execute(sourceRef, nrGroups, 
-						groupRef, true, targetRef);
-				break;
-			default:
-				throw new Exception("Error - aggregate " + aggInfo +
-						" should have been rewritten");
+				case SUM:
+					SumAggregate.execute(sourceRef, nrGroups,
+							groupRef, targetRef);
+					break;
+				case MIN:
+					MinMaxAggregate.execute(sourceRef, nrGroups,
+							groupRef, false, targetRef);
+					break;
+				case MAX:
+					MinMaxAggregate.execute(sourceRef, nrGroups,
+							groupRef, true, targetRef);
+					break;
+				case AVG:
+					AvgAggregate.execute(sourceRef, nrGroups,
+							groupRef, targetRef);
+					break;
+				default:
+					throw new Exception("Error - aggregate " + aggInfo +
+							" should have been rewritten");
 			}
 		}
 		// Print out aggregation table if activated
@@ -522,7 +595,7 @@ public class PostProcessor {
 		// Collect indices of group passing the having predicate
 		int[] groupHaving = ((IntData)BufferManager.getData(havingRef)).data;
 		List<Integer> havingGroups = new ArrayList<>();
-		for (int groupCtr=0; groupCtr<context.nrGroups; ++groupCtr) {
+		for (int groupCtr = 0; groupCtr < groupHaving.length; ++groupCtr) {
 			if (groupHaving[groupCtr]>0) {
 				havingGroups.add(groupCtr);
 			}
@@ -550,13 +623,12 @@ public class PostProcessor {
 		// Determine whether query has HAVING clause
 		ExpressionInfo havingExpr = query.havingExpression;
 		boolean hasHaving = havingExpr!=null;
-
 		// Determine whether query has ORDER BY clause
 		boolean hasOrder = !query.orderByExpressions.isEmpty();
-
-		if (index != null && joinCard == index.cardinality
-				&& !hasHaving && index.groupForRows != null) {
-			processFullTable(query, context, resultRelName, tempResult, index);
+		// Whether the result table is exactly an original table.
+		if (index != null && joinCard == index.cardinality) {
+			processOriginalTable(query, context, resultRelName,
+					tempResult, index, hasHaving, hasOrder);
 		}
 		else {
 			long startMillis = System.currentTimeMillis();
@@ -570,7 +642,7 @@ public class PostProcessor {
 			PostStats.aggregateMillis = aggregateEnd - groupEnd;
 			// Different treatment for queries with/without HAVING
 			if (hasHaving) {
-				// Having clause specified - insertinto intermediate result table
+				// Having clause specified - insert into intermediate result table
 				addPerGroupSelTbl(query, context,
 						NamingConfig.RESULT_NO_HAVING, true);
 				// Get groups satisfying HAVING clause
@@ -605,6 +677,7 @@ public class PostProcessor {
 				}
 			}
 		}
+
 		long orderStart = System.currentTimeMillis();
 		// Sort result table if applicable
 		if (hasOrder) {

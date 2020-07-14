@@ -1,7 +1,6 @@
 package joining.joinThreadTask;
 
 import config.JoinConfig;
-import config.LoggingConfig;
 import joining.join.DataParallelJoin;
 import joining.progress.hash.State;
 import joining.result.ResultTuple;
@@ -105,8 +104,6 @@ public class JoinPartitionsTask implements Callable<Set<ResultTuple>> {
         }
         // Get default action selection policy
         SelectionPolicy policy = JoinConfig.DEFAULT_SELECTION;
-        // Initialize counter until scale down
-        long nextScaleDown = 1;
         // Initialize counter until memory loss
         long nextForget = 1;
         // Initialize plot counter
@@ -127,7 +124,7 @@ public class JoinPartitionsTask implements Callable<Set<ResultTuple>> {
                 joinOp.log("Slow State: " + slowState.toString());
                 reward = joinOp.execute(joinOrder, slowState);
                 coordinator.optimizeSplitTable(joinOp);
-                coordinator.threadStates[tid][splitTable] = joinOp.lastEndState;
+                coordinator.threadStates[tid][splitTable] = joinOp.prevEndState;
             }
             else {
                 reward = root.sample(roundCtr, joinOrder, policy);

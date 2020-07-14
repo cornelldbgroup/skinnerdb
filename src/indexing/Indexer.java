@@ -20,7 +20,8 @@ public class Indexer {
 	 * 
 	 * @param colRef	create index on this column
 	 */
-	public static void index(ColumnRef colRef) throws Exception {
+	public static Index index(ColumnRef colRef) throws Exception {
+		Index index = null;
 		// Check if index already exists
 		if (!BufferManager.colToIndex.containsKey(colRef)) {
 			ColumnData data = BufferManager.getData(colRef);
@@ -28,19 +29,17 @@ public class Indexer {
 				IntData intData = (IntData)data;
 				// Use specialized index for columns without duplicates
 				if (CatalogManager.getColumn(colRef).isUnique) {
-					BufferManager.colToIndex.put(colRef, 
-							new UniqueIntIndex(intData));
+					index = new UniqueIntIndex(intData);
 				} else {
-					BufferManager.colToIndex.put(colRef, 
-							new DefaultIntIndex(intData));
-							//new DummyIntIndex());
+					index = new DefaultIntIndex(intData);
 				}
 			} else if (data instanceof DoubleData) {
 				DoubleData doubleData = (DoubleData)data;
-				DoubleIndex index = new DoubleIndex(doubleData);
-				BufferManager.colToIndex.put(colRef, index);
+				index = new DoubleIndex(doubleData);
 			}
+			BufferManager.colToIndex.put(colRef, index);
 		}
+		return index;
 	}
 	/**
 	 * Creates an index for each key/foreign key column.
@@ -63,7 +62,10 @@ public class Indexer {
 								String column = columnInfo.name;
 								ColumnRef colRef = new ColumnRef(table, column);
 								System.out.println("Indexing " + colRef + " ...");
-								index(colRef);								
+								Index index = index(colRef);
+								if (index != null) {
+									index.groupRows();
+								}
 							}
 						} catch (Exception e) {
 							System.err.println("Error indexing " + columnInfo);

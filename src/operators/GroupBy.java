@@ -102,5 +102,6 @@ public class GroupBy {
 		// Update catalog statistics
 		CatalogManager.updateStats(targetTbl);
 		return nextGroupID;
+
 	}
 }

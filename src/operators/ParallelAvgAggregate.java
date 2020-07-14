@@ -8,11 +8,20 @@ import data.ColumnData;
 import data.DoubleData;
 import data.IntData;
 import expressions.ExpressionInfo;
+import expressions.compilation.EvaluatorType;
+import expressions.compilation.ExpressionCompiler;
+import expressions.compilation.UnaryIntEval;
 import indexing.Index;
 import query.ColumnRef;
+import threads.ThreadPool;
 import types.SQLtype;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
 import java.util.stream.IntStream;
 
 /**
@@ -30,15 +39,18 @@ public class ParallelAvgAggregate {
 	 *
 	 * @param sourceRef		reference to source column
 	 * @param targetRef		store results in this column
+	 * @param index			the index corresponding to selected column
 	 * @throws Exception
 	 */
-	public static void executeWithIndex(ColumnRef sourceRef, Index index,
-										ColumnRef targetRef, ExpressionInfo expr) throws Exception {
+	public static void executeWithIndex(ColumnRef sourceRef,
+										ColumnRef targetRef,
+										Index index,
+										ExpressionInfo expression) throws Exception {
 		// Get information about source column
 		SQLtype srcType = CatalogManager.getColumn(sourceRef).type;
 		ColumnData srcData = BufferManager.getData(sourceRef);
 		// Generate target column
-		int targetCard = index.groupForRows.length;
+		int targetCard = index.groups.length;
 		DoubleData target = new DoubleData(targetCard);
 		BufferManager.colToData.put(targetRef, target);
 		// Register target column in catalog
@@ -49,60 +61,81 @@ public class ParallelAvgAggregate {
 		ColumnInfo targetColInfo = new ColumnInfo(targetCol,
 				srcType, false, false, false, false);
 		targetRelInfo.addColumn(targetColInfo);
-		OperationTest operationTest = new OperationTest();
-		expr.finalExpression.accept(operationTest);
-		OperationNode operationNode = operationTest.operationNodes.pop();
-		// Check more mappings
-		OperationNode evaluator = operationNode.operator == Operator.Variable ? null : operationNode;
-
 		// Update catalog statistics on result table
 		CatalogManager.updateStats(targetRel);
+		int[] positions = index.positions;
+		int[] groups = index.groups;
+		// Split groups into batches
+		List<RowRange> batches = OperatorUtils.split(groups.length, 50, 500);
+		ExecutorService executorService = ThreadPool.postExecutorService;
+		List<Future<Integer>> dummyFutures = new ArrayList<>();
+		// Compile mapping expression
+		OperationTest operationTest = new OperationTest();
+		expression.finalExpression.accept(operationTest);
+		OperationNode operationNode = operationTest.operationNodes.pop();
+		// check more mappings
+		OperationNode evaluator = operationNode.operator == Operator.Variable ? null : operationNode;
 
 		// Switch according to column type (to avoid casts)
 		switch (srcType) {
-			case INT:
-			{
+			case INT: {
 				IntData intSrc = (IntData)srcData;
-				int[] positions = index.positions;
-				int[] gids = index.groupForRows;
-				IntStream.range(0, gids.length).parallel().forEach(gid -> {
-					int pos = gids[gid];
-					int groupCard = positions[pos];
-					double data = 0;
-					for (int i = pos + 1; i <= pos + groupCard; i++) {
-						int rid = positions[i];
-						data += intSrc.data[rid];
-					}
-					if (data != 0) {
-						data = data / groupCard;
-					}
-					if (evaluator != null) {
-						data = evaluator.evaluate(data);
-					}
-					target.data[gid] = data;
-				});
+				for (RowRange batch: batches) {
+					int startGroup = batch.firstTuple;
+					int endGroup = batch.lastTuple;
+					dummyFutures.add(executorService.submit(() -> {
+						for (int groupID = startGroup; groupID <= endGroup; groupID++) {
+							int pos = groups[groupID];
+							int groupCard = positions[pos];
+							double value = 0;
+							for (int i = pos + 1; i <= pos + groupCard; i++) {
+								int rid = positions[i];
+								value += intSrc.data[rid];
+							}
+							if (value != 0) {
+								value = value / groupCard;
+							}
+							if (evaluator != null) {
+								value = evaluator.evaluate(value);
+							}
+							target.data[groupID] = value;
+						}
+						return 0;
+					}));
+				}
+				for (int batchCtr = 0; batchCtr < batches.size(); batchCtr++) {
+					Future<Integer> batchFuture = dummyFutures.get(batchCtr);
+				}
 				break;
 			}
 			case DOUBLE: {
 				DoubleData doubleSrc = (DoubleData)srcData;
-				int[] positions = index.positions;
-				int[] gids = index.groupForRows;
-				Arrays.parallelSetAll(target.data, gid -> {
-					int pos = gids[gid];
-					int groupCard = positions[pos];
-					double value = 0;
-					for (int i = pos + 1; i <= pos + groupCard; i++) {
-						int rid = positions[i];
-						value += doubleSrc.data[rid];
-					}
-					if (value != 0) {
-						value = value / groupCard;
-					}
-					if (evaluator != null) {
-						value = evaluator.evaluate(value);
-					}
-					return value;
-				});
+				for (RowRange batch: batches) {
+					int startGroup = batch.firstTuple;
+					int endGroup = batch.lastTuple;
+					dummyFutures.add(executorService.submit(() -> {
+						for (int groupID = startGroup; groupID <= endGroup; groupID++) {
+							int pos = groups[groupID];
+							int groupCard = positions[pos];
+							double value = 0;
+							for (int i = pos + 1; i <= pos + groupCard; i++) {
+								int rid = positions[i];
+								value += doubleSrc.data[rid];
+							}
+							if (value != 0) {
+								value = value / groupCard;
+							}
+							if (evaluator != null) {
+								value = evaluator.evaluate(value);
+							}
+							target.data[groupID] = value;
+						}
+						return 0;
+					}));
+				}
+				for (int batchCtr = 0; batchCtr < batches.size(); batchCtr++) {
+					Future<Integer> batchFuture = dummyFutures.get(batchCtr);
+				}
 				break;
 			}
 			default:

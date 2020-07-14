@@ -77,7 +77,7 @@ public class DataParallelJoin extends OldJoin {
     /**
      * Last state after a episode.
      */
-    public State lastEndState;
+    public State prevEndState;
     /**
      * A list of logs entries to record the behaviour of each thread.
      */
@@ -168,10 +168,20 @@ public class DataParallelJoin extends OldJoin {
             tracker.updateProgress(joinOrder, state, splitTableId, roundCtr);
         }
         log("End: " + state.toString() + "\tReward: " + reward);
-        lastEndState = state;
+        prevEndState = state;
         return reward;
     }
-
+    /**
+     * Executes a given join order for a given budget of steps
+     * (i.e., predicate evaluations). It is possible that changing
+     * split table can loss progress. Considering the progress
+     * of the slowest thread, if the "slowest progress" is ahead of
+     * the progress retrieved from the tracker, the algorithm will
+     * use the "slowest progress" instead of retrieved progress.
+     *
+     * @param order         table join order
+     * @param slowState     the slowest state
+     */
     public double execute(int[] order, State slowState) throws Exception {
         // Set default split table
         if (splitTable < 0) {
@@ -215,7 +225,7 @@ public class DataParallelJoin extends OldJoin {
             tracker.updateProgress(joinOrder, state, splitTableId, roundCtr);
         }
         log("End: " + state.toString() + "\tReward: " + reward);
-        lastEndState = state;
+        prevEndState = state;
         return reward;
     }
     /**
@@ -448,7 +458,7 @@ public class DataParallelJoin extends OldJoin {
 
     @Override
     public boolean isFinished() {
-        return tracker.isFinished || lastEndState.lastIndex < 0;
+        return tracker.isFinished || prevEndState.lastIndex < 0;
     }
 
     /**

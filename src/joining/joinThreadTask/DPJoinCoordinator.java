@@ -81,7 +81,7 @@ public class DPJoinCoordinator {
      * @param dpJoin        join operator
      */
     public void optimizeSplitTable(DataParallelJoin dpJoin) {
-        State lastState = dpJoin.lastEndState;
+        State lastState = dpJoin.prevEndState;
         int tid = dpJoin.tid;
         int lastSplitTable = dpJoin.splitTable;
         int optimalTable = -1;

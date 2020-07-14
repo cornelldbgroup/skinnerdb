@@ -15,6 +15,10 @@ public abstract class Index {
 	 */
 	public final int cardinality;
 	/**
+	 * The number of distinct keys.
+	 */
+	public int nrKeys;
+	/**
 	 * After indexing: contains for each search key
 	 * the number of entries, followed by the row
 	 * numbers at which those entries are found.
@@ -32,7 +36,7 @@ public abstract class Index {
 	 * each row. By recording this, grouping rows for
 	 * single column can be processed efficiently.
 	 */
-	public int[] groupForRows;
+	public int[] groups;
 	/**
 	 * Initialize for given cardinality of indexed table.
 	 * 
@@ -64,5 +68,20 @@ public abstract class Index {
 		int nrThreads = ParallelConfig.JOIN_THREADS;
 		tid = (priorIndex + tid) % nrThreads;
 		return threadForRows[curIndex] == tid;
+	}
+	/**
+	 * Initialize the group id for each row.
+	 */
+	public void groupRows() {
+		groups = new int[nrKeys];
+		int groupID = 0;
+		int positionsCtr = 0;
+		int nrPos = positions.length;
+		while (positionsCtr < nrPos) {
+			groups[groupID] = positionsCtr;
+			int nrVals = positions[positionsCtr];
+			positionsCtr += nrVals + 1;
+			groupID++;
+		}
 	}
 }

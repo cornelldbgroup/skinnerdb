@@ -35,6 +35,7 @@ public class UniqueIntIndex extends IntIndex {
 				keyToRow.put(key, row);
 			}
 		}
+		this.nrKeys = cardinality;
 	}
 
 	@Override

@@ -18,6 +18,10 @@ public class ThreadPool {
      */
     public static ExecutorService executorService;
     /**
+     * Thread pool instance for post-processing.
+     */
+    public static ExecutorService postExecutorService;
+    /**
      * Initializes a thread pool.
      *
      * @param nrThreads	    Number of threads for join phase.
@@ -25,13 +29,15 @@ public class ThreadPool {
     public static void initThreadsPool(int nrThreads) {
         if (nrThreads > 0) {
             executorService = Executors.newFixedThreadPool(nrThreads);
-//            executorService = Executors.newFixedThreadPool(nrThreads,
-//                    new AffinityThreadFactory("bg", SAME_CORE, DIFFERENT_SOCKET, ANY));
+            int cores = Runtime.getRuntime().availableProcessors();
+            postExecutorService = Executors.newFixedThreadPool(cores);
         }
     }
 
     public static void close() {
         if (executorService != null)
             executorService.shutdown();
+        if (postExecutorService != null)
+            postExecutorService.shutdown();;
     }
 }

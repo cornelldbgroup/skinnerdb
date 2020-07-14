@@ -15,12 +15,16 @@ import indexing.DoubleIndex;
 import indexing.Index;
 import indexing.IntIndex;
 import query.ColumnRef;
+import threads.ThreadPool;
 import types.JavaType;
 import types.SQLtype;
 import types.TypeUtil;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
 import java.util.stream.IntStream;
 
 /**
@@ -199,50 +203,71 @@ public class ParallelMapRows {
         ColumnInfo targetColInf = new ColumnInfo(targetCol,
                 resultType, false, false, false, false);
         targetTblInf.addColumn(targetColInf);
-        // Prepare generating result data
-        int inCard = CatalogManager.getCardinality(sourceRel);
+        int[] positions = index.positions;
+        int[] groups = index.groups;
+        int outCard = groups.length;
+        // Split groups into batches
+        List<RowRange> batches = OperatorUtils.split(groups.length, 50, 500);
+        ExecutorService executorService = ThreadPool.postExecutorService;
+        List<Future<Integer>> dummyFutures = new ArrayList<>();
+        // Compiler
         OperationTest operationTest = new OperationTest();
         expression.finalExpression.accept(operationTest);
         OperationNode operationNode = operationTest.operationNodes.pop();
-        // Check more mappings
+        // check more mappings
         OperationNode evaluator = operationNode.operator == Operator.Variable ? null : operationNode;
-        int[] positions = index.positions;
-        int[] gids = index.groupForRows;
-        int outCard = gids.length;
         // Create result data and load into buffer
         switch (jResultType) {
             case INT: {
                 // Generate result data and store in buffer
                 IntData intResult = new IntData(outCard);
-//                intResult.isNull.set(0, outCard - 1);
                 BufferManager.colToData.put(targetRef, intResult);
-                IntStream.range(0, gids.length).parallel().forEach(gid -> {
-                    int pos = index.groupForRows[gid];
-                    int rid = positions[pos + 1];
-                    int data = ((DefaultIntIndex)index).intData.data[rid];
-                    if (evaluator != null) {
-                        data = (int) evaluator.evaluate(data);
-                    }
-                    intResult.data[gid] = data;
-                });
+                for (RowRange batch: batches) {
+                    int startGroup = batch.firstTuple;
+                    int endGroup = batch.lastTuple;
+                    dummyFutures.add(executorService.submit(() -> {
+                        for (int groupID = startGroup; groupID <= endGroup; groupID++) {
+                            int pos = groups[groupID];
+                            int rid = positions[pos + 1];
+                            int data = ((DefaultIntIndex)index).intData.data[rid];
+                            if (evaluator != null) {
+                                data = (int) evaluator.evaluate(data);
+                            }
+                            intResult.data[groupID] = data;
+                        }
+                        return 0;
+                    }));
+                }
+                for (int batchCtr = 0; batchCtr < batches.size(); batchCtr++) {
+                    Future<Integer> batchFuture = dummyFutures.get(batchCtr);
+                }
+                break;
             }
-            break;
             case DOUBLE: {
                 // Generate result data and store in buffer
                 DoubleData doubleResult = new DoubleData(outCard);
-                doubleResult.isNull.set(0, outCard - 1);
                 BufferManager.colToData.put(targetRef, doubleResult);
-                IntStream.range(0, gids.length).parallel().forEach(gid -> {
-                    int pos = index.groupForRows[gid];
-                    int rid = positions[pos + 1];
-                    double data = ((DoubleIndex)index).doubleData.data[rid];
-                    if (evaluator != null) {
-                        data = evaluator.evaluate(data);
-                    }
-                    doubleResult.data[gid] = data;
-                });
+                for (RowRange batch: batches) {
+                    int startGroup = batch.firstTuple;
+                    int endGroup = batch.lastTuple;
+                    dummyFutures.add(executorService.submit(() -> {
+                        for (int groupID = startGroup; groupID <= endGroup; groupID++) {
+                            int pos = groups[groupID];
+                            int rid = positions[pos + 1];
+                            double data = ((DoubleIndex)index).doubleData.data[rid];
+                            if (evaluator != null) {
+                                data = evaluator.evaluate(data);
+                            }
+                            doubleResult.data[groupID] = data;
+                        }
+                        return 0;
+                    }));
+                }
+                for (int batchCtr = 0; batchCtr < batches.size(); batchCtr++) {
+                    Future<Integer> batchFuture = dummyFutures.get(batchCtr);
+                }
+                break;
             }
-            break;
         }
         // Update catalog statistics
         CatalogManager.updateStats(targetTable);
