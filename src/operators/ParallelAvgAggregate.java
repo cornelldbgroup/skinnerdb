@@ -8,21 +8,15 @@ import data.ColumnData;
 import data.DoubleData;
 import data.IntData;
 import expressions.ExpressionInfo;
-import expressions.compilation.EvaluatorType;
-import expressions.compilation.ExpressionCompiler;
-import expressions.compilation.UnaryIntEval;
 import indexing.Index;
 import query.ColumnRef;
 import threads.ThreadPool;
 import types.SQLtype;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
-import java.util.stream.IntStream;
 
 /**
  * Calculates the average (total or per group)
@@ -73,9 +67,8 @@ public class ParallelAvgAggregate {
 		OperationTest operationTest = new OperationTest();
 		expression.finalExpression.accept(operationTest);
 		OperationNode operationNode = operationTest.operationNodes.pop();
-		// check more mappings
+		// Check more mappings
 		OperationNode evaluator = operationNode.operator == Operator.Variable ? null : operationNode;
-
 		// Switch according to column type (to avoid casts)
 		switch (srcType) {
 			case INT: {

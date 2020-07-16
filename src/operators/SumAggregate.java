@@ -28,7 +28,7 @@ public class SumAggregate {
 	 * 
 	 * @param sourceRef		reference to source column
 	 * @param nrGroups		number of groups
-	 * @param groupData		assigns source rows to group IDs
+	 * @param groupRef		assigns source rows to group IDs
 	 * @param targetRef		store results in this column
 	 * @throws Exception
 	 */

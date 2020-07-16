@@ -28,7 +28,7 @@ public class AvgAggregate {
 	 * 
 	 * @param sourceRef		reference to source column
 	 * @param nrGroups		number of groups
-	 * @param groupData		assigns source rows to group IDs
+	 * @param groupRef		reference to group column
 	 * @param targetRef		store results in this column
 	 * @throws Exception
 	 */
@@ -90,7 +90,7 @@ public class AvgAggregate {
 		case INT:
 			IntData intSrc = (IntData)srcData;
 			// Iterate over input column
-			for (int row=0; row<srcCard; ++row) {
+			for (int row = 0; row < srcCard; ++row) {
 				// Check for null values
 				if (!srcData.isNull.get(row)) {
 					int group = groups[row];
@@ -103,22 +103,6 @@ public class AvgAggregate {
 //			IntStream.range(0, targetCard).parallel().forEach(i -> finalIntTarget.data[i] /= numbers[i]);
 			IntStream.range(0, targetCard).forEach(i -> finalIntTarget.data[i] /= numbers[i]);
 
-			break;
-		case LONG:
-			LongData longSrc = (LongData)srcData;
-			// Iterate over input column
-			for (int row=0; row<srcCard; ++row) {
-				// Check for null values
-				if (!srcData.isNull.get(row)) {
-					int group = groups[row];
-					genericTarget.isNull.set(group, false);
-					longTarget.data[group] += longSrc.data[row];
-					numbers[group]++;
-				}
-			}
-			LongData finalLongTarget = longTarget;
-//			IntStream.range(0, targetCard).parallel().forEach(i -> finalLongTarget.data[i] /= numbers[i]);
-			IntStream.range(0, targetCard).forEach(i -> finalLongTarget.data[i] /= numbers[i]);
 			break;
 		case DOUBLE:
 			DoubleData doubleSrc = (DoubleData)srcData;

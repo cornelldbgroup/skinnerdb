@@ -66,4 +66,9 @@ public class UniqueIntIndex extends IntIndex {
 	public int nrIndexed(int value) {
 		return keyToRow.containsKey(value)?1:0;
 	}
+
+	@Override
+	public int getGroupID(int row) {
+		return row;
+	}
 }

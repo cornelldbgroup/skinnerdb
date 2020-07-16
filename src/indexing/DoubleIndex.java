@@ -28,6 +28,11 @@ public class DoubleIndex extends Index {
 	 */
 	public DoubleIntMap keyToPositions;
 	/**
+	 * Assign a group id to each key if the column
+	 * is dense.
+	 */
+	private DoubleIntMap keyToGroups;
+	/**
 	 * Create index on the given double column.
 	 * 
 	 * @param doubleData	double data to index
@@ -80,6 +85,16 @@ public class DoubleIndex extends Index {
 			}
 		}
 		this.nrKeys = nrKeys;
+		if (nrKeys < 10) {
+			keyToGroups = HashDoubleIntMaps.newMutableMap(nrKeys);
+			int groupID = 0;
+			DoubleIntCursor keyToPosCursor = keyToPositions.cursor();
+			while (keyToPosCursor.moveNext()) {
+				double key = keyToPosCursor.key();
+				keyToGroups.put(key, groupID);
+				groupID++;
+			}
+		}
 		// Output statistics for performance tuning
 		if (LoggingConfig.INDEXING_VERBOSE) {
 			long totalMillis = System.currentTimeMillis() - startMillis;
@@ -265,5 +280,11 @@ public class DoubleIndex extends Index {
 		} else {
 			return positions[firstPos];
 		}
+	}
+
+	@Override
+	public int getGroupID(int row) {
+		double value = doubleData.data[row];
+		return keyToGroups.getOrDefault(value, 0);
 	}
 }

@@ -387,8 +387,8 @@ public class SkinnerCmd {
 			BufferManager.loadDictionary();
 		}
 //		processInput("bench ./jcch/queries/ benchtest.log");
-//		processInput("index all");
-//		processInput("exec ./jcch/queries/q18.sql");
+		processInput("index all");
+//		processInput("exec ./jcch/queries/q01.sql");
 		// Command line processing
 		System.out.println("Enter 'help' for help and 'quit' to exit");
 		Scanner scanner = new Scanner(System.in);

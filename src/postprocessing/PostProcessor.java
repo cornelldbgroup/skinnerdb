@@ -54,6 +54,7 @@ public class PostProcessor {
 		int groupSrcID = 0;
 		// Will contain group-by columns
 		List<ColumnRef> sourceRefs = new ArrayList<>();
+		List<Index> sourceIndexes = new ArrayList<>();
 		for (ExpressionInfo groupExpr : query.groupByExpressions) {
 			// Is it raw group by column?
 			if (groupExpr.finalExpression instanceof Column) {
@@ -61,6 +62,7 @@ public class PostProcessor {
 				ColumnRef queryRef = groupExpr.columnsMentioned.iterator().next();
 				ColumnRef dbRef = context.columnMapping.get(queryRef);
 				sourceRefs.add(dbRef);
+				sourceIndexes.add(BufferManager.colToIndex.get(queryRef));
 			} else {
 				// Composite expression - need to execute map
 				String sourceRel = context.joinedTable;
@@ -81,7 +83,16 @@ public class PostProcessor {
 		ColumnRef targetRef = new ColumnRef(groupTbl, targetCol);
 		// Update query context for following steps
 		context.groupRef = targetRef;
-		context.nrGroups = GroupBy.execute(sourceRefs, targetRef);
+		int maxNrGroups = 1;
+		for (Index srcIndex : sourceIndexes) {
+			maxNrGroups *= srcIndex.nrKeys;
+		}
+		if (maxNrGroups < 20) {
+			context.nrGroups = GroupBy.paraExecuteDenseGroups(sourceRefs, sourceIndexes, targetRef);
+		}
+		else {
+			context.nrGroups = GroupBy.execute(sourceRefs, targetRef);
+		}
 		// TODO: need to replace references to columns in GROUP BY clause
 	}
 	/**
@@ -291,8 +302,8 @@ public class PostProcessor {
 				String sourceCol = NamingConfig.AGG_SRC_COL_PRE + aggInputCtr;
 				sourceRef = new ColumnRef(aggSrcTbl, sourceCol);
 				++aggInputCtr;
-				MapRows.execute(joinRel, aggInput, 
-						context.columnMapping, null, 
+				MapRows.execute(joinRel, aggInput,
+						context.columnMapping, null,
 						null, -1, sourceRef);
 			}
 			log("Source column: " + sourceRef);

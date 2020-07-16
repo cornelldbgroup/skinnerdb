@@ -41,6 +41,11 @@ public class DefaultIntIndex extends IntIndex {
 	 */
 	int lastTuple = -1;
 	/**
+	 * Assign a group id to each key if the column
+	 * is dense.
+	 */
+	private IntIntMap keyToGroups;
+	/**
 	 * Counts number of occurrences for each key within
 	 * a given data batch, returns a map from keys to
 	 * counts.
@@ -167,6 +172,16 @@ public class DefaultIntIndex extends IntIndex {
 			}
 		}
 		this.nrKeys = nrKeys;
+		if (nrKeys < 10) {
+			keyToGroups = HashIntIntMaps.newMutableMap(nrKeys);
+			int groupID = 0;
+			IntIntCursor keyToPosCursor = keyToPositions.cursor();
+			while (keyToPosCursor.moveNext()) {
+				int key = keyToPosCursor.key();
+				keyToGroups.put(key, groupID);
+				groupID++;
+			}
+		}
 		// Output statistics for performance tuning
 		if (LoggingConfig.INDEXING_VERBOSE) {
 			long totalMillis = System.currentTimeMillis() - startMillis;
@@ -357,5 +372,11 @@ public class DefaultIntIndex extends IntIndex {
 		} else {
 			return positions[firstPos];
 		}
+	}
+
+	@Override
+	public int getGroupID(int row) {
+		int value = intData.data[row];
+		return keyToGroups.getOrDefault(value, 0);
 	}
 }

@@ -49,7 +49,7 @@ public class Context {
 	 * Maps aggregation expressions (in string representation)
 	 * to columns containing corresponding (per-group) results.
 	 */
-	public Map<String, ColumnRef> aggToData = new HashMap<>();
+	public Map<String, ColumnRef> aggToData = new ConcurrentHashMap<>();
 	
 	@Override
 	public String toString() {

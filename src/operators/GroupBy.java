@@ -6,13 +6,17 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
 
 import buffer.BufferManager;
 import catalog.CatalogManager;
 import catalog.info.ColumnInfo;
 import data.ColumnData;
 import data.IntData;
+import indexing.Index;
 import query.ColumnRef;
+import threads.ThreadPool;
 import types.SQLtype;
 
 /**
@@ -69,8 +73,9 @@ public class GroupBy {
 		return nextGroupID;
 	}
 
-	public static int parallelExecute(Collection<ColumnRef> sourceRefs,
-							  ColumnRef targetRef) throws Exception {
+	public static int paraExecuteDenseGroups(Collection<ColumnRef> sourceRefs,
+											 List<Index> sourceIndexes,
+											 ColumnRef targetRef) throws Exception {
 		// Register result column
 		String targetTbl = targetRef.aliasName;
 		String targetCol = targetRef.columnName;
@@ -87,21 +92,43 @@ public class GroupBy {
 		for (ColumnRef srcRef : sourceRefs) {
 			sourceCols.add(BufferManager.getData(srcRef));
 		}
-		// Fill result column
-		Map<Group, Integer> groupToID = new ConcurrentHashMap<>();
-		int nextGroupID = 0;
-		for (int rowCtr=0; rowCtr<cardinality; ++rowCtr) {
-			Group curGroup = new Group(rowCtr, sourceCols);
-			if (!groupToID.containsKey(curGroup)) {
-				groupToID.put(curGroup, nextGroupID);
-				++nextGroupID;
-			}
-			int groupID = groupToID.get(curGroup);
-			groupData.data[rowCtr] = groupID;
+
+		// Split groups into batches
+		List<RowRange> batches = OperatorUtils.split(cardinality, 50, 500);
+		ExecutorService executorService = ThreadPool.postExecutorService;
+		List<Future<Integer>> dummyFutures = new ArrayList<>();
+
+		int nrGroupColumns = sourceCols.size();
+		int nrGroups = 1;
+		for (Index srcIndex : sourceIndexes) {
+			nrGroups *= srcIndex.nrKeys;
+		}
+
+		// Fill result column in parallel
+		for (RowRange batch: batches) {
+			int startRow = batch.firstTuple;
+			int endRow = batch.lastTuple;
+			dummyFutures.add(executorService.submit(() -> {
+				for (int rowCtr = startRow; rowCtr < endRow; ++rowCtr) {
+					int groupID = 0;
+					int base = 1;
+					for (int indexCtr = 0; indexCtr < nrGroupColumns; indexCtr++) {
+						Index index = sourceIndexes.get(indexCtr);
+						int columnGroupID = index.getGroupID(rowCtr);
+						groupID += base * columnGroupID;
+						base *= index.nrKeys;
+					}
+					groupData.data[rowCtr] = groupID;
+				}
+				return 0;
+			}));
+		}
+		for (int batchCtr = 0; batchCtr < batches.size(); batchCtr++) {
+			Future<Integer> batchFuture = dummyFutures.get(batchCtr);
 		}
 		// Update catalog statistics
 		CatalogManager.updateStats(targetTbl);
-		return nextGroupID;
+		return nrGroups;
 
 	}
 }

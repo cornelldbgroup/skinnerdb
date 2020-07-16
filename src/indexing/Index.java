@@ -84,4 +84,11 @@ public abstract class Index {
 			groupID++;
 		}
 	}
+	/**
+	 * Return the group id for the given row count.
+	 *
+	 * @param row		row count
+	 * @return          group id
+	 */
+	public abstract int getGroupID(int row);
 }
