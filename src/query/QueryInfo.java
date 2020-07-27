@@ -1,6 +1,7 @@
 package query;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -134,6 +135,15 @@ public class QueryInfo {
 	 * indices for them during pre-processing).
 	 */
 	public Set<ColumnRef> equiJoinCols = new HashSet<>();
+	/**
+	 * Contains pairs of columns that are connected
+	 * via binary equality join conditions.
+	 */
+	public Set<Set<ColumnRef>> equiJoinPairs = new HashSet<>();
+	/**
+	 * Equivalence classes of columns involved in equi-joins.
+	 */
+	public Set<Set<ColumnRef>> equiJoinClasses = new HashSet<>();
 	/**
 	 * List of expressions that correspond to
 	 * equality join predicates.
@@ -400,6 +410,7 @@ public class QueryInfo {
 						Set<ColumnRef> curEquiJoinCols = extractEquiJoinCols(curInfo);
 						if (curEquiJoinCols != null) {							
 							equiJoinCols.addAll(curEquiJoinCols);
+							equiJoinPairs.add(curEquiJoinCols);
 							equiJoinPreds.add(curInfo);
 						} else {
 							nonEquiPred = nonEquiPred==null?conjunct:
@@ -413,6 +424,47 @@ public class QueryInfo {
 				} // if join predicate
 			} // over where conjuncts
 		} // if where clause
+	}
+	/**
+	 * Partition columns involved in equality joins
+	 * into equivalence classes.
+	 */
+	void partitionEquiJoinCols() {
+		// Initialize equivalence classes: each column
+		// forms an equivalence class on its own.
+		for (ColumnRef colRef : equiJoinCols) {
+			Set<ColumnRef> colClass = Collections.singleton(colRef);
+			equiJoinClasses.add(colClass);
+		}
+		// Continue until no more merge operations
+		boolean mergedClasses = false;
+		do {
+			// No classes merged in this iteration
+			mergedClasses = false;
+			// Equivalence classes after this iteration
+			Set<Set<ColumnRef>> nextClasses = new HashSet<>();
+			// Iterate over current equivalence classes
+			for (Set<ColumnRef> equiJoinClass : equiJoinClasses) {
+				// Copy before changing
+				Set<ColumnRef> newEquiJoinClass = new HashSet<>();
+				newEquiJoinClass.addAll(equiJoinClass);
+				// Iterate over column pairs in equi joins
+				for (Set<ColumnRef> equiJoinPair : equiJoinPairs) {
+					// Iterate over columns in predicate
+					for (ColumnRef colRef : equiJoinPair) {
+						if (equiJoinClass.contains(colRef)) {
+							mergedClasses = mergedClasses ||
+									newEquiJoinClass.addAll(
+											equiJoinPair);
+						}
+					}
+				}
+				// Add potentially changed class to new set
+				nextClasses.add(newEquiJoinClass);
+			}
+			// Next classes become current classes
+			equiJoinClasses = nextClasses;
+		} while (mergedClasses);
 	}
 	/**
 	 * Adds expressions in the GROUP-By clause (if any).
@@ -656,9 +708,12 @@ public class QueryInfo {
 		log("Alias to expression: " + aliasToExpression);
 		// Extract predicates in WHERE clause
 		extractPredicates();
+		partitionEquiJoinCols();
 		log("Unary predicates: " + unaryPredicates);
 		log("Equi join cols: " + equiJoinCols);
+		log("Equi join pairs: " + equiJoinPairs);
 		log("Equi join preds: " + equiJoinPreds);
+		log("Equivalent cols: " + equiJoinClasses);
 		log("Other join preds: " + nonEquiJoinPreds);
 		// Add expressions in GROUP BY clause
 		treatGroupBy();

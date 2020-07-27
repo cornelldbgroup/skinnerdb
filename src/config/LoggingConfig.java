@@ -15,7 +15,7 @@ public class LoggingConfig {
 	/**
 	 * Whether to log intermediate steps during query analysis.
 	 */
-	public final static boolean QUERY_ANALYSIS_VERBOSE = false;
+	public final static boolean QUERY_ANALYSIS_VERBOSE = true;
 	/**
 	 * Whether to log expressions after each transformation stage.
 	 */
