@@ -57,4 +57,4 @@ SkinnerDB includes various tuning parameters that can improve performance for sp
 
 # Team
 
-SkinnerDB is developed by the Cornell database group (http://www.cs.cornell.edu/database/).
+SkinnerDB is developed by the Cornell database group (https://research.cs.cornell.edu/database/learning.php).
