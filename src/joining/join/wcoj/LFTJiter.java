@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
 
 import buffer.BufferManager;
 import catalog.CatalogManager;
@@ -59,20 +60,22 @@ public class LFTJiter {
 	 * @param globalVarOrder	global order of variables
 	 */
 	public LFTJiter(QueryInfo query, int aliasID, 
-			List<ColumnRef> globalVarOrder) throws Exception {
+			List<Set<ColumnRef>> globalVarOrder) throws Exception {
 		// Get information on target table
 		String alias = query.aliases[aliasID];
 		String table = query.aliasToTable.get(alias);
 		card = CatalogManager.getCardinality(table);
 		// Extract columns used for sorting
 		trieCols = new ArrayList<>();
-		for (ColumnRef colRef : globalVarOrder) {
-			if (colRef.aliasName.equals(alias)) {
-				String colName = colRef.columnName;
-				ColumnRef bufferRef = new ColumnRef(table, colName);
-				ColumnData colData = BufferManager.getData(bufferRef);
-				trieCols.add((IntData)colData);
-			}
+		for (Set<ColumnRef> eqClass : globalVarOrder) {
+			for (ColumnRef colRef : eqClass) {
+				if (colRef.aliasName.equals(alias)) {
+					String colName = colRef.columnName;
+					ColumnRef bufferRef = new ColumnRef(table, colName);
+					ColumnData colData = BufferManager.getData(bufferRef);
+					trieCols.add((IntData)colData);
+				}
+			}			
 		}
 		// Initialize position array
 		nrLevels = trieCols.size();
@@ -115,6 +118,15 @@ public class LFTJiter {
 	 */
 	public int key() {
 		return keyAt(curTuples[curTrieLevel]);
+	}
+	/**
+	 * Returns index of currently considered tuple
+	 * in its base table.
+	 * 
+	 * @return	record ID of current tuple
+	 */
+	public int rid() {
+		return curTuples[curTrieLevel];
 	}
 	/**
 	 * Proceeds to next key in current trie level.
@@ -180,7 +192,7 @@ public class LFTJiter {
 	 * iterator to first associated position.
 	 */
 	public void open() {
-		int curTuple = curTuples[curTrieLevel];
+		int curTuple = curTrieLevel<0 ? 0:curTuples[curTrieLevel];
 		++curTrieLevel;
 		curTuples[curTrieLevel] = curTuple;
 	}

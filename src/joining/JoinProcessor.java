@@ -9,6 +9,7 @@ import config.LoggingConfig;
 import config.NamingConfig;
 import config.JoinConfig;
 import joining.join.OldJoin;
+import joining.join.wcoj.LFTjoin;
 import joining.result.ResultTuple;
 import joining.uct.ExplorationWeightPolicy;
 import joining.uct.SelectionPolicy;
@@ -60,8 +61,11 @@ public class JoinProcessor {
 		DefaultJoin joinOp = new DefaultJoin(query, preSummary, 
 				LearningConfig.BUDGET_PER_EPISODE);
 		*/
+		/*
 		OldJoin joinOp = new OldJoin(query, context, 
 				JoinConfig.BUDGET_PER_EPISODE);
+		*/
+		LFTjoin joinOp = new LFTjoin(query);
 		// Initialize UCT join order search tree
 		UctNode root = new UctNode(0, query, true, joinOp);
 		// Initialize counters and variables
@@ -135,7 +139,7 @@ public class JoinProcessor {
 			// Generate logging entries if activated
 			log("Selected join order " + Arrays.toString(joinOrder));
 			log("Obtained reward:\t" + reward);
-			log("Table offsets:\t" + Arrays.toString(joinOp.tracker.tableOffset));
+			//log("Table offsets:\t" + Arrays.toString(joinOp.tracker.tableOffset));
 			log("Table cardinalities:\t" + Arrays.toString(joinOp.cardinalities));
 			// Generate plots if activated
 			if (query.explain && plotCtr<query.plotAtMost && 
@@ -161,9 +165,11 @@ public class JoinProcessor {
 			if (tableCtr == joinOrder[0]) {
 				JoinStats.totalWork += 1;
 			} else {
+				/*
 				JoinStats.totalWork += Math.max(
 						joinOp.tracker.tableOffset[tableCtr],0)/
-						(double)joinOp.cardinalities[tableCtr];				
+						(double)joinOp.cardinalities[tableCtr];
+				*/				
 			}
 		}
 		// Output final stats if join logging enabled
@@ -171,8 +177,10 @@ public class JoinProcessor {
 			System.out.println("Exploration weight:\t" + 
 					JoinConfig.EXPLORATION_WEIGHT);
 			System.out.println("Nr. rounds:\t" + roundCtr);
+			/*
 			System.out.println("Table offsets:\t" + 
 					Arrays.toString(joinOp.tracker.tableOffset));
+			*/
 			System.out.println("Table cards.:\t" +
 					Arrays.toString(joinOp.cardinalities));
 		}
