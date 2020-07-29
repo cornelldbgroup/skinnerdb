@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import joining.join.MultiWayJoin;
+import preprocessing.Context;
 import query.ColumnRef;
 import query.QueryInfo;
 
@@ -53,10 +54,11 @@ public class LFTjoin extends MultiWayJoin {
 	 * Initialize join for given query.
 	 * 
 	 * @param query			join query to process via LFTJ
+	 * @param preSummary	summarizes effects of pre-processing
 	 * @throws Exception
 	 */
-	public LFTjoin(QueryInfo query) throws Exception {
-		super(query);
+	public LFTjoin(QueryInfo query, Context preSummary) throws Exception {
+		super(query, preSummary);
 		// Choose variable order arbitrarily
 		varOrder = new ArrayList<>();
 		varOrder.addAll(query.equiJoinClasses);
@@ -66,7 +68,8 @@ public class LFTjoin extends MultiWayJoin {
 		idToIter = new LFTJiter[nrJoined];
 		for (int aliasCtr=0; aliasCtr<nrJoined; ++aliasCtr) {
 			String alias = query.aliases[aliasCtr];
-			LFTJiter iter = new LFTJiter(query, aliasCtr, varOrder);
+			LFTJiter iter = new LFTJiter(query, 
+					preSummary, aliasCtr, varOrder);
 			aliasToIter.put(alias, iter);
 			idToIter[aliasCtr] = iter;
 		}
@@ -117,6 +120,7 @@ public class LFTjoin extends MultiWayJoin {
 	 * iterator positions.
 	 */
 	void addResultTuple() {
+		System.out.println("addResultTuple");
 		// Generate result tuple
 		int[] resultTuple = new int[nrJoined];
 		// Iterate over all joined tables
@@ -127,6 +131,9 @@ public class LFTjoin extends MultiWayJoin {
 		// Add new result tuple
 		result.add(resultTuple);
 	}
+	
+	long roundCtr = 0;
+	
 	/**
 	 * Execute leapfrog trie join for given variable.
 	 * 
@@ -137,12 +144,17 @@ public class LFTjoin extends MultiWayJoin {
 		// Have we completed a result tuple?
 		if (curVariableID >= nrVars) {
 			addResultTuple();
+			return;
 		}
 		// Collect relevant iterators
 		List<LFTJiter> curIters = itersByVar.get(curVariableID);
 		int nrCurIters = curIters.size();
 		// Order iterators and check for early termination
 		if(!leapfrogInit(curIters)) {
+			// Go one level up in each trie
+			for (LFTJiter iter : curIters) {
+				iter.up();
+			}
 			return;
 		}
 		// Execute search procedure
@@ -152,17 +164,42 @@ public class LFTjoin extends MultiWayJoin {
 		while (true) {
 			LFTJiter minIter = curIters.get(p);
 			int minKey = minIter.key();
+			// Generate debugging output
+			++roundCtr;
+			if (roundCtr < 500) {
+				System.out.println("--- Current variable ID: " + curVariableID);
+				System.out.println("p: " + p);
+				System.out.println("minKey: " + minKey);
+				System.out.println("maxKey: " + maxKey);
+				for (LFTJiter iter : curIters) {
+					System.out.println(iter.rid() + ":" + iter.key());
+				}
+			}
 			// Did we find a match between iterators?
 			if (minKey == maxKey) {
 				executeLFTJ(curVariableID+1);
+				minIter.seek(maxKey+1);
+				if (minIter.atEnd()) {
+					// Go one level up in each trie
+					for (LFTJiter iter : curIters) {
+						iter.up();
+					}
+					return;
+				}
+				maxKey = minIter.key();
+				p = (p + 1) % nrCurIters;
 			} else {
 				minIter.seek(maxKey);
 				if (minIter.atEnd()) {
+					// Go one level up in each trie
+					for (LFTJiter iter : curIters) {
+						iter.up();
+					}
 					return;
 				} else {
 					// Min-iter to max-iter
 					maxKey = minIter.key();
-					p = p + 1 % nrCurIters;
+					p = (p + 1) % nrCurIters;
 				}
 			}
 		}

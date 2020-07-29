@@ -65,7 +65,7 @@ public class JoinProcessor {
 		OldJoin joinOp = new OldJoin(query, context, 
 				JoinConfig.BUDGET_PER_EPISODE);
 		*/
-		LFTjoin joinOp = new LFTjoin(query);
+		LFTjoin joinOp = new LFTjoin(query, context);
 		// Initialize UCT join order search tree
 		UctNode root = new UctNode(0, query, true, joinOp);
 		// Initialize counters and variables
