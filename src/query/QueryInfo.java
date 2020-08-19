@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -467,6 +468,46 @@ public class QueryInfo {
 		} while (mergedClasses);
 	}
 	/**
+	 * Add unary predicates that connect two columns in
+	 * the same table via an equality predicate, based
+	 * on predicate equivalence classes.
+	 */
+	void addUnaryEquiPreds() throws Exception {
+		// Iterate over predicate equivalence classes
+		for (Set<ColumnRef> equiClass : equiJoinClasses) {
+			// Map table alias to first column in equivalence class
+			Map<String, ColumnRef> aliasToCol = new HashMap<>();
+			for (ColumnRef colRef : equiClass) {
+				aliasToCol.put(colRef.aliasName, colRef);
+			}
+			// Form unary predicates if possible
+			Iterator<ColumnRef> colIter = equiClass.iterator();
+			while (colIter.hasNext()) {
+				ColumnRef colRef = colIter.next();
+				String alias = colRef.aliasName;
+				// Have other column on same table?
+				if (aliasToCol.containsKey(alias) &&
+						!aliasToCol.get(alias).equals(colRef)) {
+					ColumnRef otherColRef = aliasToCol.get(alias);
+					// Create equality predicate expression
+					Table aliasTable = new Table(alias);
+					Column col = new Column(aliasTable, 
+							colRef.columnName);
+					Column otherCol = new Column(aliasTable, 
+							otherColRef.columnName);
+					EqualsTo equalsTo = new EqualsTo();
+					equalsTo.setLeftExpression(col);
+					equalsTo.setRightExpression(otherCol);
+					ExpressionInfo equalsToExpr = 
+							new ExpressionInfo(this, equalsTo);
+					unaryPredicates.add(equalsToExpr);
+					// Remove prior join predicates - TODO
+					colIter.remove();
+				}
+			}
+		}
+	}
+	/**
 	 * Adds expressions in the GROUP-By clause (if any).
 	 */
 	void treatGroupBy() throws Exception {		
@@ -709,6 +750,7 @@ public class QueryInfo {
 		// Extract predicates in WHERE clause
 		extractPredicates();
 		partitionEquiJoinCols();
+		addUnaryEquiPreds();
 		log("Unary predicates: " + unaryPredicates);
 		log("Equi join cols: " + equiJoinCols);
 		log("Equi join pairs: " + equiJoinPairs);

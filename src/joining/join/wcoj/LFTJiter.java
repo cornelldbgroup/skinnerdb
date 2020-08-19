@@ -46,7 +46,7 @@ public class LFTJiter {
 	/**
 	 * We are at this level of the trie.
 	 */
-	int curTrieLevel = -1;
+	int curTrieLevel;
 	/**
 	 * Maximally admissible tuple index
 	 * at current level (value in prior
@@ -89,7 +89,6 @@ public class LFTJiter {
 		// Initialize position array
 		nrLevels = trieCols.size();
 		curTuples = new int[nrLevels];
-		Arrays.fill(curTuples, 0);
 		curUBs = new int[nrLevels];
 		// Initialize tuple order
 		tupleOrder = new Integer[card];
@@ -116,6 +115,19 @@ public class LFTJiter {
 				return 0;
 			}
 		});
+		reset();
+		// Perform run time checks if activated
+		IterChecker.checkIter(query, context, 
+				aliasID, globalVarOrder, this);
+	}
+	/**
+	 * Resets all internal variables to state
+	 * before first invocation.
+	 */
+	void reset() {
+		Arrays.fill(curTuples, 0);
+		Arrays.fill(curUBs, 0);
+		curTrieLevel = -1;
 	}
 	/**
 	 * Return key in current level at given tuple.
@@ -138,13 +150,13 @@ public class LFTJiter {
 		return keyAt(curTuples[curTrieLevel]);
 	}
 	/**
-	 * Returns index of currently considered tuple
-	 * in its base table.
+	 * Returns (actual) index of currently
+	 * considered tuple in its base table.
 	 * 
 	 * @return	record ID of current tuple
 	 */
 	public int rid() {
-		return curTuples[curTrieLevel];
+		return tupleOrder[curTuples[curTrieLevel]];
 	}
 	/**
 	 * Proceeds to next key in current trie level.
@@ -162,6 +174,27 @@ public class LFTJiter {
 	 * @param ub		search for tuples up to this index
 	 * @return			next tuple index or -1 if none found
 	 */
+	public int seekInRange(int seekKey, int ub) {
+		// Current tuple position is lower bound
+		int lb = curTuples[curTrieLevel];
+		// Until search bounds collapse
+		while (lb < ub) {
+			int middle = (lb + ub)/2;
+			if (keyAt(middle)>=seekKey) {
+				ub = middle;
+			} else {
+				lb = middle+1;
+			}
+		}
+		// Debugging check
+		if (lb != ub) {
+			System.out.println("Error - lb " + 
+					lb + " and ub " + ub);
+		}
+		// Return next tuple position or -1
+		return keyAt(lb)>=seekKey?lb:-1;
+	}
+	/*
 	public int seekInRange(int seekKey, int ub) {
 		// Prepare for "galloping"
 		int step = 1;
@@ -201,6 +234,7 @@ public class LFTJiter {
 		// Return index of next tuple
 		return searchLB;
 	}
+	*/
 	/**
 	 * Place iterator at first element whose
 	 * key is at or above the seek key.
