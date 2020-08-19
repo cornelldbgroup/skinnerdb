@@ -17,4 +17,10 @@ public class CheckConfig {
 	 * leap-frog trie join.
 	 */
 	public static boolean CHECK_LFTJ_ITERS = true;
+	/**
+	 * Whether to verify that result tuples produced by
+	 * leap-frog trie join satisfy all equality join
+	 * conditions of the query.
+	 */
+	public static boolean CHECK_LFTJ_RESULTS = true;
 }

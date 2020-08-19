@@ -28,7 +28,7 @@ public class IterChecker {
 	 */
 	public static boolean checkIter(QueryInfo query, Context context,
 			int aliasID, List<Set<ColumnRef>> globalVarOrder, 
-			LFTJiter iter) {
+			LFTJiter iter) throws Exception {
 		// Are checks activated?
 		if (CheckConfig.CHECK_LFTJ_ITERS) {
 			// Get table referenced by iterator

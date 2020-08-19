@@ -1,12 +1,19 @@
 package joining.join.wcoj;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
+import buffer.BufferManager;
+import config.CheckConfig;
+import data.ColumnData;
+import data.IntData;
 import joining.join.MultiWayJoin;
 import preprocessing.Context;
 import query.ColumnRef;
@@ -63,6 +70,7 @@ public class LFTjoin extends MultiWayJoin {
 		varOrder = new ArrayList<>();
 		varOrder.addAll(query.equiJoinClasses);
 		nrVars = query.equiJoinClasses.size();
+		System.out.println("Variable Order: " + varOrder);
 		// Initialize iterators
 		aliasToIter = new HashMap<>();
 		idToIter = new LFTJiter[nrJoined];
@@ -119,8 +127,8 @@ public class LFTjoin extends MultiWayJoin {
 	 * Add join result tuple based on current
 	 * iterator positions.
 	 */
-	void addResultTuple() {
-		System.out.println("addResultTuple");
+	void addResultTuple() throws Exception {
+		//System.out.println("addResultTuple");
 		// Generate result tuple
 		int[] resultTuple = new int[nrJoined];
 		// Iterate over all joined tables
@@ -130,6 +138,56 @@ public class LFTjoin extends MultiWayJoin {
 		}
 		// Add new result tuple
 		result.add(resultTuple);
+		// Verify result tuple if activated
+		if (CheckConfig.CHECK_LFTJ_RESULTS) {
+			if (!testResult(resultTuple)) {
+				System.out.println(
+						"Error - inconsistent result tuple: "
+						+ Arrays.toString(resultTuple));
+			}
+		}
+	}
+	/**
+	 * Returns true iff given result tuples satisfies
+	 * all binary join equality predicates.
+	 * 
+	 * @param resultTuple	check this result tuple
+	 * @return				true iff tuple passes checks
+	 * @throws Exception
+	 */
+	boolean testResult(int[] resultTuple) throws Exception {
+		// Iterate over equality join conditions
+		for (Set<ColumnRef> equiPair : query.equiJoinPairs) {
+			Set<Integer> keyVals = new HashSet<>();
+			// Iterate over columns in equality condition
+			for (ColumnRef colRef : equiPair) {
+				// Retrieve tuple index
+				String alias = colRef.aliasName;
+				int aliasIdx = query.aliasToIndex.get(alias);
+				int tupleIdx = resultTuple[aliasIdx];
+				// Retrieve corresponding data
+				String table = preSummary.aliasToFiltered.get(alias);
+				String column = colRef.columnName;
+				ColumnRef baseRef = new ColumnRef(table, column);
+				ColumnData data = BufferManager.getData(baseRef);
+				IntData intData = (IntData)data;
+				int key = intData.data[tupleIdx];
+				keyVals.add(key);
+			}
+			// Check whether key values collapse
+			if (keyVals.size()>1) {
+				System.out.println(
+						"Equality not satisfied: " +
+						equiPair.toString());
+				return false;
+			} else {
+				System.out.println(
+						"Equality satisfied: " +
+						equiPair.toString());
+			}
+		}
+		// No inconsistencies were found - passed check
+		return true;
 	}
 	
 	long roundCtr = 0;

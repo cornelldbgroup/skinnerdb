@@ -161,7 +161,7 @@ public class LFTJiter {
 	/**
 	 * Proceeds to next key in current trie level.
 	 */
-	public void next() {
+	public void next() throws Exception {
 		seek(key()+1);
 	}
 	/**
@@ -174,7 +174,7 @@ public class LFTJiter {
 	 * @param ub		search for tuples up to this index
 	 * @return			next tuple index or -1 if none found
 	 */
-	public int seekInRange(int seekKey, int ub) {
+	public int seekInRange(int seekKey, int ub) throws Exception {
 		// Current tuple position is lower bound
 		int lb = curTuples[curTrieLevel];
 		// Until search bounds collapse
@@ -190,6 +190,29 @@ public class LFTJiter {
 		if (lb != ub) {
 			System.out.println("Error - lb " + 
 					lb + " and ub " + ub);
+		}
+		// Check that prior keys did not change
+		if (keyAt(lb)>=seekKey) {
+			for (int level=0; level<curTrieLevel; ++level) {
+				int curTuple = curTuples[curTrieLevel];
+				IntData intData = trieCols.get(level);
+				int cmp = intData.compareRows(
+						tupleOrder[curTuple], tupleOrder[lb]);
+				if (cmp != 0) {
+					throw new Exception(
+							"Inconsistent keys at level " + level +
+							" for seek at level " + curTrieLevel +
+							"; upper bounds: " + 
+							Arrays.toString(curUBs) + 
+							"; current tuples: " +
+							Arrays.toString(curTuples) +
+							"; lb: " + lb + 
+							"; key1: " + 
+							intData.data[tupleOrder[curTuple]] +
+							"; key2: " + 
+							intData.data[tupleOrder[lb]]);
+				}
+			}
 		}
 		// Return next tuple position or -1
 		return keyAt(lb)>=seekKey?lb:-1;
@@ -241,14 +264,14 @@ public class LFTJiter {
 	 * 
 	 * @param seekKey	lower bound for next key
 	 */
-	public void seek(int seekKey) {
+	public void seek(int seekKey) throws Exception {
 		// Search next tuple in current range
 		int next = seekInRange(seekKey, curUBs[curTrieLevel]);
 		// Did we find a tuple?
 		if (next<0) {
 			curTuples[curTrieLevel] = card;
 		} else {
-			curTuples[curTrieLevel] = next;			
+			curTuples[curTrieLevel] = next;
 		}
 	}
 	/**
@@ -263,11 +286,11 @@ public class LFTJiter {
 	 * Advance to next trie level and reset
 	 * iterator to first associated position.
 	 */
-	public void open() {
+	public void open() throws Exception {
 		int curTuple = curTrieLevel<0 ? 0:curTuples[curTrieLevel];
 		int nextUB = card-1;
 		if (curTrieLevel>=0) {
-			for (int i=0; i<curTrieLevel; ++i) {
+			for (int i=0; i<=curTrieLevel; ++i) {
 				nextUB = Math.min(curUBs[i], nextUB);
 			}
 			int curKey = key();
