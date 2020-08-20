@@ -126,7 +126,7 @@ public class LFTJiter {
 	 */
 	void reset() {
 		Arrays.fill(curTuples, 0);
-		Arrays.fill(curUBs, 0);
+		Arrays.fill(curUBs, card-1);
 		curTrieLevel = -1;
 	}
 	/**

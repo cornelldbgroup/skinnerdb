@@ -65,11 +65,12 @@ public class LFTjoin extends MultiWayJoin {
 	 * @throws Exception
 	 */
 	public LFTjoin(QueryInfo query, Context preSummary) throws Exception {
-		super(query, preSummary);
+		super(query, preSummary);		
 		// Choose variable order arbitrarily
 		varOrder = new ArrayList<>();
 		varOrder.addAll(query.equiJoinClasses);
 		nrVars = query.equiJoinClasses.size();
+		Collections.shuffle(varOrder);
 		System.out.println("Variable Order: " + varOrder);
 		// Initialize iterators
 		aliasToIter = new HashMap<>();
@@ -180,11 +181,14 @@ public class LFTjoin extends MultiWayJoin {
 						"Equality not satisfied: " +
 						equiPair.toString());
 				return false;
-			} else {
+			}
+			/*
+			else {
 				System.out.println(
 						"Equality satisfied: " +
 						equiPair.toString());
 			}
+			*/
 		}
 		// No inconsistencies were found - passed check
 		return true;
@@ -199,6 +203,10 @@ public class LFTjoin extends MultiWayJoin {
 	 * @throws Exception
 	 */
 	void executeLFTJ(int curVariableID) throws Exception {
+		// Check for timeout
+		if (System.currentTimeMillis() - startMillis > 60000) {
+			return;
+		}
 		// Have we completed a result tuple?
 		if (curVariableID >= nrVars) {
 			addResultTuple();
@@ -263,9 +271,12 @@ public class LFTjoin extends MultiWayJoin {
 		}
 	}
 
+	long startMillis = -1;
+	
 	@Override
 	public double execute(int[] order) throws Exception {
 		// Retrieve result via WCOJ
+		startMillis = System.currentTimeMillis();
 		executeLFTJ(0);
 		// Set termination flag
 		finished = true;

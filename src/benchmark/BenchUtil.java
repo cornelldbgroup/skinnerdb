@@ -25,6 +25,10 @@ import statistics.PreStats;
  */
 public class BenchUtil {
 	/**
+	 * Delimiter used for separating fields in benchmark results.
+	 */
+	static String delimiter = ",";
+	/**
 	 * Parses queries in all '.sql' files that are found
 	 * in given directory and returns mapping from file
 	 * names to queries.
@@ -35,9 +39,12 @@ public class BenchUtil {
 	 */
 	public static Map<String, PlainSelect> readAllQueries(
 			String dirPath) throws Exception {
-		Map<String, PlainSelect> nameToQuery = 
+		Map<String, PlainSelect> nameToQuery =
+				/*
 				new TreeMap<String, PlainSelect>(
 						Collections.reverseOrder());
+				*/
+				new TreeMap<String, PlainSelect>();
 		File dir = new File(dirPath);
 		for (File file : dir.listFiles()) {
 			if (file.getName().endsWith(".sql")) {
@@ -57,10 +64,18 @@ public class BenchUtil {
 	 * @param benchOut	channel to benchmark file
 	 */
 	public static void writeBenchHeader(PrintWriter benchOut) {
-		benchOut.println("Query\tMillis\tPreMillis\tPostMillis\tTuples\t"
-				+ "Iterations\tLookups\tNrIndexEntries\tnrUniqueLookups\t" 
-				+ "NrUctNodes\tNrPlans\tJoinCard\tNrSamples\tAvgReward\t"
-				+ "MaxReward\tTotalWork");
+		benchOut.println("Query" + delimiter + "Millis" + 
+				delimiter + "PreMillis" + delimiter + "PostMillis" + 
+				delimiter + "Tuples" + delimiter + "Iterations" + 
+				delimiter + "Lookups" + delimiter + "NrIndexEntries" + 
+				delimiter + "nrUniqueLookups" + 
+				delimiter + "NrUctNodes" + 
+				delimiter + "NrPlans" + 
+				delimiter + "JoinCard" + 
+				delimiter + "NrSamples" + 
+				delimiter + "AvgReward" + 
+				delimiter + "MaxReward" + 
+				delimiter + "TotalWork");
 	}
 	/**
 	 * Writes out statistics concerning last query execution
@@ -77,21 +92,21 @@ public class BenchUtil {
 		int skinnerJoinCard = CatalogManager.getCardinality(
 				NamingConfig.JOINED_NAME);
 		// Generate output
-		benchOut.print(queryName + "\t");
-		benchOut.print(totalMillis + "\t");
-		benchOut.print(PreStats.preMillis + "\t");
-		benchOut.print(PostStats.postMillis + "\t");
-		benchOut.print(JoinStats.nrTuples + "\t");
-		benchOut.print(JoinStats.nrIterations + "\t");
-		benchOut.print(JoinStats.nrIndexLookups + "\t");
-		benchOut.print(JoinStats.nrIndexEntries + "\t");
-		benchOut.print(JoinStats.nrUniqueIndexLookups + "\t");
-		benchOut.print(JoinStats.nrUctNodes + "\t");
-		benchOut.print(JoinStats.nrPlansTried + "\t");
-		benchOut.print(skinnerJoinCard + "\t");
-		benchOut.print(JoinStats.nrSamples + "\t");
-		benchOut.print(JoinStats.avgReward + "\t");
-		benchOut.print(JoinStats.maxReward + "\t");
+		benchOut.print(queryName + delimiter);
+		benchOut.print(totalMillis + delimiter);
+		benchOut.print(PreStats.preMillis + delimiter);
+		benchOut.print(PostStats.postMillis + delimiter);
+		benchOut.print(JoinStats.nrTuples + delimiter);
+		benchOut.print(JoinStats.nrIterations + delimiter);
+		benchOut.print(JoinStats.nrIndexLookups + delimiter);
+		benchOut.print(JoinStats.nrIndexEntries + delimiter);
+		benchOut.print(JoinStats.nrUniqueIndexLookups + delimiter);
+		benchOut.print(JoinStats.nrUctNodes + delimiter);
+		benchOut.print(JoinStats.nrPlansTried + delimiter);
+		benchOut.print(skinnerJoinCard + delimiter);
+		benchOut.print(JoinStats.nrSamples + delimiter);
+		benchOut.print(JoinStats.avgReward + delimiter);
+		benchOut.print(JoinStats.maxReward + delimiter);
 		benchOut.println(JoinStats.totalWork);
 		benchOut.flush();
 	}
