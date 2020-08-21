@@ -8,11 +8,13 @@ import java.util.Set;
 
 import buffer.BufferManager;
 import catalog.CatalogManager;
+import config.CheckConfig;
 import data.ColumnData;
 import data.IntData;
 import preprocessing.Context;
 import query.ColumnRef;
 import query.QueryInfo;
+import statistics.JoinStats;
 
 /**
  * Implements the iterator used by the LFTJ.
@@ -175,6 +177,8 @@ public class LFTJiter {
 	 * @return			next tuple index or -1 if none found
 	 */
 	public int seekInRange(int seekKey, int ub) throws Exception {
+		// Count search in trie
+		JoinStats.nrIndexLookups++;
 		// Current tuple position is lower bound
 		int lb = curTuples[curTrieLevel];
 		// Until search bounds collapse
@@ -192,7 +196,7 @@ public class LFTJiter {
 					lb + " and ub " + ub);
 		}
 		// Check that prior keys did not change
-		if (keyAt(lb)>=seekKey) {
+		if (CheckConfig.CHECK_LFTJ_ITERS && keyAt(lb)>=seekKey) {
 			for (int level=0; level<curTrieLevel; ++level) {
 				int curTuple = curTuples[curTrieLevel];
 				IntData intData = trieCols.get(level);

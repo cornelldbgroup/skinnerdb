@@ -18,6 +18,7 @@ import joining.join.MultiWayJoin;
 import preprocessing.Context;
 import query.ColumnRef;
 import query.QueryInfo;
+import statistics.JoinStats;
 
 /**
  * Implements variant of the Leapfrog Trie Join
@@ -228,11 +229,14 @@ public class LFTjoin extends MultiWayJoin {
 		int maxIterPos = (nrCurIters+p-1) % nrCurIters;
 		int maxKey = curIters.get(maxIterPos).key();
 		while (true) {
+			// Update statistics
+			JoinStats.nrIterations++;
+			// Get current key
 			LFTJiter minIter = curIters.get(p);
 			int minKey = minIter.key();
 			// Generate debugging output
 			++roundCtr;
-			if (roundCtr < 500) {
+			if (roundCtr < 10) {
 				System.out.println("--- Current variable ID: " + curVariableID);
 				System.out.println("p: " + p);
 				System.out.println("minKey: " + minKey);
