@@ -2,9 +2,9 @@ package joining.parallel.uct;
 
 import config.JoinConfig;
 import joining.parallel.join.DPJoin;
+import joining.parallel.join.ParaJoin;
 import joining.parallel.join.SPJoin;
 import joining.parallel.threads.ThreadPool;
-import joining.plan.JoinOrder;
 import joining.uct.SelectionPolicy;
 import query.QueryInfo;
 import statistics.JoinStats;
@@ -120,9 +120,6 @@ public class SyncNode {
         nrActions = nrTables;
         this.nrThreads = nrThreads;
         priorityActions = new ArrayList<>();
-        for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
-            priorityActions.add(actionCtr);
-        }
         childNodes = new SyncNode[nrActions];
         nrTries = new int[nrActions];
         accumulatedReward = new double[nrActions];
@@ -137,7 +134,11 @@ public class SyncNode {
         recommendedActions = new HashSet<>();
         for (int action = 0; action < nrActions; ++action) {
             accumulatedReward[action] = 0;
-            recommendedActions.add(action);
+            int table = nextTable[action];
+            if (!query.temporaryTables.contains(table)) {
+                priorityActions.add(action);
+                recommendedActions.add(action);
+            }
         }
     }
 
@@ -189,7 +190,10 @@ public class SyncNode {
             if (recommendedActions.isEmpty()) {
                 // add all actions to recommended actions
                 for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
-                    recommendedActions.add(actionCtr);
+                    int table = nextTable[actionCtr];
+                    if (!query.temporaryTables.contains(table)) {
+                        recommendedActions.add(actionCtr);
+                    }
                 }
             }
         } // if heuristic is used
@@ -412,6 +416,56 @@ public class SyncNode {
         return syncExecute(joinOps, joinOrders, roundCtr);
     }
 
+    double playout(ParaJoin joinOp, int[] joinOrder, long roundCtr) throws Exception {
+        // Last selected table
+        int lastTable = joinOrder[treeLevel];
+        // Should we avoid Cartesian product joins?
+        if (useHeuristic) {
+            Set<Integer> newlyJoined = new HashSet<Integer>();
+            newlyJoined.addAll(joinedTables);
+            newlyJoined.add(lastTable);
+            // Iterate over join order positions to fill
+            List<Integer> unjoinedTablesShuffled = new ArrayList<Integer>();
+            unjoinedTablesShuffled.addAll(unjoinedTables);
+            Collections.shuffle(unjoinedTablesShuffled);
+            for (int posCtr = treeLevel + 1; posCtr < nrTables; ++posCtr) {
+                boolean foundTable = false;
+                for (int table : unjoinedTablesShuffled) {
+                    if (!newlyJoined.contains(table) &&
+                            query.connected(newlyJoined, table)) {
+                        joinOrder[posCtr] = table;
+                        newlyJoined.add(table);
+                        foundTable = true;
+                        break;
+                    }
+                }
+                if (!foundTable) {
+                    for (int table : unjoinedTablesShuffled) {
+                        if (!newlyJoined.contains(table)) {
+                            joinOrder[posCtr] = table;
+                            newlyJoined.add(table);
+                            break;
+                        }
+                    }
+                }
+            }
+        } else {
+            // Shuffle remaining tables
+            Collections.shuffle(unjoinedTables);
+            Iterator<Integer> unjoinedTablesIter = unjoinedTables.iterator();
+            // Fill in remaining join order positions
+            for (int posCtr = treeLevel + 1; posCtr < nrTables; ++posCtr) {
+                int nextTable = unjoinedTablesIter.next();
+                while (nextTable == lastTable) {
+                    nextTable = unjoinedTablesIter.next();
+                }
+                joinOrder[posCtr] = nextTable;
+            }
+        }
+        // Evaluate completed join order and return reward
+        return joinOp.execute(joinOrder, (int) roundCtr);
+    }
+
     /**
      * Recursively sample from UCT tree and return reward.
      *
@@ -443,6 +497,33 @@ public class SyncNode {
             double reward = (child != null) ?
                     child.sample(roundCtr, joinOrder, policy, joinOps) :
                     playout(joinOps, joinOrder, roundCtr);
+            // update UCT statistics and return reward
+            updateStatistics(action, reward);
+            return reward;
+        }
+    }
+
+    public double sample(long roundCtr, int[] joinOrder,
+                         SelectionPolicy policy, ParaJoin joinOp) throws Exception {
+        // Check if this is a (non-extendible) leaf node
+        if (nrActions == 0) {
+            // leaf node - evaluate join order and return reward
+            return joinOp.execute(joinOrder, (int) roundCtr);
+        } else {
+            // inner node - select next action and expand tree if necessary
+            int action = selectAction(policy);
+            int table = nextTable[action];
+            joinOrder[treeLevel] = table;
+            // grow tree if possible
+            boolean canExpand = createdIn != roundCtr;
+            if (childNodes[action] == null && canExpand) {
+                childNodes[action] = new SyncNode(roundCtr, this, table);
+            }
+            // evaluate via recursive invocation or via playout
+            SyncNode child = childNodes[action];
+            double reward = (child != null) ?
+                    child.sample(roundCtr, joinOrder, policy, joinOp) :
+                    playout(joinOp, joinOrder, roundCtr);
             // update UCT statistics and return reward
             updateStatistics(action, reward);
             return reward;

@@ -457,6 +457,9 @@ public class SkinnerCmd {
                 else if (spec == 14) {
                     output += "CAPS_" + ParallelConfig.EXE_THREADS + caseName + ".txt";
                 }
+                else if (spec == 15) {
+                    output += "PJ_" + ParallelConfig.EXE_THREADS + caseName + ".txt";
+                }
             } else {
                 output += "Seq_1.txt";
             }

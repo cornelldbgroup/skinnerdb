@@ -29,6 +29,9 @@ public class State {
 	 * Time version of the state.
 	 */
 	public int roundCtr;
+	/**
+	 * Thread identification.
+	 */
 	public int tid;
 	/**
 	 * Initializes tuple indices to appropriate size.

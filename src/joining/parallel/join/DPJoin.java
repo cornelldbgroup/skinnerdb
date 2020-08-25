@@ -182,14 +182,12 @@ public abstract class DPJoin {
     public abstract double execute(int[] order, int splitTable, int roundCtr) throws Exception;
     public abstract double execute(int[] order, int splitTable, int roundCtr,
                                    boolean[][] finishedFlags, State slowState) throws Exception;
-
     /**
      * Returns true iff a complete join result was generated.
      *
      * @return true iff query processing is finished
      */
     public abstract boolean isFinished();
-
     /**
      * Get the first table that has more than 1 row.
      *
@@ -204,7 +202,6 @@ public abstract class DPJoin {
         }
         return order[0];
     }
-
     /**
      * Put a log sentence into a list of logs.
      *

@@ -3,6 +3,7 @@ package joining;
 import catalog.CatalogManager;
 import config.*;
 import joining.parallel.parallelization.dpdsync.DPDSync;
+import joining.parallel.parallelization.join.JoinParallelization;
 import joining.parallel.parallelization.leaf.LeafParallelization;
 import joining.parallel.parallelization.root.RootParallelization;
 import joining.parallel.parallelization.search.AdaptiveSearchParallelization;
@@ -171,6 +172,13 @@ public class ParallelJoinProcessor {
                         JoinConfig.BUDGET_PER_EPISODE, query, context);
                 parallelization.execute(resultTuples);
             }
+            // CAPS
+            else if (ParallelConfig.PARALLEL_SPEC == 15) {
+                Parallelization parallelization = new JoinParallelization(ParallelConfig.EXE_THREADS,
+                        JoinConfig.BUDGET_PER_EPISODE, query, context);
+                parallelization.execute(resultTuples);
+            }
+
             subExes.add(JoinStats.subExeTime.remove(JoinStats.subExeTime.size() - 1));
             subSamples.add(JoinStats.nrSamples);
             subTuples.add(JoinStats.nrTuples);

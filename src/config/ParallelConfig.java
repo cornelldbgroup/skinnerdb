@@ -112,4 +112,6 @@ public class ParallelConfig {
 	 * 1: minimal joined cardinality.
 	 */
 	public static final int HEURISTIC_POLICY = 1;
+
+	public static final int BRANCH_FACTOR = 10;
 }

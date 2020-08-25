@@ -716,9 +716,9 @@ public class ModJoin extends DPJoin {
             else if (joinIndex == nrTables - 1){
                 ++nrResultTuples;
                 result.add(tupleIndices);
+                writeLog("INFO:Bingo: " + Arrays.toString(tupleIndices));
                 joinIndex = proposeNextInScope(
                         plan.joinOrder.order, splitTable, joinIndices.get(joinIndex), joinIndex, tupleIndices, tid);
-//                writeLog("INFO:Bingo: " + Arrays.toString(tupleIndices));
             }
         }
 
@@ -760,7 +760,7 @@ public class ModJoin extends DPJoin {
                     ++nrResultTuples;
                     result.add(tupleIndices);
 
-//                    writeLog("INFO:Bingo: " + Arrays.toString(tupleIndices));
+                    writeLog("INFO:Bingo: " + Arrays.toString(tupleIndices));
 
                     joinIndex = proposeNextInScope(
                             plan.joinOrder.order, splitTable, joinIndices.get(joinIndex), joinIndex, tupleIndices, tid);
