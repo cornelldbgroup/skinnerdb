@@ -17,7 +17,7 @@ import preprocessing.Context;
 import query.QueryInfo;
 import statistics.JoinStats;
 
-public class OldJoin extends MultiWayJoin {
+public class OldJoin extends DynamicMWJoin {
     /**
      * Number of steps per episode.
      */

@@ -15,23 +15,22 @@ import buffer.BufferManager;
 import config.CheckConfig;
 import data.ColumnData;
 import data.IntData;
-import joining.join.DynamicMWJoin;
+import joining.join.MultiWayJoin;
+import joining.result.JoinResult;
 import preprocessing.Context;
 import query.ColumnRef;
 import query.QueryInfo;
 import statistics.JoinStats;
 
 /**
- * Implements variant of the Leapfrog Trie Join
- * (see paper "Leapfrog Triejoin: a worst-case
- * optimal join algorithm" by T. Veldhuizen).
- * This version allows to dynamically change
- * the attribute order for each time slice.
+ * An LFTJ operator with a fixed join order
+ * that is chosen at initialization. Allows
+ * to resume execution for single time slices.
  * 
  * @author immanueltrummer
  *
  */
-public class LFTjoin extends DynamicMWJoin {
+public class StaticLFTJ extends MultiWayJoin {
 	/**
 	 * Maps alias IDs to corresponding iterator.
 	 */
@@ -65,14 +64,43 @@ public class LFTjoin extends DynamicMWJoin {
 	 */
 	boolean finished = false;
 	/**
+	 * Counds iterations of the main loop.
+	 */
+	long roundCtr = 0;
+	/**
+	 * Bookkeeping information associated 
+	 * with attributes (needed to resume join).
+	 */
+	Stack<JoinFrame> joinStack = new Stack<>();
+	/**
+	 * Whether we backtracked in the last iteration
+	 * of the main loop (requires certain actions
+	 * at the beginning of loop).
+	 */
+	boolean backtracked = false;
+	/**
+	 * Number of result tuples produced 
+	 * in last invocation (used for reward
+	 * calculations).
+	 */
+	public int lastNrResults = -1;
+	/**
+	 * Percentage of work done for first
+	 * attribute in attribute order (used
+	 * for reward calculations).
+	 */
+	public double firstCovered = -1;
+	/**
 	 * Initialize join for given query.
 	 * 
-	 * @param query			join query to process via LFTJ
-	 * @param preSummary	summarizes effects of pre-processing
+	 * @param query				join query to process via LFTJ
+	 * @param executionContext	summarizes procesing context
 	 * @throws Exception
 	 */
-	public LFTjoin(QueryInfo query, Context preSummary) throws Exception {
-		super(query, preSummary);		
+	public StaticLFTJ(QueryInfo query, Context executionContext, 
+			JoinResult joinResult) throws Exception {
+		// Initialize query and context variables
+		super(query, executionContext, joinResult);
 		// Choose variable order arbitrarily
 		varOrder = new ArrayList<>();
 		varOrder.addAll(query.equiJoinClasses);
@@ -85,7 +113,7 @@ public class LFTjoin extends DynamicMWJoin {
 		for (int aliasCtr=0; aliasCtr<nrJoined; ++aliasCtr) {
 			String alias = query.aliases[aliasCtr];
 			LFTJiter iter = new LFTJiter(query, 
-					preSummary, aliasCtr, varOrder);
+					executionContext, aliasCtr, varOrder);
 			aliasToIter.put(alias, iter);
 			idToIter[aliasCtr] = iter;
 		}
@@ -100,6 +128,10 @@ public class LFTjoin extends DynamicMWJoin {
 			}
 			itersByVar.add(curVarIters);
 		}
+		// Initialize stack for LFTJ algorithm
+		JoinFrame joinFrame = new JoinFrame();
+		joinFrame.curVariableID = 0;
+		joinStack.push(joinFrame);
 	}
 	/**
 	 * Initializes iterators and checks for
@@ -136,7 +168,8 @@ public class LFTjoin extends DynamicMWJoin {
 	 * iterator positions.
 	 */
 	void addResultTuple() throws Exception {
-		//System.out.println("addResultTuple");
+		// Update reward-related statistics
+		++lastNrResults;
 		// Generate result tuple
 		int[] resultTuple = new int[nrJoined];
 		// Iterate over all joined tables
@@ -200,91 +233,93 @@ public class LFTjoin extends DynamicMWJoin {
 		// No inconsistencies were found - passed check
 		return true;
 	}
-	
-	long roundCtr = 0;
-	
-	class JoinFrame {
-		int curVariableID = -1;
-		List<LFTJiter> curIters = null;
-		int nrCurIters = -1;
-		int p = -1;
-		int maxIterPos = -1;
-		int maxKey = -1;
-	}
-	
-	Stack<JoinFrame> joinStack = new Stack<>();
-	
-	void recInvoke() {
+	/**
+	 * Advance to next variable in join order.
+	 */
+	void advance() {
 		JoinFrame oldFrame = joinStack.peek();
 		JoinFrame newFrame = new JoinFrame();
 		newFrame.curVariableID = oldFrame.curVariableID+1;
 		joinStack.push(newFrame);
 	}
-	
-	void recReturn() {
+	/**
+	 * Backtrack to previous variable in join order.
+	 */
+	void backtrack() {
 		joinStack.pop();
-		returning = true;
+		backtracked = true;
 	}
-	
-	boolean returning = false;
-			
-	void executeLFTJ() throws Exception {
+	/**
+	 * Resumes join operation for a fixed number of steps.
+	 * 
+	 * @param budget		how many iterations are allowed
+	 * @throws Exception
+	 */
+	void resumeJoin(long budget) throws Exception {
+		// Initialize reward-related statistics
+		lastNrResults = 0;
+		// Do we freshly resume after being suspended?
+		boolean afterSuspension = roundCtr>0;
+		// Until we finish processing (break)
 		while (true) {
+			// Did we finish processing?
 			if (joinStack.empty()) {
+				finished = true;
 				break;
 			}
 			JoinFrame joinFrame = joinStack.peek();
-			if (returning) {
-				returning = false;
-				LFTJiter minIter = joinFrame.curIters.get(joinFrame.p);
-				minIter.seek(joinFrame.maxKey+1);
-				if (minIter.atEnd()) {
-					// Go one level up in each trie
-					for (LFTJiter iter : joinFrame.curIters) {
-						iter.up();
-					}
-					recReturn();
-					continue;
-				}
-				joinFrame.maxKey = minIter.key();
-				joinFrame.p = (joinFrame.p + 1) % joinFrame.nrCurIters;
+			// Go directly to point of interrupt?
+			if (afterSuspension) {
+				afterSuspension = false;
 			} else {
-				// Check for timeout
-				if (System.currentTimeMillis() - startMillis > 60000) {
-					recReturn();
-					break;
-				}
-				// Have we completed a result tuple?
-				if (joinFrame.curVariableID >= nrVars) {
-					addResultTuple();
-					recReturn();
-					continue;
-				}
-				// Collect relevant iterators
-				joinFrame.curIters = itersByVar.get(joinFrame.curVariableID);
-				joinFrame.nrCurIters = joinFrame.curIters.size();
-				// Order iterators and check for early termination
-				if(!leapfrogInit(joinFrame.curIters)) {
-					// Go one level up in each trie
-					for (LFTJiter iter : joinFrame.curIters) {
-						iter.up();
+				if (backtracked) {
+					backtracked = false;
+					LFTJiter minIter = joinFrame.curIters.get(joinFrame.p);
+					minIter.seek(joinFrame.maxKey+1);
+					if (minIter.atEnd()) {
+						// Go one level up in each trie
+						for (LFTJiter iter : joinFrame.curIters) {
+							iter.up();
+						}
+						backtrack();
+						continue;
 					}
-					recReturn();
-					continue;
+					joinFrame.maxKey = minIter.key();
+					joinFrame.p = (joinFrame.p + 1) % joinFrame.nrCurIters;
+				} else {
+					// Have we completed a result tuple?
+					if (joinFrame.curVariableID >= nrVars) {
+						addResultTuple();
+						backtrack();
+						continue;
+					}
+					// Collect relevant iterators
+					joinFrame.curIters = itersByVar.get(joinFrame.curVariableID);
+					joinFrame.nrCurIters = joinFrame.curIters.size();
+					// Order iterators and check for early termination
+					if(!leapfrogInit(joinFrame.curIters)) {
+						// Go one level up in each trie
+						for (LFTJiter iter : joinFrame.curIters) {
+							iter.up();
+						}
+						backtrack();
+						continue;
+					}
+					// Execute search procedure
+					joinFrame.p = 0;
+					joinFrame.maxIterPos = (joinFrame.nrCurIters+joinFrame.p-1) % joinFrame.nrCurIters;
+					joinFrame.maxKey = joinFrame.curIters.get(joinFrame.maxIterPos).key();				
 				}
-				// Execute search procedure
-				joinFrame.p = 0;
-				joinFrame.maxIterPos = (joinFrame.nrCurIters+joinFrame.p-1) % joinFrame.nrCurIters;
-				joinFrame.maxKey = joinFrame.curIters.get(joinFrame.maxIterPos).key();				
 			}
 			while (true) {
-				// Update statistics
+				// Count current round
+				++roundCtr;
+				--budget;
 				JoinStats.nrIterations++;
 				// Get current key
 				LFTJiter minIter = joinFrame.curIters.get(joinFrame.p);
 				int minKey = minIter.key();
 				// Generate debugging output
-				++roundCtr;
 				if (roundCtr < 10) {
 					System.out.println("--- Current variable ID: " + joinFrame.curVariableID);
 					System.out.println("p: " + joinFrame.p);
@@ -296,7 +331,7 @@ public class LFTjoin extends DynamicMWJoin {
 				}
 				// Did we find a match between iterators?
 				if (minKey == joinFrame.maxKey) {
-					recInvoke();
+					advance();
 					break;
 				} else {
 					minIter.seek(joinFrame.maxKey);
@@ -305,7 +340,7 @@ public class LFTjoin extends DynamicMWJoin {
 						for (LFTJiter iter : joinFrame.curIters) {
 							iter.up();
 						}
-						recReturn();
+						backtrack();
 						break;
 					} else {
 						// Min-iter to max-iter
@@ -316,108 +351,8 @@ public class LFTjoin extends DynamicMWJoin {
 			}
 		}
 	}
-
-	
-	/**
-	 * Execute leapfrog trie join for given variable.
-	 * 
-	 * @param curVariableID	variable index in global variable order
-	 * @throws Exception
-	 */
-	/*
-	void executeLFTJ(int curVariableID) throws Exception {
-		// Check for timeout
-		if (System.currentTimeMillis() - startMillis > 60000) {
-			return;
-		}
-		// Have we completed a result tuple?
-		if (curVariableID >= nrVars) {
-			addResultTuple();
-			return;
-		}
-		// Collect relevant iterators
-		List<LFTJiter> curIters = itersByVar.get(curVariableID);
-		int nrCurIters = curIters.size();
-		// Order iterators and check for early termination
-		if(!leapfrogInit(curIters)) {
-			// Go one level up in each trie
-			for (LFTJiter iter : curIters) {
-				iter.up();
-			}
-			return;
-		}
-		// Execute search procedure
-		int p = 0;
-		int maxIterPos = (nrCurIters+p-1) % nrCurIters;
-		int maxKey = curIters.get(maxIterPos).key();
-		while (true) {
-			// Update statistics
-			JoinStats.nrIterations++;
-			// Get current key
-			LFTJiter minIter = curIters.get(p);
-			int minKey = minIter.key();
-			// Generate debugging output
-			++roundCtr;
-			if (roundCtr < 10) {
-				System.out.println("--- Current variable ID: " + curVariableID);
-				System.out.println("p: " + p);
-				System.out.println("minKey: " + minKey);
-				System.out.println("maxKey: " + maxKey);
-				for (LFTJiter iter : curIters) {
-					System.out.println(iter.rid() + ":" + iter.key());
-				}
-			}
-			// Did we find a match between iterators?
-			if (minKey == maxKey) {
-				executeLFTJ(curVariableID+1);
-				minIter.seek(maxKey+1);
-				if (minIter.atEnd()) {
-					// Go one level up in each trie
-					for (LFTJiter iter : curIters) {
-						iter.up();
-					}
-					return;
-				}
-				maxKey = minIter.key();
-				p = (p + 1) % nrCurIters;
-			} else {
-				minIter.seek(maxKey);
-				if (minIter.atEnd()) {
-					// Go one level up in each trie
-					for (LFTJiter iter : curIters) {
-						iter.up();
-					}
-					return;
-				} else {
-					// Min-iter to max-iter
-					maxKey = minIter.key();
-					p = (p + 1) % nrCurIters;
-				}
-			}
-		}
-	}
-	*/
-
-	long startMillis = -1;
-	
-	@Override
-	public double execute(int[] order) throws Exception {
-		// Retrieve result via WCOJ
-		startMillis = System.currentTimeMillis();
-		// Start LFTJ algorithm
-		JoinFrame joinFrame = new JoinFrame();
-		joinFrame.curVariableID = 0;
-		joinStack.push(joinFrame);
-		executeLFTJ();
-		// Set termination flag
-		finished = true;
-		// Return dummy reward
-		return 1;
-	}
-
 	@Override
 	public boolean isFinished() {
 		return finished;
 	}
-
 }

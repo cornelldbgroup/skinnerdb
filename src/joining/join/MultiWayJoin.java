@@ -1,6 +1,5 @@
 package joining.join;
 
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -18,8 +17,7 @@ import query.QueryInfo;
 
 /**
  * A multi-way join operator that executes joins in small
- * episodes, using for each episode a newly specified join
- * order. Collects result tuples over different episodes
+ * episodes. Collects result tuples over different episodes
  * and contains finally a complete join result.
  * 
  * @author immanueltrummer
@@ -68,13 +66,28 @@ public abstract class MultiWayJoin {
     	predToEval = null;
     }
     /**
+     * Initializes join for given query, execution context,
+     * and for a freshly generated join result.
+     * 
+     * @param query				query to evaluate
+     * @param executionContext	execution context for join
+     * @throws Exception
+     */
+    public MultiWayJoin(QueryInfo query, 
+    		Context executionContext) throws Exception {
+    	this(query, executionContext, 
+    			new JoinResult(query.nrJoined));
+    }
+    /**
      * Initializes join operator for given query
-     * and initialize new join result.
+     * and given join result.
      * 
      * @param query			query to process
      * @param preSummary	summarizes pre-processing steps
+     * @param joinResult	insert result tuples here
      */
-    public MultiWayJoin(QueryInfo query, Context preSummary) throws Exception {
+    public MultiWayJoin(QueryInfo query, Context preSummary,
+    		JoinResult joinResult) throws Exception {
         this.query = query;
         this.nrJoined = query.nrJoined;
         this.preSummary = preSummary;
@@ -88,7 +101,7 @@ public abstract class MultiWayJoin {
         	int cardinality = CatalogManager.getCardinality(table);
         	cardinalities[index] = cardinality;
         }
-        this.result = new JoinResult(nrJoined);
+        this.result = joinResult;
         // Compile predicates
         predToEval = new HashMap<>();
         for (ExpressionInfo predInfo : query.wherePredicates) {
@@ -106,14 +119,6 @@ public abstract class MultiWayJoin {
         	predToEval.put(pred, boolEval);        		
         }
     }
-    /**
-     * Executes given join order for a given number of steps.
-     * 
-     * @param order		execute this join order
-     * @return			reward (higher reward means faster progress)
-     * @throws Exception 
-     */
-    public abstract double execute(int[] order) throws Exception;
     /**
      * Returns true iff a complete join result was generated.
      * 

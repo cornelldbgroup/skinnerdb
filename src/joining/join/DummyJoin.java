@@ -2,7 +2,6 @@ package joining.join;
 
 import java.util.Random;
 
-import preprocessing.Context;
 import query.QueryInfo;
 
 /**
@@ -12,14 +11,15 @@ import query.QueryInfo;
  * @author immanueltrummer
  *
  */
-public class DummyJoin extends MultiWayJoin {
+public class DummyJoin extends DynamicMWJoin {
 	/**
 	 * Random generator used for rewards.
 	 */
 	Random random = new Random();
 
 	public DummyJoin(QueryInfo query) throws Exception {
-		super(query);
+		// FIXME: This will throw a null pointer exception
+		super(query, null);
 	}
 
 	@Override

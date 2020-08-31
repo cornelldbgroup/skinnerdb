@@ -1,6 +1,6 @@
 package joining.uct;
 
-import joining.join.MultiWayJoin;
+import joining.join.DynamicMWJoin;
 import query.QueryInfo;
 import statistics.JoinStats;
 
@@ -79,7 +79,7 @@ public class UctNode {
     /**
      * Evaluates a given join order and accumulates results.
      */
-    final MultiWayJoin joinOp;
+    final DynamicMWJoin joinOp;
     /**
      * Indicates whether the search space is restricted to
      * join orders that avoid Cartesian products. This
@@ -104,7 +104,7 @@ public class UctNode {
      * @param joinOp		multi-way join operator allowing fast join order switching
      */
     public UctNode(long roundCtr, QueryInfo query, 
-    		boolean useHeuristic, MultiWayJoin joinOp) {
+    		boolean useHeuristic, DynamicMWJoin joinOp) {
     	// Count node generation
     	++JoinStats.nrUctNodes;
         this.query = query;

@@ -9,6 +9,7 @@ import config.LoggingConfig;
 import config.NamingConfig;
 import config.JoinConfig;
 import joining.join.OldJoin;
+import joining.join.wcoj.DynamicLFTJ;
 import joining.join.wcoj.LFTjoin;
 import joining.result.ResultTuple;
 import joining.uct.ExplorationWeightPolicy;
@@ -65,7 +66,8 @@ public class JoinProcessor {
 		OldJoin joinOp = new OldJoin(query, context, 
 				JoinConfig.BUDGET_PER_EPISODE);
 		*/
-		LFTjoin joinOp = new LFTjoin(query, context);
+		//LFTjoin joinOp = new LFTjoin(query, context);
+		DynamicLFTJ joinOp = new DynamicLFTJ(query, context);
 		// Initialize UCT join order search tree
 		UctNode root = new UctNode(0, query, true, joinOp);
 		// Initialize counters and variables
