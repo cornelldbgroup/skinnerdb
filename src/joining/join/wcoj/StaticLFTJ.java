@@ -260,6 +260,8 @@ public class StaticLFTJ extends MultiWayJoin {
 		lastNrResults = 0;
 		// Do we freshly resume after being suspended?
 		boolean afterSuspension = roundCtr>0;
+		// We had at least one iteration
+		roundCtr += 1;
 		// Until we finish processing (break)
 		while (true) {
 			// Did we finish processing?
@@ -316,6 +318,10 @@ public class StaticLFTJ extends MultiWayJoin {
 				++roundCtr;
 				--budget;
 				JoinStats.nrIterations++;
+				// Check for timeout
+				if (budget <= 0) {
+					return;
+				}
 				// Get current key
 				LFTJiter minIter = joinFrame.curIters.get(joinFrame.p);
 				int minKey = minIter.key();

@@ -3,7 +3,9 @@ package joining.join.wcoj;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import buffer.BufferManager;
@@ -62,6 +64,12 @@ public class LFTJiter {
 	 */
 	final int[] curTuples;
 	/**
+	 * Caches tuple orderings that can be reused across
+	 * different join orders.
+	 */
+	static final Map<List<ColumnRef>, Integer[]> orderCache =
+			new HashMap<>();
+	/**
 	 * Initializes iterator for given query and
 	 * relation, and given (global) variable order.
 	 * 
@@ -77,10 +85,12 @@ public class LFTJiter {
 		String table = context.aliasToFiltered.get(alias);
 		card = CatalogManager.getCardinality(table);
 		// Extract columns used for sorting
+		List<ColumnRef> localColumns = new ArrayList<>();
 		trieCols = new ArrayList<>();
 		for (Set<ColumnRef> eqClass : globalVarOrder) {
 			for (ColumnRef colRef : eqClass) {
 				if (colRef.aliasName.equals(alias)) {
+					localColumns.add(colRef);
 					String colName = colRef.columnName;
 					ColumnRef bufferRef = new ColumnRef(table, colName);
 					ColumnData colData = BufferManager.getData(bufferRef);
@@ -92,31 +102,38 @@ public class LFTJiter {
 		nrLevels = trieCols.size();
 		curTuples = new int[nrLevels];
 		curUBs = new int[nrLevels];
-		// Initialize tuple order
-		tupleOrder = new Integer[card];
-		for (int i=0; i<card; ++i) {
-			tupleOrder[i] = i;
-		}
-		// Sort tuples by global variable order
-		Arrays.parallelSort(tupleOrder, new Comparator<Integer>() {
-			public int compare(Integer row1, Integer row2) {
-				for (ColumnData colData : trieCols) {
-					int cmp = colData.compareRows(row1, row2);
-					if (cmp == 2) {
-						boolean row1null = colData.isNull.get(row1);
-						boolean row2null = colData.isNull.get(row2);
-						if (row1null && !row2null) {
-							return -1;
-						} else if (!row1null && row2null) {
-							return 1;
-						}
-					} else if (cmp != 0) {
-						return cmp;
-					}
-				}
-				return 0;
+		// Retrieve cached tuple order or sort
+		if (orderCache.containsKey(localColumns)) {
+			tupleOrder = orderCache.get(localColumns);
+		} else {
+			// Initialize tuple order
+			tupleOrder = new Integer[card];
+			for (int i=0; i<card; ++i) {
+				tupleOrder[i] = i;
 			}
-		});
+			// Sort tuples by global variable order
+			Arrays.parallelSort(tupleOrder, new Comparator<Integer>() {
+				public int compare(Integer row1, Integer row2) {
+					for (ColumnData colData : trieCols) {
+						int cmp = colData.compareRows(row1, row2);
+						if (cmp == 2) {
+							boolean row1null = colData.isNull.get(row1);
+							boolean row2null = colData.isNull.get(row2);
+							if (row1null && !row2null) {
+								return -1;
+							} else if (!row1null && row2null) {
+								return 1;
+							}
+						} else if (cmp != 0) {
+							return cmp;
+						}
+					}
+					return 0;
+				}
+			});
+			orderCache.put(localColumns, tupleOrder);
+		}
+		// Reset internal state
 		reset();
 		// Perform run time checks if activated
 		IterChecker.checkIter(query, context, 
