@@ -9,6 +9,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Stack;
 
 import buffer.BufferManager;
 import config.CheckConfig;
@@ -197,12 +198,128 @@ public class LFTjoin extends MultiWayJoin {
 	
 	long roundCtr = 0;
 	
+	class JoinFrame {
+		int curVariableID = -1;
+		List<LFTJiter> curIters = null;
+		int nrCurIters = -1;
+		int p = -1;
+		int maxIterPos = -1;
+		int maxKey = -1;
+	}
+	
+	Stack<JoinFrame> joinStack = new Stack<>();
+	
+	void recInvoke() {
+		JoinFrame oldFrame = joinStack.peek();
+		JoinFrame newFrame = new JoinFrame();
+		newFrame.curVariableID = oldFrame.curVariableID+1;
+		joinStack.push(newFrame);
+	}
+	
+	void recReturn() {
+		joinStack.pop();
+		returning = true;
+	}
+	
+	boolean returning = false;
+			
+	void executeLFTJ() throws Exception {
+		while (true) {
+			if (joinStack.empty()) {
+				break;
+			}
+			JoinFrame joinFrame = joinStack.peek();
+			if (returning) {
+				returning = false;
+				LFTJiter minIter = joinFrame.curIters.get(joinFrame.p);
+				minIter.seek(joinFrame.maxKey+1);
+				if (minIter.atEnd()) {
+					// Go one level up in each trie
+					for (LFTJiter iter : joinFrame.curIters) {
+						iter.up();
+					}
+					recReturn();
+					continue;
+				}
+				joinFrame.maxKey = minIter.key();
+				joinFrame.p = (joinFrame.p + 1) % joinFrame.nrCurIters;
+			} else {
+				// Check for timeout
+				if (System.currentTimeMillis() - startMillis > 60000) {
+					recReturn();
+					break;
+				}
+				// Have we completed a result tuple?
+				if (joinFrame.curVariableID >= nrVars) {
+					addResultTuple();
+					recReturn();
+					continue;
+				}
+				// Collect relevant iterators
+				joinFrame.curIters = itersByVar.get(joinFrame.curVariableID);
+				joinFrame.nrCurIters = joinFrame.curIters.size();
+				// Order iterators and check for early termination
+				if(!leapfrogInit(joinFrame.curIters)) {
+					// Go one level up in each trie
+					for (LFTJiter iter : joinFrame.curIters) {
+						iter.up();
+					}
+					recReturn();
+					continue;
+				}
+				// Execute search procedure
+				joinFrame.p = 0;
+				joinFrame.maxIterPos = (joinFrame.nrCurIters+joinFrame.p-1) % joinFrame.nrCurIters;
+				joinFrame.maxKey = joinFrame.curIters.get(joinFrame.maxIterPos).key();				
+			}
+			while (true) {
+				// Update statistics
+				JoinStats.nrIterations++;
+				// Get current key
+				LFTJiter minIter = joinFrame.curIters.get(joinFrame.p);
+				int minKey = minIter.key();
+				// Generate debugging output
+				++roundCtr;
+				if (roundCtr < 10) {
+					System.out.println("--- Current variable ID: " + joinFrame.curVariableID);
+					System.out.println("p: " + joinFrame.p);
+					System.out.println("minKey: " + minKey);
+					System.out.println("maxKey: " + joinFrame.maxKey);
+					for (LFTJiter iter : joinFrame.curIters) {
+						System.out.println(iter.rid() + ":" + iter.key());
+					}
+				}
+				// Did we find a match between iterators?
+				if (minKey == joinFrame.maxKey) {
+					recInvoke();
+					break;
+				} else {
+					minIter.seek(joinFrame.maxKey);
+					if (minIter.atEnd()) {
+						// Go one level up in each trie
+						for (LFTJiter iter : joinFrame.curIters) {
+							iter.up();
+						}
+						recReturn();
+						break;
+					} else {
+						// Min-iter to max-iter
+						joinFrame.maxKey = minIter.key();
+						joinFrame.p = (joinFrame.p + 1) % joinFrame.nrCurIters;
+					}
+				}
+			}
+		}
+	}
+
+	
 	/**
 	 * Execute leapfrog trie join for given variable.
 	 * 
 	 * @param curVariableID	variable index in global variable order
 	 * @throws Exception
 	 */
+	/*
 	void executeLFTJ(int curVariableID) throws Exception {
 		// Check for timeout
 		if (System.currentTimeMillis() - startMillis > 60000) {
@@ -274,6 +391,7 @@ public class LFTjoin extends MultiWayJoin {
 			}
 		}
 	}
+	*/
 
 	long startMillis = -1;
 	
@@ -281,7 +399,11 @@ public class LFTjoin extends MultiWayJoin {
 	public double execute(int[] order) throws Exception {
 		// Retrieve result via WCOJ
 		startMillis = System.currentTimeMillis();
-		executeLFTJ(0);
+		// Start LFTJ algorithm
+		JoinFrame joinFrame = new JoinFrame();
+		joinFrame.curVariableID = 0;
+		joinStack.push(joinFrame);
+		executeLFTJ();
 		// Set termination flag
 		finished = true;
 		// Return dummy reward
