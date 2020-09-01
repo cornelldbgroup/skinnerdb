@@ -9,7 +9,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.Stack;
 
 import buffer.BufferManager;
 import config.CheckConfig;
@@ -71,7 +70,11 @@ public class StaticLFTJ extends MultiWayJoin {
 	 * Bookkeeping information associated 
 	 * with attributes (needed to resume join).
 	 */
-	Stack<JoinFrame> joinStack = new Stack<>();
+	List<JoinFrame> joinFrames = new ArrayList<>();
+	/**
+	 * Index of current variable in attribute order.
+	 */
+	int curVariableID = -1;
 	/**
 	 * Whether we backtracked in the last iteration
 	 * of the main loop (requires certain actions
@@ -129,9 +132,11 @@ public class StaticLFTJ extends MultiWayJoin {
 			itersByVar.add(curVarIters);
 		}
 		// Initialize stack for LFTJ algorithm
-		JoinFrame joinFrame = new JoinFrame();
-		joinFrame.curVariableID = 0;
-		joinStack.push(joinFrame);
+		curVariableID = 0;
+		for (int varCtr=0; varCtr<nrVars; ++varCtr) {
+			JoinFrame joinFrame = new JoinFrame();
+			joinFrames.add(joinFrame);
+		}
 	}
 	/**
 	 * Initializes iterators and checks for
@@ -237,16 +242,13 @@ public class StaticLFTJ extends MultiWayJoin {
 	 * Advance to next variable in join order.
 	 */
 	void advance() {
-		JoinFrame oldFrame = joinStack.peek();
-		JoinFrame newFrame = new JoinFrame();
-		newFrame.curVariableID = oldFrame.curVariableID+1;
-		joinStack.push(newFrame);
+		curVariableID++;
 	}
 	/**
 	 * Backtrack to previous variable in join order.
 	 */
 	void backtrack() {
-		joinStack.pop();
+		curVariableID--;
 		backtracked = true;
 	}
 	/**
@@ -265,11 +267,12 @@ public class StaticLFTJ extends MultiWayJoin {
 		// Until we finish processing (break)
 		while (true) {
 			// Did we finish processing?
-			if (joinStack.empty()) {
+			if (curVariableID<0) {
 				finished = true;
 				break;
 			}
-			JoinFrame joinFrame = joinStack.peek();
+			JoinFrame joinFrame = curVariableID>=nrVars?
+					null:joinFrames.get(curVariableID);
 			// Go directly to point of interrupt?
 			if (afterSuspension) {
 				afterSuspension = false;
@@ -290,13 +293,13 @@ public class StaticLFTJ extends MultiWayJoin {
 					joinFrame.p = (joinFrame.p + 1) % joinFrame.nrCurIters;
 				} else {
 					// Have we completed a result tuple?
-					if (joinFrame.curVariableID >= nrVars) {
+					if (curVariableID >= nrVars) {
 						addResultTuple();
 						backtrack();
 						continue;
 					}
 					// Collect relevant iterators
-					joinFrame.curIters = itersByVar.get(joinFrame.curVariableID);
+					joinFrame.curIters = itersByVar.get(curVariableID);
 					joinFrame.nrCurIters = joinFrame.curIters.size();
 					// Order iterators and check for early termination
 					if(!leapfrogInit(joinFrame.curIters)) {
@@ -327,7 +330,7 @@ public class StaticLFTJ extends MultiWayJoin {
 				int minKey = minIter.key();
 				// Generate debugging output
 				if (roundCtr < 10) {
-					System.out.println("--- Current variable ID: " + joinFrame.curVariableID);
+					System.out.println("--- Current variable ID: " + curVariableID);
 					System.out.println("p: " + joinFrame.p);
 					System.out.println("minKey: " + minKey);
 					System.out.println("maxKey: " + joinFrame.maxKey);

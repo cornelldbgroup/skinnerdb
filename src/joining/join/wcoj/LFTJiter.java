@@ -64,10 +64,18 @@ public class LFTJiter {
 	 */
 	final int[] curTuples;
 	/**
-	 * Caches tuple orderings that can be reused across
-	 * different join orders.
+	 * Caches tuple orderings for tables after applying
+	 * query-specific unary predicates. Such orderings
+	 * can be reused across different join orders
+	 * for the same query.
 	 */
-	static final Map<List<ColumnRef>, Integer[]> orderCache =
+	final static Map<List<ColumnRef>, Integer[]> queryOrderCache =
+			new HashMap<>();
+	/**
+	 * Caches tuple orderings for base tables that can
+	 * be reused across different queries.
+	 */
+	final static Map<List<ColumnRef>, Integer[]> baseOrderCache =
 			new HashMap<>();
 	/**
 	 * Initializes iterator for given query and
@@ -103,11 +111,37 @@ public class LFTJiter {
 		curTuples = new int[nrLevels];
 		curUBs = new int[nrLevels];
 		// Retrieve cached tuple order or sort
-		if (orderCache.containsKey(localColumns)) {
-			tupleOrder = orderCache.get(localColumns);
+		tupleOrder = getTupleOrder(query, 
+				context, aliasID, localColumns);
+		// Reset internal state
+		reset();
+		// Perform run time checks if activated
+		IterChecker.checkIter(query, context, 
+				aliasID, globalVarOrder, this);
+	}
+	/**
+	 * Sorts tuples by their values in local columns,
+	 * returns tuple IDs from tuple order in array.
+	 * 
+	 * @param localColumns	sort by those columns
+	 * @return				array with sorted tuple indices
+	 */
+	Integer[] getTupleOrder(QueryInfo query, Context executionContext, 
+			int aliasID, List<ColumnRef> localColumns) {
+		// No unary predicates for current alias?
+		String alias = query.aliases[aliasID];
+		boolean notFiltered = executionContext.
+				aliasToFiltered.get(alias).equals(alias);
+		// Did we cache tuple order for associated base tables?
+		if (notFiltered && baseOrderCache.containsKey(localColumns)) {
+			return baseOrderCache.get(localColumns);
+		} else
+		// Retrieve cached tuple order or sort
+		if (queryOrderCache.containsKey(localColumns)) {
+			return queryOrderCache.get(localColumns);
 		} else {
 			// Initialize tuple order
-			tupleOrder = new Integer[card];
+			Integer[] tupleOrder = new Integer[card];
 			for (int i=0; i<card; ++i) {
 				tupleOrder[i] = i;
 			}
@@ -131,13 +165,14 @@ public class LFTJiter {
 					return 0;
 				}
 			});
-			orderCache.put(localColumns, tupleOrder);
+			// Distinguish by cache
+			if (notFiltered) {
+				baseOrderCache.put(localColumns, tupleOrder);
+			} else {
+				queryOrderCache.put(localColumns, tupleOrder);				
+			}
+			return tupleOrder;
 		}
-		// Reset internal state
-		reset();
-		// Perform run time checks if activated
-		IterChecker.checkIter(query, context, 
-				aliasID, globalVarOrder, this);
 	}
 	/**
 	 * Resets all internal variables to state

@@ -15,7 +15,7 @@ public class JoinFrame {
 	 * Index of variable that this join
 	 * frame is associated with.
 	 */
-	int curVariableID = -1;
+	//int curVariableID = -1;
 	/**
 	 * Relevant LFTJ iterators that are
 	 * relevant to current variable.

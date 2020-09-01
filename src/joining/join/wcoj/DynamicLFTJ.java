@@ -33,7 +33,7 @@ public class DynamicLFTJ extends DynamicMWJoin {
 			Context executionContext) throws Exception {
 		super(query, executionContext);
 		// Clear cache of tuple orders
-		LFTJiter.orderCache.clear();
+		LFTJiter.queryOrderCache.clear();
 		// Prepare join with different attribute orders
 		long startMillis = System.currentTimeMillis();
 		for (int orderCtr=0; orderCtr<nrOrders; ++orderCtr) {
