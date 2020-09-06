@@ -90,7 +90,10 @@ public class Master {
 				JoinStats.exeTime = 0;
 				JoinStats.subExeTime.add(JoinStats.exeTime);
 				PostStats.postMillis = 0;
-				PostStats.subPostMillis.add(PostStats.postMillis);
+				PostStats.subHaving.add(0L);
+				PostStats.subAggregation.add(0L);
+				PostStats.subGroupby.add(0L);
+				PostStats.subOrder.add(0L);
 				String targetRelName = NamingConfig.JOINED_NAME;
 				Materialize.execute(new HashSet<>(), subQueryInfo.aliasToIndex,
 						subQueryInfo.colsForPostProcessing,
@@ -137,7 +140,6 @@ public class Master {
 //				PostProcessor.process(subQueryInfo, context,
 //						resultRel, tempResult);
 //			}
-			System.out.println(Arrays.toString(PostStats.subPostMillis.toArray()));
 			if (StartupConfig.Memory) {
 				JoinStats.temporaryTableIndexSize.add(BufferManager.getTempDataSize(subQueryResults));
 			}
@@ -152,6 +154,7 @@ public class Master {
 	private static void initializeStats() {
 		PreStats.subPreMillis = new ArrayList<>();
 		PreStats.subFilterMillis = new ArrayList<>();
+		PreStats.subIndexMillis = new ArrayList<>();
 		JoinStats.skinnerJoinCards = new ArrayList<>();
 		JoinStats.subJoinTime = new ArrayList<>();
 		JoinStats.subMateriazed = new ArrayList<>();
@@ -159,7 +162,10 @@ public class Master {
 		JoinStats.subAllExeTime = new ArrayList<>();
 		JoinStats.subAllSamples = new ArrayList<>();
 		JoinStats.subAllTuples = new ArrayList<>();
-		PostStats.subPostMillis = new ArrayList<>();
+		PostStats.subGroupby = new ArrayList<>();
+		PostStats.subAggregation = new ArrayList<>();
+		PostStats.subHaving = new ArrayList<>();
+		PostStats.subOrder = new ArrayList<>();
 		JoinStats.temporaryTableIndexSize = new ArrayList<>();
 		JoinStats.uctTreeSize = new ArrayList<>();
 		JoinStats.progressTrackerSize = new ArrayList<>();

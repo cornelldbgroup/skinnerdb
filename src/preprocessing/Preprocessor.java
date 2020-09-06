@@ -111,6 +111,7 @@ public class Preprocessor {
 				query.aliasToTable.keySet().parallelStream():
 				query.aliasToTable.keySet().stream();
 		// Iterate over query aliases
+		long filterStart = System.currentTimeMillis();
 		aliasStream.forEach(alias -> {
 			long s1 = System.currentTimeMillis();
 			// Collect required columns (for joins and post-processing) for this table
@@ -221,9 +222,8 @@ public class Preprocessor {
 			throw new Exception("Error in pre-processor.");
 		}
 		// Measure filtering time
-		if (performance) {
-			PreStats.subFilterMillis.add(System.currentTimeMillis() - startMillis);
-		}
+		long filterTime = System.currentTimeMillis() - startMillis;
+		PreStats.subFilterMillis.add(filterTime);
 
 		// Create missing indices for columns involved in equi-joins.
 		log("Creating indices ...");
@@ -231,13 +231,14 @@ public class Preprocessor {
 			PreStats.subPreMillis.add(System.currentTimeMillis() - startMillis);
 			return preSummary;
 		}
+		long indexStart = System.currentTimeMillis();
 		createJoinIndices(query, preSummary);
-		// Measure processing time
-		if (performance) {
-			long total = System.currentTimeMillis() - startMillis;
-			PreStats.subPreMillis.add(total);
-		}
+		long indexEnd = System.currentTimeMillis();
 
+		// Measure processing time
+		long indexTime = indexEnd - indexStart;
+		PreStats.subIndexMillis.add(indexTime);
+		System.out.println("Filter: " + filterTime + "\tIndex: " + indexTime);
 		// construct mapping from join tables to index for each join predicate
 		query.equiJoinPreds.forEach(expressionInfo -> {
 			expressionInfo.extractIndex(preSummary);
@@ -330,9 +331,11 @@ public class Preprocessor {
 		Expression remainingExpr = conjunction(nonIndexedConjuncts);
 		// Evaluate indexed predicate part
 		if (!indexedConjuncts.isEmpty()) {
+			long indexStart = System.currentTimeMillis();
 			IndexFilter indexFilter = new IndexFilter(query);
 			Expression indexedExpr = conjunction(indexedConjuncts);
 			indexedExpr.accept(indexFilter);
+			long indexEnd = System.currentTimeMillis();
 			// Create filtered table
 			List<Integer> rows = indexFilter.qualifyingRows.peek();
 //			if (rows.size() < 10) {
@@ -375,8 +378,12 @@ public class Preprocessor {
 					sort = indexFilter.lastIndex.sortedRow.clone();
 					Arrays.parallelSort(sort, rows.get(0), rows.get(1));
 				}
+				long materialStart = System.currentTimeMillis();
 				Materialize.executeRange(table, requiredCols, rows,
 						sort, targetRelName, true);
+				long materialEnd = System.currentTimeMillis();
+				System.out.println("Index Filter: " + (indexEnd - indexStart) + "\tMaterialization: "
+						+ (materialEnd - materialStart));
 			}
 			// Update pre-processing summary
 			for (String colName : requiredCols) {

@@ -1,11 +1,14 @@
 package operators;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 import buffer.BufferManager;
 import catalog.CatalogManager;
 import catalog.info.ColumnInfo;
 import catalog.info.TableInfo;
+import config.ParallelConfig;
 import data.DoubleData;
 import data.IntData;
 import data.LongData;
@@ -180,4 +183,117 @@ public class MapRows {
 		// Update catalog statistics
 		CatalogManager.updateStats(targetTable);
 	}
+
+	public static void parallelExecute(String sourceRel, ExpressionInfo expression,
+							   Map<ColumnRef, ColumnRef> columnMapping, Map<String, ColumnRef> aggMapping,
+							   ColumnRef groupRef, int nrGroups, ColumnRef targetRef) throws Exception {
+		// Do we map to groups?
+		boolean groupBy = groupRef!=null;
+		// Register target column in catalog
+		SQLtype resultType = expression.resultType;
+		JavaType jResultType = TypeUtil.toJavaType(resultType);
+		String targetTable = targetRef.aliasName;
+		String targetCol = targetRef.columnName;
+		TableInfo targetTblInf = CatalogManager.
+				currentDB.nameToTable.get(targetTable);
+		ColumnInfo targetColInf = new ColumnInfo(targetCol,
+				resultType, false, false, false, false);
+		targetTblInf.addColumn(targetColInf);
+		// Prepare generating result data
+		int inCard = CatalogManager.getCardinality(sourceRel);
+		int outCard = groupBy?nrGroups:inCard;
+		IntData groupData = groupBy?
+				(IntData)BufferManager.getData(groupRef):
+				null;
+		List<RowRange> batches = split(inCard);
+		// Create result data and load into buffer
+		switch (jResultType) {
+			case INT:
+			{
+				// Compile mapping expression
+				ExpressionCompiler unaryCompiler = new ExpressionCompiler(
+						expression, columnMapping, null, aggMapping,
+						EvaluatorType.UNARY_INT);
+				expression.finalExpression.accept(unaryCompiler);
+				UnaryIntEval unaryIntEval = unaryCompiler.getUnaryIntEval();
+				// Generate result data and store in buffer
+				IntData intResult = new IntData(outCard);
+				if (groupBy && outCard<0) {
+					intResult.isNull.set(0, outCard-1);
+				}
+				BufferManager.colToData.put(targetRef, intResult);
+				// Iterate over source table and store results
+				batches.parallelStream().forEach(batch -> {
+					int[] rowResult = new int[1];
+					int first = batch.firstTuple;
+					int last = batch.lastTuple;
+					for (int srcRow = first; srcRow <= last; ++srcRow) {
+						// Either map row to row or row to group
+						int targetRow = !groupBy ? srcRow : groupData.data[srcRow];
+						boolean notNull = unaryIntEval.evaluate(srcRow, rowResult);
+						if (!groupBy || notNull) {
+							intResult.isNull.set(targetRow, !notNull);
+							intResult.data[targetRow] = rowResult[0];
+						}
+					}
+				});
+			}
+			break;
+			case DOUBLE:
+			{
+				// Compile mapping expression
+				ExpressionCompiler unaryCompiler = new ExpressionCompiler(
+						expression, columnMapping, null, aggMapping,
+						EvaluatorType.UNARY_DOUBLE);
+				expression.finalExpression.accept(unaryCompiler);
+				UnaryDoubleEval unaryDoubleEval = unaryCompiler.getUnaryDoubleEval();
+				// Generate result data and store in buffer
+				DoubleData doubleResult = new DoubleData(outCard);
+				if (groupBy && outCard<0) {
+					doubleResult.isNull.set(0, outCard-1);
+				}
+				BufferManager.colToData.put(targetRef, doubleResult);
+				// Iterate over source table and store results
+				batches.parallelStream().forEach(batch -> {
+					double[] rowResult = new double[1];
+					int first = batch.firstTuple;
+					int last = batch.lastTuple;
+					for (int srcRow = first; srcRow <= last; ++srcRow) {
+						// Either map row to row or row to group
+						int targetRow = !groupBy ? srcRow : groupData.data[srcRow];
+						boolean notNull = unaryDoubleEval.evaluate(srcRow, rowResult);
+						if (!groupBy || notNull) {
+							doubleResult.isNull.set(targetRow, !notNull);
+							doubleResult.data[targetRow] = rowResult[0];
+						}
+					}
+				});
+			}
+			break;
+		}
+		// Update catalog statistics
+		CatalogManager.updateStats(targetTable);
+	}
+
+	/**
+	 * Splits table with given cardinality into tuple batches
+	 * according to the configuration for joining.parallel processing.
+	 *
+	 * @param cardinality	cardinality of table to split
+	 * @return				list of row ranges (batches)
+	 */
+	public static List<RowRange> split(int cardinality) {
+		List<RowRange> batches = new ArrayList<RowRange>();
+		int batchSize = Math.max(ParallelConfig.PRE_INDEX_SIZE, cardinality / 300);
+		for (int batchCtr=0; batchCtr * batchSize < cardinality;
+			 ++batchCtr) {
+			int startIdx = batchCtr * batchSize;
+			int tentativeEndIdx = startIdx + batchSize - 1;
+			int endIdx = Math.min(cardinality - 1, tentativeEndIdx);
+			RowRange rowRange = new RowRange(startIdx, endIdx);
+			batches.add(rowRange);
+		}
+		return batches;
+	}
+
 }

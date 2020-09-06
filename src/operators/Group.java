@@ -1,5 +1,6 @@
 package operators;
 
+import java.util.Arrays;
 import java.util.Collection;
 
 import data.ColumnData;
@@ -59,10 +60,6 @@ public class Group {
 	}
 	@Override
 	public int hashCode() {
-		int hash = 0;
-		for (long value: rowValues) {
-			hash += Long.hashCode(value);
-		}
-		return hash;
+		return Arrays.hashCode(rowValues);
 	}
 }

@@ -73,8 +73,8 @@ public class PostProcessor {
 				ColumnInfo targetInfo = new ColumnInfo(targetCol, 
 						groupExpr.resultType, false, false, false, false);
 				groupTblInfo.addColumn(targetInfo);
-				MapRows.execute(sourceRel, groupExpr, 
-						context.columnMapping, 
+				MapRows.execute(sourceRel, groupExpr,
+						context.columnMapping,
 						null, null, -1, targetRef);
 				sourceRefs.add(targetRef);
 			}
@@ -84,11 +84,12 @@ public class PostProcessor {
 		ColumnRef targetRef = new ColumnRef(groupTbl, targetCol);
 		// Update query context for following steps
 		context.groupRef = targetRef;
-//		long timer1 = System.currentTimeMillis();
-		context.nrGroups = GroupBy.execute(sourceRefs, targetRef);
-//		context.nrGroups = ParallelGroupBy.sortedExecute(sourceRefs, targetRef);
-//		long timer2 = System.currentTimeMillis();
-//		System.out.println("Group: " + (timer2 - timer1));
+		long timer1 = System.currentTimeMillis();
+//		context.nrGroups = GroupBy.execute(sourceRefs, targetRef);
+//		context.nrGroups = ParallelGroupBy.execute(sourceRefs, targetRef, query);
+		context.nrGroups = ParallelGroupBy.executeByIndex(sourceRefs, targetRef, query);
+		long timer2 = System.currentTimeMillis();
+		System.out.println("Group: " + (timer2 - timer1));
 		// TODO: need to replace references to columns in GROUP BY clause
 	}
 	/**
@@ -100,7 +101,8 @@ public class PostProcessor {
 	 * @param context		query processing context
 	 * @throws Exception
 	 */
-	static void applyIndex(QueryInfo queryInfo, Context context, String targetRel, boolean tempResult, Index index)
+	static void applyIndex(QueryInfo queryInfo, Context context, String targetRel,
+						   boolean tempResult, Index index)
 			throws Exception {
 		// Generate table for holding aggregation input
 		String aggSrcTbl = NamingConfig.AGG_SRC_TBL_NAME;
@@ -115,7 +117,9 @@ public class PostProcessor {
 		// Generate table holding result
 		TableInfo targetInfo = new TableInfo(targetRel, tempResult);
 		CatalogManager.currentDB.addTable(targetInfo);
-
+		PostStats.subGroupby.add(0L);
+		PostStats.subHaving.add(0L);
+		long aggStart = 0;
 		for (ExpressionInfo selInfo : queryInfo.selectExpressions) {
 			String colName = queryInfo.selectToAlias.get(selInfo);
 			String resultName = targetInfo.name;
@@ -176,6 +180,8 @@ public class PostProcessor {
 				System.out.println("AggColumn: " + aggInfo + "\t" + (timer1 - timer0));
 			}
 		}
+		long aggEnd = 0;
+		PostStats.subAggregation.add(aggEnd - aggStart);
 		// Update statistics on result table
 		CatalogManager.updateStats(targetRel);
 
@@ -222,8 +228,11 @@ public class PostProcessor {
 				String sourceCol = NamingConfig.AGG_SRC_COL_PRE + aggInputCtr;
 				sourceRef = new ColumnRef(aggSrcTbl, sourceCol);
 				++aggInputCtr;
-				MapRows.execute(joinRel, aggInput, 
-						context.columnMapping, null, 
+//				MapRows.execute(joinRel, aggInput,
+//						context.columnMapping, null,
+//						null, -1, sourceRef);
+				MapRows.parallelExecute(joinRel, aggInput,
+						context.columnMapping, null,
 						null, -1, sourceRef);
 			}
 			log("Source column: " + sourceRef);
@@ -240,11 +249,15 @@ public class PostProcessor {
 			ColumnRef groupRef = context.groupRef;
 			switch (aggInfo.aggFunction) {
 			case SUM:
-				SumAggregate.execute(sourceRef, nrGroups, 
+//				SumAggregate.execute(sourceRef, nrGroups,
+//						groupRef, targetRef);
+				SumAggregate.parallelExecute(sourceRef, nrGroups,
 						groupRef, targetRef);
 				break;
 			case MIN:
-				MinMaxAggregate.execute(sourceRef, nrGroups, 
+//				MinMaxAggregate.execute(sourceRef, nrGroups,
+//						groupRef, false, targetRef);
+				MinMaxAggregate.parallelExecute(sourceRef, nrGroups,
 						groupRef, false, targetRef);
 				break;
 			case MAX:
@@ -252,7 +265,9 @@ public class PostProcessor {
 						groupRef, true, targetRef);
 				break;
 			case AVG:
-				AvgAggregate.execute(sourceRef, nrGroups,
+//				AvgAggregate.execute(sourceRef, nrGroups,
+//						groupRef, targetRef);
+				AvgAggregate.parallelExecute(sourceRef, nrGroups,
 						groupRef, targetRef);
 				break;
 			default:
@@ -330,12 +345,18 @@ public class PostProcessor {
 		String joinRel = NamingConfig.JOINED_NAME;
 		// Name of result relation
 		String resultRel = result.name;
+		PostStats.subGroupby.add(0L);
+		PostStats.subHaving.add(0L);
+		PostStats.subOrder.add(0L);
+		long aggStart = System.currentTimeMillis();
 		// Iterate over expressions in SELECT clause
 		for (ExpressionInfo expr : query.selectExpressions) {
 			// Add corresponding result column
 			String colName = query.selectToAlias.get(expr);
 			addPerRowCol(query, context, joinRel, expr, result, colName);
 		}
+		long aggEnd = System.currentTimeMillis();
+		PostStats.subAggregation.add(aggEnd - aggStart);
 		// Update statistics on result
 		CatalogManager.updateStats(resultRel);
 		// Does query have an ORDER BY clause?
@@ -360,6 +381,8 @@ public class PostProcessor {
 			// Sort result table
 			OrderBy.execute(orderRefs, query.orderByAsc, resultRel);
 		}
+		long orderEnd = System.currentTimeMillis();
+		PostStats.subAggregation.add(orderEnd - aggEnd);
 	}
 	/**
 	 * Treat queries that have aggregates but no group-by clauses.
@@ -377,6 +400,7 @@ public class PostProcessor {
 		String resultTbl = resultRelName;
 		TableInfo result = new TableInfo(resultTbl, tempResult);
 		CatalogManager.currentDB.nameToTable.put(resultTbl, result);
+		long aggStart = System.currentTimeMillis();
 		// Calculate aggregates
 		aggregate(query, context);
 		// Get name of result relation
@@ -400,10 +424,15 @@ public class PostProcessor {
 			} else {
 				// Need to generate select item data
 				String srcRel = NamingConfig.AGG_TBL_NAME;
-				MapRows.execute(srcRel, expr, context.columnMapping, 
+				MapRows.execute(srcRel, expr, context.columnMapping,
 						context.aggToData, null, -1, resultRef);
 			}
 		}
+		long aggEnd = System.currentTimeMillis();
+		PostStats.subGroupby.add(0L);
+		PostStats.subHaving.add(0L);
+		PostStats.subOrder.add(0L);
+		PostStats.subAggregation.add(aggEnd - aggStart);
 	}
 	/**
 	 * Add a column that has one row for each group. Either
@@ -440,14 +469,14 @@ public class PostProcessor {
 			// Need to generate select item data -
 			// selector must be based on group-by columns.
 			String srcRel = NamingConfig.JOINED_NAME;
-			MapRows.execute(srcRel, expr, context.columnMapping, 
+			MapRows.execute(srcRel, expr, context.columnMapping,
 					context.aggToData, groupRef, nrGroups, resultRef);
 		} else {
 			// Need to generate data - selector is
 			// complex expression based on previously
 			// calculated per-group aggregates.
 			String srcRel = NamingConfig.AGG_TBL_NAME;
-			MapRows.execute(srcRel, expr, context.columnMapping, 
+			MapRows.execute(srcRel, expr, context.columnMapping,
 					context.aggToData, null, -1, resultRef);
 		}
 	}
@@ -567,10 +596,15 @@ public class PostProcessor {
 			applyIndex(query, context, resultRelName, tempResult, index);
 		}
 		else {
+			long groupStart = System.currentTimeMillis();
 			// Execute group by
 			groupBy(query, context);
+			long groupEnd = System.currentTimeMillis();
+			PostStats.subGroupby.add(groupEnd - groupStart);
 			// Calculate aggregates
 			aggregate(query, context);
+			long aggEnd = System.currentTimeMillis();
+			PostStats.subAggregation.add(aggEnd - groupEnd);
 			// Different treatment for queries with/without HAVING
 			if (hasHaving) {
 				// Having clause specified - insertinto intermediate result table
@@ -607,7 +641,10 @@ public class PostProcessor {
 							NamingConfig.ORDER_NAME, true);
 				}
 			}
+			long havingEnd = System.currentTimeMillis();
+			PostStats.subHaving.add(havingEnd - aggEnd);
 		}
+		long orderStart = System.currentTimeMillis();
 		// Sort result table if applicable
 		if (hasOrder) {
 			String orderTbl = NamingConfig.ORDER_NAME;
@@ -618,6 +655,8 @@ public class PostProcessor {
 			}
 			OrderBy.execute(orderRefs, query.orderByAsc, resultRelName);			
 		}
+		long orderEnd = System.currentTimeMillis();
+		PostStats.subOrder.add(orderEnd - orderStart);
 	}
 	/**
 	 * Generate debugging output if activated.
@@ -681,6 +720,5 @@ public class PostProcessor {
 		CatalogManager.updateStats(resultRel);
 		// Measure time and store as statistics
 		PostStats.postMillis = System.currentTimeMillis() - startMillis;
-		PostStats.subPostMillis.add(PostStats.postMillis);
 	}
 }

@@ -102,7 +102,8 @@ public class BenchUtil {
 				+ "Iterations\tLookups\tNrIndexEntries\tnrUniqueLookups\t"
 				+ "NrUctNodes\tNrPlans\tJoinCard\tNrSamples\tAvgReward\t"
 				+ "MaxReward\tTotalWork\tResultCard\tSubFilter\tSubIndex\t"
-				+ "SubPre\tSubJoin\tSubMaterial\tSubPost\tAllSamples\tAllTuples\tAllCases\t"
+				+ "SubPre\tSubJoin\tSubMaterial\tSubGroup\tSubAgg\tSubHaving\tSubOrder\t"
+				+ "AllSamples\tAllTuples\tAllCases\t"
 				+ "DataSize\tUctSize\tStateSize\tJoinSize");
 	}
 	/**
@@ -132,14 +133,14 @@ public class BenchUtil {
 		benchOut.print(JoinStats.totalWork + "\t");
 		benchOut.print(JoinStats.skinnerJoinCards + "\t");
 		benchOut.print(Arrays.toString(PreStats.subFilterMillis.toArray()) + "\t");
-		long[] subIndex = PreStats.subFilterMillis.size() == 0 ? new long[]{} :
-				IntStream.range(0, PreStats.subFilterMillis.size()).mapToLong(idx ->
-				PreStats.subPreMillis.get(idx) - PreStats.subFilterMillis.get(idx)).toArray();
-		benchOut.print(Arrays.toString(subIndex) + "\t");
+		benchOut.print(Arrays.toString(PreStats.subIndexMillis.toArray()) + "\t");
 		benchOut.print(Arrays.toString(PreStats.subPreMillis.toArray()) + "\t");
 		benchOut.print(Arrays.toString(JoinStats.subExeTime.toArray()) + "\t");
 		benchOut.print(Arrays.toString(JoinStats.subMateriazed.toArray()) + "\t");
-		benchOut.print(Arrays.toString(PostStats.subPostMillis.toArray()) + "\t");
+		benchOut.print(Arrays.toString(PostStats.subGroupby.toArray()) + "\t");
+		benchOut.print(Arrays.toString(PostStats.subAggregation.toArray()) + "\t");
+		benchOut.print(Arrays.toString(PostStats.subHaving.toArray()) + "\t");
+		benchOut.print(Arrays.toString(PostStats.subOrder.toArray()) + "\t");
 		benchOut.print(Arrays.toString(JoinStats.subAllSamples.toArray()) + "\t");
 		benchOut.print(Arrays.toString(JoinStats.subAllTuples.toArray()) + "\t");
 		benchOut.print(Arrays.toString(JoinStats.subAllExeTime.toArray()) + "\t");

@@ -193,7 +193,7 @@ public class ParallelPostProcessor {
             context.nrGroups = index.groupIds.length;
         }
         else {
-            context.groupsToIndex = ParallelGroupBy.execute(sourceRefs, targetRef, maxSize);
+//            context.groupsToIndex = ParallelGroupBy.execute(sourceRefs, targetRef, maxSize);
             context.nrGroups = context.groupsToIndex.size();
         }
         // TODO: need to replace references to columns in GROUP BY clause
@@ -713,6 +713,5 @@ public class ParallelPostProcessor {
         CatalogManager.updateStats(resultRel);
         // Measure time and store as statistics
         PostStats.postMillis = System.currentTimeMillis() - startMillis;
-        PostStats.subPostMillis.add(PostStats.postMillis);
     }
 }

@@ -30,6 +30,10 @@ public class PreStats {
 	 */
 	public static List<Long> subPreMillis;
 	/**
+	 * A list of index creation time in milliseconds for sub-queries.
+	 */
+	public static List<Long> subIndexMillis;
+	/**
 	 * A list of filtering time in milliseconds for sub-queries.
 	 */
     public static List<Long> subFilterMillis;

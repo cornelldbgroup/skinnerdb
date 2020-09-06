@@ -17,7 +17,19 @@ public class PostStats {
 	 */
 	public static long postMillis = 0;
 	/**
-	 * A list of duration of post-processing phase in milliseconds for sub queries.
+	 * A list of duration of group by phase in milliseconds for sub queries.
 	 */
-	public static List<Long> subPostMillis;
+	public static List<Long> subGroupby;
+	/**
+	 * A list of duration of aggregation phase in milliseconds for sub queries.
+	 */
+	public static List<Long> subAggregation;
+	/**
+	 * A list of duration of having phase in milliseconds for sub queries.
+	 */
+	public static List<Long> subHaving;
+	/**
+	 * A list of duration of order phase in milliseconds for sub queries.
+	 */
+	public static List<Long> subOrder;
 }

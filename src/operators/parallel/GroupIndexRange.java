@@ -29,25 +29,9 @@ public class GroupIndexRange {
      */
     public IntIntMap prefixMap;
     /**
-     * A list of groups;
+     * Array of group objects.
      */
     public Group[] groups;
-    /**
-     * First tuple index in range.
-     */
-    public int firstValue;
-    /**
-     * Last tuple index in range.
-     */
-    public int lastValue;
-    /**
-     * Last tuple index in range.
-     */
-    public int lastID;
-    /**
-     * Add more id.
-     */
-    public int addID;
 
     /**
      * Initialize range for first and
@@ -60,13 +44,13 @@ public class GroupIndexRange {
         this.firstTuple = firstTuple;
         this.lastTuple = lastTuple;
         this.bid = bid;
-        valuesMap = new HashMap<>(lastTuple - firstTuple);
-        groups = new Group[lastTuple - firstTuple + 1];
+        this.valuesMap = new HashMap<>(lastTuple - firstTuple + 1);
+        this.groups = new Group[lastTuple - firstTuple + 1];
     }
 
-    public void add(Group datum, int index) {
-        int nrValue = valuesMap.getOrDefault(datum, 0);
-        valuesMap.put(datum, nrValue + 1);
-        groups[index] = datum;
+    public void add(Group group, int index) {
+        int size = valuesMap.size();
+        valuesMap.putIfAbsent(group, size);
+        groups[index] = group;
     }
 }

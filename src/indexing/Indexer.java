@@ -52,7 +52,7 @@ public class Indexer {
 	 *
 	 * @param colRef	create index on this column
 	 */
-	public static void partitionIndex(ColumnRef colRef, ColumnRef queryRef, PartitionIndex oldIndex,
+	public static Index partitionIndex(ColumnRef colRef, ColumnRef queryRef, PartitionIndex oldIndex,
 									  boolean isPrimary, boolean isSeq, boolean sorted) throws Exception {
 		// Check if index already exists
 		if (!BufferManager.colToIndex.containsKey(colRef)) {
@@ -68,6 +68,7 @@ public class Indexer {
 					index.sortRows();
 				}
 				BufferManager.colToIndex.put(colRef, index);
+				return index;
 			} else if (data instanceof DoubleData) {
 				DoubleData doubleData = (DoubleData)data;
 				DoublePartitionIndex doubleIndex = oldIndex == null ? null : (DoublePartitionIndex) oldIndex;
@@ -79,8 +80,10 @@ public class Indexer {
 					index.sortRows();
 				}
 				BufferManager.colToIndex.put(colRef, index);
+				return index;
 			}
 		}
+		return null;
 	}
 
 	/**

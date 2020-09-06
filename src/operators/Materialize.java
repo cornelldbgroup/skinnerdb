@@ -4,6 +4,7 @@ import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import buffer.BufferManager;
@@ -53,7 +54,7 @@ public class Materialize {
 			List<Integer> rowList, BitSet rowBitSet, String targetRelName,
 			boolean tempResult) throws Exception {
 		// Generate references to source columns
-		List<ColumnRef> sourceColRefs = new ArrayList<ColumnRef>();
+		List<ColumnRef> sourceColRefs = new ArrayList<>();
 		for (String columnName : columnNames) {
 			sourceColRefs.add(new ColumnRef(sourceRelName, columnName));
 		}
@@ -62,7 +63,7 @@ public class Materialize {
 		CatalogManager.currentDB.addTable(resultTable);
 		for (ColumnRef sourceColRef : sourceColRefs) {
 			// Add result column to result table, using type of source column
-			ColumnInfo sourceCol = CatalogManager.getColumn(sourceColRef); 
+			ColumnInfo sourceCol = CatalogManager.getColumn(sourceColRef);
 			ColumnInfo resultCol = new ColumnInfo(sourceColRef.columnName, 
 					sourceCol.type, sourceCol.isPrimary, 
 					sourceCol.isUnique, sourceCol.isNotNull, 
@@ -75,19 +76,59 @@ public class Materialize {
 				BufferManager.loadColumn(sourceColRef);
 			}
 		}
-
-
+		int cardinality = rowList.size();
+		List<RowRange> batches = split(cardinality);
 		// Generate column data
 		Stream<ColumnRef> sourceColStream = GeneralConfig.isParallel?
 				sourceColRefs.parallelStream():sourceColRefs.stream();
 		sourceColStream.forEach(sourceColRef -> {
 			// Copy relevant rows into result column
 			ColumnData srcData = BufferManager.colToData.get(sourceColRef);
-			ColumnData resultData = rowList==null?
-					srcData.copyRows(rowBitSet):srcData.copyRows(rowList);
 			String columnName = sourceColRef.columnName;
 			ColumnRef resultColRef = new ColumnRef(targetRelName, columnName);
-			BufferManager.colToData.put(resultColRef, resultData);
+			ColumnInfo sourceCol = CatalogManager.getColumn(sourceColRef);
+
+			JavaType jType = TypeUtil.toJavaType(sourceCol.type);
+			switch (jType) {
+				case INT: {
+					IntData intTargetData = new IntData(cardinality);
+					IntData intSourceData = (IntData) srcData;
+					BufferManager.colToData.put(resultColRef, intTargetData);
+					int[] target = intTargetData.data;
+					int[] source = intSourceData.data;
+					batches.parallelStream().forEach(batch -> {
+						int batchFirst = batch.firstTuple;
+						int batchLast = batch.lastTuple;
+						for (int rowCtr = batchFirst; rowCtr <= batchLast; rowCtr++) {
+							int row = rowList.get(rowCtr);
+							// Treat special case: insertion of null values
+							if (!intSourceData.isNull.get(row)) {
+								target[rowCtr] = source[row];
+							}
+						}
+					});
+					break;
+				}
+				case DOUBLE: {
+					DoubleData doubleTargetData = new DoubleData(cardinality);
+					DoubleData doubleSourceData = (DoubleData) srcData;
+					BufferManager.colToData.put(resultColRef, doubleTargetData);
+					double[] target = doubleTargetData.data;
+					double[] source = doubleSourceData.data;
+					batches.parallelStream().forEach(batch -> {
+						int batchFirst = batch.firstTuple;
+						int batchLast = batch.lastTuple;
+						for (int rowCtr = batchFirst; rowCtr <= batchLast; rowCtr++) {
+							int row = rowList.get(rowCtr);
+							// Treat special case: insertion of null values
+							if (!doubleSourceData.isNull.get(row)) {
+								target[rowCtr] = source[row];
+							}
+						}
+					});
+					break;
+				}
+			}
 		});
 
 		// Update statistics in catalog
@@ -114,36 +155,17 @@ public class Materialize {
 		// Update catalog, inserting materialized table
 		TableInfo resultTable = new TableInfo(targetRelName, tempResult);
 		CatalogManager.currentDB.addTable(resultTable);
+		// Split batches
+		List<RowRange> batches = split(cardinality);
 
-		List<IntData> intSource = new ArrayList<>();
-		List<IntData> intTarget = new ArrayList<>();
-		List<DoubleData> doubleSource = new ArrayList<>();
-		List<DoubleData> doubleTarget = new ArrayList<>();
 		for (ColumnRef sourceColRef : sourceColRefs) {
 			// Add result column to result table, using type of source column
 			ColumnInfo sourceCol = CatalogManager.getColumn(sourceColRef);
-			ColumnData srcData = BufferManager.colToData.get(sourceColRef);
 			ColumnInfo resultCol = new ColumnInfo(sourceColRef.columnName,
 					sourceCol.type, sourceCol.isPrimary,
 					sourceCol.isUnique, sourceCol.isNotNull,
 					sourceCol.isForeign);
 			resultTable.addColumn(resultCol);
-			ColumnRef resultColRef = new ColumnRef(targetRelName, sourceColRef.columnName);
-			JavaType jType = TypeUtil.toJavaType(sourceCol.type);
-			switch (jType) {
-				case INT:
-					IntData intData = new IntData(cardinality);
-					intSource.add((IntData) srcData);
-					intTarget.add(intData);
-					BufferManager.colToData.put(resultColRef, intData);
-					break;
-				case DOUBLE:
-					DoubleData doubleData = new DoubleData(cardinality);
-					doubleSource.add((DoubleData) srcData);
-					doubleTarget.add(doubleData);
-					BufferManager.colToData.put(resultColRef, doubleData);
-					break;
-			}
 		}
 		// Load source data if necessary
 		if (!GeneralConfig.inMemory) {
@@ -151,83 +173,55 @@ public class Materialize {
 				BufferManager.loadColumn(sourceColRef);
 			}
 		}
-		ExecutorService executorService = ThreadPool.preprocessingService;
-		int nrBatches = GeneralConfig.isParallel ? ParallelConfig.PRE_THREADS : 1;
-		List<RowRange> batches = OperatorUtils.split(cardinality, nrBatches);
-		List<Future<Integer>> futures = new ArrayList<>();
-		for (RowRange batch: batches) {
-			int batchFirst = batch.firstTuple + first;
-			int batchLast = batch.lastTuple + first;
-			futures.add(executorService.submit(() -> {
-				for (int i = 0; i < intSource.size(); i++) {
-					IntData intDataSource = intSource.get(i);
-					IntData intDataTarget = intTarget.get(i);
-					int[] source = intDataSource.data;
-					int[] target = intDataTarget.data;
-					for (int rid = batchFirst; rid <= batchLast; rid++) {
-						int offset = rid - first;
-						int row = sortedRow[rid];
-						// Treat special case: insertion of null values
-						if (!intDataSource.isNull.get(row)) {
-							target[offset] = source[row];
-						}
-						else {
-							target[offset] = Integer.MIN_VALUE;
-						}
-					}
-				}
-				for (int i = 0; i < doubleSource.size(); i++) {
-					DoubleData doubleDataSource = doubleSource.get(i);
-					DoubleData doubleDataTarget = doubleTarget.get(i);
-					double[] source = doubleDataSource.data;
-					double[] target = doubleDataTarget.data;
-					for (int rid = batchFirst; rid <= batchLast; rid++) {
-						int offset = rid - first;
-						int row = sortedRow[rid];
-						// Treat special case: insertion of null values
-						if (!doubleDataSource.isNull.get(row)) {
-							target[offset] = source[row];
-						}
-						else {
-							target[offset] = Integer.MIN_VALUE;
-						}
-					}
-				}
-				return 1;
-			}));
-		}
 
-
-		for (Future<Integer> futureResult : futures) {
-			try {
-				int result = futureResult.get();
-			} catch (InterruptedException | ExecutionException e) {
-				e.printStackTrace();
+		sourceColRefs.parallelStream().forEach(sourceColRef -> {
+			ColumnInfo sourceCol = CatalogManager.getColumn(sourceColRef);
+			ColumnData srcData = BufferManager.colToData.get(sourceColRef);
+			ColumnRef resultColRef = new ColumnRef(targetRelName, sourceColRef.columnName);
+			JavaType jType = TypeUtil.toJavaType(sourceCol.type);
+			switch (jType) {
+				case INT: {
+					IntData intTargetData = new IntData(cardinality);
+					IntData intSourceData = (IntData) srcData;
+					BufferManager.colToData.put(resultColRef, intTargetData);
+					int[] target = intTargetData.data;
+					int[] source = intSourceData.data;
+					batches.parallelStream().forEach(batch -> {
+						int batchFirst = batch.firstTuple + first;
+						int batchLast = batch.lastTuple + first;
+						for (int rowCtr = batchFirst; rowCtr <= batchLast; rowCtr++) {
+							int offset = rowCtr - first;
+							int row = sortedRow[rowCtr];
+							// Treat special case: insertion of null values
+							if (!intSourceData.isNull.get(row)) {
+								target[offset] = source[row];
+							}
+						}
+					});
+					break;
+				}
+				case DOUBLE: {
+					DoubleData doubleTargetData = new DoubleData(cardinality);
+					DoubleData doubleSourceData = (DoubleData) srcData;
+					BufferManager.colToData.put(resultColRef, doubleTargetData);
+					double[] target = doubleTargetData.data;
+					double[] source = doubleSourceData.data;
+					batches.parallelStream().forEach(batch -> {
+						int batchFirst = batch.firstTuple + first;
+						int batchLast = batch.lastTuple + first;
+						for (int rowCtr = batchFirst; rowCtr <= batchLast; rowCtr++) {
+							int offset = rowCtr - first;
+							int row = sortedRow[rowCtr];
+							// Treat special case: insertion of null values
+							if (!doubleSourceData.isNull.get(row)) {
+								target[offset] = source[row];
+							}
+						}
+					});
+					break;
+				}
 			}
-		}
-
-//		for (ColumnRef sourceColRef : sourceColRefs) {
-//			// Add result column to result table, using type of source column
-//			ColumnInfo sourceCol = CatalogManager.getColumn(sourceColRef);
-//			ColumnInfo resultCol = new ColumnInfo(sourceColRef.columnName,
-//					sourceCol.type, sourceCol.isPrimary,
-//					sourceCol.isUnique, sourceCol.isNotNull,
-//					sourceCol.isForeign);
-//			resultTable.addColumn(resultCol);
-//		}
-//
-//		// Generate column data
-//		sourceColRefs.parallelStream().forEach(sourceColRef -> {
-//			// Copy relevant rows into result column
-//			ColumnData srcData = BufferManager.colToData.get(sourceColRef);
-//			long timer0 = System.currentTimeMillis();
-//			ColumnData resultData = srcData.copyRangeRows(first, last, index);
-//			long timer1 = System.currentTimeMillis();
-//			System.out.println("Column " + (timer1 - timer0) + " " + (last - first));
-//			String columnName = sourceColRef.columnName;
-//			ColumnRef resultColRef = new ColumnRef(targetRelName, columnName);
-//			BufferManager.colToData.put(resultColRef, resultData);
-//		});
+		});
 		// Update statistics in catalog
 		CatalogManager.updateStats(targetRelName);
 		// Unload source data if necessary
@@ -578,5 +572,25 @@ public class Materialize {
 		// Update statistics in catalog
 		CatalogManager.updateStats(targetRelName);
 		RelationPrinter.print(targetRelName);
+	}
+
+	/**
+	 * Splits table with given cardinality into tuple batches
+	 * according to the configuration for joining.parallel processing.
+	 *
+	 * @param cardinality	cardinality of table to split
+	 * @return				list of row ranges (batches)
+	 */
+	static List<RowRange> split(int cardinality) {
+		List<RowRange> batches = new ArrayList<RowRange>();
+		for (int batchCtr=0; batchCtr*ParallelConfig.PRE_BATCH_SIZE<cardinality;
+			 ++batchCtr) {
+			int startIdx = batchCtr * ParallelConfig.PRE_BATCH_SIZE;
+			int tentativeEndIdx = startIdx + ParallelConfig.PRE_BATCH_SIZE-1;
+			int endIdx = Math.min(cardinality - 1, tentativeEndIdx);
+			RowRange rowRange = new RowRange(startIdx, endIdx);
+			batches.add(rowRange);
+		}
+		return batches;
 	}
 }

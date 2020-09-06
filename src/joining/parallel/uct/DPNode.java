@@ -563,7 +563,7 @@ public class DPNode {
 //            reward = 0.01;
             if (ParallelConfig.PARALLEL_SPEC == 0 || ParallelConfig.PARALLEL_SPEC == 11
                     || ParallelConfig.PARALLEL_SPEC == 12 || ParallelConfig.PARALLEL_SPEC == 13) {
-                if (treeLevel <= joinOp.deepIndex) {
+                if (treeLevel <= joinOp.deepIndex && !joinOp.lastState.isFinished()) {
                     nodeStatistics[tid].updateStatistics(reward, action);
                 }
             }
