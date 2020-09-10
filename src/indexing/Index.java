@@ -26,10 +26,14 @@ public abstract class Index {
 	 */
 	public volatile int[] sortedRow;
 	/**
+	 * After indexing: map group id to position.
+	 */
+	public volatile int[] groupIds;
+	/**
 	 * After indexing: contains group id that the element
 	 * belongs to.
 	 */
-	public volatile int[] groupIds;
+	public volatile int[] groupPerRow;
 	/**
 	 * Whether it is unique key.
 	 */

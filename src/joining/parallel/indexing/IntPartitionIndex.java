@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicIntegerArray;
 import java.util.stream.IntStream;
 
 public class IntPartitionIndex extends PartitionIndex {
@@ -98,12 +99,20 @@ public class IntPartitionIndex extends PartitionIndex {
                 keyToPositions = HashIntIntMaps.newMutableMap(nrKeys);
             }
             sequentialIndex(colRef, keyToNr);
-            groupIds = new int[keyToPositions.size()];
-            int id = 0;
-            for (Integer pos: keyToPositions.values()) {
-                groupIds[id] = pos;
-                id++;
+            // TODO: detect grouped index
+            if (positions != null) {
+                groupIds = keyToPositions.values().toIntArray();
+                groupPerRow = new int[intData.cardinality];
+                IntStream.range(0, groupIds.length).parallel().forEach(gid -> {
+                    int pos = groupIds[gid];
+                    int values = positions[pos];
+                    for (int posCtr = pos + 1; posCtr <= pos + values; posCtr++) {
+                        int row = positions[posCtr];
+                        groupPerRow[row] = gid;
+                    }
+                });
             }
+            System.out.println(colRef + " " + sorted);
         }
         else if (policy == IndexPolicy.Sparse) {
             keyToPositions = origin.keyToPositions;
@@ -215,8 +224,10 @@ public class IntPartitionIndex extends PartitionIndex {
             int nrBatches = batches.size();
             IntStream.range(0, nrBatches).parallel().forEach(bid -> {
                 IntIndexRange batch = batches.get(bid);
+                int first = batch.firstTuple;
+                int last = batch.lastTuple;
                 // Evaluate predicate for each table row
-                for (int rowCtr = batch.firstTuple; rowCtr <= batch.lastTuple; ++rowCtr) {
+                for (int rowCtr = first; rowCtr <= last; ++rowCtr) {
                     int value = data[rowCtr];
                     if (!intData.isNull.get(rowCtr) && value != Integer.MIN_VALUE) {
                         int firstPos = keyToPositions.getOrDefault(value, -1);
@@ -233,67 +244,92 @@ public class IntPartitionIndex extends PartitionIndex {
         else {
             List<IntIndexRange> batches = this.split(false);
             int nrBatches = batches.size();
-            batches.parallelStream().forEach(batch -> {
-                // Evaluate predicate for each table row
-                for (int rowCtr = batch.firstTuple; rowCtr <= batch.lastTuple; ++rowCtr) {
-                    int value = data[rowCtr];
-                    if (!intData.isNull.get(rowCtr) && value != Integer.MIN_VALUE) {
-                        batch.add(value);
-                    }
-                }
-            });
-
-            // joining.parallel fill prefix and indices value into positions array.
-//            long t2 = System.currentTimeMillis();
+            // Atomic Implementation
+            AtomicIntegerArray integerArray = new AtomicIntegerArray(index.positions.length);
             IntStream.range(0, nrBatches).parallel().forEach(bid -> {
                 IntIndexRange batch = batches.get(bid);
-                batch.prefixMap = HashIntIntMaps.newMutableMap(batch.valuesMap.size());
-                IntIntCursor batchCursor = batch.valuesMap.cursor();
-                while (batchCursor.moveNext()) {
-                    int key = batchCursor.key();
-                    int prefix = 1;
-                    int localNr = batchCursor.value();
-                    int startPos = keyToPositions.getOrDefault(key, -1);
-//                    if (startPos == -1) {
-//                        System.out.println("wrong key: " + key);
-//                    }
-                    for (int i = 0; i < bid; i++) {
-                        prefix += batches.get(i).valuesMap.getOrDefault(key, 0);
-                    }
-                    int nrValue = positions[startPos];
-                    if (nrValue == 0) {
-                        int nr = prefix - 1 + localNr;
-                        for (int i = bid + 1; i < nrBatches; i++) {
-                            nr += batches.get(i).valuesMap.getOrDefault(key, 0);
-                        }
-                        positions[startPos] = nr;
-                        nrValue = nr;
-                    }
-                    if (nrValue > 1) {
-                        batch.prefixMap.put(key, prefix + startPos);
-                    }
-                }
-                // Evaluate predicate for each table row
-                for (int rowCtr = batch.firstTuple; rowCtr <= batch.lastTuple; ++rowCtr) {
+                int first = batch.firstTuple;
+                int last = batch.lastTuple;
+                for (int rowCtr = first; rowCtr <= last; ++rowCtr) {
                     int value = data[rowCtr];
                     if (!intData.isNull.get(rowCtr) && value != Integer.MIN_VALUE) {
                         int firstPos = keyToPositions.getOrDefault(value, -1);
-                        int nr = positions[firstPos];
-                        if (nr == 1) {
-                            positions[firstPos + 1] = rowCtr;
-                            scopes[rowCtr] = 0;
-                        }
-                        else {
-                            int pos = batch.prefixMap.computeIfPresent(value, (k, v) -> v + 1) - 1;
-                            positions[pos] = rowCtr;
-                            int startThread = (pos - firstPos - 1) % nrThreads;
-                            scopes[rowCtr] = (byte) startThread;
-                        }
+                        int nr = integerArray.incrementAndGet(firstPos);
+                        int pos = firstPos + nr;
+                        positions[pos] = rowCtr;
                     }
                 }
             });
-//            long t3 = System.currentTimeMillis();
-//            System.out.println(queryRef + " " + (t2 - t1) + " " + (t3 - t2));
+            keyToPositions.values().parallelStream().forEach(pos -> {
+                int nr = integerArray.get(pos);
+                positions[pos] = nr;
+                Arrays.parallelSort(positions, pos + 1, pos + nr + 1);
+                IntStream.range(pos+1, pos+1+nr).parallel().forEach(ctr -> {
+                    scopes[positions[ctr]] = (byte) ((ctr - pos - 1) % nrThreads);
+                });
+
+            });
+//            batches.parallelStream().forEach(batch -> {
+//                int first = batch.firstTuple;
+//                int last = batch.lastTuple;
+//                // Evaluate predicate for each table row
+//                for (int rowCtr = first; rowCtr <= last; ++rowCtr) {
+//                    int value = data[rowCtr];
+//                    if (!intData.isNull.get(rowCtr) && value != Integer.MIN_VALUE) {
+//                        batch.add(value);
+//                    }
+//                }
+//            });
+//
+//            // joining.parallel fill prefix and indices value into positions array.
+////            long t2 = System.currentTimeMillis();
+//            IntStream.range(0, nrBatches).parallel().forEach(bid -> {
+//                IntIndexRange batch = batches.get(bid);
+//                batch.prefixMap = HashIntIntMaps.newMutableMap(batch.valuesMap.size());
+//                IntIntCursor batchCursor = batch.valuesMap.cursor();
+//                while (batchCursor.moveNext()) {
+//                    int key = batchCursor.key();
+//                    int prefix = 1;
+//                    int localNr = batchCursor.value();
+//                    int startPos = keyToPositions.getOrDefault(key, -1);
+////                    if (startPos == -1) {
+////                        System.out.println("wrong key: " + key);
+////                    }
+//                    for (int i = 0; i < bid; i++) {
+//                        prefix += batches.get(i).valuesMap.getOrDefault(key, 0);
+//                    }
+//                    int nrValue = positions[startPos];
+//                    if (nrValue == 0) {
+//                        int nr = prefix - 1 + localNr;
+//                        for (int i = bid + 1; i < nrBatches; i++) {
+//                            nr += batches.get(i).valuesMap.getOrDefault(key, 0);
+//                        }
+//                        positions[startPos] = nr;
+//                        nrValue = nr;
+//                    }
+//                    if (nrValue > 1) {
+//                        batch.prefixMap.put(key, prefix + startPos);
+//                    }
+//                }
+//                // Evaluate predicate for each table row
+//                for (int rowCtr = batch.firstTuple; rowCtr <= batch.lastTuple; ++rowCtr) {
+//                    int value = data[rowCtr];
+//                    if (!intData.isNull.get(rowCtr) && value != Integer.MIN_VALUE) {
+//                        int firstPos = keyToPositions.getOrDefault(value, -1);
+//                        int nr = positions[firstPos];
+//                        if (nr == 1) {
+//                            positions[firstPos + 1] = rowCtr;
+//                            scopes[rowCtr] = 0;
+//                        }
+//                        else {
+//                            int pos = batch.prefixMap.computeIfPresent(value, (k, v) -> v + 1) - 1;
+//                            positions[pos] = rowCtr;
+//                            int startThread = (pos - firstPos - 1) % nrThreads;
+//                            scopes[rowCtr] = (byte) startThread;
+//                        }
+//                    }
+//                }
+//            });
         }
     }
 

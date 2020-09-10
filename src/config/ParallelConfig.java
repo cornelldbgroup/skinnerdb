@@ -16,7 +16,7 @@ public class ParallelConfig {
 	/**
 	 * Maximal number of tuples per batch during index generation.
 	 */
-	public final static int PRE_INDEX_SIZE = 100000;
+	public final static int PRE_INDEX_SIZE = 10000;
 	/**
 	 * Maximal number of tuples if joining.parallel method is applied.
 	 */

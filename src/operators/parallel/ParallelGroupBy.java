@@ -29,6 +29,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicIntegerArray;
 import java.util.function.Function;
 import java.util.stream.Collector;
 import java.util.stream.Collectors;
@@ -270,6 +271,127 @@ public class ParallelGroupBy {
         CatalogManager.updateStats(targetTbl);
         // Retrieve data for
         return nrGroups;
+    }
+
+    public static long groupToLongBits(List<Index> sourceIndexes, int row) {
+        long groupBits = 0;
+        int card = 1;
+        for (Index index : sourceIndexes) {
+            groupBits += index.groupPerRow[row] * card;
+            card *= index.groupIds.length;
+        }
+        return groupBits;
+    }
+
+    public static int executeBySimpleIndex(Collection<ColumnRef> sourceRefs,
+                                     ColumnRef targetRef, QueryInfo query) throws Exception {
+        // Register result column
+        String targetTbl = targetRef.aliasName;
+        String targetCol = targetRef.columnName;
+        ColumnInfo targetInfo = new ColumnInfo(targetCol,
+                SQLtype.INT, false, false, false, false);
+        CatalogManager.currentDB.nameToTable.get(targetTbl).addColumn(targetInfo);
+        // Generate result column and load it into buffer
+        String firstSourceTbl = sourceRefs.iterator().next().aliasName;
+        int cardinality = CatalogManager.getCardinality(firstSourceTbl);
+        IntData groupData = new IntData(cardinality);
+        BufferManager.colToData.put(targetRef, groupData);
+        // Get data of source columns
+        List<ColumnData> sourceCols = new ArrayList<>();
+        List<Index> sourceIndexes = new ArrayList<>();
+        Iterator<ExpressionInfo> groupsRef = query.groupByExpressions.iterator();
+        for (ColumnRef srcRef : sourceRefs) {
+            sourceCols.add(BufferManager.getData(srcRef));
+            sourceIndexes.add(BufferManager.colToIndex.getOrDefault(
+                    groupsRef.next().columnsMentioned.iterator().next(), null));
+        }
+        int nrGroups = -1;
+        int nrGroupedColumns = query.groupByExpressions.size();
+        if (nrGroupedColumns == 1) {
+            List<GroupIndexRange> batches = split(cardinality);
+            Index index = sourceIndexes.iterator().next();
+            int[] groupsArray = index.groupPerRow;
+            AtomicIntegerArray groups = new AtomicIntegerArray(cardinality);
+            AtomicInteger nextID = new AtomicInteger(0);
+            batches.parallelStream().forEach(batch -> {
+                int first = batch.firstTuple;
+                int last = batch.lastTuple;
+                for (int posCtr = first; posCtr <= last; ++posCtr) {
+                    int groupBits = groupsArray[posCtr];
+//                    int prev, next;
+//                    do {
+//                        prev = nextID.get();
+//                        group =
+//                                next = prev == 0 ? prev + 1 : prev;
+//                        if (prev == next) {
+//                            break;
+//                        }
+//                    } while (!nextID.compareAndSet(prev, next));
+
+                    int groupID = nextID.getAndUpdate(id -> groups.updateAndGet(groupBits, (value) -> {
+                        if (value == 0) {
+                            return id + 1;
+                        }
+                        else {
+                            return id;
+                        }
+                    }));
+                    groupData.data[posCtr] = groupID;
+                }
+            });
+            nrGroups = nextID.get();
+        }
+        else {
+            List<GroupIndexRange> batches = split(cardinality);
+            ConcurrentMap<Long, Integer> curGroupToID = new ConcurrentHashMap<>(cardinality);
+            AtomicInteger nextID = new AtomicInteger(0);
+            batches.parallelStream().forEach(batch -> {
+                int first = batch.firstTuple;
+                int last = batch.lastTuple;
+                for (int posCtr = first; posCtr <= last; ++posCtr) {
+                    long groupBits = groupToLongBits(sourceIndexes, posCtr);
+                    Integer groupID = curGroupToID.putIfAbsent(groupBits, 0);
+                    if (groupID == null) {
+                        groupID = nextID.getAndIncrement();
+                        curGroupToID.put(groupBits, groupID);
+                    }
+                    groupData.data[posCtr] = groupID;
+                }
+            });
+            nrGroups = curGroupToID.size();
+        }
+
+        // Update catalog statistics
+        CatalogManager.updateStats(targetTbl);
+        // Retrieve data for
+        return nrGroups;
+    }
+
+    public static int executeBySingleIndex(Collection<ColumnRef> sourceRefs, ColumnRef targetRef,
+                                           QueryInfo query, Index index) throws Exception {
+        // Register result column
+        String targetTbl = targetRef.aliasName;
+        String targetCol = targetRef.columnName;
+        ColumnInfo targetInfo = new ColumnInfo(targetCol,
+                SQLtype.INT, false, false, false, false);
+        CatalogManager.currentDB.nameToTable.get(targetTbl).addColumn(targetInfo);
+        // Generate result column and load it into buffer
+        String firstSourceTbl = sourceRefs.iterator().next().aliasName;
+        int cardinality = CatalogManager.getCardinality(firstSourceTbl);
+        IntData groupData = new IntData(cardinality);
+        BufferManager.colToData.put(targetRef, groupData);
+        // Get data of source columns
+        List<ColumnData> sourceCols = new ArrayList<>();
+        for (ColumnRef srcRef : sourceRefs) {
+            sourceCols.add(BufferManager.getData(srcRef));
+        }
+        // Fill result column
+        int[] groupSrc = index.groupPerRow;
+        System.arraycopy(groupSrc, 0, groupData.data, 0, cardinality);
+        // Update catalog statistics
+        CatalogManager.updateStats(targetTbl);
+        // Retrieve data for
+        return index.groupIds.length;
     }
 
     public static Map<Group, GroupIndex> executeIndex(Collection<ColumnRef> sourceRefs,

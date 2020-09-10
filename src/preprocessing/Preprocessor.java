@@ -482,7 +482,7 @@ public class Preprocessor {
 					log("Creating index for " + queryRef +
 							" (query) - " + dbRef + " (DB)");
 				}
-//					long timer1 = System.currentTimeMillis();
+				long timer1 = System.currentTimeMillis();
 				ColumnInfo columnInfo = query.colRefToInfo.get(queryRef);
 				String tableName = query.aliasToTable.get(queryRef.aliasName);
 				String columnName = queryRef.columnName;
@@ -492,8 +492,8 @@ public class Preprocessor {
 				// Get index generation policy according to statistics.
 				// Create index (unless it exists already)
 				Indexer.partitionIndex(dbRef, queryRef, partitionIndex, columnInfo.isPrimary, !GeneralConfig.isParallel, false);
-//					long timer2 = System.currentTimeMillis();
-//					System.out.println("Indexing " + queryRef + " " + (timer2 - timer1));
+				long timer2 = System.currentTimeMillis();
+				System.out.println("Indexing " + queryRef + " " + (timer2 - timer1));
 			} catch (Exception e) {
 				System.err.println("Error creating index for " + queryRef);
 				e.printStackTrace();

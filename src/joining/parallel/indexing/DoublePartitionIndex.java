@@ -100,15 +100,18 @@ public class DoublePartitionIndex extends PartitionIndex {
             keyToPositions = HashDoubleIntMaps.newMutableMap(nrKeys);
             log(colRef + ": Number of keys:\t" + nrKeys);
             sequentialIndex(colRef, keyToNr);
-//            groupIds = new int[keyToPositions.size()];
-//            int id = 0;
-//            for (Integer pos: keyToPositions.values()) {
-//                groupIds[id] = pos;
-//                id++;
-//            }
-//            if (keyToPositions.size() == doubleData.cardinality) {
-//                unique = true;
-//            }
+            if (positions != null) {
+                groupIds = keyToPositions.values().toIntArray();
+                groupPerRow = new int[doubleData.cardinality];
+                IntStream.range(0, groupIds.length).parallel().forEach(gid -> {
+                    int pos = groupIds[gid];
+                    int values = positions[pos];
+                    for (int posCtr = pos + 1; posCtr <= pos + values; posCtr++) {
+                        int row = positions[posCtr];
+                        groupPerRow[row] = gid;
+                    }
+                });
+            }
         }
         else {
             double[] data = doubleData.data;

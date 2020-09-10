@@ -1,7 +1,10 @@
 package postprocessing;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.stream.Collectors;
 
 import buffer.BufferManager;
 import catalog.CatalogManager;
@@ -14,6 +17,7 @@ import data.IntData;
 import expressions.ExpressionInfo;
 import expressions.aggregates.AggInfo;
 import indexing.Index;
+import net.sf.jsqlparser.expression.Function;
 import net.sf.jsqlparser.schema.Column;
 import operators.*;
 import operators.parallel.ParallelAvgAggregate;
@@ -88,6 +92,56 @@ public class PostProcessor {
 //		context.nrGroups = GroupBy.execute(sourceRefs, targetRef);
 //		context.nrGroups = ParallelGroupBy.execute(sourceRefs, targetRef, query);
 		context.nrGroups = ParallelGroupBy.executeByIndex(sourceRefs, targetRef, query);
+//		context.nrGroups = ParallelGroupBy.executeBySimpleIndex(sourceRefs, targetRef, query);
+		long timer2 = System.currentTimeMillis();
+		System.out.println("Group: " + (timer2 - timer1));
+		// TODO: need to replace references to columns in GROUP BY clause
+	}
+
+	static void groupBySingleIndex(QueryInfo query, Context context, Index index) throws Exception {
+		// Check whether query has group by clause
+		if (query.groupByExpressions.isEmpty()) {
+			return;
+		}
+		// Create table to contain groups
+		String groupTbl = NamingConfig.GROUPS_TBL_NAME;
+		TableInfo groupTblInfo = new TableInfo(groupTbl, true);
+		CatalogManager.currentDB.nameToTable.put(groupTbl, groupTblInfo);
+		// ID to assign to next group by column (only used for
+		// columns whose content needs to be generated).
+		int groupSrcID = 0;
+		// Will contain group-by columns
+		List<ColumnRef> sourceRefs = new ArrayList<>();
+		for (ExpressionInfo groupExpr : query.groupByExpressions) {
+			// Is it raw group by column?
+			if (groupExpr.finalExpression instanceof Column) {
+				// Simply add referenced column
+				ColumnRef queryRef = groupExpr.columnsMentioned.iterator().next();
+				ColumnRef dbRef = context.columnMapping.get(queryRef);
+				sourceRefs.add(dbRef);
+			} else {
+				// Composite expression - need to execute map
+				String sourceRel = NamingConfig.JOINED_NAME;
+				String targetCol = NamingConfig.GROUPS_SRC_COL_PRE + groupSrcID;
+				++groupSrcID;
+				ColumnRef targetRef = new ColumnRef(groupTbl, targetCol);
+				ColumnInfo targetInfo = new ColumnInfo(targetCol,
+						groupExpr.resultType, false, false, false, false);
+				groupTblInfo.addColumn(targetInfo);
+				MapRows.parallelExecute(sourceRel, groupExpr,
+						context.columnMapping,
+						null, null, -1, targetRef);
+				sourceRefs.add(targetRef);
+			}
+		}
+		// Execute group by
+		String targetCol = NamingConfig.GROUPS_COL_NAME;
+		ColumnRef targetRef = new ColumnRef(groupTbl, targetCol);
+		// Update query context for following steps
+		context.groupRef = targetRef;
+		long timer1 = System.currentTimeMillis();
+		context.nrGroups = ParallelGroupBy.executeBySingleIndex(sourceRefs, targetRef, query, index);
+//		context.nrGroups = index.groupIds.length;
 		long timer2 = System.currentTimeMillis();
 		System.out.println("Group: " + (timer2 - timer1));
 		// TODO: need to replace references to columns in GROUP BY clause
@@ -252,7 +306,7 @@ public class PostProcessor {
 //				SumAggregate.execute(sourceRef, nrGroups,
 //						groupRef, targetRef);
 				SumAggregate.parallelExecute(sourceRef, nrGroups,
-						groupRef, targetRef);
+						groupRef, targetRef, queryInfo);
 				break;
 			case MIN:
 //				MinMaxAggregate.execute(sourceRef, nrGroups,
@@ -469,14 +523,16 @@ public class PostProcessor {
 			// Need to generate select item data -
 			// selector must be based on group-by columns.
 			String srcRel = NamingConfig.JOINED_NAME;
-			MapRows.execute(srcRel, expr, context.columnMapping,
+			MapRows.parallelExecute(srcRel, expr, context.columnMapping,
 					context.aggToData, groupRef, nrGroups, resultRef);
+//			MapRows.execute(srcRel, expr, context.columnMapping,
+//					context.aggToData, groupRef, nrGroups, resultRef);
 		} else {
 			// Need to generate data - selector is
 			// complex expression based on previously
 			// calculated per-group aggregates.
 			String srcRel = NamingConfig.AGG_TBL_NAME;
-			MapRows.execute(srcRel, expr, context.columnMapping,
+			MapRows.parallelExecute(srcRel, expr, context.columnMapping,
 					context.aggToData, null, -1, resultRef);
 		}
 	}
@@ -546,7 +602,7 @@ public class PostProcessor {
 	 * @return				indices of rows satisfying HAVING clause
 	 * @throws Exception
 	 */
-	static List<Integer> havingRows(QueryInfo query, 
+	static List<Integer> havingRows(QueryInfo query,
 			Context context) throws Exception {
 		ExpressionInfo havingExpr = query.havingExpression;
 		// Generate table containing result of having expression
@@ -559,13 +615,19 @@ public class PostProcessor {
 				NamingConfig.HAVING_COL_NAME);
 		// Collect indices of group passing the having predicate
 		int[] groupHaving = ((IntData)BufferManager.getData(havingRef)).data;
-		List<Integer> havingGroups = new ArrayList<>();
-		for (int groupCtr=0; groupCtr<context.nrGroups; ++groupCtr) {
-			if (groupHaving[groupCtr]>0) {
-				havingGroups.add(groupCtr);
+
+		List<Integer> groupList = MapRows.split(context.nrGroups).parallelStream().flatMap(batch -> {
+			int first = batch.firstTuple;
+			int last = batch.lastTuple;
+			List<Integer> groups = new ArrayList<>(last - first + 1);
+			for (int groupCtr = first; groupCtr <= last; ++groupCtr) {
+				if (groupHaving[groupCtr] > 0) {
+					groups.add(groupCtr);
+				}
 			}
-		}
-		return havingGroups;
+			return groups.stream();
+		}).collect(Collectors.toList());
+		return groupList;
 	}
 	/**
 	 * Treat a query that aggregates over groups of rows.
@@ -598,13 +660,19 @@ public class PostProcessor {
 		else {
 			long groupStart = System.currentTimeMillis();
 			// Execute group by
-			groupBy(query, context);
+			if (index != null && joinCard == index.cardinality) {
+				groupBySingleIndex(query, context, index);
+			}
+			else {
+				groupBy(query, context);
+			}
 			long groupEnd = System.currentTimeMillis();
 			PostStats.subGroupby.add(groupEnd - groupStart);
 			// Calculate aggregates
 			aggregate(query, context);
 			long aggEnd = System.currentTimeMillis();
 			PostStats.subAggregation.add(aggEnd - groupEnd);
+			System.out.println("Agg: " + (aggEnd - groupEnd));
 			// Different treatment for queries with/without HAVING
 			if (hasHaving) {
 				// Having clause specified - insertinto intermediate result table
@@ -643,6 +711,7 @@ public class PostProcessor {
 			}
 			long havingEnd = System.currentTimeMillis();
 			PostStats.subHaving.add(havingEnd - aggEnd);
+			System.out.println("Having: " + (havingEnd - aggEnd));
 		}
 		long orderStart = System.currentTimeMillis();
 		// Sort result table if applicable

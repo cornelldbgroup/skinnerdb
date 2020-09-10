@@ -9,10 +9,7 @@ import catalog.CatalogManager;
 import catalog.info.ColumnInfo;
 import catalog.info.TableInfo;
 import config.ParallelConfig;
-import data.DoubleData;
-import data.IntData;
-import data.LongData;
-import data.StringData;
+import data.*;
 import expressions.ExpressionInfo;
 import expressions.compilation.EvaluatorType;
 import expressions.compilation.ExpressionCompiler;
@@ -20,6 +17,7 @@ import expressions.compilation.UnaryDoubleEval;
 import expressions.compilation.UnaryIntEval;
 import expressions.compilation.UnaryLongEval;
 import expressions.compilation.UnaryStringEval;
+import joining.parallel.indexing.IntIndexRange;
 import query.ColumnRef;
 import types.JavaType;
 import types.SQLtype;
@@ -218,9 +216,6 @@ public class MapRows {
 				UnaryIntEval unaryIntEval = unaryCompiler.getUnaryIntEval();
 				// Generate result data and store in buffer
 				IntData intResult = new IntData(outCard);
-				if (groupBy && outCard<0) {
-					intResult.isNull.set(0, outCard-1);
-				}
 				BufferManager.colToData.put(targetRef, intResult);
 				// Iterate over source table and store results
 				batches.parallelStream().forEach(batch -> {
@@ -232,7 +227,6 @@ public class MapRows {
 						int targetRow = !groupBy ? srcRow : groupData.data[srcRow];
 						boolean notNull = unaryIntEval.evaluate(srcRow, rowResult);
 						if (!groupBy || notNull) {
-							intResult.isNull.set(targetRow, !notNull);
 							intResult.data[targetRow] = rowResult[0];
 						}
 					}
@@ -249,9 +243,6 @@ public class MapRows {
 				UnaryDoubleEval unaryDoubleEval = unaryCompiler.getUnaryDoubleEval();
 				// Generate result data and store in buffer
 				DoubleData doubleResult = new DoubleData(outCard);
-				if (groupBy && outCard<0) {
-					doubleResult.isNull.set(0, outCard-1);
-				}
 				BufferManager.colToData.put(targetRef, doubleResult);
 				// Iterate over source table and store results
 				batches.parallelStream().forEach(batch -> {
@@ -263,7 +254,6 @@ public class MapRows {
 						int targetRow = !groupBy ? srcRow : groupData.data[srcRow];
 						boolean notNull = unaryDoubleEval.evaluate(srcRow, rowResult);
 						if (!groupBy || notNull) {
-							doubleResult.isNull.set(targetRow, !notNull);
 							doubleResult.data[targetRow] = rowResult[0];
 						}
 					}
@@ -284,7 +274,7 @@ public class MapRows {
 	 */
 	public static List<RowRange> split(int cardinality) {
 		List<RowRange> batches = new ArrayList<RowRange>();
-		int batchSize = Math.max(ParallelConfig.PRE_INDEX_SIZE, cardinality / 300);
+		int batchSize = Math.max(ParallelConfig.PRE_INDEX_SIZE, cardinality / 600);
 		for (int batchCtr=0; batchCtr * batchSize < cardinality;
 			 ++batchCtr) {
 			int startIdx = batchCtr * batchSize;
@@ -292,6 +282,35 @@ public class MapRows {
 			int endIdx = Math.min(cardinality - 1, tentativeEndIdx);
 			RowRange rowRange = new RowRange(startIdx, endIdx);
 			batches.add(rowRange);
+		}
+		return batches;
+	}
+
+	/**
+	 * Splits table with given cardinality into tuple batches
+	 * according to the configuration for joining.parallel processing.
+	 *
+	 * @param cardinality	cardinality of table to split
+	 * @return				list of row ranges (batches)
+	 */
+	public static List<RowRange> sortedSplit(int cardinality, ColumnData data) {
+		List<RowRange> batches = new ArrayList<>();
+		int batchSize = Math.max(ParallelConfig.PRE_INDEX_SIZE, cardinality / 200);
+		int startIdx = 0;
+		int tentativeEndIdx = startIdx + batchSize - 1;
+		for (int batchCtr = 0; batchCtr * batchSize < cardinality;
+			 ++batchCtr) {
+			int endIdx = Math.min(cardinality - 1, tentativeEndIdx);
+			while (endIdx < cardinality - 1 && data.compareRows(endIdx, endIdx + 1) == 0) {
+				endIdx = Math.min(cardinality - 1, endIdx + 1);
+			}
+			RowRange rowRange = new RowRange(startIdx, endIdx);
+			batches.add(rowRange);
+			startIdx = endIdx + 1;
+			tentativeEndIdx = startIdx + batchSize - 1;
+			if (startIdx >= cardinality) {
+				break;
+			}
 		}
 		return batches;
 	}

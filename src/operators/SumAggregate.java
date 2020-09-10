@@ -1,7 +1,6 @@
 package operators;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.stream.IntStream;
 
@@ -9,8 +8,11 @@ import buffer.BufferManager;
 import catalog.CatalogManager;
 import catalog.info.ColumnInfo;
 import catalog.info.TableInfo;
+import com.google.common.util.concurrent.AtomicDoubleArray;
 import data.*;
+import indexing.Index;
 import query.ColumnRef;
+import query.QueryInfo;
 import types.SQLtype;
 
 /**
@@ -155,7 +157,7 @@ public class SumAggregate {
 	}
 
 	public static void parallelExecute(ColumnRef sourceRef, int nrGroups,
-							   ColumnRef groupRef, ColumnRef targetRef) throws Exception {
+									   ColumnRef groupRef, ColumnRef targetRef, QueryInfo query) throws Exception {
 		// Get information about source column
 		String srcRel = sourceRef.aliasName;
 		SQLtype srcType = CatalogManager.getColumn(sourceRef).type;
@@ -163,11 +165,11 @@ public class SumAggregate {
 		ColumnData srcData = BufferManager.getData(sourceRef);
 		// Create row to group assignments
 		boolean grouping = groupRef != null;
-		int[] groups = grouping?((IntData)
-				BufferManager.getData(groupRef)).data:
-				new int[srcCard];
+		Index index = query.groupByExpressions.size() == 1 ?
+				BufferManager.colToIndex.get(query.groupByExpressions.iterator().next().
+						columnsMentioned.iterator().next()) : null;
 		// Generate target column
-		int targetCard = grouping ? nrGroups:1;
+		int targetCard = grouping ? nrGroups : 1;
 		// Handle constant column
 		if (srcData instanceof ConstantData) {
 			ConstantData constantData = (ConstantData) srcData;
@@ -195,7 +197,6 @@ public class SumAggregate {
 		}
 		ColumnData genericTarget = null;
 		IntData intTarget = null;
-		LongData longTarget = null;
 		DoubleData doubleTarget = null;
 		switch (srcType) {
 			case INT:
@@ -222,86 +223,124 @@ public class SumAggregate {
 		targetRelInfo.addColumn(targetColInfo);
 		// Update catalog statistics on result table
 		CatalogManager.updateStats(targetRel);
-		// Set target values to null
-		for (int row=0; row<targetCard; ++row) {
-			genericTarget.isNull.set(row);
-		}
-		// Initialize batches
-		List<RowRange> batches = MapRows.split(srcCard);
-		int nrBatches = batches.size();
-		// Switch according to column type (to avoid casts)
-		switch (srcType) {
-			case INT:
-			{
-				List<int[]> aggPerBatch = new ArrayList<>(nrBatches);
-				for (int batchCtr = 0; batchCtr < nrBatches; batchCtr++) {
-					aggPerBatch.add(new int[targetCard]);
+		// Group by single sorted index
+		if (index != null && srcCard == index.cardinality && index.sorted) {
+			// Initialize batches
+			List<RowRange> batches = MapRows.sortedSplit(srcCard, srcData);
+			int[] indexGroups = index.groupPerRow;
+			// Switch according to column type (to avoid casts)
+			switch (srcType) {
+				case INT: {
+					IntData intSrc = (IntData)srcData;
+					int[] target = intTarget.data;
+					batches.parallelStream().forEach(batch -> {
+						int first = batch.firstTuple;
+						int last = batch.lastTuple;
+						for (int rowCtr = first; rowCtr <= last; rowCtr++) {
+							// Check for null values
+							if (!srcData.isNull.get(rowCtr)) {
+								int group = indexGroups[rowCtr];
+								target[group] += intSrc.data[rowCtr];
+							}
+						}
+					});
+					break;
 				}
-				IntData intSrc = (IntData)srcData;
-				IntData finalIntTarget = intTarget;
-				// Iterate over input column
-				IntStream.range(0, nrBatches).parallel().forEach(bid -> {
-					RowRange batch = batches.get(bid);
-					int first = batch.firstTuple;
-					int last = batch.lastTuple;
-					int[] target = aggPerBatch.get(bid);
-					for (int row = first; row <= last; ++row) {
-						// Check for null values
-						if (!srcData.isNull.get(row)) {
-							int group = groups[row];
-							target[group] += intSrc.data[row];
+				case DOUBLE: {
+					DoubleData doubleSrc = (DoubleData)srcData;
+					double[] target = doubleTarget.data;
+					batches.parallelStream().forEach(batch -> {
+						int first = batch.firstTuple;
+						int last = batch.lastTuple;
+						for (int rowCtr = first; rowCtr <= last; rowCtr++) {
+							// Check for null values
+							if (!srcData.isNull.get(rowCtr)) {
+								int group = indexGroups[rowCtr];
+								target[group] += doubleSrc.data[rowCtr];
+							}
 						}
-					}
-				});
-				MapRows.split(targetCard).parallelStream().forEach(targetBatch -> {
-					int first = targetBatch.firstTuple;
-					int last = targetBatch.lastTuple;
-					for (int row = first; row <= last; ++row) {
-						// Check for null values
-						for (int batchCtr = 0; batchCtr < nrBatches; batchCtr++) {
-							finalIntTarget.data[row] += aggPerBatch.get(batchCtr)[row];
-						}
-					}
-				});
-				genericTarget.isNull.set(0, targetCard, false);
-			}
-			break;
-			case DOUBLE: {
-				List<double[]> aggPerBatch = new ArrayList<>(nrBatches);
-				for (int batchCtr = 0; batchCtr < nrBatches; batchCtr++) {
-					aggPerBatch.add(new double[targetCard]);
+					});
+					break;
 				}
-				DoubleData doubleSrc = (DoubleData) srcData;
-				DoubleData finalDoubleTarget = doubleTarget;
-				// Iterate over input column
-				IntStream.range(0, nrBatches).parallel().forEach(bid -> {
-					RowRange batch = batches.get(bid);
-					int first = batch.firstTuple;
-					int last = batch.lastTuple;
-					double[] target = aggPerBatch.get(bid);
-					for (int row = first; row <= last; ++row) {
-						// Check for null values
-						if (!srcData.isNull.get(row)) {
-							int group = groups[row];
-							target[group] += doubleSrc.data[row];
-						}
-					}
-				});
-				MapRows.split(targetCard).parallelStream().forEach(targetBatch -> {
-					int first = targetBatch.firstTuple;
-					int last = targetBatch.lastTuple;
-					for (int row = first; row <= last; ++row) {
-						// Check for null values
-						for (int batchCtr = 0; batchCtr < nrBatches; batchCtr++) {
-							finalDoubleTarget.data[row] += aggPerBatch.get(batchCtr)[row];
-						}
-					}
-				});
-				genericTarget.isNull.set(0, targetCard, false);
+				default:
+					throw new Exception("Unsupported type: " + srcType);
 			}
-			break;
-			default:
-				throw new Exception("Unsupported type: " + srcType);
 		}
+		else {
+			int[] groups = grouping ? ((IntData)
+					BufferManager.getData(groupRef)).data:
+					new int[srcCard];
+			// Initialize batches
+			List<RowRange> batches = MapRows.split(srcCard);
+			int nrBatches = batches.size();
+			// Switch according to column type (to avoid casts)
+			switch (srcType) {
+				case INT:
+				{
+					List<int[]> aggPerBatch = new ArrayList<>(nrBatches);
+					for (int batchCtr = 0; batchCtr < nrBatches; batchCtr++) {
+						aggPerBatch.add(new int[targetCard]);
+					}
+					IntData intSrc = (IntData)srcData;
+					IntData finalIntTarget = intTarget;
+					// Iterate over input column
+					IntStream.range(0, nrBatches).parallel().forEach(bid -> {
+						RowRange batch = batches.get(bid);
+						int first = batch.firstTuple;
+						int last = batch.lastTuple;
+						int[] target = aggPerBatch.get(bid);
+						for (int row = first; row <= last; ++row) {
+							// Check for null values
+							if (!srcData.isNull.get(row)) {
+								int group = groups[row];
+								target[group] += intSrc.data[row];
+							}
+						}
+					});
+					MapRows.split(targetCard).parallelStream().forEach(targetBatch -> {
+						int first = targetBatch.firstTuple;
+						int last = targetBatch.lastTuple;
+						for (int row = first; row <= last; ++row) {
+							// Check for null values
+							for (int batchCtr = 0; batchCtr < nrBatches; batchCtr++) {
+								finalIntTarget.data[row] += aggPerBatch.get(batchCtr)[row];
+							}
+						}
+					});
+				}
+				break;
+				case DOUBLE: {
+					AtomicDoubleArray values = new AtomicDoubleArray(targetCard);
+					DoubleData doubleSrc = (DoubleData) srcData;
+					DoubleData finalDoubleTarget = doubleTarget;
+					// Iterate over input column
+					IntStream.range(0, nrBatches).parallel().forEach(bid -> {
+						RowRange batch = batches.get(bid);
+						int first = batch.firstTuple;
+						int last = batch.lastTuple;
+						for (int row = first; row <= last; ++row) {
+							// Check for null values
+							if (!srcData.isNull.get(row)) {
+								int group = groups[row];
+								double value = doubleSrc.data[row];
+								values.getAndAdd(group, value);
+							}
+						}
+					});
+
+					MapRows.split(targetCard).parallelStream().forEach(targetBatch -> {
+						int first = targetBatch.firstTuple;
+						int last = targetBatch.lastTuple;
+						for (int groupCtr = first; groupCtr <= last; ++groupCtr) {
+							finalDoubleTarget.data[groupCtr] = values.get(groupCtr);
+						}
+					});
+				}
+				break;
+				default:
+					throw new Exception("Unsupported type: " + srcType);
+			}
+		}
+
 	}
 }
