@@ -21,6 +21,7 @@ import operators.Group;
 import operators.OperatorUtils;
 import operators.RowRange;
 import postprocessing.IndexRange;
+import preprocessing.Context;
 import query.ColumnRef;
 import query.QueryInfo;
 import types.SQLtype;
@@ -28,8 +29,10 @@ import types.SQLtype;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicIntegerArray;
+import java.util.concurrent.atomic.AtomicLongArray;
 import java.util.function.Function;
 import java.util.stream.Collector;
 import java.util.stream.Collectors;
@@ -284,7 +287,7 @@ public class ParallelGroupBy {
     }
 
     public static int executeBySimpleIndex(Collection<ColumnRef> sourceRefs,
-                                     ColumnRef targetRef, QueryInfo query) throws Exception {
+                                           ColumnRef targetRef, QueryInfo query, Context context) throws Exception {
         // Register result column
         String targetTbl = targetRef.aliasName;
         String targetCol = targetRef.columnName;
@@ -318,25 +321,19 @@ public class ParallelGroupBy {
                 int last = batch.lastTuple;
                 for (int posCtr = first; posCtr <= last; ++posCtr) {
                     int groupBits = groupsArray[posCtr];
-//                    int prev, next;
-//                    do {
-//                        prev = nextID.get();
-//                        group =
-//                                next = prev == 0 ? prev + 1 : prev;
-//                        if (prev == next) {
-//                            break;
-//                        }
-//                    } while (!nextID.compareAndSet(prev, next));
-
-                    int groupID = nextID.getAndUpdate(id -> groups.updateAndGet(groupBits, (value) -> {
-                        if (value == 0) {
-                            return id + 1;
-                        }
-                        else {
-                            return id;
-                        }
-                    }));
-                    groupData.data[posCtr] = groupID;
+                    boolean isEmpty = groups.compareAndSet(groupBits, 0, -1);
+                    if (isEmpty) {
+                        int groupID = nextID.getAndIncrement();
+                        groups.set(groupBits, groupID);
+                        groupData.data[posCtr] = groupID;
+                    }
+                    else {
+                        int groupID;
+                        do {
+                            groupID = groups.get(groupBits);
+                        } while (groupID < 0);
+                        groupData.data[posCtr] = groupID;
+                    }
                 }
             });
             nrGroups = nextID.get();
@@ -350,10 +347,15 @@ public class ParallelGroupBy {
                 int last = batch.lastTuple;
                 for (int posCtr = first; posCtr <= last; ++posCtr) {
                     long groupBits = groupToLongBits(sourceIndexes, posCtr);
-                    Integer groupID = curGroupToID.putIfAbsent(groupBits, 0);
+                    Integer groupID = curGroupToID.putIfAbsent(groupBits, -1);
                     if (groupID == null) {
                         groupID = nextID.getAndIncrement();
                         curGroupToID.put(groupBits, groupID);
+                    }
+                    else if (groupID < 0) {
+                        do {
+                            groupID = curGroupToID.get(groupBits);
+                        } while (groupID < 0);
                     }
                     groupData.data[posCtr] = groupID;
                 }

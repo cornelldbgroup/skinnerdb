@@ -30,6 +30,10 @@ public class IntPartitionIndex extends PartitionIndex {
      */
     public final IntIntMap keyToPositions;
     /**
+     * After indexing: maps search key to group id.
+     */
+    public final IntIntMap keyToGroups;
+    /**
      * Number of unique keys.
      */
     public final int nrKeys;
@@ -69,6 +73,7 @@ public class IntPartitionIndex extends PartitionIndex {
             this.unique = true;
             keyToPositions = HashIntIntMaps.newMutableMap(this.cardinality);
             positions = null;
+            keyToGroups = null;
             keyColumnIndex(origin);
         }
         else if (policy == IndexPolicy.Sequential) {
@@ -100,24 +105,39 @@ public class IntPartitionIndex extends PartitionIndex {
             }
             sequentialIndex(colRef, keyToNr);
             // TODO: detect grouped index
+            keyToGroups = HashIntIntMaps.newMutableMap(keyToPositions.size());
             if (positions != null) {
                 groupIds = keyToPositions.values().toIntArray();
                 groupPerRow = new int[intData.cardinality];
                 IntStream.range(0, groupIds.length).parallel().forEach(gid -> {
                     int pos = groupIds[gid];
-                    int values = positions[pos];
-                    for (int posCtr = pos + 1; posCtr <= pos + values; posCtr++) {
+                    int nrValues = positions[pos];
+                    for (int posCtr = pos + 1; posCtr <= pos + nrValues; posCtr++) {
                         int row = positions[posCtr];
                         groupPerRow[row] = gid;
                     }
                 });
+                for (int groupCtr = 0; groupCtr < groupIds.length; groupCtr++) {
+                    int value = intData.data[positions[groupIds[groupCtr] + 1]];
+                    keyToGroups.put(value, groupCtr);
+                }
             }
+            else {
+                groupPerRow = new int[intData.cardinality];
+                Arrays.parallelSetAll(groupPerRow, index -> index);
+                for (int groupCtr = 0; groupCtr < data.length; groupCtr++) {
+                    int value = data[groupCtr];
+                    keyToGroups.put(value, groupCtr);
+                }
+            }
+
             System.out.println(colRef + " " + sorted);
         }
         else if (policy == IndexPolicy.Sparse) {
             keyToPositions = origin.keyToPositions;
             positions = new int[origin.positions.length];
             parallelSparseIndex(origin);
+            keyToGroups = null;
         }
         else {
             int[] data = intData.data;
@@ -187,6 +207,7 @@ public class IntPartitionIndex extends PartitionIndex {
                     }
                 }
             });
+            keyToGroups = null;
         }
         nrKeys = this.keyToPositions.size();
     }
@@ -730,6 +751,11 @@ public class IntPartitionIndex extends PartitionIndex {
                     return diff;
                 })
                 .mapToInt(ele -> ele).toArray();
+    }
+
+    @Override
+    public int groupKey(int rowCtr) {
+        return keyToGroups.get(intData.data[rowCtr]);
     }
 
     @Override

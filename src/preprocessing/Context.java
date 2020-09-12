@@ -53,6 +53,14 @@ public class Context {
 	 * to columns containing corresponding (per-group) results.
 	 */
 	public Map<String, ColumnRef> aggToData = new HashMap<>();
+	/**
+	 * Store result list after the join phase.
+	 */
+	public List<int[]> resultList;
+	/**
+	 * Store group keys after the join phase.
+	 */
+	public List<Long> groupsKey;
 	
 	@Override
 	public String toString() {

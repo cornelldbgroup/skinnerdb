@@ -92,7 +92,7 @@ public class PostProcessor {
 //		context.nrGroups = GroupBy.execute(sourceRefs, targetRef);
 //		context.nrGroups = ParallelGroupBy.execute(sourceRefs, targetRef, query);
 		context.nrGroups = ParallelGroupBy.executeByIndex(sourceRefs, targetRef, query);
-//		context.nrGroups = ParallelGroupBy.executeBySimpleIndex(sourceRefs, targetRef, query);
+//		context.nrGroups = ParallelGroupBy.executeBySimpleIndex(sourceRefs, targetRef, query, context);
 		long timer2 = System.currentTimeMillis();
 		System.out.println("Group: " + (timer2 - timer1));
 		// TODO: need to replace references to columns in GROUP BY clause
@@ -616,18 +616,13 @@ public class PostProcessor {
 		// Collect indices of group passing the having predicate
 		int[] groupHaving = ((IntData)BufferManager.getData(havingRef)).data;
 
-		List<Integer> groupList = MapRows.split(context.nrGroups).parallelStream().flatMap(batch -> {
-			int first = batch.firstTuple;
-			int last = batch.lastTuple;
-			List<Integer> groups = new ArrayList<>(last - first + 1);
-			for (int groupCtr = first; groupCtr <= last; ++groupCtr) {
-				if (groupHaving[groupCtr] > 0) {
-					groups.add(groupCtr);
-				}
+		List<Integer> havingGroups = new ArrayList<>(groupHaving.length);
+		for (int groupCtr = 0; groupCtr < groupHaving.length; ++groupCtr) {
+			if (groupHaving[groupCtr]>0) {
+				havingGroups.add(groupCtr);
 			}
-			return groups.stream();
-		}).collect(Collectors.toList());
-		return groupList;
+		}
+		return havingGroups;
 	}
 	/**
 	 * Treat a query that aggregates over groups of rows.

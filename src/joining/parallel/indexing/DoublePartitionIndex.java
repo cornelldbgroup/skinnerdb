@@ -13,6 +13,7 @@ import predicate.Operator;
 import query.ColumnRef;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.stream.IntStream;
@@ -28,6 +29,10 @@ public class DoublePartitionIndex extends PartitionIndex {
      * information is stored.
      */
     public final DoubleIntMap keyToPositions;
+    /**
+     * After indexing: maps search key to group id.
+     */
+    public final DoubleIntMap keyToGroups;
     /**
      * Number of unique keys.
      */
@@ -72,10 +77,12 @@ public class DoublePartitionIndex extends PartitionIndex {
                 keyToPositions = origin.keyToPositions;
             }
             keyColumnIndex(origin);
+            keyToGroups = null;
         }
         else if (policy == IndexPolicy.Sparse) {
             keyToPositions = origin.keyToPositions;
             parallelSparseIndex(origin);
+            keyToGroups = null;
         }
         else if (policy == IndexPolicy.Sequential) {
             boolean unique = true;
@@ -100,6 +107,7 @@ public class DoublePartitionIndex extends PartitionIndex {
             keyToPositions = HashDoubleIntMaps.newMutableMap(nrKeys);
             log(colRef + ": Number of keys:\t" + nrKeys);
             sequentialIndex(colRef, keyToNr);
+            keyToGroups = HashDoubleIntMaps.newMutableMap(keyToPositions.size());
             if (positions != null) {
                 groupIds = keyToPositions.values().toIntArray();
                 groupPerRow = new int[doubleData.cardinality];
@@ -111,6 +119,18 @@ public class DoublePartitionIndex extends PartitionIndex {
                         groupPerRow[row] = gid;
                     }
                 });
+                for (int groupCtr = 0; groupCtr < groupIds.length; groupCtr++) {
+                    double value = data[positions[groupIds[groupCtr] + 1]];
+                    keyToGroups.put(value, groupCtr);
+                }
+            }
+            else {
+                groupPerRow = new int[doubleData.cardinality];
+                Arrays.parallelSetAll(groupPerRow, index -> index);
+                for (int groupCtr = 0; groupCtr < data.length; groupCtr++) {
+                    double value = data[groupCtr];
+                    keyToGroups.put(value, groupCtr);
+                }
             }
         }
         else {
@@ -181,6 +201,7 @@ public class DoublePartitionIndex extends PartitionIndex {
                     }
                 }
             });
+            keyToGroups = null;
         }
         nrKeys = this.keyToPositions.size();
     }
@@ -669,6 +690,11 @@ public class DoublePartitionIndex extends PartitionIndex {
         sortedRow = IntStream.range(0, cardinality)
                 .boxed().sorted(Comparator.comparingDouble(i -> doubleData.data[i]))
                 .mapToInt(ele -> ele).toArray();
+    }
+
+    @Override
+    public int groupKey(int rowCtr) {
+        return keyToGroups.get(doubleData.data[rowCtr]);
     }
 
     @Override

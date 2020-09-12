@@ -1,6 +1,9 @@
 package joining.result;
 
+import indexing.Index;
+
 import java.util.Arrays;
+import java.util.List;
 
 /**
  * Represents one tuple of the join result.
@@ -24,6 +27,7 @@ public class ResultTuple {
 		int nrTables = baseIndices.length;
 		this.baseIndices = Arrays.copyOf(baseIndices, nrTables);
 	}
+
 	@Override
 	public boolean equals(Object other) {
 		ResultTuple otherTuple = (ResultTuple)other;
@@ -36,5 +40,24 @@ public class ResultTuple {
 	@Override
 	public String toString() {
 		return Arrays.toString(baseIndices);
+	}
+
+	/**
+	 * Generate group keys based on group index.
+	 *
+	 * @param sourceIndexes
+	 * @return
+	 */
+	public long groupKey(List<Index> sourceIndexes, List<Integer> tableIndexes) {
+		long groupBits = 0;
+		int card = 1;
+		for (int columnCtr = 0; columnCtr < sourceIndexes.size(); columnCtr++) {
+			Index index = sourceIndexes.get(columnCtr);
+			int table = tableIndexes.get(columnCtr);
+			int row = baseIndices[table];
+			groupBits += index.groupKey(row) * card;
+			card *= index.groupIds.length;
+		}
+		return groupBits;
 	}
 }

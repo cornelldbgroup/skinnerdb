@@ -5,7 +5,9 @@ import config.JoinConfig;
 import config.LoggingConfig;
 import config.ParallelConfig;
 import config.StartupConfig;
+import expressions.ExpressionInfo;
 import expressions.compilation.KnaryBoolEval;
+import indexing.Index;
 import joining.parallel.plan.LeftDeepPartitionPlan;
 import joining.progress.ProgressTracker;
 import joining.result.ResultTuple;
@@ -20,6 +22,7 @@ import logs.LogUtils;
 import net.sf.jsqlparser.expression.Expression;
 import predicate.NonEquiNode;
 import preprocessing.Context;
+import query.ColumnRef;
 import query.QueryInfo;
 import statistics.JoinStats;
 import statistics.QueryStats;
@@ -119,10 +122,22 @@ public class LockFreeParallelization extends Parallelization {
         JoinStats.exeTime = executionEnd - executionStart;
         JoinStats.subExeTime.add(JoinStats.exeTime);
 
-
+        int maxSize = 0;
+        for (int futureCtr = 0; futureCtr < nrThreads; futureCtr++) {
+            LockFreeResult result = futures.get(futureCtr).get();
+            maxSize += result.result.size();
+        }
+        List<int[]> resultArrayList = new ArrayList<>(maxSize);
+        List<Long> groupKeyList = new ArrayList<>(maxSize);
+        // Generate group keys
         futures.forEach(futureResult -> {
             try {
                 LockFreeResult result = futureResult.get();
+                for (ResultTuple resultTuple: result.result) {
+                    if (resultList.add(resultTuple)) {
+                        resultArrayList.add(resultTuple.baseIndices);
+                    }
+                }
                 resultList.addAll(result.result);
                 if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
                     logs[result.id] = result.logs;
@@ -131,8 +146,9 @@ public class LockFreeParallelization extends Parallelization {
             } catch (InterruptedException | ExecutionException e) {
                 e.printStackTrace();
             }
-
         });
+        context.resultList = resultArrayList;
+        context.groupsKey = groupKeyList;
         long nrSamples = 0;
         for (DPJoin joinOp: dpJoins) {
             nrSamples = Math.max(joinOp.roundCtr, nrSamples);

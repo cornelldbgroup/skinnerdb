@@ -2,6 +2,7 @@ package operators;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicIntegerArray;
 import java.util.stream.IntStream;
 
 import buffer.BufferManager;
@@ -266,6 +267,70 @@ public class SumAggregate {
 					throw new Exception("Unsupported type: " + srcType);
 			}
 		}
+		else if (nrGroups <= 100) {
+			int[] groups = grouping ? ((IntData)
+					BufferManager.getData(groupRef)).data:
+					new int[srcCard];
+			// Initialize batches
+			List<RowRange> batches = MapRows.split(srcCard);
+			int nrBatches = batches.size();
+			// Switch according to column type (to avoid casts)
+			switch (srcType) {
+				case INT:
+				{
+					int[][] values = new int[nrBatches][targetCard];
+					IntData intSrc = (IntData) srcData;
+					// Iterate over input column
+					IntStream.range(0, nrBatches).parallel().forEach(bid -> {
+						int[] localValues = values[bid];
+						RowRange batch = batches.get(bid);
+						int first = batch.firstTuple;
+						int last = batch.lastTuple;
+						for (int row = first; row <= last; ++row) {
+							// Check for null values
+							if (!srcData.isNull.get(row)) {
+								int group = groups[row];
+								int value = intSrc.data[row];
+								localValues[group] += value;
+							}
+						}
+					});
+					for (int groupCtr = 0; groupCtr < targetCard; ++groupCtr) {
+						for (int batchCtr = 0; batchCtr < nrBatches; batchCtr++) {
+							intTarget.data[groupCtr] += values[batchCtr][groupCtr];
+						}
+					}
+					break;
+				}
+				case DOUBLE: {
+					double[][] values = new double[nrBatches][targetCard];
+					DoubleData doubleSrc = (DoubleData) srcData;
+					// Iterate over input column
+					IntStream.range(0, nrBatches).parallel().forEach(bid -> {
+						double[] localValues = values[bid];
+						RowRange batch = batches.get(bid);
+						int first = batch.firstTuple;
+						int last = batch.lastTuple;
+						for (int row = first; row <= last; ++row) {
+							// Check for null values
+							if (!srcData.isNull.get(row)) {
+								int group = groups[row];
+								double value = doubleSrc.data[row];
+								localValues[group] += value;
+							}
+						}
+					});
+					for (int groupCtr = 0; groupCtr < targetCard; ++groupCtr) {
+						for (int batchCtr = 0; batchCtr < nrBatches; batchCtr++) {
+							doubleTarget.data[groupCtr] += values[batchCtr][groupCtr];
+						}
+					}
+					break;
+				}
+				default:
+					throw new Exception("Unsupported type: " + srcType);
+			}
+		}
 		else {
 			int[] groups = grouping ? ((IntData)
 					BufferManager.getData(groupRef)).data:
@@ -277,38 +342,33 @@ public class SumAggregate {
 			switch (srcType) {
 				case INT:
 				{
-					List<int[]> aggPerBatch = new ArrayList<>(nrBatches);
-					for (int batchCtr = 0; batchCtr < nrBatches; batchCtr++) {
-						aggPerBatch.add(new int[targetCard]);
-					}
-					IntData intSrc = (IntData)srcData;
+					AtomicIntegerArray values = new AtomicIntegerArray(targetCard);
+					IntData intSrc = (IntData) srcData;
 					IntData finalIntTarget = intTarget;
 					// Iterate over input column
 					IntStream.range(0, nrBatches).parallel().forEach(bid -> {
 						RowRange batch = batches.get(bid);
 						int first = batch.firstTuple;
 						int last = batch.lastTuple;
-						int[] target = aggPerBatch.get(bid);
 						for (int row = first; row <= last; ++row) {
 							// Check for null values
 							if (!srcData.isNull.get(row)) {
 								int group = groups[row];
-								target[group] += intSrc.data[row];
+								int value = intSrc.data[row];
+								values.getAndAdd(group, value);
 							}
 						}
 					});
+
 					MapRows.split(targetCard).parallelStream().forEach(targetBatch -> {
 						int first = targetBatch.firstTuple;
 						int last = targetBatch.lastTuple;
-						for (int row = first; row <= last; ++row) {
-							// Check for null values
-							for (int batchCtr = 0; batchCtr < nrBatches; batchCtr++) {
-								finalIntTarget.data[row] += aggPerBatch.get(batchCtr)[row];
-							}
+						for (int groupCtr = first; groupCtr <= last; ++groupCtr) {
+							finalIntTarget.data[groupCtr] = values.get(groupCtr);
 						}
 					});
+					break;
 				}
-				break;
 				case DOUBLE: {
 					AtomicDoubleArray values = new AtomicDoubleArray(targetCard);
 					DoubleData doubleSrc = (DoubleData) srcData;
@@ -335,12 +395,11 @@ public class SumAggregate {
 							finalDoubleTarget.data[groupCtr] = values.get(groupCtr);
 						}
 					});
+					break;
 				}
-				break;
 				default:
 					throw new Exception("Unsupported type: " + srcType);
 			}
 		}
-
 	}
 }

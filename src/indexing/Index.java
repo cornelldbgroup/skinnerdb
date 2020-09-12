@@ -1,6 +1,7 @@
 package indexing;
 
 import com.koloboke.collect.IntCollection;
+import com.koloboke.collect.map.IntIntMap;
 import config.LoggingConfig;
 
 /**
@@ -61,6 +62,10 @@ public abstract class Index {
 	 * Sort the elements and initialize the array of sortedRow
 	 */
 	public abstract void sortRows();
+	/**
+	 * Sort the elements and initialize the array of sortedRow
+	 */
+	public abstract int groupKey(int rowCtr);
 
 	/**
 	 * Output given log text if activated.

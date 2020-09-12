@@ -466,6 +466,7 @@ public class Materialize {
 					srcInfo.type, false, false, false, false);
 			resultInfo.addColumn(targetInfo);
 		}
+
 		// Materialize result columns
 		sourceCols.parallelStream().forEach(srcQueryRef -> {
 			// Generate target column reference
