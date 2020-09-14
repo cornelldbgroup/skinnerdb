@@ -164,7 +164,6 @@ public class ParallelGroupBy {
         String tableName = query.aliasToTable.get(queryRef.aliasName);
         String columnName = queryRef.columnName;
         ColumnRef columnRef = new ColumnRef(tableName, columnName);
-        Index index = BufferManager.colToIndex.getOrDefault(columnRef, null);
         PartitionIndex partitionIndex = null;
 
         Index groupIndex = Indexer.partitionIndex(firstRef, queryRef, partitionIndex,
@@ -189,10 +188,15 @@ public class ParallelGroupBy {
                         for (int posCtr = first; posCtr <= last; ++posCtr) {
                             int row = positions[posCtr + pos + 1];
                             Group group = new Group(row, sourceCols);
-                            Integer groupID = curGroupToID.putIfAbsent(group, 0);
+                            Integer groupID = curGroupToID.putIfAbsent(group, -1);
                             if (groupID == null) {
                                 groupID = nextID.getAndIncrement();
                                 curGroupToID.put(group, groupID);
+                            }
+                            else if (groupID < 0) {
+                                do {
+                                    groupID = curGroupToID.get(group);
+                                } while (groupID < 0);
                             }
                             groupData.data[row] = groupID;
                         }
@@ -237,10 +241,15 @@ public class ParallelGroupBy {
                         for (int rowCtr = first; rowCtr <= last; ++rowCtr) {
                             int row = positions[rowCtr + pos + 1];
                             Group group = new Group(row, sourceCols);
-                            Integer groupID = curGroupToID.putIfAbsent(group, 0);
+                            Integer groupID = curGroupToID.putIfAbsent(group, -1);
                             if (groupID == null) {
                                 groupID = nextID.getAndIncrement();
                                 curGroupToID.put(group, groupID);
+                            }
+                            else if (groupID < 0) {
+                                do {
+                                    groupID = curGroupToID.get(group);
+                                } while (groupID < 0);
                             }
                             groupData.data[row] = groupID;
                         }

@@ -49,6 +49,9 @@ public class RelationPrinter {
 		// Get table meta-data
 		TableInfo tableInfo = CatalogManager.
 				currentDB.nameToTable.get(tableName);
+		if (tableInfo == null) {
+			return;
+		}
 		int nrCols = tableInfo.columnNames.size();
 		// Print table header
 		String header = StringUtils.join(tableInfo.columnNames, "\t");
@@ -98,11 +101,16 @@ public class RelationPrinter {
 		} else {
 			switch (type) {
 			case INT:
-				return Integer.valueOf(((IntData)data).data[rowNr]).toString();
+				int intValue = ((IntData)data).data[rowNr];
+				return Integer.valueOf(intValue).toString();
 			case LONG:
 				return Long.valueOf(((LongData)data).data[rowNr]).toString();
 			case DOUBLE:
-				return Double.valueOf(((DoubleData)data).data[rowNr]).toString();
+				double doubleValue = ((DoubleData)data).data[rowNr];
+				if (doubleValue == 0) {
+					return "[null]";
+				}
+				return Double.valueOf(doubleValue).toString();
 			case STRING_CODE:
 				int code = ((IntData)data).data[rowNr];
 				return BufferManager.dictionary.getString(code);

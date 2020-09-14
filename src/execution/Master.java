@@ -132,14 +132,6 @@ public class Master {
 			// Aggregation, grouping, and sorting if required
 			PostProcessor.process(subQueryInfo, context,
 					resultRel, tempResult);
-//			if (GeneralConfig.isParallel) {
-//				ParallelPostProcessor.process(subQueryInfo, context,
-//						resultRel, tempResult);
-//			}
-//			else {
-//				PostProcessor.process(subQueryInfo, context,
-//						resultRel, tempResult);
-//			}
 			if (StartupConfig.Memory) {
 				JoinStats.temporaryTableIndexSize.add(BufferManager.getTempDataSize(subQueryResults));
 			}

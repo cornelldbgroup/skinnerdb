@@ -1,6 +1,8 @@
 package operators;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicIntegerArray;
 import java.util.stream.IntStream;
@@ -305,6 +307,7 @@ public class SumAggregate {
 				case DOUBLE: {
 					double[][] values = new double[nrBatches][targetCard];
 					DoubleData doubleSrc = (DoubleData) srcData;
+
 					// Iterate over input column
 					IntStream.range(0, nrBatches).parallel().forEach(bid -> {
 						double[] localValues = values[bid];

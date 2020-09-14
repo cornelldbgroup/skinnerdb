@@ -308,11 +308,13 @@ public class SkinnerCmd {
 //                            false, -1, -1, null);
                     // Display query result if no target tables specified
                     // and if this is not a benchmark run.
-                    if (!benchRun && printResult) {
-                        // Display on console
+//                    if (!benchRun && printResult) {
+//                        // Display on console
 //                        RelationPrinter.print(
 //                                NamingConfig.FINAL_RESULT_NAME);
-                    }
+//                    }
+                    RelationPrinter.print(
+                            NamingConfig.FINAL_RESULT_NAME);
                 } catch (SQLexception e) {
                     System.out.println(e.getMessage());
                 } catch (Exception e) {

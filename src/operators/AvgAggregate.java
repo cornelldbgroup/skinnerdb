@@ -182,10 +182,6 @@ public class AvgAggregate {
 		targetRelInfo.addColumn(targetColInfo);
 		// Update catalog statistics on result table
 		CatalogManager.updateStats(targetRel);
-		// Set target values to null
-		for (int row=0; row<targetCard; ++row) {
-			genericTarget.isNull.set(row);
-		}
 		// Initialize batches
 		if (nrGroups < 100) {
 			int[] groups = grouping ? ((IntData)
