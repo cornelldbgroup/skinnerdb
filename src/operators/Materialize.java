@@ -1,9 +1,8 @@
 package operators;
 
 import java.util.*;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -15,6 +14,7 @@ import config.GeneralConfig;
 import config.NamingConfig;
 import config.ParallelConfig;
 import data.*;
+import expressions.ExpressionInfo;
 import indexing.Index;
 import joining.parallel.indexing.DoublePartitionIndex;
 import joining.parallel.indexing.IntPartitionIndex;
@@ -22,6 +22,8 @@ import joining.parallel.join.DPJoin;
 import joining.parallel.parallelization.lockfree.LockFreeResult;
 import joining.parallel.threads.ThreadPool;
 import joining.result.ResultTuple;
+import joining.result.UniqueJoinResult;
+import preprocessing.Context;
 import print.RelationPrinter;
 import query.ColumnRef;
 import query.QueryInfo;
@@ -105,6 +107,9 @@ public class Materialize {
 							if (!intSourceData.isNull.get(row)) {
 								target[rowCtr] = source[row];
 							}
+							else {
+								target[rowCtr] = Integer.MIN_VALUE;
+							}
 						}
 					});
 					break;
@@ -123,6 +128,9 @@ public class Materialize {
 							// Treat special case: insertion of null values
 							if (!doubleSourceData.isNull.get(row)) {
 								target[rowCtr] = source[row];
+							}
+							else {
+								target[rowCtr] = Integer.MIN_VALUE;
 							}
 						}
 					});
@@ -485,6 +493,116 @@ public class Materialize {
 	}
 
 	/**
+	 * Materializes a join relation from given indices
+	 * for a set of base tables.
+	 *
+	 * @param tuples			base table indices representing result tuples
+	 * @param tableToIdx		maps table names to base table indices
+	 * @param sourceCols		set of columns to copy
+	 * @param context	maps source columns, as in query, to DB columns
+	 * @param targetRelName		name of materialized result relation
+	 * @throws Exception
+	 */
+	public static void execute(Collection<ResultTuple> tuples,
+							   Map<String, Integer> tableToIdx,
+							   Collection<ColumnRef> sourceCols,
+							   Context context,
+							   String targetRelName) throws Exception {
+		// Update catalog, insert result table
+		TableInfo resultInfo = new TableInfo(targetRelName, true);
+		CatalogManager.currentDB.addTable(resultInfo);
+		// Add result columns to catalog
+		for (ColumnRef srcQueryRef : sourceCols) {
+			// Map query column to DB column
+			ColumnRef srcDBref = context.columnMapping.get(srcQueryRef);
+			// Extract information on source column
+			String srcAlias = srcQueryRef.aliasName;
+			String srcColName = srcQueryRef.columnName;
+			ColumnInfo srcInfo = CatalogManager.getColumn(srcDBref);
+			// Generate target column
+			String targetColName = srcAlias + "." + srcColName;
+			ColumnInfo targetInfo = new ColumnInfo(targetColName,
+					srcInfo.type, false, false, false, false);
+			resultInfo.addColumn(targetInfo);
+		}
+
+		List<Collection<ResultTuple>> resultsPerThread = context.resultTuplesList;
+		int maxSize = context.maxSize;
+		ResultTuple[] resultArray = new ResultTuple[maxSize];
+		Set<ResultTuple> resultTupleSet = new HashSet<>(maxSize);
+		AtomicInteger index = new AtomicInteger(0);
+		resultsPerThread.forEach(resultTuples -> resultTuples.forEach(resultTuple -> {
+			if (resultTupleSet.add(resultTuple)) {
+				resultArray[index.getAndIncrement()] = resultTuple;
+			}
+		}));
+		int cardinality = index.get();
+		List<RowRange> batches = split(cardinality);
+		// Materialize result columns
+		sourceCols.parallelStream().forEach(srcQueryRef -> {
+			// Generate target column reference
+			String targetCol = srcQueryRef.aliasName + "." + srcQueryRef.columnName;
+			ColumnRef targetRef = new ColumnRef(targetRelName, targetCol);
+			// Generate target column
+			int tableIdx = tableToIdx.get(srcQueryRef.aliasName);
+			ColumnRef srcDBref = context.columnMapping.get(srcQueryRef);
+			ColumnInfo srcInfo = CatalogManager.getColumn(srcDBref);
+			ColumnData srcData = BufferManager.colToData.get(srcDBref);
+			JavaType jType = TypeUtil.toJavaType(srcInfo.type);
+			switch (jType) {
+				case INT: {
+					IntData intTargetData = new IntData(cardinality);
+					IntData intSourceData = (IntData) srcData;
+					BufferManager.colToData.put(targetRef, intTargetData);
+					int[] target = intTargetData.data;
+					int[] source = intSourceData.data;
+					batches.parallelStream().forEach(batch -> {
+						int batchFirst = batch.firstTuple;
+						int batchLast = batch.lastTuple;
+						for (int rowCtr = batchFirst; rowCtr <= batchLast; rowCtr++) {
+							int row = resultArray[rowCtr].baseIndices[tableIdx];
+							// Treat special case: insertion of null values
+							if (!intSourceData.isNull.get(row)) {
+								target[rowCtr] = source[row];
+							}
+							else {
+								target[rowCtr] = Integer.MIN_VALUE;
+							}
+						}
+					});
+					break;
+				}
+				case DOUBLE: {
+					DoubleData doubleTargetData = new DoubleData(cardinality);
+					DoubleData doubleSourceData = (DoubleData) srcData;
+					BufferManager.colToData.put(targetRef, doubleTargetData);
+					double[] target = doubleTargetData.data;
+					double[] source = doubleSourceData.data;
+					batches.parallelStream().forEach(batch -> {
+						int batchFirst = batch.firstTuple;
+						int batchLast = batch.lastTuple;
+						for (int rowCtr = batchFirst; rowCtr <= batchLast; rowCtr++) {
+							int row = resultArray[rowCtr].baseIndices[tableIdx];
+							// Treat special case: insertion of null values
+							if (!doubleSourceData.isNull.get(row)) {
+								target[rowCtr] = source[row];
+							}
+							else {
+								target[rowCtr] = Integer.MIN_VALUE;
+							}
+						}
+					});
+					break;
+				}
+			}
+		});
+		// Update statistics in catalog
+		CatalogManager.updateStats(targetRelName);
+	}
+
+
+
+	/**
 	 * Materializes a join relation from given an existing relation
 	 *
 	 * @param sourceCols		set of columns to copy
@@ -573,6 +691,39 @@ public class Materialize {
 		// Update statistics in catalog
 		CatalogManager.updateStats(targetRelName);
 		RelationPrinter.print(targetRelName);
+	}
+
+
+	public static void materializeRow(UniqueJoinResult uniqueJoinResult,
+									  QueryInfo query,
+									  Context context,
+									  String resultRel) throws Exception {
+
+		TableInfo resultInfo = new TableInfo(resultRel, true);
+		CatalogManager.currentDB.addTable(resultInfo);
+		// Add result columns to catalog
+		int columnCtr = 0;
+		for (ExpressionInfo expr : query.selectExpressions) {
+			ColumnRef srcQueryRef = expr.columnsMentioned.iterator().next();
+			ColumnRef srcDBref = context.columnMapping.get(srcQueryRef);
+			ColumnInfo srcInfo = CatalogManager.getColumn(srcDBref);
+			// Update catalog by adding result column
+			String targetColName = query.selectToAlias.getOrDefault(expr,
+					srcQueryRef.aliasName + "." + srcQueryRef.columnName);
+			ColumnRef resultRef = new ColumnRef(resultRel, targetColName);
+			ColumnInfo targetInfo = new ColumnInfo(targetColName,
+					srcInfo.type, false, false, false, false);
+			resultInfo.addColumn(targetInfo);
+			// insert row
+			List<Integer> rowList = new ArrayList<>();
+			int row = uniqueJoinResult.tuples[columnCtr];
+			rowList.add(row);
+			ColumnData resultData = uniqueJoinResult.uniqueColumns[columnCtr].copyRows(rowList);
+			BufferManager.colToData.put(resultRef, resultData);
+			columnCtr++;
+		}
+		// Update statistics in catalog
+		CatalogManager.updateStats(resultRel);
 	}
 
 	/**

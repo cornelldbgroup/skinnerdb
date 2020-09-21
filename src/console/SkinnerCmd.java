@@ -101,10 +101,8 @@ public class SkinnerCmd {
                     System.out.println(query.toString());
                     QueryStats.queryName = queryName;
                     QueryStats.optimal = nameToOptimal.get(queryName);
-                    long startMillis = System.currentTimeMillis();
                     processSQL(query.toString(), true);
-                    long totalMillis = System.currentTimeMillis() - startMillis;
-                    BenchUtil.writeStats(queryName, totalMillis, benchOut);
+                    BenchUtil.writeStats(queryName, QueryStats.time, benchOut);
                 }
                 // Close benchmark result file
                 benchOut.close();
@@ -199,6 +197,7 @@ public class SkinnerCmd {
         try {
             sqlStatement = CCJSqlParserUtil.parse(input);
         } catch (Exception e) {
+            e.printStackTrace();
             System.out.println("Error in parsing SQL command");
             return;
         }
@@ -296,8 +295,12 @@ public class SkinnerCmd {
                         plainSelect = (PlainSelect) select.getSelectBody();
                     }
                     GeneralConfig.ISTESTCASE = true;
+                    long queryStart = System.currentTimeMillis();
                     Master.executeSelect(plainSelect,
                             false, -1, -1, null);
+                    long queryEnd = System.currentTimeMillis();
+                    QueryStats.time = queryEnd - queryStart;
+                    System.out.println("Query Time: " + (queryEnd - queryStart));
 //                    Master.executeSelect(plainSelect,
 //                            false, -1, -1, null);
 //                    Master.executeSelect(plainSelect,
@@ -313,8 +316,10 @@ public class SkinnerCmd {
 //                        RelationPrinter.print(
 //                                NamingConfig.FINAL_RESULT_NAME);
 //                    }
-                    RelationPrinter.print(
-                            NamingConfig.FINAL_RESULT_NAME);
+//                    if (printResult) {
+//                        RelationPrinter.print(
+//                                NamingConfig.FINAL_RESULT_NAME);
+//                    }
                 } catch (SQLexception e) {
                     System.out.println(e.getMessage());
                 } catch (Exception e) {

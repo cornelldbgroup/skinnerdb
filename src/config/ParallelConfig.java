@@ -57,7 +57,8 @@ public class ParallelConfig {
 	/**
 	 * The minimum size of partitioned table
 	 */
-	public final static int PARTITION_SIZE = 50000;
+	public final static int PARTITION_SIZE = 40000;
+//	public final static int PARTITION_SIZE = 3000;
 	/**
 	 * The maximum size of statistics
 	 */

@@ -2,6 +2,7 @@ package indexing;
 
 import com.koloboke.collect.IntCollection;
 import com.koloboke.collect.map.IntIntMap;
+import com.koloboke.collect.map.hash.HashLongIntMap;
 import config.LoggingConfig;
 
 /**
@@ -44,6 +45,10 @@ public abstract class Index {
 	 */
 	public boolean sorted = true;
 	/**
+	 * After indexing: map long value of each row to group id.
+	 */
+	public volatile HashLongIntMap valueToGroups;
+	/**
 	 * Initialize for given cardinality of indexed table.
 	 * 
 	 * @param cardinality	number of rows to index
@@ -63,9 +68,9 @@ public abstract class Index {
 	 */
 	public abstract void sortRows();
 	/**
-	 * Sort the elements and initialize the array of sortedRow
+	 * Given the value, return the group key.
 	 */
-	public abstract int groupKey(int rowCtr);
+	public abstract int groupKey(long rowVal);
 
 	/**
 	 * Output given log text if activated.

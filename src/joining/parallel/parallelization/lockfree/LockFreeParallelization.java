@@ -18,6 +18,7 @@ import joining.parallel.parallelization.Parallelization;
 import joining.parallel.progress.ParallelProgressTracker;
 import joining.parallel.threads.ThreadPool;
 import joining.parallel.uct.DPNode;
+import joining.result.UniqueJoinResult;
 import logs.LogUtils;
 import net.sf.jsqlparser.expression.Expression;
 import predicate.NonEquiNode;
@@ -123,32 +124,49 @@ public class LockFreeParallelization extends Parallelization {
         JoinStats.subExeTime.add(JoinStats.exeTime);
 
         int maxSize = 0;
+        context.resultTuplesList = new ArrayList<>(nrThreads);
         for (int futureCtr = 0; futureCtr < nrThreads; futureCtr++) {
-            LockFreeResult result = futures.get(futureCtr).get();
-            maxSize += result.result.size();
-        }
-        List<int[]> resultArrayList = new ArrayList<>(maxSize);
-        List<Long> groupKeyList = new ArrayList<>(maxSize);
-        // Generate group keys
-        futures.forEach(futureResult -> {
             try {
-                LockFreeResult result = futureResult.get();
-                for (ResultTuple resultTuple: result.result) {
-                    if (resultList.add(resultTuple)) {
-                        resultArrayList.add(resultTuple.baseIndices);
-                    }
-                }
-                resultList.addAll(result.result);
+                LockFreeResult result = futures.get(futureCtr).get();
+                maxSize += result.result.size();
+                // collect results
+                context.resultTuplesList.add(result.result);
                 if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
                     logs[result.id] = result.logs;
                 }
-
+                UniqueJoinResult uniqueJoinResult = dpJoins.get(futureCtr).uniqueJoinResult;
+                if (uniqueJoinResult != null) {
+                    if (context.uniqueJoinResult == null) {
+                        context.uniqueJoinResult = uniqueJoinResult;
+                    }
+                    else {
+                        context.uniqueJoinResult.merge(uniqueJoinResult);
+                    }
+                }
             } catch (InterruptedException | ExecutionException e) {
                 e.printStackTrace();
             }
-        });
-        context.resultList = resultArrayList;
-        context.groupsKey = groupKeyList;
+        }
+        context.maxSize = maxSize;
+//        List<int[]> resultArrayList = new ArrayList<>(maxSize);
+//        // Generate group keys
+//        futures.forEach(futureResult -> {
+//            try {
+//                LockFreeResult result = futureResult.get();
+//                for (ResultTuple resultTuple: result.result) {
+//                    if (resultList.add(resultTuple)) {
+//                        resultArrayList.add(resultTuple.baseIndices);
+//                    }
+//                }
+//                if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
+//                    logs[result.id] = result.logs;
+//                }
+//
+//            } catch (InterruptedException | ExecutionException e) {
+//                e.printStackTrace();
+//            }
+//        });
+//        context.resultList = resultArrayList;
         long nrSamples = 0;
         for (DPJoin joinOp: dpJoins) {
             nrSamples = Math.max(joinOp.roundCtr, nrSamples);
@@ -172,6 +190,5 @@ public class LockFreeParallelization extends Parallelization {
             }
             JoinStats.algorithmSize.add(size * nrTables * 4);
         }
-        System.out.println("Result Set: " + resultList.size());
     }
 }

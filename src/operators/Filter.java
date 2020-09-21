@@ -102,8 +102,7 @@ public class Filter {
 	/**
 	 * Returns list of indices of rows satisfying given
 	 * unary predicate.s
-	 * 
-	 * @param unaryPred		unary predicate
+	 *
 	 * @param tableName		name of DB table to which predicate applies
 	 * @param columnMapping	maps query columns to buffered columns -
 	 * 						assume identity mapping if null is specified.
@@ -211,32 +210,33 @@ public class Filter {
 			else {
 				// Divide tuples into batches
 				List<RowRange> batches = split(cardinality);
-//				result = new ArrayList<>(cardinality);
-//				// Process batches in joining.parallel
-//				for (RowRange rowRange: batches) {
-//					// Evaluate predicate for each table row
-//					for (int rowCtr=rowRange.firstTuple;
-//						 rowCtr<=rowRange.lastTuple; ++rowCtr) {
-//						if (unaryBoolEval.evaluate(rowCtr) > 0) {
-//							result.add(rowCtr);
-//						}
-//					}
-//				}
+				int nrBatches = batches.size();
+//				result = batches.parallelStream().flatMap(batch ->
+//						filterBatch(unaryBoolEval, batch).stream()).collect(
+//						Collectors.toList());
+//				return result;
+				ColumnRef columnRef = columnMapping.get(unaryPred.columnsMentioned.iterator().next());
+				ColumnData data = BufferManager.getData(columnRef);
+				result = new ArrayList<>(cardinality);
+				List<Integer>[] resultsArray = new ArrayList[batches.size()];
+				IntStream.range(0, nrBatches).parallel().forEach(bid -> {
+					RowRange batch = batches.get(bid);
+					int first = batch.firstTuple;
+					int end = batch.lastTuple;
 
-//				SimpleLinkedList<Integer>[] batchResults = new SimpleLinkedList[batches.size()];
-//				IntStream.range(0, batches.size()).parallel().forEach(bid ->
-//						batchResults[bid] = filterSimpleBatch(unaryBoolEval, batches.get(bid)));
-//
-//				SimpleLinkedList<Integer> simpleResult = new SimpleLinkedList<>();
-//				for (SimpleLinkedList<Integer> batchResult : batchResults) {
-//					simpleResult.concat(batchResult);
-//				}
-//
-//				return simpleResult;
-				result = batches.parallelStream().flatMap(batch ->
-						filterBatch(unaryBoolEval, batch).stream()).collect(
-						Collectors.toList());
-				return result;
+					List<Integer> subResult = new ArrayList<>(end - first + 1);
+					// Evaluate predicate for each table row
+					for (int rowCtr = first; rowCtr <= end; ++rowCtr) {
+						if (data.longForRow(rowCtr) != Integer.MIN_VALUE
+								&& unaryBoolEval.evaluate(rowCtr) > 0) {
+							subResult.add(rowCtr);
+						}
+					}
+					resultsArray[bid] = subResult;
+				});
+				for (List<Integer> subResult: resultsArray) {
+					result.addAll(subResult);
+				}
 			}
 		}
 		return result;
@@ -250,10 +250,11 @@ public class Filter {
 	 */
 	static List<RowRange> split(int cardinality) {
 		List<RowRange> batches = new ArrayList<RowRange>();
-		for (int batchCtr=0; batchCtr*ParallelConfig.PRE_BATCH_SIZE<cardinality;
+		int batchSize = Math.max(ParallelConfig.PRE_BATCH_SIZE, cardinality / 500);
+		for (int batchCtr=0; batchCtr * batchSize < cardinality;
 				++batchCtr) {
-			int startIdx = batchCtr * ParallelConfig.PRE_BATCH_SIZE;
-			int tentativeEndIdx = startIdx + ParallelConfig.PRE_BATCH_SIZE-1;
+			int startIdx = batchCtr * batchSize;
+			int tentativeEndIdx = startIdx + batchSize - 1;
 			int endIdx = Math.min(cardinality - 1, tentativeEndIdx);
 			RowRange rowRange = new RowRange(startIdx, endIdx);
 			batches.add(rowRange);
@@ -312,7 +313,6 @@ public class Filter {
 	static List<Integer> filterBatch(UnaryBoolEval unaryBoolEval, 
 			RowRange rowRange) {
 		List<Integer> result = new ArrayList<>(rowRange.lastTuple - rowRange.firstTuple);
-//		List<Integer> result = new SimpleLinkedList<>();
 		// Evaluate predicate for each table row
 		for (int rowCtr=rowRange.firstTuple;
 				rowCtr<=rowRange.lastTuple; ++rowCtr) {

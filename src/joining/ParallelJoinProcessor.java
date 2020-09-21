@@ -9,8 +9,10 @@ import joining.parallel.parallelization.root.RootParallelization;
 import joining.parallel.parallelization.search.AdaptiveSearchParallelization;
 import joining.parallel.parallelization.search.HeuristicParallelization;
 import joining.parallel.parallelization.search.SearchParallelization;
+import joining.parallel.parallelization.task.StandardParallelization;
 import joining.parallel.parallelization.task.TaskParallelization;
 import joining.parallel.parallelization.tree.TreeParallelization;
+import joining.result.MinJoinResult;
 import joining.result.ResultTuple;
 import operators.Materialize;
 import joining.parallel.parallelization.Parallelization;
@@ -178,6 +180,12 @@ public class ParallelJoinProcessor {
                         JoinConfig.BUDGET_PER_EPISODE, query, context);
                 parallelization.execute(resultTuples);
             }
+            // DBTP
+            else if (ParallelConfig.PARALLEL_SPEC == 16) {
+                Parallelization parallelization = new StandardParallelization(ParallelConfig.EXE_THREADS,
+                        JoinConfig.BUDGET_PER_EPISODE, query, context);
+                parallelization.execute(resultTuples);
+            }
 
             subExes.add(JoinStats.subExeTime.remove(JoinStats.subExeTime.size() - 1));
             subSamples.add(JoinStats.nrSamples);
@@ -192,16 +200,30 @@ public class ParallelJoinProcessor {
             JoinStats.subAllSamples.add(Arrays.toString(subSamples.toArray()));
             JoinStats.subAllTuples.add(Arrays.toString(subTuples.toArray()));
 
-
+            int skinnerJoinCard;
             long materializeStart = System.currentTimeMillis();
+            String targetRelName = NamingConfig.JOINED_NAME;
+            if (context.uniqueJoinResult != null) {
+                String resultRel = query.plainSelect.getIntoTables().get(0).getName();
+                Materialize.materializeRow(context.uniqueJoinResult, query, context, resultRel);
+                skinnerJoinCard = 1;
+            }
+            else if (context.resultTuplesList == null) {
+                Materialize.execute(resultTuples, query.aliasToIndex,
+                        query.colsForPostProcessing,
+                        context.columnMapping, targetRelName);
+                skinnerJoinCard = CatalogManager.getCardinality(targetRelName);
+            }
+            else {
+                Materialize.execute(resultTuples, query.aliasToIndex,
+                        query.colsForPostProcessing,
+                        context, targetRelName);
+                skinnerJoinCard = CatalogManager.getCardinality(targetRelName);
+            }
             // Materialize result table
-            int nrTuples = resultTuples.size();
 //            String resultRel = query.plainSelect.getIntoTables().get(0).getName();
 //            log("Materializing join result with " + nrTuples + " tuples ...");
-            String targetRelName = NamingConfig.JOINED_NAME;
-            Materialize.execute(resultTuples, query.aliasToIndex,
-                    query.colsForPostProcessing,
-                    context.columnMapping, targetRelName);
+
 //            // Update processing context
             context.columnMapping.clear();
             for (ColumnRef postCol : query.colsForPostProcessing) {
@@ -212,7 +234,6 @@ public class ParallelJoinProcessor {
             long materializeEnd = System.currentTimeMillis();
             JoinStats.subMateriazed.add(materializeEnd - materializeStart);
             // Store number of join result tuples
-            int skinnerJoinCard = resultTuples.size();
             JoinStats.skinnerJoinCards.add(skinnerJoinCard);
             System.out.println("Join card: " + skinnerJoinCard + "\tJoin time:" + Arrays.toString(JoinStats.subExeTime.toArray()));
             JoinStats.lastJoinCard = skinnerJoinCard;

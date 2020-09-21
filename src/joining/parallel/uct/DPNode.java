@@ -393,6 +393,7 @@ public class DPNode {
             double exploration = Math.sqrt(Math.log(nrVisits) / nrTry);
             // Assess the quality of the action according to policy
             double quality = meanReward;
+//            exploration *= JoinConfig.EXPLORATION_WEIGHT;
             exploration *= (nrThreads == 1 ? JoinConfig.EXPLORATION_WEIGHT : JoinConfig.PARALLEL_WEIGHT);
             quality += exploration;
 //            double quality = meanReward + JoinConfig.EXPLORATION_WEIGHT * exploration;
@@ -629,8 +630,18 @@ public class DPNode {
         if (nrThreads == 1) {
             return 0;
         }
+
+//        if (joinOrder.length > 30) {
+//            for (int i = 0; i < nrTables; i++) {
+//                int table = joinOrder[i];
+//                if (table < 40 && table % 4 > 1 || table == 43) {
+//                    return table;
+//                }
+//            }
+//        }
         int splitLen = 5;
         int splitSize = ParallelConfig.PARTITION_SIZE;
+//        int splitSize = 53000;
         int splitTable = joinOrder[0];
         if (ParallelConfig.PARALLEL_SPEC == 11) {
             return splitTable;
@@ -647,7 +658,8 @@ public class DPNode {
             return splitTable;
         }
         int end = Math.min(splitLen, nrTables);
-        int start = nrTables < splitLen ? 0 : 1;
+//        int end = nrTables;
+        int start = nrTables <= splitLen + 1 ? 0 : 1;
         for (int i = start; i < end; i++) {
             int table = joinOrder[i];
             int cardinality = cardinalities[table];

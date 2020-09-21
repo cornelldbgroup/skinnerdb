@@ -98,7 +98,7 @@ public class BenchUtil {
 	 * @param benchOut	channel to benchmark file
 	 */
 	public static void writeBenchHeader(PrintWriter benchOut) {
-		benchOut.println("Query\tTuples\t"
+		benchOut.println("Query\tMillis\tTuples\t"
 				+ "Iterations\tLookups\tNrIndexEntries\tnrUniqueLookups\t"
 				+ "NrUctNodes\tNrPlans\tJoinCard\tNrSamples\tAvgReward\t"
 				+ "MaxReward\tTotalWork\tResultCard\tSubFilter\tSubIndex\t"
@@ -119,6 +119,7 @@ public class BenchUtil {
 			PrintWriter benchOut) throws Exception {
 		// Generate output
 		benchOut.print(queryName + "\t");
+		benchOut.print(totalMillis + "\t");
 		benchOut.print(JoinStats.nrTuples + "\t");
 		benchOut.print(JoinStats.nrIterations + "\t");
 		benchOut.print(JoinStats.nrIndexLookups + "\t");

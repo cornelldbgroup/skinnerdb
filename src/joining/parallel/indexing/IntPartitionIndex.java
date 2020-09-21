@@ -4,6 +4,7 @@ import com.koloboke.collect.IntCollection;
 import com.koloboke.collect.map.IntIntCursor;
 import com.koloboke.collect.map.IntIntMap;
 import com.koloboke.collect.map.hash.HashIntIntMaps;
+import com.koloboke.collect.map.hash.HashLongIntMaps;
 import com.koloboke.collect.set.IntSet;
 import config.ParallelConfig;
 import data.DoubleData;
@@ -11,10 +12,7 @@ import data.IntData;
 import predicate.Operator;
 import query.ColumnRef;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicIntegerArray;
 import java.util.stream.IntStream;
 
@@ -29,10 +27,6 @@ public class IntPartitionIndex extends PartitionIndex {
      * information is stored.
      */
     public final IntIntMap keyToPositions;
-    /**
-     * After indexing: maps search key to group id.
-     */
-    public final IntIntMap keyToGroups;
     /**
      * Number of unique keys.
      */
@@ -73,7 +67,6 @@ public class IntPartitionIndex extends PartitionIndex {
             this.unique = true;
             keyToPositions = HashIntIntMaps.newMutableMap(this.cardinality);
             positions = null;
-            keyToGroups = null;
             keyColumnIndex(origin);
         }
         else if (policy == IndexPolicy.Sequential) {
@@ -105,7 +98,7 @@ public class IntPartitionIndex extends PartitionIndex {
             }
             sequentialIndex(colRef, keyToNr);
             // TODO: detect grouped index
-            keyToGroups = HashIntIntMaps.newMutableMap(keyToPositions.size());
+            valueToGroups = HashLongIntMaps.newMutableMap(keyToPositions.size());
             if (positions != null) {
                 groupIds = keyToPositions.values().toIntArray();
                 groupPerRow = new int[intData.cardinality];
@@ -119,7 +112,7 @@ public class IntPartitionIndex extends PartitionIndex {
                 });
                 for (int groupCtr = 0; groupCtr < groupIds.length; groupCtr++) {
                     int value = intData.data[positions[groupIds[groupCtr] + 1]];
-                    keyToGroups.put(value, groupCtr);
+                    valueToGroups.put(value, groupCtr);
                 }
             }
             else {
@@ -127,7 +120,7 @@ public class IntPartitionIndex extends PartitionIndex {
                 Arrays.parallelSetAll(groupPerRow, index -> index);
                 for (int groupCtr = 0; groupCtr < data.length; groupCtr++) {
                     int value = data[groupCtr];
-                    keyToGroups.put(value, groupCtr);
+                    valueToGroups.put(value, groupCtr);
                 }
             }
 
@@ -137,7 +130,6 @@ public class IntPartitionIndex extends PartitionIndex {
             keyToPositions = origin.keyToPositions;
             positions = new int[origin.positions.length];
             parallelSparseIndex(origin);
-            keyToGroups = null;
         }
         else {
             int[] data = intData.data;
@@ -207,7 +199,6 @@ public class IntPartitionIndex extends PartitionIndex {
                     }
                 }
             });
-            keyToGroups = null;
         }
         nrKeys = this.keyToPositions.size();
     }
@@ -283,13 +274,51 @@ public class IntPartitionIndex extends PartitionIndex {
             });
             keyToPositions.values().parallelStream().forEach(pos -> {
                 int nr = integerArray.get(pos);
-                positions[pos] = nr;
-                Arrays.parallelSort(positions, pos + 1, pos + nr + 1);
-                IntStream.range(pos+1, pos+1+nr).parallel().forEach(ctr -> {
-                    scopes[positions[ctr]] = (byte) ((ctr - pos - 1) % nrThreads);
-                });
-
+                if (nr > 0) {
+                    positions[pos] = nr;
+                    Arrays.sort(positions, pos + 1, pos + nr + 1);
+                    IntStream.range(pos+1, pos+1+nr).forEach(ctr ->
+                            scopes[positions[ctr]] = (byte) ((ctr - pos - 1) % nrThreads));
+                }
             });
+            // map implementation
+//            long s1 = System.currentTimeMillis();
+//            Map<Integer, int[]>[] batchGroups = new HashMap[nrBatches];
+//            IntStream.range(0, nrBatches).parallel().forEach(bid -> {
+//                IntIndexRange batch = batches.get(bid);
+//                int first = batch.firstTuple;
+//                int last = batch.lastTuple;
+//                int maxKeys = Math.min(nrKeys, last - first + 1);
+//                Map<Integer, int[]> keyToRows = new HashMap<>(maxKeys);
+//                for (int rowCtr = first; rowCtr <= last; ++rowCtr) {
+//                    int value = data[rowCtr];
+//                    if (!intData.isNull.get(rowCtr) && value != Integer.MIN_VALUE) {
+//                        int firstPos = keyToPositions.getOrDefault(value, -1);
+//                        int nrValues = index.positions[firstPos];
+//                        int[] satisfiedRows = keyToRows.computeIfAbsent(firstPos, (key) -> new int[nrValues + 1]);
+//                        satisfiedRows[0]++;
+//                        int subNrs = satisfiedRows[0];
+//                        satisfiedRows[subNrs] = value;
+//                    }
+//                }
+//                batchGroups[bid] = keyToRows;
+//            });
+//            long s2 = System.currentTimeMillis();
+//            keyToPositions.values().parallelStream().forEach(pos -> {
+//                int nr = 0;
+//                for (int batchCtr = 0; batchCtr < nrBatches; batchCtr++) {
+//                    int[] satisfiedRows = batchGroups[batchCtr].get(pos);
+//                    if (satisfiedRows != null) {
+//                        int subNrs = satisfiedRows[0];
+//                        LinkedList<Integer> list = new LinkedList<>();
+//                        System.arraycopy(satisfiedRows, 1, positions, pos + 1 + nr, subNrs);
+//                        nr += subNrs;
+//                        positions[pos] = nr;
+//                    }
+//                }
+//            });
+//            long s3 = System.currentTimeMillis();
+//            System.out.println("unsorted: " + (s2 - s1) + " " + (s3 - s2));
 //            batches.parallelStream().forEach(batch -> {
 //                int first = batch.firstTuple;
 //                int last = batch.lastTuple;
@@ -407,7 +436,7 @@ public class IntPartitionIndex extends PartitionIndex {
      */
     public List<IntIndexRange> split() {
         List<IntIndexRange> batches = new ArrayList<>();
-        int batchSize = Math.max(ParallelConfig.PRE_INDEX_SIZE, cardinality / 200);
+        int batchSize = Math.max(ParallelConfig.PRE_INDEX_SIZE, cardinality / 500);
         for (int batchCtr = 0; batchCtr * batchSize < cardinality;
              ++batchCtr) {
             int startIdx = batchCtr * batchSize;
@@ -754,8 +783,8 @@ public class IntPartitionIndex extends PartitionIndex {
     }
 
     @Override
-    public int groupKey(int rowCtr) {
-        return keyToGroups.get(intData.data[rowCtr]);
+    public int groupKey(long rowVal) {
+        return valueToGroups.get(rowVal);
     }
 
     @Override

@@ -16,4 +16,8 @@ public class QueryStats {
      * Optimal join order.
      */
     public static int[] optimal = null;
+    /**
+     * End-to-end time for the query.
+     */
+    public static long time;
 }

@@ -163,7 +163,7 @@ public class DoubleIndex extends Index {
 	}
 
 	@Override
-	public int groupKey(int rowCtr) {
+	public int groupKey(long rowVal) {
 		return 0;
 	}
 }

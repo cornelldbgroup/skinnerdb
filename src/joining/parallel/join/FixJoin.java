@@ -214,43 +214,43 @@ public class FixJoin extends SPJoin {
 
         if (size > ParallelConfig.MAX_CACHE_SIZE) {
             // utility based
-//            pairList.sort(Comparator.comparing(o -> o.getRight().getRight()));
-//            Pair<Pair<Integer, Integer>, Pair<Integer, Double>> entry = pairList.get(0);
-//            int bid = entry.getKey().getLeft();
-//            int key = entry.getKey().getRight();
-//            int itemSize = entry.getRight().getLeft() * constant;
-//            while (size > ParallelConfig.MAX_CACHE_SIZE) {
-//                statsCache[bid].remove(key);
-//                progressCache[bid].remove(key);
-//                pairList.remove(0);
-//                size -= itemSize;
-//                if (size > 0) {
-//                    entry = pairList.get(0);
-//                    bid = entry.getKey().getLeft();
-//                    key = entry.getKey().getRight();
-//                    itemSize = entry.getRight().getLeft() * constant;
-//                }
-//            }
-            // FIFO
-            for (int i = 0; i < progressCache.length; i++) {
-                List<Pair<Pair<Integer, Integer>, Pair<Integer, Double>>> batchList = new LinkedList<>();
-                for (Map.Entry<Integer, Pair<Integer, Double>> entry: statsCache[i].entrySet()) {
-                    Pair<Integer, Double> resultPair = entry.getValue();
-                    Pair<Integer, Integer> keyPair = new ImmutablePair<>(i, entry.getKey());
-                    batchList.add(new ImmutablePair<>(keyPair, resultPair));
-                }
-                batchList.sort(Comparator.comparing(o -> o.getLeft().getRight()));
-                Iterator<Pair<Pair<Integer, Integer>, Pair<Integer, Double>>> batchIter = batchList.iterator();
-                while (size > ParallelConfig.MAX_CACHE_SIZE && batchIter.hasNext()) {
-                    Pair<Pair<Integer, Integer>, Pair<Integer, Double>> entry = batchIter.next();
-                    int key = entry.getLeft().getRight();
-                    int itemSize = entry.getRight().getLeft() * constant;
-                    statsCache[i].remove(key);
-                    progressCache[i].remove(key);
-                    batchIter.remove();
-                    size -= itemSize;
+            pairList.sort(Comparator.comparing(o -> o.getRight().getRight()));
+            Pair<Pair<Integer, Integer>, Pair<Integer, Double>> entry = pairList.get(0);
+            int bid = entry.getKey().getLeft();
+            int key = entry.getKey().getRight();
+            int itemSize = entry.getRight().getLeft() * constant;
+            while (size > ParallelConfig.MAX_CACHE_SIZE) {
+                statsCache[bid].remove(key);
+                progressCache[bid].remove(key);
+                pairList.remove(0);
+                size -= itemSize;
+                if (size > 0) {
+                    entry = pairList.get(0);
+                    bid = entry.getKey().getLeft();
+                    key = entry.getKey().getRight();
+                    itemSize = entry.getRight().getLeft() * constant;
                 }
             }
+            // FIFO
+//            for (int i = 0; i < progressCache.length; i++) {
+//                List<Pair<Pair<Integer, Integer>, Pair<Integer, Double>>> batchList = new LinkedList<>();
+//                for (Map.Entry<Integer, Pair<Integer, Double>> entry: statsCache[i].entrySet()) {
+//                    Pair<Integer, Double> resultPair = entry.getValue();
+//                    Pair<Integer, Integer> keyPair = new ImmutablePair<>(i, entry.getKey());
+//                    batchList.add(new ImmutablePair<>(keyPair, resultPair));
+//                }
+//                batchList.sort(Comparator.comparing(o -> o.getLeft().getRight()));
+//                Iterator<Pair<Pair<Integer, Integer>, Pair<Integer, Double>>> batchIter = batchList.iterator();
+//                while (size > ParallelConfig.MAX_CACHE_SIZE && batchIter.hasNext()) {
+//                    Pair<Pair<Integer, Integer>, Pair<Integer, Double>> entry = batchIter.next();
+//                    int key = entry.getLeft().getRight();
+//                    int itemSize = entry.getRight().getLeft() * constant;
+//                    statsCache[i].remove(key);
+//                    progressCache[i].remove(key);
+//                    batchIter.remove();
+//                    size -= itemSize;
+//                }
+//            }
         }
 
 
@@ -724,38 +724,26 @@ public class FixJoin extends SPJoin {
         int firstTable = plan.joinOrder.order[0];
         int start = Math.max(offsets[firstTable], tupleIndices[firstTable]);
         List<int[]> intermediateResults = new ArrayList<>();
-//        long x1 = System.currentTimeMillis();
-//        // for the first table, just add tuples of the first table to the intermediate result.
-//        for (int firstTuple = start; firstTuple < cardinalities[firstTable]; firstTuple++) {
-//            tupleIndices[firstTable] = firstTuple;
-//            intermediateResults.add(tupleIndices.clone());
-//            statsInstance.nrTuples++;
-//            if (terminate.get()) {
-//                state.lastIndex = 1;
-//                return;
-//            }
-//        }
-//        long x2 = System.currentTimeMillis();
-//        System.out.println("Initial: " + (x2 - x1));
 
-        // iterate all joining tables
+        // Iterate all tables in the join order
         for (int nextIndex = 0; nextIndex < nrTables; nextIndex++) {
             int nextTable = plan.joinOrder.order[nextIndex];
             // Integrate table offset
             tupleIndices[nextTable] = Math.max(
                     offsets[nextTable], tupleIndices[nextTable]);
-            // some join statistics for current index
+            // Some join statistics for current index
             int nextCardinality = cardinalities[nextTable];
             int curTuple = tupleIndices[nextTable];
             List<JoinPartitionIndexWrapper> indexWrappers = joinIndices.get(nextIndex);
             final boolean isEmpty = indexWrappers.isEmpty();
             final boolean isFirst = nextIndex == 0;
             List<int[]> finalIntermediateResults = intermediateResults;
-            // partition the input intermediate results
+            // Partition the input intermediate results
             int splitSize = isFirst ? cardinalities[firstTable] - start : finalIntermediateResults.size();
             List<IntIndexRange> ranges = this.split(splitSize);
             List<int[]> curResults = isFirst && splitSize < ParallelConfig.PRE_BATCH_SIZE ?
                     new ArrayList<>(cardinalities[firstTable] - start) :
+                    // TODO: specify the size of the list
                     new ArrayList<>();
 
             // if the intermediate result size is smaller than the minimal batch size.
@@ -861,7 +849,7 @@ public class FixJoin extends SPJoin {
                 this.resultList = new ArrayList[ranges.size()];
                 this.threadResultsList = new ThreadResult[ranges.size()][];
                 for (IntIndexRange batch : ranges) {
-                    // the start and end position of the partition.
+                    // Start and end position of the partition.
                     int startIndex = batch.firstTuple;
                     int endIndex = batch.lastTuple;
                     final int indexStart = nextIndex;
@@ -870,7 +858,6 @@ public class FixJoin extends SPJoin {
                     futures.add(executorService.submit(() -> {
                         int[] points = new int[2];
                         int[] threadIndices = tupleIndices.clone();
-//                        long startX = System.currentTimeMillis();
                         List<int[]> threadFinalResults = new ArrayList<>();
                         // For the first table that is larger than batch size, we need to get tuples from a list
                         int threadTable = plan.joinOrder.order[indexStart];
@@ -878,7 +865,7 @@ public class FixJoin extends SPJoin {
                         // Integrate table offset
                         threadIndices[threadTable] = Math.max(
                                 offsets[threadTable], threadIndices[threadTable]);
-                        // some join statistics for current index
+                        // Some join statistics for current index
                         int threadCardinality = cardinalities[threadTable];
                         int threadTuple = threadIndices[threadTable];
                         List<JoinPartitionIndexWrapper> threadIndexWrappers = joinIndices.get(indexStart);
@@ -917,9 +904,9 @@ public class FixJoin extends SPJoin {
                             }
                         }
                         else {
-                            // the index wrapper is empty
+                            // Index wrapper is empty
                             if (threadFirst) {
-                                // create an object array that has the same size of intermediate result partition
+                                // Create an object array that has the same size of intermediate result partition
                                 threadResults = new ThreadResult[1];
                                 int[] threadResultsArray = new int[nrTables * (endIndex - startIndex + 1) + 1];
                                 for (int firstTuple = start + startIndex; firstTuple <= start + endIndex; firstTuple++) {
@@ -928,7 +915,7 @@ public class FixJoin extends SPJoin {
                                     if (terminate.get()) {
                                         return new ArrayList<>();
                                     }
-                                    // accumulate how many new tuples we have found.
+                                    // Accumulate how many new tuples we have found.
                                     allResultCounts++;
                                     threadIterations++;
                                 }
@@ -937,20 +924,22 @@ public class FixJoin extends SPJoin {
                                 threadResults[0] = new ThreadResult(threadResultsArray);
                             }
                             else if (threadEmpty) {
-                                // create an object array that has the same size of intermediate result partition
+                                // Create an object array that has the same size of intermediate result partition
                                 threadResults = new ThreadResult[endIndex - startIndex + 1];
-                                // iterate all intermediate tuples
+                                // Iterate all intermediate tuples
+                                int[] tuples = new int[nrTables];
                                 for (int rid = startIndex; rid <= endIndex; rid++) {
-                                    int[] tuples = finalIntermediateResults.get(rid);
+                                    System.arraycopy(finalIntermediateResults.get(rid), 0, tuples, 0, nrTables);
                                     // For this tuple, we know there are (threadCardinality - threadTuple) numbers of
-                                    // tuples that will be joined to the given tuple. And we save all tuples in a long array.
+                                    // tuples that will be joined to the given tuple.
+                                    // And we save all tuples in a long array.
                                     int count = 0;
                                     int newCount = threadNonEquiPreds.size() == 0 ? threadCardinality - threadTuple : 1;
                                     int[] threadResultsArray = new int[newCount * nrTables + 1];
                                     int tuple = threadTuple;
                                     while (tuple < threadCardinality) {
                                         tuples[threadTable] = tuple;
-                                        // whether pass non-equi join predicate
+                                        // Whether pass non-equi join predicate
                                         boolean pass = true;
                                         for (NonEquiNode pred : applicablePreds.get(indexStart)) {
                                             if (!pred.evaluate(tuples, threadTable, cardinalities[threadTable])) {
@@ -984,11 +973,12 @@ public class FixJoin extends SPJoin {
                                 }
                             }
                             else {
-                                // create an object array that has the same size of intermediate result partition
+                                // Create an object array that has the same size of intermediate result partition
                                 threadResults = new ThreadResult[endIndex - startIndex + 1];
-                                // iterate all intermediate tuples
+                                // Iterate all intermediate tuples
+                                int[] tuples = new int[nrTables];
                                 for (int rid = startIndex; rid <= endIndex; rid++) {
-                                    int[] tuples = finalIntermediateResults.get(rid);
+                                    System.arraycopy(finalIntermediateResults.get(rid), 0, tuples, 0, nrTables);
                                     threadResults[rid - startIndex] = getThreadResult(tuples, threadTable,
                                             threadTuple, newPointsList, points, nrTables,
                                             threadIndexWrappers, threadNonEquiPreds);
@@ -1005,7 +995,7 @@ public class FixJoin extends SPJoin {
 //                                return new ArrayList<>();
 //                            }
 
-                            // write the results to the cache
+                            // Write the results to the cache
                             this.progressCache[bid].put(prefixKey, threadResults);
                             double score = joinProbs[indexStart] * threadIterations;
                             this.statsCache[bid].put(prefixKey, new ImmutablePair<>(allResultCounts, score));

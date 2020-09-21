@@ -330,6 +330,7 @@ public class ParallelProgressTracker {
             int table = order[joinCtr];
             curPrefixProgress = curPrefixProgress.childNodes[table];
             if (curPrefixProgress == null || curPrefixProgress.latestStates[threadID] == null) {
+                state.lastIndex = joinCtr;
                 return state;
             }
             // get a thread state
@@ -361,28 +362,33 @@ public class ParallelProgressTracker {
                                 otherSplitKey = false;
                                 threadState.fastForward(state, table, splitKey, joinCtr);
                                 if (state.roundCtr < 0) {
+                                    state.lastIndex = joinCtr;
                                     return state;
                                 }
                             }
                             else if (progress == slowestProgress) {
                                 threadState.fastForward(state, table, splitKey, joinCtr);
                                 if (state.roundCtr < 0) {
+                                    state.lastIndex = joinCtr;
                                     return state;
                                 }
                             }
                             else {
                                 state.tupleIndices[table] = Math.max(0, slowestProgress);
                                 slowSet = true;
+                                state.lastIndex = joinCtr;
                                 return state;
                             }
                         }
                         else {
                             state.tupleIndices[table] = Math.max(0, slowestProgress);
+                            state.lastIndex = joinCtr;
                             return state;
                         }
                     }
                 }
                 else {
+                    state.lastIndex = joinCtr;
                     return state;
                 }
             }

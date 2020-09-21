@@ -423,10 +423,11 @@ public class SubJoin extends SPJoin {
 //        int joinIndex = state.lastIndex;
         int joinIndex = 1;
         System.arraycopy(state.tupleIndices, 0, tupleIndices, 0, nrTables);
-
+        int remainingBudget = budget;
         for (int i = 0; i < nrTables; i++) {
             int table = plan.joinOrder.order[i];
             joinIndex = i;
+            remainingBudget--;
             if (query.temporaryTables.contains(table)) {
                 tupleIndices[table] = offsets[table];
             }
@@ -449,8 +450,6 @@ public class SubJoin extends SPJoin {
             }
         }
 
-
-        int remainingBudget = budget;
         // Number of completed tuples added
         Arrays.fill(nrVisited, 0);
         nrResultTuples = 0;

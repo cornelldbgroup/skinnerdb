@@ -1,10 +1,13 @@
 package preprocessing;
 
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import joining.result.ResultTuple;
+import joining.result.UniqueJoinResult;
 import operators.Group;
 import operators.parallel.GroupIndex;
 import query.ColumnRef;
@@ -58,9 +61,21 @@ public class Context {
 	 */
 	public List<int[]> resultList;
 	/**
+	 * Store result list for each thread.
+	 */
+	public List<Collection<ResultTuple>> resultTuplesList;
+	/**
+	 * Store upper bound for result set.
+	 */
+	public int maxSize;
+	/**
 	 * Store group keys after the join phase.
 	 */
 	public List<Long> groupsKey;
+	/**
+	 * Unique join result
+	 */
+	public UniqueJoinResult uniqueJoinResult;
 	
 	@Override
 	public String toString() {

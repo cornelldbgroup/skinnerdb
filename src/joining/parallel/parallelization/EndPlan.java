@@ -1,6 +1,7 @@
 package joining.parallel.parallelization;
 
 import config.ParallelConfig;
+import joining.parallel.join.DPJoin;
 import joining.parallel.uct.BaseUctInner;
 import joining.parallel.uct.DPNode;
 import joining.parallel.uct.SimpleUctNode;
@@ -50,7 +51,9 @@ public class EndPlan {
         splitTable = -1;
         this.slowThreads = new int[nrTables];
         Arrays.fill(slowThreads, -1);
-        this.slowestState = new AtomicReference<>(new State(nrTables));
+        State firstState = new State(nrTables);
+        firstState.tid = -1;
+        this.slowestState = new AtomicReference<>(firstState);
         this.root = root;
         this.threadSlowStates = new State[nrThreads][nrTables];
     }
@@ -71,11 +74,11 @@ public class EndPlan {
         this.splitTable = splitTable;
     }
 
-    public State setSplitTable(int largeTable, State state) {
+    public State setSplitTable(int optimalTable, State state) {
         int nrTables = joinOrder.length;
         return slowestState.updateAndGet(previousState -> {
+            this.splitTable = optimalTable;
             if (previousState.isAhead(joinOrder, state, nrTables)) {
-                this.splitTable = largeTable;
                 return state;
             }
             else {
@@ -84,15 +87,16 @@ public class EndPlan {
         });
     }
 
-    public boolean isSlow(State state, int tid, int splitTable) {
+    public boolean isSlow(State state, int tid, int splitTable, DPJoin dpJoin) {
         threadSlowStates[tid][splitTable] = state;
         int nrTables = joinOrder.length;
         boolean isSlow = true;
-        for (int i = 0; i < threadSlowStates.length; i++) {
-            if (tid != i) {
-                State threadState = threadSlowStates[i][splitTable];
-                if (threadState == null ||
-                        (threadState.lastIndex >= 0 && threadState.isAhead(joinOrder, state, nrTables))) {
+        for (int threadCtr = 0; threadCtr < threadSlowStates.length; threadCtr++) {
+            if (tid != threadCtr) {
+                State threadState = threadSlowStates[threadCtr][splitTable];
+                if (threadState == null
+                        || (threadState.lastIndex >= 0
+                        && threadState.isAhead(joinOrder, state, nrTables))) {
                     isSlow = false;
                     break;
                 }
@@ -103,24 +107,13 @@ public class EndPlan {
 
     public boolean setFinished(int tid, int splitTable) {
         finishFlags[tid][splitTable] = true;
-        int number = 0;
-        int slowID = 0;
-        int firstFinish = -1;
-        for (int i = 0; i < finishFlags.length && number <= 1; i++) {
-            if (!finishFlags[i][splitTable]) {
-                number++;
-                slowID = i;
-            }
-            else if (firstFinish < 0){
-                firstFinish = i;
+        for (int thread = 0; thread < finishFlags.length; thread++) {
+            if (!finishFlags[thread][splitTable]) {
+                return false;
             }
         }
 
-        if (number == 1 && tid == firstFinish) {
-            slowThreads[splitTable] = slowID;
-        }
-
-        return number == 0;
+        return true;
     }
 
     public State getSlowState(int largeTable) {
@@ -133,9 +126,10 @@ public class EndPlan {
                 state.tid = i;
                 return state;
             }
-            else if (state == null ||
-                    (threadState.lastIndex >=0 && threadState.isAhead(joinOrder, state, nrTables))) {
+            else if (state == null || (threadState.lastIndex >= 0
+                            && threadState.isAhead(joinOrder, state, nrTables))) {
                 state = threadState;
+                state.tid = i;
             }
         }
         return state;

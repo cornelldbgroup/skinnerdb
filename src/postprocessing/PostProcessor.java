@@ -173,7 +173,7 @@ public class PostProcessor {
 		CatalogManager.currentDB.addTable(targetInfo);
 		PostStats.subGroupby.add(0L);
 		PostStats.subHaving.add(0L);
-		long aggStart = 0;
+		long aggStart = System.currentTimeMillis();
 		for (ExpressionInfo selInfo : queryInfo.selectExpressions) {
 			String colName = queryInfo.selectToAlias.get(selInfo);
 			String resultName = targetInfo.name;
@@ -234,7 +234,7 @@ public class PostProcessor {
 				System.out.println("AggColumn: " + aggInfo + "\t" + (timer1 - timer0));
 			}
 		}
-		long aggEnd = 0;
+		long aggEnd = System.currentTimeMillis();
 		PostStats.subAggregation.add(aggEnd - aggStart);
 		// Update statistics on result table
 		CatalogManager.updateStats(targetRel);
@@ -523,16 +523,18 @@ public class PostProcessor {
 			// Need to generate select item data -
 			// selector must be based on group-by columns.
 			String srcRel = NamingConfig.JOINED_NAME;
-			MapRows.parallelExecute(srcRel, expr, context.columnMapping,
-					context.aggToData, groupRef, nrGroups, resultRef);
-//			MapRows.execute(srcRel, expr, context.columnMapping,
+//			MapRows.parallelExecute(srcRel, expr, context.columnMapping,
 //					context.aggToData, groupRef, nrGroups, resultRef);
+			MapRows.execute(srcRel, expr, context.columnMapping,
+					context.aggToData, groupRef, nrGroups, resultRef);
 		} else {
 			// Need to generate data - selector is
 			// complex expression based on previously
 			// calculated per-group aggregates.
 			String srcRel = NamingConfig.AGG_TBL_NAME;
-			MapRows.parallelExecute(srcRel, expr, context.columnMapping,
+//			MapRows.parallelExecute(srcRel, expr, context.columnMapping,
+//					context.aggToData, null, -1, resultRef);
+			MapRows.execute(srcRel, expr, context.columnMapping,
 					context.aggToData, null, -1, resultRef);
 		}
 	}

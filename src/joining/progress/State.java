@@ -63,6 +63,12 @@ public class State {
 	 * @return				true iff the other state is ahead
 	 */
 	public boolean isAhead(int[] order, State otherState, int prefixLength) {
+		if (lastIndex == -1) {
+			return false;
+		}
+		if (otherState.lastIndex == -1) {
+			return true;
+		}
 		// Determine up to which join order index we compare
 		int nrCompared = prefixLength;
 		//int nrCompared = Math.min(prefixLength, lastIndex);

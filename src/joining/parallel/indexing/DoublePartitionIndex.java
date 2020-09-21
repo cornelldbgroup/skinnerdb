@@ -6,6 +6,7 @@ import com.koloboke.collect.map.DoubleIntMap;
 import com.koloboke.collect.map.IntIntMap;
 import com.koloboke.collect.map.hash.HashDoubleIntMaps;
 import com.koloboke.collect.map.hash.HashIntIntMaps;
+import com.koloboke.collect.map.hash.HashLongIntMaps;
 import com.koloboke.collect.set.IntSet;
 import config.ParallelConfig;
 import data.DoubleData;
@@ -29,10 +30,6 @@ public class DoublePartitionIndex extends PartitionIndex {
      * information is stored.
      */
     public final DoubleIntMap keyToPositions;
-    /**
-     * After indexing: maps search key to group id.
-     */
-    public final DoubleIntMap keyToGroups;
     /**
      * Number of unique keys.
      */
@@ -77,12 +74,10 @@ public class DoublePartitionIndex extends PartitionIndex {
                 keyToPositions = origin.keyToPositions;
             }
             keyColumnIndex(origin);
-            keyToGroups = null;
         }
         else if (policy == IndexPolicy.Sparse) {
             keyToPositions = origin.keyToPositions;
             parallelSparseIndex(origin);
-            keyToGroups = null;
         }
         else if (policy == IndexPolicy.Sequential) {
             boolean unique = true;
@@ -107,7 +102,7 @@ public class DoublePartitionIndex extends PartitionIndex {
             keyToPositions = HashDoubleIntMaps.newMutableMap(nrKeys);
             log(colRef + ": Number of keys:\t" + nrKeys);
             sequentialIndex(colRef, keyToNr);
-            keyToGroups = HashDoubleIntMaps.newMutableMap(keyToPositions.size());
+            valueToGroups = HashLongIntMaps.newMutableMap(keyToPositions.size());
             if (positions != null) {
                 groupIds = keyToPositions.values().toIntArray();
                 groupPerRow = new int[doubleData.cardinality];
@@ -121,7 +116,8 @@ public class DoublePartitionIndex extends PartitionIndex {
                 });
                 for (int groupCtr = 0; groupCtr < groupIds.length; groupCtr++) {
                     double value = data[positions[groupIds[groupCtr] + 1]];
-                    keyToGroups.put(value, groupCtr);
+                    long key = Double.doubleToRawLongBits(value);
+                    valueToGroups.put(key, groupCtr);
                 }
             }
             else {
@@ -129,7 +125,8 @@ public class DoublePartitionIndex extends PartitionIndex {
                 Arrays.parallelSetAll(groupPerRow, index -> index);
                 for (int groupCtr = 0; groupCtr < data.length; groupCtr++) {
                     double value = data[groupCtr];
-                    keyToGroups.put(value, groupCtr);
+                    long key = Double.doubleToRawLongBits(value);
+                    valueToGroups.put(key, groupCtr);
                 }
             }
         }
@@ -201,7 +198,6 @@ public class DoublePartitionIndex extends PartitionIndex {
                     }
                 }
             });
-            keyToGroups = null;
         }
         nrKeys = this.keyToPositions.size();
     }
@@ -693,8 +689,8 @@ public class DoublePartitionIndex extends PartitionIndex {
     }
 
     @Override
-    public int groupKey(int rowCtr) {
-        return keyToGroups.get(doubleData.data[rowCtr]);
+    public int groupKey(long rowVal) {
+        return valueToGroups.getOrDefault(rowVal, -1);
     }
 
     @Override

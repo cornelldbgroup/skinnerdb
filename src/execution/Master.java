@@ -17,6 +17,7 @@ import postprocessing.PostProcessor;
 import preprocessing.Context;
 import preprocessing.NewPreprocessor;
 import preprocessing.Preprocessor;
+import print.RelationPrinter;
 import query.ColumnRef;
 import query.QueryInfo;
 import query.SQLexception;
@@ -79,8 +80,11 @@ public class Master {
 			PlainSelect subQuery = unnestor.unnestedQueries.get(subQueryCtr);
 			Set<String> temporary = unnestor.temporaryTables.get(subQueryCtr);
 			// Analyze sub-query
+			long parseStart = System.currentTimeMillis();
 			QueryInfo subQueryInfo = new QueryInfo(subQuery, temporary, explain,
 					plotAtMost, plotEvery, plotDir);
+			long parseEnd = System.currentTimeMillis();
+			System.out.println("Parse query: " + (parseEnd - parseStart));
 			PreConfig.FILTER = PreConfig.PRE_FILTER;
 			// Filter, projection, and indexing for join phase
 			Preprocessor.performance = true;
@@ -129,11 +133,13 @@ public class Master {
 			boolean lastSubQuery = subQueryCtr==nrSubQueries-1;
 			boolean tempResult = lastSubQuery?finalTempResult:true;
 			String resultRel = subQuery.getIntoTables().get(0).getName();
-			// Aggregation, grouping, and sorting if required
-			PostProcessor.process(subQueryInfo, context,
-					resultRel, tempResult);
-			if (StartupConfig.Memory) {
-				JoinStats.temporaryTableIndexSize.add(BufferManager.getTempDataSize(subQueryResults));
+			if (!CatalogManager.currentDB.nameToTable.containsKey(resultRel)) {
+				// Aggregation, grouping, and sorting if required
+				PostProcessor.process(subQueryInfo, context,
+						resultRel, tempResult);
+				if (StartupConfig.Memory) {
+					JoinStats.temporaryTableIndexSize.add(BufferManager.getTempDataSize(subQueryResults));
+				}
 			}
 //			RelationPrinter.print(resultRel);
 			// Clean up intermediate results except result table

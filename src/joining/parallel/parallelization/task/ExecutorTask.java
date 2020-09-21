@@ -126,7 +126,7 @@ public class ExecutorTask implements Callable<TaskResult> {
                         bestJoinOrder[nextThread][nrTables] = 2;
                         fixJoins.get(nextThread).terminate.set(true);
                         System.out.println("Assign " + Arrays.toString(best)
-                                + " to Thread " + nextThread + " at round " + roundCtr + " " + System.currentTimeMillis());
+                                + " to Executor " + nextThread + " at round " + roundCtr + " " + System.currentTimeMillis());
                     }
 
                     nextThread = (nextThread + 1) % (nrExecutors + 1);

@@ -1,21 +1,30 @@
 package joining.parallel.join;
 
+import buffer.BufferManager;
 import catalog.CatalogManager;
 import com.koloboke.collect.set.IntSet;
 import com.koloboke.collect.set.hash.HashIntSets;
 import config.LoggingConfig;
 import config.ParallelConfig;
 import config.PreConfig;
+import data.ColumnData;
 import expressions.ExpressionInfo;
+import expressions.aggregates.AggInfo;
+import expressions.aggregates.SQLaggFunction;
 import expressions.compilation.EvaluatorType;
 import expressions.compilation.ExpressionCompiler;
 import expressions.compilation.KnaryBoolEval;
 import joining.progress.State;
 import joining.result.JoinResult;
+import joining.result.MaxJoinResult;
+import joining.result.MinJoinResult;
+import joining.result.UniqueJoinResult;
 import net.sf.jsqlparser.expression.Expression;
 import joining.parallel.statistics.StatsInstance;
+import net.sf.jsqlparser.expression.Function;
 import predicate.NonEquiNode;
 import preprocessing.Context;
+import query.AggregationType;
 import query.QueryInfo;
 
 import java.util.ArrayList;
@@ -62,6 +71,7 @@ public abstract class DPJoin {
      * finally a complete result.
      */
     public final JoinResult result;
+
     /**
      * Number of working threads.
      */
@@ -114,6 +124,10 @@ public abstract class DPJoin {
      * A set of finished tables
      */
     public final IntSet[] finishedTables;
+    /**
+     * Store result if the selected columns are unique
+     */
+    public final UniqueJoinResult uniqueJoinResult;
 
     ExpressionCompiler compiler;
     KnaryBoolEval boolEval;
@@ -169,6 +183,33 @@ public abstract class DPJoin {
                     predToComp.put(pred, boolEval);
                 }
             }
+        }
+        if (query.groupByExpressions.size() == 0 &&
+                query.aggregationType == AggregationType.ALL_ROWS) {
+            int nrAgg = query.aggregates.size();
+            ColumnData[] columnData = new ColumnData[nrAgg];
+            int[] tableIndices = new int[nrAgg];
+            int columnCtr = 0;
+            boolean isMax = true;
+            for (ExpressionInfo expressionInfo: query.selectExpressions) {
+                Function function = expressionInfo.aggregates.iterator().next();
+                String name = function.getName();
+                if (!name.equals("MIN") && !name.equals("MAX")) {
+                    uniqueJoinResult = null;
+                    return;
+                }
+                isMax = name.equals("MAX");
+                columnData[columnCtr] = BufferManager.getData(preSummary.columnMapping.get(
+                        expressionInfo.columnsMentioned.iterator().next()));
+                tableIndices[columnCtr] = expressionInfo.aliasIdxMentioned.iterator().next();
+                columnCtr++;
+            }
+            uniqueJoinResult = isMax ? new MaxJoinResult(nrAgg, columnData, tableIndices) :
+                    new MinJoinResult(nrAgg, columnData, tableIndices);
+
+        }
+        else {
+            uniqueJoinResult = null;
         }
     }
 

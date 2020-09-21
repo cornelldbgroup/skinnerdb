@@ -8,6 +8,7 @@ import config.ParallelConfig;
 import joining.join.OldJoin;
 import joining.parallel.join.FixJoin;
 import joining.parallel.join.SPJoin;
+import joining.parallel.join.ThreadResult;
 import joining.parallel.parallelization.Parallelization;
 import joining.parallel.progress.ParallelProgressTracker;
 import joining.parallel.threads.ThreadPool;
@@ -67,114 +68,92 @@ public class StandardParallelization extends Parallelization {
 
     @Override
     public void execute(Set<ResultTuple> resultList) throws Exception {
-        // Initialize statistics
-        long startMillis = System.currentTimeMillis();
-        // there is no predicate to evaluate in join phase.
-        if (query.equiJoinPreds.size() == 0 && query.nonEquiJoinPreds.size() == 0) {
-            String targetRelName = NamingConfig.JOINED_NAME;
-            Materialize.executeFromExistingTable(query.colsForPostProcessing,
-                    context.columnMapping, targetRelName);
-            // Measure execution time for join phase
-            JoinStats.exeTime = 0;
-            JoinStats.subExeTime.add(JoinStats.exeTime);
-            // Update processing context
-            context.columnMapping.clear();
-            for (ColumnRef postCol : query.colsForPostProcessing) {
-                String newColName = postCol.aliasName + "." + postCol.columnName;
-                ColumnRef newRef = new ColumnRef(targetRelName, newColName);
-                context.columnMapping.put(postCol, newRef);
-            }
-            // Store number of join result tuples
-            int skinnerJoinCard = CatalogManager.getCardinality(targetRelName);
-            JoinStats.skinnerJoinCards.add(skinnerJoinCard);
-            return;
-        }
         // Initialize a thread pool.
         ExecutorService executorService = ThreadPool.executorService;
         // Mutex shared by multiple threads.
         AtomicBoolean end = new AtomicBoolean(false);
-
-        OldJoin joinOp = new OldJoin(query, context,
-                JoinConfig.BUDGET_PER_EPISODE);
-        // Initialize UCT join order search tree
-        UctNode root = new UctNode(0, query, true, joinOp);
-        // Initialize counters and variables
-        int[] joinOrder = new int[query.nrJoined];
-        long roundCtr = 0;
-        // Get default action selection policy
-        SelectionPolicy policy = JoinConfig.DEFAULT_SELECTION;
-        // Initialize counter until memory loss
-        long nextForget = 1;
-        double maxReward = Double.NEGATIVE_INFINITY;
-        // master parameters
-        int nrExecutors = ParallelConfig.EXE_THREADS;
-        int nextThread = 0;
-        int lastCount = 0;
-        int nextPeriod = 1;
-        double nextNum = 1;
-        double base  = Math.pow(ParallelConfig.C, 1.0 / nrExecutors);
-        while (!joinOp.isFinished()) {
-            ++roundCtr;
-            double reward = root.sample(roundCtr, joinOrder, policy);
-            // Count reward except for final sample
-            if (!joinOp.isFinished()) {
-                maxReward = Math.max(reward, maxReward);
-            }
-
-            // Consider memory loss
-            if (JoinConfig.FORGET && roundCtr==nextForget) {
-                root = new UctNode(roundCtr, query, true, joinOp);
-                nextForget *= 10;
-            }
-
-            // assign the best join order to next thread.
-            if (roundCtr == lastCount + nextPeriod && nrExecutors > 1) {
-                System.out.println("Assign " + Arrays.toString(joinOrder) +
-                        " to Executor " + nextThread + " at round " + roundCtr);
-
-                nextThread = (nextThread + 1) % nrExecutors;
-                lastCount = (int) roundCtr;
-                nextNum = nextNum * base;
-                nextPeriod = (int) Math.round(nextNum);
-            }
-
+        int nrTables = query.nrJoined;
+        List<DBTask> tasks = new ArrayList<>();
+        // logs list
+        List<String>[] logs = new List[nrThreads];
+        int nrExecutors = Math.min(ParallelConfig.NR_EXECUTORS + 1, nrThreads);
+        // best join orders
+        int[][] best = new int[nrExecutors][nrTables + 1];
+        double[][] probs = new double[nrExecutors][nrTables];
+        for (int i = 0; i < nrExecutors; i++) {
+            logs[i] = new ArrayList<>();
+            best[i][0] = -1;
         }
+        for (int i = 0; i < nrExecutors; i++) {
+            FixJoin spJoin = spJoins.get(i);
+            DBTask dbTask = new DBTask(query, spJoin, end, best, probs, spJoins);
+            tasks.add(dbTask);
+        }
+        long executionStart = System.currentTimeMillis();
+        List<Future<TaskResult>> futures = executorService.invokeAll(tasks);
+//        TaskResult result = executorService.invokeAny(tasks);
+        long executionEnd = System.currentTimeMillis();
+        JoinStats.exeTime = executionEnd - executionStart;
+        JoinStats.subExeTime.add(JoinStats.exeTime);
+        futures.forEach(futureResult -> {
+            try {
+                TaskResult result = futureResult.get();
+                resultList.addAll(result.result);
+                if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
+                    logs[result.id] = result.logs;
+                }
+
+            } catch (InterruptedException | ExecutionException e) {
+                e.printStackTrace();
+            }
+
+        });
+        // close thread pool
+        for (FixJoin fixJoin: spJoins) {
+            List<int[]>[] opResultList = fixJoin.resultList;
+            ThreadResult[][] threadResultsList = fixJoin.threadResultsList;
+            if (opResultList != null) {
+                for (List<int[]> results: opResultList) {
+                    if (results != null) {
+                        for (int[] tuples: results) {
+                            resultList.add(new ResultTuple(tuples));
+                        }
+                    }
+                }
+            }
+            if (fixJoin.threadResultsList != null) {
+                for (ThreadResult[] results: threadResultsList) {
+                    if (results != null) {
+                        for (ThreadResult threadTuples: results) {
+                            int count = threadTuples.count;
+                            int[] tuples = new int[nrTables];
+                            for (int i = 0; i < count; i++) {
+                                int startPos = i * nrTables + 1;
+                                System.arraycopy(threadTuples.result, startPos, tuples, 0, nrTables);
+                                resultList.add(new ResultTuple(tuples));
+                            }
+                        }
+                    }
+                }
+            }
+            if (fixJoin.executorService != null)
+                fixJoin.executorService.shutdown();
+        }
+        long nrSamples = 0;
+        long nrTuples = 0;
+        for (SPJoin joinOp: spJoins) {
+            nrSamples = Math.max(joinOp.roundCtr, nrSamples);
+            nrTuples = Math.max(joinOp.statsInstance.nrTuples, nrTuples);
+        }
+        JoinStats.nrSamples = nrSamples;
+        JoinStats.nrTuples = nrTuples;
+
+
         // Write log to the local file.
         if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
-            List<String>[] logs = new List[1];
-            logs[0] = joinOp.logs;
             LogUtils.writeLogs(logs, "verbose/task/" + QueryStats.queryName);
         }
 
-        // Measure execution time for join phase
-        JoinStats.exeTime = System.currentTimeMillis() - startMillis;
-        JoinStats.subExeTime.add(JoinStats.exeTime);
-        // Materialize result table
-        Collection<ResultTuple> tuples = joinOp.result.getTuples();
-        int nrTuples = tuples.size();
-        String targetRelName = NamingConfig.JOINED_NAME;
-        Materialize.execute(tuples, query.aliasToIndex,
-                query.colsForPostProcessing,
-                context.columnMapping, targetRelName);
-        // Update processing context
-        context.columnMapping.clear();
-        for (ColumnRef postCol : query.colsForPostProcessing) {
-            String newColName = postCol.aliasName + "." + postCol.columnName;
-            ColumnRef newRef = new ColumnRef(targetRelName, newColName);
-            context.columnMapping.put(postCol, newRef);
-        }
-        // Store number of join result tuples
-        int skinnerJoinCard = CatalogManager.
-                getCardinality(NamingConfig.JOINED_NAME);
-        JoinStats.skinnerJoinCards.add(skinnerJoinCard);
-
-        // Measure execution time for join phase
-        JoinStats.joinMillis = System.currentTimeMillis() - startMillis;
-        JoinStats.subMateriazed.add(JoinStats.joinMillis - JoinStats.exeTime);
-        JoinStats.subJoinTime.add(JoinStats.exeTime);
-        System.out.println("Round count: " + roundCtr);
-        System.out.println("Join Order: " + Arrays.toString(joinOrder));
-        System.out.println("Join Card: " + skinnerJoinCard + "\tJoin time:" + JoinStats.joinMillis);
-        JoinStats.lastJoinCard = nrTuples;
+        System.out.println("Result Set: " + resultList.size());
     }
 }

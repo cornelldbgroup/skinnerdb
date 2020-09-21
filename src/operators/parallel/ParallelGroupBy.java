@@ -285,11 +285,14 @@ public class ParallelGroupBy {
         return nrGroups;
     }
 
-    public static long groupToLongBits(List<Index> sourceIndexes, int row) {
+    public static long groupToLongBits(List<Index> sourceIndexes, List<ColumnData> sourceData, int row) {
         long groupBits = 0;
         int card = 1;
-        for (Index index : sourceIndexes) {
-            groupBits += index.groupPerRow[row] * card;
+        for (int groupColumn = 0; groupColumn < sourceIndexes.size(); groupColumn++) {
+            long key = sourceData.get(groupColumn).longForRow(row);
+            Index index = sourceIndexes.get(groupColumn);
+            long columnBits = index.groupKey(key);
+            groupBits += columnBits * card;
             card *= index.groupIds.length;
         }
         return groupBits;
@@ -321,49 +324,68 @@ public class ParallelGroupBy {
         int nrGroupedColumns = query.groupByExpressions.size();
         if (nrGroupedColumns == 1) {
             List<GroupIndexRange> batches = split(cardinality);
-            Index index = sourceIndexes.iterator().next();
-            int[] groupsArray = index.groupPerRow;
-            AtomicIntegerArray groups = new AtomicIntegerArray(cardinality);
-            AtomicInteger nextID = new AtomicInteger(0);
-            batches.parallelStream().forEach(batch -> {
-                int first = batch.firstTuple;
-                int last = batch.lastTuple;
-                for (int posCtr = first; posCtr <= last; ++posCtr) {
-                    int groupBits = groupsArray[posCtr];
-                    boolean isEmpty = groups.compareAndSet(groupBits, 0, -1);
-                    if (isEmpty) {
-                        int groupID = nextID.getAndIncrement();
-                        groups.set(groupBits, groupID);
-                        groupData.data[posCtr] = groupID;
-                    }
-                    else {
-                        int groupID;
-                        do {
-                            groupID = groups.get(groupBits);
-                        } while (groupID < 0);
-                        groupData.data[posCtr] = groupID;
-                    }
-                }
-            });
-            nrGroups = nextID.get();
-        }
-        else {
-            List<GroupIndexRange> batches = split(cardinality);
+            ColumnData data = sourceCols.iterator().next();
             ConcurrentMap<Long, Integer> curGroupToID = new ConcurrentHashMap<>(cardinality);
             AtomicInteger nextID = new AtomicInteger(0);
             batches.parallelStream().forEach(batch -> {
                 int first = batch.firstTuple;
                 int last = batch.lastTuple;
                 for (int posCtr = first; posCtr <= last; ++posCtr) {
-                    long groupBits = groupToLongBits(sourceIndexes, posCtr);
-                    Integer groupID = curGroupToID.putIfAbsent(groupBits, -1);
+                    long key = data.longForRow(posCtr);
+                    Integer groupID = curGroupToID.putIfAbsent(key, -1);
                     if (groupID == null) {
                         groupID = nextID.getAndIncrement();
-                        curGroupToID.put(groupBits, groupID);
+                        curGroupToID.put(key, groupID);
+                    }
+                    else {
+                        do {
+                            groupID = curGroupToID.get(key);
+                        } while (groupID < 0);
+                    }
+                    groupData.data[posCtr] = groupID;
+                }
+            });
+            nrGroups = nextID.get();
+        }
+        else {
+//            List<GroupIndexRange> batches = split(cardinality);
+//            ConcurrentMap<Long, Integer> curGroupToID = new ConcurrentHashMap<>(cardinality);
+//            AtomicInteger nextID = new AtomicInteger(0);
+//            batches.parallelStream().forEach(batch -> {
+//                int first = batch.firstTuple;
+//                int last = batch.lastTuple;
+//                for (int posCtr = first; posCtr <= last; ++posCtr) {
+//                    long groupBits = groupToLongBits(sourceIndexes, sourceCols, posCtr);
+//                    Integer groupID = curGroupToID.putIfAbsent(groupBits, -1);
+//                    if (groupID == null) {
+//                        groupID = nextID.getAndIncrement();
+//                        curGroupToID.put(groupBits, groupID);
+//                    }
+//                    else if (groupID < 0) {
+//                        do {
+//                            groupID = curGroupToID.get(groupBits);
+//                        } while (groupID < 0);
+//                    }
+//                    groupData.data[posCtr] = groupID;
+//                }
+//            });
+//            nrGroups = curGroupToID.size();
+            List<GroupIndexRange> batches = split(cardinality);
+            ConcurrentMap<Group, Integer> curGroupToID = new ConcurrentHashMap<>(cardinality);
+            AtomicInteger nextID = new AtomicInteger(0);
+            batches.parallelStream().forEach(batch -> {
+                int first = batch.firstTuple;
+                int last = batch.lastTuple;
+                for (int posCtr = first; posCtr <= last; ++posCtr) {
+                    Group group = new Group(posCtr, sourceCols);
+                    Integer groupID = curGroupToID.putIfAbsent(group, -1);
+                    if (groupID == null) {
+                        groupID = nextID.getAndIncrement();
+                        curGroupToID.put(group, groupID);
                     }
                     else if (groupID < 0) {
                         do {
-                            groupID = curGroupToID.get(groupBits);
+                            groupID = curGroupToID.get(group);
                         } while (groupID < 0);
                     }
                     groupData.data[posCtr] = groupID;
