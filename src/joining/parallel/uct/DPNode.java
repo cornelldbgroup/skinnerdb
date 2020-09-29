@@ -102,8 +102,8 @@ public class DPNode {
     /**
      * concurrent priority set
      */
-//    private LinkedList<Integer>[] prioritySet;
-    private ConcurrentLinkedDeque<Integer> prioritySet;
+    private LinkedList<Integer>[] prioritySet;
+//    private ConcurrentLinkedDeque<Integer> prioritySet;
     /**
      * Number of threads.
      */
@@ -157,24 +157,24 @@ public class DPNode {
             this.nodeStatistics[i] = new NodeStatistics(nrActions);
         }
 
-//        this.prioritySet = new LinkedList[nrThreads];
-//        for (int i = 0; i < nrThreads; i++) {
-//            prioritySet[i] = new LinkedList<>();
-//            for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
-//                int table = nextTable[actionCtr];
-//                if (!query.temporaryTables.contains(table)) {
-//                    prioritySet[i].add(actionCtr);
-//                }
-//            }
-//        }
-
-        this.prioritySet = new ConcurrentLinkedDeque<>();
-        for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
-            int table = nextTable[actionCtr];
-            if (!query.temporaryTables.contains(table)) {
-                prioritySet.add(actionCtr);
+        this.prioritySet = new LinkedList[nrThreads];
+        for (int i = 0; i < nrThreads; i++) {
+            prioritySet[i] = new LinkedList<>();
+            for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
+                int table = nextTable[actionCtr];
+                if (!query.temporaryTables.contains(table)) {
+                    prioritySet[i].add(actionCtr);
+                }
             }
         }
+
+//        this.prioritySet = new ConcurrentLinkedDeque<>();
+//        for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
+//            int table = nextTable[actionCtr];
+//            if (!query.temporaryTables.contains(table)) {
+//                prioritySet.add(actionCtr);
+//            }
+//        }
 
         // initialize read-write lock for DPDsync
         if (ParallelConfig.PARALLEL_SPEC == 1) {
@@ -261,12 +261,12 @@ public class DPNode {
             }
         }
 
-//        this.prioritySet = new LinkedList[nrThreads];
-//        for (int i = 0; i < nrThreads; i++) {
-//            prioritySet[i] = new LinkedList<>(priorityActions);
-//        }
+        this.prioritySet = new LinkedList[nrThreads];
+        for (int i = 0; i < nrThreads; i++) {
+            prioritySet[i] = new LinkedList<>(priorityActions);
+        }
 
-        this.prioritySet = new ConcurrentLinkedDeque<>(priorityActions);
+//        this.prioritySet = new ConcurrentLinkedDeque<>(priorityActions);
 
 
         if (nrActions == 0) {
@@ -343,8 +343,11 @@ public class DPNode {
          * action among the ones with maximal UCT value.
          */
         Integer priorAction = null;
-        if (!prioritySet.isEmpty()) {
-            priorAction = prioritySet.pollFirst();
+//        if (!prioritySet.isEmpty()) {
+//            priorAction = prioritySet.pollFirst();
+//        }
+        if (!prioritySet[tid].isEmpty()) {
+            priorAction = prioritySet[tid].pollFirst();
         }
         if (priorAction != null) {
             return priorAction;
@@ -660,6 +663,7 @@ public class DPNode {
         int end = Math.min(splitLen, nrTables);
 //        int end = nrTables;
         int start = nrTables <= splitLen + 1 ? 0 : 1;
+//        int start = 0;
         for (int i = start; i < end; i++) {
             int table = joinOrder[i];
             int cardinality = cardinalities[table];
@@ -679,6 +683,7 @@ public class DPNode {
         int splitSize = ParallelConfig.PARTITION_SIZE;
         int splitTable = -1;
         int end = Math.min(splitLen, joinOrder.length);
+//        int start = nrTables <= splitLen + 1 ? 0 : 1;
         for (int i = 0; i < end; i++) {
             int table = joinOrder[i];
             int cardinality = cardinalities[table];

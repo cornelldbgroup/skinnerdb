@@ -3,6 +3,7 @@ package joining.parallel.join;
 import buffer.BufferManager;
 import com.koloboke.collect.set.IntSet;
 import config.JoinConfig;
+import config.LoggingConfig;
 import config.ParallelConfig;
 import config.PreConfig;
 import data.ColumnData;
@@ -180,7 +181,7 @@ public class ModJoin extends DPJoin {
         // Execute from ing state, save progress, return progress
 
         State state;
-        if (JoinConfig.NEWTRACKER && ParallelConfig.PARALLEL_SPEC == 0 && nrThreads > 1) {
+        if (JoinConfig.NEWTRACKER && ParallelConfig.PARALLEL_SPEC <= 1 && nrThreads > 1) {
             state = tracker.continueFrom(joinOrder, splitHash, tid, isShared, this);
             System.arraycopy(tracker.tableOffset, 0, offsets, 0, nrJoined);
         }
@@ -193,7 +194,9 @@ public class ModJoin extends DPJoin {
             System.arraycopy(oldTracker.tableOffset, 0, offsets, 0, nrJoined);
         }
 
-//        writeLog("Round: " + roundCtr + "\tJoin Order: " + Arrays.toString(order) + "\tSplit: " + splitTable);
+        if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
+            writeLog("Round: " + roundCtr + "\tJoin Order: " + Arrays.toString(order) + "\tSplit: " + splitTable);
+        }
 //        long timer2 = System.currentTimeMillis();
         boolean forward = false;
         for (int i = 0; i < nrJoined; i++) {
@@ -240,7 +243,7 @@ public class ModJoin extends DPJoin {
         int firstTable = getFirstLargeTable(order);
 //        int firstTable = order[0];
         if (!state.isFinished()) {
-            if (JoinConfig.NEWTRACKER && ParallelConfig.PARALLEL_SPEC == 0 && nrThreads > 1) {
+            if (JoinConfig.NEWTRACKER && ParallelConfig.PARALLEL_SPEC <= 1 && nrThreads > 1) {
                 state.roundCtr = 0;
                 slowest = tracker.updateProgress(joinOrder, splitHash, state, tid, roundCtr, splitTable, firstTable);
             }
@@ -255,8 +258,9 @@ public class ModJoin extends DPJoin {
         state.tid = tid;
         lastTable = splitTable;
         noProgressOnSplit = nrVisits[splitTable] == 0;
-//        writeLog("Visit: " + Arrays.toString(nrVisits) + "\tLarge: " + largeTable + "\tSlow: " + slowest);
-//        writeLog("End: " + state.toString() + "\tReward: " + reward + "\tLevel: " + deepIndex);
+        if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
+            writeLog("End: " + state.toString() + "\tReward: " + reward + "\tLevel: " + deepIndex);
+        }
         return reward;
     }
 
@@ -265,9 +269,12 @@ public class ModJoin extends DPJoin {
 //        order = new int[]{4, 5, 3, 2, 1, 0};
 //        splitTable = 2;
         // Treat special case: at least one input relation is empty
-//        writeLog("Round: " + roundCtr +
-//                "\tJoin Order: " + Arrays.toString(order) +
-//                "\tSplit: " + splitTable + " " + System.currentTimeMillis());
+        if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
+            writeLog("Round: " + roundCtr +
+                    "\tJoin Order: " + Arrays.toString(order) +
+                    "\tSplit: " + splitTable + " " + System.currentTimeMillis());
+        }
+
         for (int tableCtr = 0; tableCtr < nrJoined; ++tableCtr) {
             if (tableCtr == splitTable) {
                 break;
@@ -311,13 +318,15 @@ public class ModJoin extends DPJoin {
         if (slowState != null && state.isAhead(order, slowState, nrJoined)) {
             System.arraycopy(slowState.tupleIndices, 0, state.tupleIndices, 0, nrJoined);
         }
-//        if (slowState != null) {
-//            writeLog("Start: " + state.toString() + "\tSlow: " + slowState.toString());
-//        }
-//        else {
-//            writeLog("Start: " + state.toString() + "\tSlow: NULL");
-//        }
-//        writeLog("Offset: " + Arrays.toString(offsets));
+        if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
+            if (slowState != null) {
+                writeLog("Start: " + state.toString() + "\tSlow: " + slowState.toString());
+            }
+            else {
+                writeLog("Start: " + state.toString() + "\tSlow: NULL");
+            }
+            writeLog("Offset: " + Arrays.toString(offsets));
+        }
 //        long timer2 = System.currentTimeMillis();
         boolean forward = false;
         for (int i = 0; i < nrJoined; i++) {
@@ -345,33 +354,41 @@ public class ModJoin extends DPJoin {
 //            }
 //        }
         // Estimate sequential statistics
-
+        int firstEligibleCtr = 0;
         for (int joinCtr = 0; joinCtr < nrJoined; joinCtr++) {
             int table = order[joinCtr];
-            double downForSeq = downOps[table];
             int sizeForSeq = nrVisits[table];
-
-            if (sizeForSeq > nrThreads) {
-                int shrink = table == splitTable ? nrThreads : 1;
-                downOps[table] = downForSeq / shrink;
-                upOps[table] = (int)(downOps[table] / sizeForSeq);
+            if (sizeForSeq > nrThreads &&
+                    !query.temporaryTables.contains(table)) {
+                firstEligibleCtr = joinCtr;
+                break;
             }
         }
 
+
+
         double progress = Integer.MIN_VALUE;
         StringBuilder progressLog = new StringBuilder();
-        for (int table = 0; table < nrJoined; table++) {
+        int largeIndex = 0;
+        for (int joinCtr = 0; joinCtr < nrJoined; joinCtr++) {
+            int table = order[joinCtr];
             if (cardinalities[table] >= ParallelConfig.PARTITION_SIZE &&
                     !query.temporaryTables.contains(table)
                     && nrVisits[table] > nrThreads) {
-                double tableProgress = getSplitTableReward(order, table);
+                double tableProgress = getSplitTableReward(order, joinCtr, firstEligibleCtr);
                 progressLog.append("|").append(table).append("|").append(tableProgress);
                 if (tableProgress > progress) {
                     progress = tableProgress;
                     largeTable = table;
+                    largeIndex = joinCtr;
                 }
             }
         }
+
+//        int nextTable = order[largeIndex + 1];
+//        if (largeTable == splitTable && downOps[splitTable] <= 2 * upOps[nextTable]) {
+//            largeTable = nextTable;
+//        }
 
         double reward = reward(joinOrder.order, tupleIndexDelta, offsets);
         // Get the first table whose cardinality is larger than 1.
@@ -392,9 +409,12 @@ public class ModJoin extends DPJoin {
         state.tid = tid;
         lastTable = splitTable;
         noProgressOnSplit = nrVisits[splitTable] == 0;
-//        writeLog("Visit: " + Arrays.toString(nrVisits) + "\tLarge: " + largeTable + "\t" + progressLog +
-//                "\t" + Arrays.toString(downOps) + "\t" + Arrays.toString(upOps));
-//        writeLog("End: " + state.toString() + "\tReward: " + reward + " " + System.currentTimeMillis());
+
+        if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
+            writeLog("Visit: " + Arrays.toString(nrVisits) + "\tLarge: " + largeTable + "\t" + progressLog +
+                    "\t" + Arrays.toString(downOps) + "\t" + Arrays.toString(upOps));
+            writeLog("End: " + state.toString() + "\tReward: " + reward + " " + System.currentTimeMillis());
+        }
         return reward;
     }
 
@@ -975,20 +995,56 @@ public class ModJoin extends DPJoin {
         return isFinished || lastState.isFinished();
     }
 
-    public double getSplitTableReward(int[] joinOrder, int splitTable) {
-        double progress = 0;
-        double weight = 1.0;
-        for (int joinIndex = 0; joinIndex < nrJoined; joinIndex++) {
-            int table = joinOrder[joinIndex];
-            int indexSize = nrVisits[table];
-            if (indexSize > nrThreads) {
-                double downOperations = downOps[table];
-                double upOperations = upOps[table];
-                weight = weight * (1.0 / indexSize);
-                progress = progress + (weight * (table == splitTable ? (nrThreads * downOperations - indexSize * upOperations) :
-                        (downOperations - indexSize * upOperations)));
+    public double getSplitTableReward(int[] joinOrder, int splitCtr, int firstCtr) {
+//        int nrJoined = 10;
+//        int[] nrVisits = new int[]{1, 1, 15, 0, 0, 589, 47, 1, 0, 1};
+//        joinOrder = new int[]{3, 5, 9, 6, 4, 2, 7, 8, 1, 0};
+//        double[] downOps = new double[]{10.0, 25.0, 41.0, 0.0, 165.0, 4.0, 191.0, 40.0, 12.0, 6.0};
+//        double[] upOps = new double[]{6.0, 12.0, 10.0, 0.0, 165.0, 0.0, 4.0, 15.0, 12.0, 2.0};
+//        int nrThreads = 24;
+//        splitCtr = 3;
+//        firstCtr = 1;
+        int table = joinOrder[splitCtr];
+        double upOperations = upOps[table];
+        double downOperations = downOps[table];
+        double firstDown = downOps[joinOrder[firstCtr]];
+        double indexSize = nrVisits[table];
+        double splitDown = downOperations * nrThreads;
+        double splitUpDelta = upOperations > 0 ? upOperations * (nrThreads - 1) : (int)(splitDown / indexSize);
+        double progress = splitDown;
+        for (int joinIndex = splitCtr - 1; joinIndex >= firstCtr; joinIndex--) {
+            table = joinOrder[joinIndex];
+            indexSize = nrVisits[table];
+
+            upOperations = upOps[table];
+            downOperations = downOps[table];
+            if (downOperations == 0 || indexSize < nrThreads) {
+                return firstDown;
+            }
+            splitDown = downOperations + splitUpDelta;
+            splitUpDelta = upOperations > 0 ? (int)(upOperations / downOperations * splitUpDelta) : (int)(splitDown / indexSize);
+            if (splitUpDelta == 0) {
+                return joinIndex == firstCtr ? splitDown : firstDown;
+            }
+            else {
+                progress = splitDown;
             }
         }
+//        double progress = 0;
+//        double weight = 1.0;
+//        for (int joinIndex = 0; joinIndex < nrJoined; joinIndex++) {
+//            int table = joinOrder[joinIndex];
+//            int indexSize = nrVisits[table];
+//            if (indexSize > nrThreads) {
+//                double downOperations = downOps[table];
+//                double upOperations = upOps[table];
+//                weight = weight * (1.0 / indexSize);
+//                double tableProgress = (weight * (table == splitTable ? (nrThreads * downOperations - indexSize * upOperations) :
+//                        (downOperations - indexSize * upOperations)));
+//                progress = progress + tableProgress;
+//            }
+//        }
+
         return progress;
     }
 }

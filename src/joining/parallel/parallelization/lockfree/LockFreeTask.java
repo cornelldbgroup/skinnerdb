@@ -1,6 +1,7 @@
 package joining.parallel.parallelization.lockfree;
 
 import config.JoinConfig;
+import config.LoggingConfig;
 import config.ParallelConfig;
 import joining.parallel.uct.SimpleUctNode;
 import joining.progress.State;
@@ -116,12 +117,13 @@ public class LockFreeTask implements Callable<LockFreeResult>{
                         prevTable = joinOp.lastTable;
                         State prevState = joinOp.lastState;
 
-                        int slowID = slowState.tid;
 
-                        // maintain slowest state
+                        // Maintain slowest state
 //                        boolean isSlow = endPlan.isSlow(prevState, tid, prevTable, joinOp);
                         State slow = endPlan.getSlowState(prevTable);
-//                        joinOp.writeLog("Current Slow State: " + slow);
+                        if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
+                            joinOp.writeLog("Current Slow State: " + slow);
+                        }
                         endPlan.threadSlowStates[tid][splitTable] = prevState;
                         boolean isSlow = slow.tid == tid;
                         if (isSlow && !prevState.isFinished()) {
@@ -190,10 +192,10 @@ public class LockFreeTask implements Callable<LockFreeResult>{
 //                System.out.println("Write to logs!");
 //                System.exit(0);
 //            }
-//            if (JoinConfig.FORGET && roundCtr == nextForget) {
-//                endPlan.root = new DPNode(roundCtr, query, true, ParallelConfig.EXE_THREADS);
-//                nextForget *= 10;
-//            }
+            if (JoinConfig.FORGET && roundCtr == nextForget && tid == 0) {
+                endPlan.root = new DPNode(roundCtr, query, true, ParallelConfig.EXE_THREADS);
+                nextForget *= 10;
+            }
         }
         // Materialize result table
         long timer2 = System.currentTimeMillis();

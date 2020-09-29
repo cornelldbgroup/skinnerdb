@@ -1,6 +1,7 @@
 package joining.parallel.uct;
 
 import config.JoinConfig;
+import config.ParallelConfig;
 import joining.parallel.join.DPJoin;
 import joining.parallel.join.ParaJoin;
 import joining.parallel.join.SPJoin;
@@ -596,7 +597,7 @@ public class SyncNode {
         return reward;
     }
 
-    public double syncExecuteDP(List<DPJoin> joinOps, int[] joinOrder, long roundCtr) throws Exception {
+    public double syncExecuteDP(List<DPJoin> joinOps, int[] joinOrder, long roundCtr) {
         double reward = 0;
         List<Future<Double>> futures = new ArrayList<>();
         // Initialize a thread pool.
@@ -606,11 +607,10 @@ public class SyncNode {
         for (DPJoin joinOp : joinOps) {
             futures.add(executorService.submit(() -> joinOp.execute(joinOrder, splitTable, (int) roundCtr)));
         }
-        for (int i = 0; i < joinOps.size(); i++) {
-            Future<Double> futureResult = futures.get(i);
+        for (int threadCtr = 0; threadCtr < joinOps.size(); threadCtr++) {
+            Future<Double> futureResult = futures.get(threadCtr);
             try {
                 double result = futureResult.get();
-//                System.out.println(i + ": " + Arrays.toString(joinOrders.get(i)) + " " + result);
                 reward += result;
             } catch (InterruptedException | ExecutionException e) {
                 e.printStackTrace();
@@ -629,7 +629,7 @@ public class SyncNode {
      */
     int getSplitTableByCard(int[] joinOrder, int[] cardinalities) {
         int splitLen = 5;
-        int splitSize = 1000;
+        int splitSize = ParallelConfig.PARTITION_SIZE;
         int splitTable = joinOrder[0];
         int end = Math.min(splitLen, joinOrder.length);
         for (int i = 0; i < end; i++) {

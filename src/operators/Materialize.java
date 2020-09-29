@@ -529,13 +529,16 @@ public class Materialize {
 		List<Collection<ResultTuple>> resultsPerThread = context.resultTuplesList;
 		int maxSize = context.maxSize;
 		ResultTuple[] resultArray = new ResultTuple[maxSize];
-		Set<ResultTuple> resultTupleSet = new HashSet<>(maxSize);
+		ConcurrentHashMap<ResultTuple, Integer> resultTupleSet = new ConcurrentHashMap<>(maxSize);
+
 		AtomicInteger index = new AtomicInteger(0);
-		resultsPerThread.forEach(resultTuples -> resultTuples.forEach(resultTuple -> {
-			if (resultTupleSet.add(resultTuple)) {
-				resultArray[index.getAndIncrement()] = resultTuple;
-			}
-		}));
+		resultsPerThread.parallelStream().forEach(resultTuples ->
+				resultTuples.forEach(resultTuple -> {
+					if (resultTupleSet.putIfAbsent(resultTuple, 0) == null) {
+						resultArray[index.getAndIncrement()] = resultTuple;
+					}
+				})
+		);
 		int cardinality = index.get();
 		List<RowRange> batches = split(cardinality);
 		// Materialize result columns

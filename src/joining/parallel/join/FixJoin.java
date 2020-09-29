@@ -184,8 +184,7 @@ public class FixJoin extends SPJoin {
 //        long timer1 = System.currentTimeMillis();
         // Execute from ing state, save progress, return progress
         State state = new State(nrJoined);
-        int[] offsets;
-        offsets = Arrays.copyOf(tracker.tableOffsetMaps[0][0], nrJoined);
+        int[] offsets = Arrays.copyOf(tracker.tableOffsetMaps[0][0], nrJoined);
 //        Arrays.fill(offsets, 0);
 
 //            executeFixedJoin(plan, state, offsets);
@@ -302,18 +301,6 @@ public class FixJoin extends SPJoin {
                 return false;
             }
         }
-
-//        if (!preds.isEmpty()) {
-//            boolean another = boolEval.evaluate(tupleIndices) > 0;
-//            if (!another) {
-//                try {
-//                    Materialize.materializeTupleIndices(preSummary.columnMapping, tupleIndices, query);
-//                } catch (Exception e) {
-//                    e.printStackTrace();
-//                }
-//                System.out.println("Wrong");
-//            }
-//        }
         return true;
     }
     /**
@@ -843,7 +830,7 @@ public class FixJoin extends SPJoin {
                     }
                 }
             }
-            // parallel breadth-first join algorithm
+            // Parallel breadth-first join algorithm
             else {
                 List<Future<List<int[]>>> futures = new ArrayList<>();
                 this.resultList = new ArrayList[ranges.size()];
@@ -990,16 +977,12 @@ public class FixJoin extends SPJoin {
                                     threadIterations += newCount;
                                 }
                             }
-                            // master thread update a new join order?
-//                            if (terminate.get()) {
-//                                return new ArrayList<>();
-//                            }
 
                             // Write the results to the cache
                             this.progressCache[bid].put(prefixKey, threadResults);
                             double score = joinProbs[indexStart] * threadIterations;
                             this.statsCache[bid].put(prefixKey, new ImmutablePair<>(allResultCounts, score));
-                            if (finalIndexStart + 1 == nrTables) {
+                            if (finalIndexStart == nrTables - 1) {
                                 this.threadResultsList[bid] = threadResults;
                             }
                             long max = this.maxSizes[bid];

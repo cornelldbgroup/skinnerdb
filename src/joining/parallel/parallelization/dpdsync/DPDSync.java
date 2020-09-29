@@ -13,6 +13,7 @@ import joining.parallel.threads.ThreadPool;
 import joining.parallel.uct.DPNode;
 import joining.parallel.uct.SyncNode;
 import joining.result.ResultTuple;
+import joining.result.UniqueJoinResult;
 import joining.uct.SelectionPolicy;
 import joining.uct.UctNode;
 import logs.LogUtils;
@@ -55,7 +56,7 @@ public class DPDSync extends Parallelization {
         }
         // Initialize multi-way join operator
         int nrTables = query.nrJoined;
-        int nrSplits = query.equiJoinPreds.size();
+        int nrSplits = query.equiJoinPreds.size() + nrTables;
         Map<Integer, LeftDeepPartitionPlan> planCache = new ConcurrentHashMap<>();
         ParallelProgressTracker tracker = new ParallelProgressTracker(nrTables, nrThreads, nrSplits);
         for (int i = 0; i < nrThreads; i++) {
@@ -102,9 +103,18 @@ public class DPDSync extends Parallelization {
             }
         }
         long executionEnd = System.currentTimeMillis();
-        for (int i = 0; i < nrThreads; i++) {
-            DPJoin joinOp = dpJoins.get(i);
+        for (int threadCtr = 0; threadCtr < nrThreads; threadCtr++) {
+            DPJoin joinOp = dpJoins.get(threadCtr);
             resultList.addAll(joinOp.result.tuples);
+            UniqueJoinResult uniqueJoinResult = joinOp.uniqueJoinResult;
+            if (uniqueJoinResult != null) {
+                if (context.uniqueJoinResult == null) {
+                    context.uniqueJoinResult = uniqueJoinResult;
+                }
+                else {
+                    context.uniqueJoinResult.merge(uniqueJoinResult);
+                }
+            }
         }
         if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
             for (int i = 0; i < nrThreads; i++) {
@@ -115,6 +125,5 @@ public class DPDSync extends Parallelization {
         JoinStats.exeTime = executionEnd - executionStart;
         JoinStats.subExeTime.add(JoinStats.exeTime);
         JoinStats.nrSamples = roundCtr;
-        System.out.println("Result Set: " + resultList.size() + " " + JoinStats.exeTime + " " + roundCtr);
     }
 }
