@@ -29,6 +29,10 @@ public class GeneralConfig {
 	 */
 	public static int TEST_CASE = 5;
 	/**
+	 * Number of test cases.
+	 */
+	public static int Nr_Warmup = 1;
+	/**
 	 * Whether it is the test case.
 	 */
 	public static boolean ISTESTCASE = false;

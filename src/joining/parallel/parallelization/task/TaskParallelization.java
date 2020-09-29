@@ -91,7 +91,6 @@ public class TaskParallelization extends Parallelization {
 //        TaskResult result = executorService.invokeAny(tasks);
         long executionEnd = System.currentTimeMillis();
         JoinStats.exeTime = executionEnd - executionStart;
-        JoinStats.subExeTime.add(JoinStats.exeTime);
         futures.forEach(futureResult -> {
             try {
                 TaskResult result = futureResult.get();

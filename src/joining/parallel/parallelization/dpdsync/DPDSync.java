@@ -123,7 +123,6 @@ public class DPDSync extends Parallelization {
             LogUtils.writeLogs(logs, "verbose/dpdsync/" + QueryStats.queryName);
         }
         JoinStats.exeTime = executionEnd - executionStart;
-        JoinStats.subExeTime.add(JoinStats.exeTime);
         JoinStats.nrSamples = roundCtr;
     }
 }

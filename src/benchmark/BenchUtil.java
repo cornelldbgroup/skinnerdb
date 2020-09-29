@@ -98,12 +98,10 @@ public class BenchUtil {
 	 * @param benchOut	channel to benchmark file
 	 */
 	public static void writeBenchHeader(PrintWriter benchOut) {
-		benchOut.println("Query\tMillis\tTuples\t"
-				+ "Iterations\tLookups\tNrIndexEntries\tnrUniqueLookups\t"
-				+ "NrUctNodes\tNrPlans\tJoinCard\tNrSamples\tAvgReward\t"
-				+ "MaxReward\tTotalWork\tResultCard\tSubFilter\tSubIndex\t"
-				+ "SubPre\tSubJoin\tSubMaterial\tSubGroup\tSubAgg\tSubHaving\tSubOrder\t"
-				+ "AllSamples\tAllTuples\tAllCases\t"
+		benchOut.println("Query\tMillis\tPreMillis\tJoinMillis\tMatMillis\tPostMillis\t"
+				+ "FilterMillis\tIndexMillis\tGroupByMillis\tAggregateMillis\tHavingMillis\tOrderMillis\t"
+				+ "Tuples\tSamples\tLookups\tNrIndexEntries\tnrUniqueLookups\t"
+				+ "NrUctNodes\tNrPlans\tJoinCard\tAvgReward\tMaxReward\tTotalWork"
 				+ "DataSize\tUctSize\tStateSize\tJoinSize");
 	}
 	/**
@@ -116,39 +114,38 @@ public class BenchUtil {
 	 * @throws Exception
 	 */
 	public static void writeStats(String queryName, long totalMillis, 
-			PrintWriter benchOut) throws Exception {
+			PrintWriter benchOut) {
 		// Generate output
 		benchOut.print(queryName + "\t");
 		benchOut.print(totalMillis + "\t");
+		benchOut.print(PreStats.preMillis + "\t");
+		benchOut.print(JoinStats.joinMillis + "\t");
+		benchOut.print(JoinStats.matMillis + "\t");
+		benchOut.print(PostStats.postMillis + "\t");
+		// Break down statistics
+		benchOut.print(PreStats.filterMillis + "\t");
+		benchOut.print(PreStats.indexMillis + "\t");
+		benchOut.print(PostStats.groupByMillis + "\t");
+		benchOut.print(PostStats.aggMillis + "\t");
+		benchOut.print(PostStats.havingMillis + "\t");
+		benchOut.print(PostStats.orderMillis + "\t");
+		// Additional statistics
 		benchOut.print(JoinStats.nrTuples + "\t");
-		benchOut.print(JoinStats.nrIterations + "\t");
+		benchOut.print(JoinStats.nrSamples + "\t");
 		benchOut.print(JoinStats.nrIndexLookups + "\t");
 		benchOut.print(JoinStats.nrIndexEntries + "\t");
 		benchOut.print(JoinStats.nrUniqueIndexLookups + "\t");
 		benchOut.print(JoinStats.nrUctNodes + "\t");
 		benchOut.print(JoinStats.nrPlansTried + "\t");
 		benchOut.print(JoinStats.lastJoinCard + "\t");
-		benchOut.print(JoinStats.nrSamples + "\t");
 		benchOut.print(JoinStats.avgReward + "\t");
 		benchOut.print(JoinStats.maxReward + "\t");
 		benchOut.print(JoinStats.totalWork + "\t");
-		benchOut.print(JoinStats.skinnerJoinCards + "\t");
-		benchOut.print(Arrays.toString(PreStats.subFilterMillis.toArray()) + "\t");
-		benchOut.print(Arrays.toString(PreStats.subIndexMillis.toArray()) + "\t");
-		benchOut.print(Arrays.toString(PreStats.subPreMillis.toArray()) + "\t");
-		benchOut.print(Arrays.toString(JoinStats.subExeTime.toArray()) + "\t");
-		benchOut.print(Arrays.toString(JoinStats.subMateriazed.toArray()) + "\t");
-		benchOut.print(Arrays.toString(PostStats.subGroupby.toArray()) + "\t");
-		benchOut.print(Arrays.toString(PostStats.subAggregation.toArray()) + "\t");
-		benchOut.print(Arrays.toString(PostStats.subHaving.toArray()) + "\t");
-		benchOut.print(Arrays.toString(PostStats.subOrder.toArray()) + "\t");
-		benchOut.print(Arrays.toString(JoinStats.subAllSamples.toArray()) + "\t");
-		benchOut.print(Arrays.toString(JoinStats.subAllTuples.toArray()) + "\t");
-		benchOut.print(Arrays.toString(JoinStats.subAllExeTime.toArray()) + "\t");
-		benchOut.print(Arrays.toString(JoinStats.temporaryTableIndexSize.toArray()) + "\t");
-		benchOut.print(Arrays.toString(JoinStats.uctTreeSize.toArray()) + "\t");
-		benchOut.print(Arrays.toString(JoinStats.progressTrackerSize.toArray()) + "\t");
-		benchOut.println(Arrays.toString(JoinStats.algorithmSize.toArray()));
+		// Memory consumption statistics
+		benchOut.print(JoinStats.dataSize + "\t");
+		benchOut.print(JoinStats.treeSize + "\t");
+		benchOut.print(JoinStats.stateSize + "\t");
+		benchOut.println(JoinStats.joinSize);
 		benchOut.flush();
 	}
 }

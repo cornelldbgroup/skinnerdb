@@ -120,7 +120,6 @@ public class LeafParallelization extends Parallelization {
             LogUtils.writeLogs(logs, "verbose/leaf/" + QueryStats.queryName);
         }
         JoinStats.exeTime = executionEnd - executionStart;
-        JoinStats.subExeTime.add(JoinStats.exeTime);
         JoinStats.nrSamples = roundCtr;
         System.out.println("Result Set: " + resultList.size() + " " + JoinStats.exeTime + " " + roundCtr);
     }

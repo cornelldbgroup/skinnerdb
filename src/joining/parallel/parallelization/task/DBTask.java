@@ -152,8 +152,8 @@ public class DBTask implements Callable<TaskResult> {
             }
             // memory consumption
             if (StartupConfig.Memory) {
-                JoinStats.uctTreeSize.add(root.getSize(true));
-                JoinStats.progressTrackerSize.add(subJoin.tracker.getSize());
+                JoinStats.treeSize = root.getSize(true);
+                JoinStats.stateSize = subJoin.tracker.getSize();
             }
             // Materialize result table
             long timer2 = System.currentTimeMillis();

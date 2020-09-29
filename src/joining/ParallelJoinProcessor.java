@@ -64,7 +64,7 @@ public class ParallelJoinProcessor {
                     context.columnMapping, targetRelName);
             // Measure execution time for join phase
             JoinStats.exeTime = 0;
-            JoinStats.subExeTime.add(JoinStats.exeTime);
+            JoinStats.joinMillis = 0;
             // Update processing context
             context.columnMapping.clear();
             for (ColumnRef postCol : query.colsForPostProcessing) {
@@ -74,15 +74,12 @@ public class ParallelJoinProcessor {
             }
             // Store number of join result tuples
             int skinnerJoinCard = CatalogManager.getCardinality(targetRelName);
-            JoinStats.skinnerJoinCards.add(skinnerJoinCard);
-            System.out.println("Join card: " + skinnerJoinCard + "\tJoin time:" + Arrays.toString(JoinStats.subExeTime.toArray()));
+            JoinStats.lastJoinCard = skinnerJoinCard;
+            System.out.println("Join card: " + skinnerJoinCard);
             JoinStats.lastJoinCard = skinnerJoinCard;
         }
         else {
             Set<ResultTuple> resultTuples = new HashSet<>();
-            List<Long> subExes = new ArrayList<>();
-            List<Long> subSamples = new ArrayList<>();
-            List<Long> subTuples = new ArrayList<>();
 //            int nrCases = GeneralConfig.ISTESTCASE ? GeneralConfig.TEST_CASE : 1;
             // DPD async
             if (ParallelConfig.PARALLEL_SPEC == 0) {
@@ -187,18 +184,7 @@ public class ParallelJoinProcessor {
                 parallelization.execute(resultTuples);
             }
 
-            subExes.add(JoinStats.subExeTime.remove(JoinStats.subExeTime.size() - 1));
-            subSamples.add(JoinStats.nrSamples);
-            subTuples.add(JoinStats.nrTuples);
-
             System.out.println("Finish Parallel Join!");
-            int median = 0;
-            long[] subExe = subExes.stream().mapToLong(exe->exe).toArray();
-            Arrays.sort(subExe);
-            JoinStats.subExeTime.add(subExe[median]);
-            JoinStats.subAllExeTime.add(Arrays.toString(subExe));
-            JoinStats.subAllSamples.add(Arrays.toString(subSamples.toArray()));
-            JoinStats.subAllTuples.add(Arrays.toString(subTuples.toArray()));
 
             int skinnerJoinCard;
             long materializeStart = System.currentTimeMillis();
@@ -232,10 +218,11 @@ public class ParallelJoinProcessor {
                 context.columnMapping.put(postCol, newRef);
             }
             long materializeEnd = System.currentTimeMillis();
-            JoinStats.subMateriazed.add(materializeEnd - materializeStart);
+            JoinStats.matMillis = materializeEnd - materializeStart;
+            JoinStats.lastJoinCard = skinnerJoinCard;
+            JoinStats.joinMillis = JoinStats.exeTime;
             // Store number of join result tuples
-            JoinStats.skinnerJoinCards.add(skinnerJoinCard);
-            System.out.println("Join card: " + skinnerJoinCard + "\tJoin time:" + Arrays.toString(JoinStats.subExeTime.toArray()));
+            System.out.println("Join card: " + skinnerJoinCard + "\tJoin time:" + JoinStats.exeTime);
             JoinStats.lastJoinCard = skinnerJoinCard;
         }
     }

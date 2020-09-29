@@ -171,8 +171,8 @@ public class PostProcessor {
 		// Generate table holding result
 		TableInfo targetInfo = new TableInfo(targetRel, tempResult);
 		CatalogManager.currentDB.addTable(targetInfo);
-		PostStats.subGroupby.add(0L);
-		PostStats.subHaving.add(0L);
+		PostStats.groupByMillis = 0;;
+		PostStats.havingMillis = 0;
 		long aggStart = System.currentTimeMillis();
 		for (ExpressionInfo selInfo : queryInfo.selectExpressions) {
 			String colName = queryInfo.selectToAlias.get(selInfo);
@@ -235,7 +235,7 @@ public class PostProcessor {
 			}
 		}
 		long aggEnd = System.currentTimeMillis();
-		PostStats.subAggregation.add(aggEnd - aggStart);
+		PostStats.aggMillis = aggEnd - aggStart;
 		// Update statistics on result table
 		CatalogManager.updateStats(targetRel);
 
@@ -399,9 +399,9 @@ public class PostProcessor {
 		String joinRel = NamingConfig.JOINED_NAME;
 		// Name of result relation
 		String resultRel = result.name;
-		PostStats.subGroupby.add(0L);
-		PostStats.subHaving.add(0L);
-		PostStats.subOrder.add(0L);
+		PostStats.groupByMillis = 0;
+		PostStats.havingMillis = 0;
+		PostStats.orderMillis = 0;
 		long aggStart = System.currentTimeMillis();
 		// Iterate over expressions in SELECT clause
 		for (ExpressionInfo expr : query.selectExpressions) {
@@ -410,7 +410,7 @@ public class PostProcessor {
 			addPerRowCol(query, context, joinRel, expr, result, colName);
 		}
 		long aggEnd = System.currentTimeMillis();
-		PostStats.subAggregation.add(aggEnd - aggStart);
+		PostStats.aggMillis = aggEnd - aggStart;
 		// Update statistics on result
 		CatalogManager.updateStats(resultRel);
 		// Does query have an ORDER BY clause?
@@ -436,7 +436,7 @@ public class PostProcessor {
 			OrderBy.execute(orderRefs, query.orderByAsc, resultRel);
 		}
 		long orderEnd = System.currentTimeMillis();
-		PostStats.subAggregation.add(orderEnd - aggEnd);
+		PostStats.orderMillis = orderEnd - aggEnd;
 	}
 	/**
 	 * Treat queries that have aggregates but no group-by clauses.
@@ -483,10 +483,10 @@ public class PostProcessor {
 			}
 		}
 		long aggEnd = System.currentTimeMillis();
-		PostStats.subGroupby.add(0L);
-		PostStats.subHaving.add(0L);
-		PostStats.subOrder.add(0L);
-		PostStats.subAggregation.add(aggEnd - aggStart);
+		PostStats.groupByMillis = 0;
+		PostStats.havingMillis = 0;
+		PostStats.orderMillis = 0;
+		PostStats.aggMillis = aggEnd - aggStart;
 	}
 	/**
 	 * Add a column that has one row for each group. Either
@@ -664,11 +664,11 @@ public class PostProcessor {
 				groupBy(query, context);
 			}
 			long groupEnd = System.currentTimeMillis();
-			PostStats.subGroupby.add(groupEnd - groupStart);
+			PostStats.groupByMillis = groupEnd - groupStart;
 			// Calculate aggregates
 			aggregate(query, context);
 			long aggEnd = System.currentTimeMillis();
-			PostStats.subAggregation.add(aggEnd - groupEnd);
+			PostStats.aggMillis = aggEnd - groupEnd;
 			System.out.println("Agg: " + (aggEnd - groupEnd));
 			// Different treatment for queries with/without HAVING
 			if (hasHaving) {
@@ -707,7 +707,7 @@ public class PostProcessor {
 				}
 			}
 			long havingEnd = System.currentTimeMillis();
-			PostStats.subHaving.add(havingEnd - aggEnd);
+			PostStats.havingMillis = havingEnd - aggEnd;
 			System.out.println("Having: " + (havingEnd - aggEnd));
 		}
 		long orderStart = System.currentTimeMillis();
@@ -722,7 +722,7 @@ public class PostProcessor {
 			OrderBy.execute(orderRefs, query.orderByAsc, resultRelName);			
 		}
 		long orderEnd = System.currentTimeMillis();
-		PostStats.subOrder.add(orderEnd - orderStart);
+		PostStats.orderMillis = orderEnd - orderStart;
 	}
 	/**
 	 * Generate debugging output if activated.

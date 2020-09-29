@@ -121,7 +121,6 @@ public class JoinParallelization extends Parallelization {
         long executionEnd = System.currentTimeMillis();
         joinOp.threadPool.shutdown();
         JoinStats.exeTime = executionEnd - executionStart;
-        JoinStats.subExeTime.add(JoinStats.exeTime);
         JoinStats.nrSamples = roundCtr;
         resultList.addAll(joinOp.tuples);
         for (int tid = 0; tid < nrThreads; tid++) {

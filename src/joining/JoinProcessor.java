@@ -55,7 +55,6 @@ public class JoinProcessor {
 					context.columnMapping, targetRelName);
 			// Measure execution time for join phase
 			JoinStats.exeTime = 0;
-			JoinStats.subExeTime.add(JoinStats.exeTime);
 			// Update processing context
 			context.columnMapping.clear();
 			for (ColumnRef postCol : query.colsForPostProcessing) {
@@ -65,7 +64,7 @@ public class JoinProcessor {
 			}
 			// Store number of join result tuples
 			int skinnerJoinCard = CatalogManager.getCardinality(targetRelName);
-			JoinStats.skinnerJoinCards.add(skinnerJoinCard);
+			JoinStats.lastJoinCard = skinnerJoinCard;
 			return;
 		}
         JoinStats.nrTuples = 0;
@@ -210,7 +209,6 @@ public class JoinProcessor {
 		}
 		// Measure execution time for join phase
 		JoinStats.exeTime = System.currentTimeMillis() - startMillis;
-		JoinStats.subExeTime.add(JoinStats.exeTime);
 		// Materialize result table
 		Collection<ResultTuple> tuples = joinOp.result.getTuples();
 		int nrTuples = tuples.size();
@@ -229,12 +227,11 @@ public class JoinProcessor {
 		// Store number of join result tuples
 		int skinnerJoinCard = CatalogManager.
 				getCardinality(NamingConfig.JOINED_NAME);
-		JoinStats.skinnerJoinCards.add(skinnerJoinCard);
+		JoinStats.lastJoinCard = skinnerJoinCard;
 
 		// Measure execution time for join phase
 		JoinStats.joinMillis = System.currentTimeMillis() - startMillis;
-		JoinStats.subMateriazed.add(JoinStats.joinMillis - JoinStats.exeTime);
-		JoinStats.subJoinTime.add(JoinStats.exeTime);
+		JoinStats.matMillis = JoinStats.joinMillis - JoinStats.exeTime;
 		System.out.println("Round count: " + roundCtr);
 		System.out.println("Join Order: " + Arrays.toString(joinOrder));
 		System.out.println("Join card: " + skinnerJoinCard + "\tJoin time:" + JoinStats.joinMillis);

@@ -150,8 +150,8 @@ public class ExecutorTask implements Callable<TaskResult> {
             }
             // memory consumption
             if (StartupConfig.Memory) {
-                JoinStats.uctTreeSize.add(root.getSize(true));
-                JoinStats.progressTrackerSize.add(subJoin.tracker.getSize());
+                JoinStats.treeSize = root.getSize(true);
+                JoinStats.stateSize = subJoin.tracker.getSize();
             }
             // Materialize result table
             long timer2 = System.currentTimeMillis();
@@ -200,7 +200,7 @@ public class ExecutorTask implements Callable<TaskResult> {
                 for (long batchSize: spJoin.maxSizes) {
                     size += batchSize;
                 }
-                JoinStats.algorithmSize.add(Math.max(size, tuples.size()) * nrTables * 4 + 2000000);
+                JoinStats.joinSize = Math.max(size, tuples.size()) * nrTables * 4 + 2000000;
             }
             return new TaskResult(tuples, spJoin.logs, tid);
         }

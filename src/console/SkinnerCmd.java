@@ -89,7 +89,7 @@ public class SkinnerCmd {
                 // Load all queries to benchmark
                 Map<String, Statement> nameToQuery =
                         BenchUtil.readAllQueries(dirPath);
-                // read optimal join orders
+                // Read optimal join orders
                 String optimalFile = Configuration.getProperty("OPTIMAL");
                 Map<String, int[]> nameToOptimal = BenchUtil.readOptimalJoinOrders(optimalFile);
 
@@ -101,7 +101,7 @@ public class SkinnerCmd {
                     System.out.println(query.toString());
                     QueryStats.queryName = queryName;
                     QueryStats.optimal = nameToOptimal.get(queryName);
-                    processSQL(query.toString(), true);
+                    processSQL(query.toString(), benchOut);
                     BenchUtil.writeStats(queryName, QueryStats.time, benchOut);
                 }
                 // Close benchmark result file
@@ -186,14 +186,14 @@ public class SkinnerCmd {
     /**
      * Process input string as SQL statement.
      *
-     * @param input    input text
-     * @param benchRun whether this is a benchmark run (query results
-     *                 are not printed for benchmark runs)
+     * @param input     input text
+     * @param benchOut	writer to benchmark result file
      * @throws Exception
      */
-    static void processSQL(String input, boolean benchRun) throws Exception {
+    static void processSQL(String input, PrintWriter benchOut) throws Exception {
         // Try parsing as SQL query
         Statement sqlStatement = null;
+        String name = QueryStats.queryName;
         try {
             sqlStatement = CCJSqlParserUtil.parse(input);
         } catch (Exception e) {
@@ -213,10 +213,10 @@ public class SkinnerCmd {
             PlainSelect plainSelect = (PlainSelect) createView.getSelectBody();
             Table view = createView.getView();
             try {
-                if (StartupConfig.WARMUP_RUN) {
+                for (int warmupCtr = 0; warmupCtr < GeneralConfig.Nr_Warmup; warmupCtr++) {
                     GeneralConfig.ISTESTCASE = false;
                     Master.executeSelect(plainSelect,
-                            false, -1, -1, null);
+                            false, -1, -1, null, name, benchOut);
                     BufferManager.unloadTempData();
                     CatalogManager.removeTempTables();
                     sqlStatement = CCJSqlParserUtil.parse(input);
@@ -224,7 +224,7 @@ public class SkinnerCmd {
                 }
                 GeneralConfig.ISTESTCASE = true;
                 Master.executeSelect(plainSelect,
-                        false, -1, -1, null);
+                        false, -1, -1, null, name, benchOut);
 
             } catch (SQLexception e) {
                 System.out.println(e.getMessage());
@@ -281,13 +281,12 @@ public class SkinnerCmd {
             if (select.getSelectBody() instanceof PlainSelect) {
                 PlainSelect plainSelect = (PlainSelect) select.getSelectBody();
                 boolean printResult = plainSelect.getIntoTables() == null;
-                String name = QueryStats.queryName;
                 BufferManager.unloadCache(name.charAt(0) + "" + name.charAt(1));
                 try {
-                    if (StartupConfig.WARMUP_RUN) {
+                    for (int warmupCtr = 0; warmupCtr < GeneralConfig.Nr_Warmup; warmupCtr++) {
                         GeneralConfig.ISTESTCASE = false;
                         Master.executeSelect(plainSelect,
-                                false, -1, -1, null);
+                                false, -1, -1, null, name, benchOut);
                         BufferManager.unloadTempData();
                         CatalogManager.removeTempTables();
                         sqlStatement = CCJSqlParserUtil.parse(input);
@@ -295,31 +294,17 @@ public class SkinnerCmd {
                         plainSelect = (PlainSelect) select.getSelectBody();
                     }
                     GeneralConfig.ISTESTCASE = true;
-                    long queryStart = System.currentTimeMillis();
-                    Master.executeSelect(plainSelect,
-                            false, -1, -1, null);
-                    long queryEnd = System.currentTimeMillis();
-                    QueryStats.time = queryEnd - queryStart;
-                    System.out.println("Query Time: " + (queryEnd - queryStart));
-//                    Master.executeSelect(plainSelect,
-//                            false, -1, -1, null);
-//                    Master.executeSelect(plainSelect,
-//                            false, -1, -1, null);
-//                    Master.executeSelect(plainSelect,
-//                            false, -1, -1, null);
-//                    Master.executeSelect(plainSelect,
-//                            false, -1, -1, null);
+                    // Run the query after the warm up.
+                    Master.executeSelect(plainSelect, false,
+                            -1, -1, null, name, benchOut);
+
                     // Display query result if no target tables specified
                     // and if this is not a benchmark run.
-//                    if (!benchRun && printResult) {
-//                        // Display on console
-//                        RelationPrinter.print(
-//                                NamingConfig.FINAL_RESULT_NAME);
-//                    }
-//                    if (printResult) {
-//                        RelationPrinter.print(
-//                                NamingConfig.FINAL_RESULT_NAME);
-//                    }
+                    if (benchOut == null && printResult) {
+                        // Display on console
+                        RelationPrinter.print(
+                                NamingConfig.FINAL_RESULT_NAME);
+                    }
                 } catch (SQLexception e) {
                     System.out.println(e.getMessage());
                 } catch (Exception e) {
@@ -349,6 +334,7 @@ public class SkinnerCmd {
      */
     static void processExplain(String[] inputFrags) throws Exception {
         String plotDir = inputFrags[1];
+        String name = QueryStats.queryName;
         if (fileOrError(plotDir)) {
             int plotAtMost = Integer.parseInt(inputFrags[2]);
             int plotEvery = Integer.parseInt(inputFrags[3]);
@@ -372,7 +358,7 @@ public class SkinnerCmd {
                 PlainSelect plainSelect = (PlainSelect) select.getSelectBody();
                 try {
                     Master.executeSelect(plainSelect, true,
-                            plotAtMost, plotEvery, plotDir);
+                            plotAtMost, plotEvery, plotDir, name, null);
                     // Output final result
                     String resultRel = NamingConfig.FINAL_RESULT_NAME;
                     RelationPrinter.print(resultRel);
@@ -503,7 +489,7 @@ public class SkinnerCmd {
             // Nothing to do ...
         } else {
             try {
-                processSQL(input, false);
+                processSQL(input, null);
             } catch (SQLexception e) {
                 System.out.println(e.getMessage());
             }
@@ -524,16 +510,21 @@ public class SkinnerCmd {
                     + " to database directory!");
             return;
         }
+
+        // Load parameters from the command line
         if (args.length > 1) {
             ParallelConfig.EXE_THREADS = Integer.parseInt(args[1]);
-            ParallelConfig.EXE_EXECUTORS = Integer.parseInt(Configuration.getProperty("THREADS", "30"));
-            System.out.println("Threads: " + ParallelConfig.EXE_THREADS + " " + ParallelConfig.PARALLEL_SPEC);
         }
-        // whether to use parallel strategy
+        // Load parameters from the configuration file
+        // Number of executors in task parallel
+        ParallelConfig.EXE_EXECUTORS = Integer.parseInt(Configuration.getProperty("THREADS", "1"));
+        // Whether to use parallel algorithm
 		GeneralConfig.isParallel = Integer.parseInt(Configuration.getProperty("ISPARALLEL", "0")) == 1;
-        // the number of test case
+        // Number of test case
         GeneralConfig.TEST_CASE = Integer.parseInt(Configuration.getProperty("TEST_CASE", "1"));
-        // batch size
+        // Number of warmup run
+        GeneralConfig.Nr_Warmup = Integer.parseInt(Configuration.getProperty("WarmUp", "1"));
+        // Batch size
         ParallelConfig.NR_BATCHES = Integer.parseInt(Configuration.getProperty("NRBATCHES", "60"));
         if (GeneralConfig.isParallel) {
 			ParallelConfig.PARALLEL_SPEC = Integer.parseInt(Configuration.getProperty("PARALLEL_SPEC", "0"));
@@ -556,61 +547,30 @@ public class SkinnerCmd {
             // string dictionary is still loaded.
             BufferManager.loadDictionary();
         }
+        // Create indexes
         Indexer.indexAll(StartupConfig.INDEX_CRITERIA);
 
-        if (args.length > 1) {
-            // initialize a thread pool
-            String command = Configuration.getProperty("COMMAND");
-            if (ParallelConfig.PARALLEL_SPEC == 9) {
-                if (args.length == 4) {
-                    ParallelConfig.NR_EXECUTORS = Integer.parseInt(args[3]);
-                    GeneralConfig.TESTCACHE = true;
-                    System.out.println("nrExecutors: " + ParallelConfig.NR_EXECUTORS);
-                }
-                ThreadPool.initThreadsPool(2, ParallelConfig.PRE_THREADS);
-            }
-            else {
-                ThreadPool.initThreadsPool(ParallelConfig.EXE_THREADS, ParallelConfig.PRE_THREADS);
-            }
-            GeneralConfig.TEST_CASE = args.length >= 3 ? Integer.parseInt(args[2]) : 0;
-            processInput(command);
+        // Task parallel
+        if (ParallelConfig.PARALLEL_SPEC == 9) {
+            ThreadPool.initThreadsPool(2, ParallelConfig.PRE_THREADS);
         } else {
-            if (ParallelConfig.PARALLEL_SPEC == 9) {
-                ThreadPool.initThreadsPool(2, ParallelConfig.PRE_THREADS);
-            }
-            else {
-                ThreadPool.initThreadsPool(ParallelConfig.EXE_THREADS, ParallelConfig.PRE_THREADS);
-            }
-            // Command line processing
-            System.out.println("Enter 'help' for help and 'quit' to exit");
-            Scanner scanner = new Scanner(System.in);
-            boolean continueProcessing = true;
-            while (continueProcessing) {
-                System.out.print("> ");
-                String input = scanner.nextLine();
-                try {
-                    continueProcessing = processInput(input);
-                } catch (Exception e) {
-                    System.err.println("Error processing command: ");
-                    e.printStackTrace();
-                }
-//=======
-//		ThreadPool.initThreadsPool(ParallelConfig.EXE_THREADS, ParallelConfig.PRE_THREADS);
-//		System.out.println("SkinnerDB is using " +
-//				ParallelConfig.EXE_THREADS + " threads.");
-//        // Command line processing
-//        System.out.println("Enter 'help' for help and 'quit' to exit");
-//        Scanner scanner = new Scanner(System.in);
-//        boolean continueProcessing = true;
-//        while (continueProcessing) {
-//            System.out.print("> ");
-//            String input = scanner.nextLine();
-//            try {
-//                continueProcessing = processInput(input);
-//            } catch (Exception e) {
-//                System.err.println("Error processing command: ");
-//                e.printStackTrace();
-//>>>>>>> 604a4d132c566f654fbc204a2e78848c15938c9a
+            ThreadPool.initThreadsPool(ParallelConfig.EXE_THREADS, ParallelConfig.PRE_THREADS);
+        }
+
+        System.out.println("SkinnerDB is using " +
+                ParallelConfig.EXE_THREADS + " threads.");
+        // Command line processing
+        System.out.println("Enter 'help' for help and 'quit' to exit");
+        Scanner scanner = new Scanner(System.in);
+        boolean continueProcessing = true;
+        while (continueProcessing) {
+            System.out.print("> ");
+            String input = scanner.nextLine();
+            try {
+                continueProcessing = processInput(input);
+            } catch (Exception e) {
+                System.err.println("Error processing command: ");
+                e.printStackTrace();
             }
             scanner.close();
         }

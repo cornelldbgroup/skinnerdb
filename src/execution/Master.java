@@ -1,7 +1,9 @@
 package execution;
 
+import java.io.PrintWriter;
 import java.util.*;
 
+import benchmark.BenchUtil;
 import buffer.BufferManager;
 import catalog.CatalogManager;
 import config.*;
@@ -43,11 +45,13 @@ public class Master {
 	 * @param plotAtMost	generate at most that many plots if activated
 	 * @param plotEvery		generate one plot after X samples if activated
 	 * @param plotDir		add plots to this directory if activated
+	 * @param queryName		name of query to use for benchmark output
+	 * @param benchOut		writer to benchmark file, null to deactivate
 	 * @throws Exception
 	 */
 	public static void executeSelect(PlainSelect select, 
 			boolean explain, int plotAtMost, int plotEvery,
-			String plotDir) throws Exception {
+			String plotDir, String queryName, PrintWriter benchOut) throws Exception {
 		// initialize statistics variables
 		initializeStats();
 		// Determine type of result relation
@@ -76,53 +80,40 @@ public class Master {
 		Set<String> subQueryResults = new HashSet<>();
 		int nrSubQueries = unnestor.unnestedQueries.size();
 		for (int subQueryCtr=0; subQueryCtr<nrSubQueries; ++subQueryCtr) {
+			long startMillis = System.currentTimeMillis();
 			// Retrieve next sub-query
 			PlainSelect subQuery = unnestor.unnestedQueries.get(subQueryCtr);
 			Set<String> temporary = unnestor.temporaryTables.get(subQueryCtr);
 			// Analyze sub-query
-			long parseStart = System.currentTimeMillis();
 			QueryInfo subQueryInfo = new QueryInfo(subQuery, temporary, explain,
 					plotAtMost, plotEvery, plotDir);
-			long parseEnd = System.currentTimeMillis();
-			System.out.println("Parse query: " + (parseEnd - parseStart));
 			PreConfig.FILTER = PreConfig.PRE_FILTER;
 			// Filter, projection, and indexing for join phase
 			Preprocessor.performance = true;
 			Context context = Preprocessor.process(subQueryInfo);
-//			Context context = NewPreprocessor.process(subQueryInfo);
 			if (Preprocessor.terminated) {
 				JoinStats.exeTime = 0;
-				JoinStats.subExeTime.add(JoinStats.exeTime);
+				JoinStats.joinMillis = 0;
 				PostStats.postMillis = 0;
-				PostStats.subHaving.add(0L);
-				PostStats.subAggregation.add(0L);
-				PostStats.subGroupby.add(0L);
-				PostStats.subOrder.add(0L);
+				PostStats.havingMillis = 0;
+				PostStats.aggMillis = 0;
+				PostStats.groupByMillis = 0;
+				PostStats.orderMillis = 0;
+
 				String targetRelName = NamingConfig.JOINED_NAME;
 				Materialize.execute(new HashSet<>(), subQueryInfo.aliasToIndex,
 						subQueryInfo.colsForPostProcessing,
 						context.columnMapping, targetRelName);
-//            // Update processing context
+				// Update processing context
 				context.columnMapping.clear();
 				for (ColumnRef postCol : subQueryInfo.colsForPostProcessing) {
 					String newColName = postCol.aliasName + "." + postCol.columnName;
 					ColumnRef newRef = new ColumnRef(targetRelName, newColName);
 					context.columnMapping.put(postCol, newRef);
 				}
-				JoinStats.subMateriazed.add(0L);
-				// Store number of join result tuples
-				JoinStats.skinnerJoinCards.add(0);
 				break;
 			}
-			// Join filtered tables
-//			if (GeneralConfig.isParallel) {
-//				// Convert nonEqui-predicates into nodes
-//				subQueryInfo.convertNonEquiPredicates(context);
-//				ParallelJoinProcessor.process(subQueryInfo, context);
-//			}
-//			else {
-//				JoinProcessor.process(subQueryInfo, context);
-//			}
+
 			// Convert nonEqui-predicates into nodes
 			subQueryInfo.convertNonEquiPredicates(context);
 			// Extract selectivity
@@ -131,17 +122,21 @@ public class Master {
 
 			// Determine result table name and properties
 			boolean lastSubQuery = subQueryCtr==nrSubQueries-1;
-			boolean tempResult = lastSubQuery?finalTempResult:true;
+			boolean tempResult = !lastSubQuery || finalTempResult;
 			String resultRel = subQuery.getIntoTables().get(0).getName();
 			if (!CatalogManager.currentDB.nameToTable.containsKey(resultRel)) {
 				// Aggregation, grouping, and sorting if required
 				PostProcessor.process(subQueryInfo, context,
 						resultRel, tempResult);
 				if (StartupConfig.Memory) {
-					JoinStats.temporaryTableIndexSize.add(BufferManager.getTempDataSize(subQueryResults));
+					JoinStats.dataSize = BufferManager.getTempDataSize(subQueryResults);
 				}
 			}
-//			RelationPrinter.print(resultRel);
+			// Generate benchmark output if activated
+			if (benchOut != null) {
+				long totalMillis = System.currentTimeMillis() - startMillis;
+				BenchUtil.writeStats(queryName, totalMillis, benchOut);
+			}
 			// Clean up intermediate results except result table
 			subQueryResults.add(resultRel);
 			BufferManager.unloadTempData(subQueryResults);
@@ -150,25 +145,34 @@ public class Master {
 	}
 
 	private static void initializeStats() {
-		PreStats.subPreMillis = new ArrayList<>();
-		PreStats.subFilterMillis = new ArrayList<>();
-		PreStats.subIndexMillis = new ArrayList<>();
-		JoinStats.skinnerJoinCards = new ArrayList<>();
-		JoinStats.subJoinTime = new ArrayList<>();
-		JoinStats.subMateriazed = new ArrayList<>();
-		JoinStats.subExeTime = new ArrayList<>();
-		JoinStats.subAllExeTime = new ArrayList<>();
-		JoinStats.subAllSamples = new ArrayList<>();
-		JoinStats.subAllTuples = new ArrayList<>();
-		PostStats.subGroupby = new ArrayList<>();
-		PostStats.subAggregation = new ArrayList<>();
-		PostStats.subHaving = new ArrayList<>();
-		PostStats.subOrder = new ArrayList<>();
-		JoinStats.temporaryTableIndexSize = new ArrayList<>();
-		JoinStats.uctTreeSize = new ArrayList<>();
-		JoinStats.progressTrackerSize = new ArrayList<>();
-		JoinStats.algorithmSize = new ArrayList<>();
+		PreStats.preMillis = 0;
+		JoinStats.joinMillis = 0;
+		JoinStats.exeTime = 0;
+		JoinStats.matMillis = 0;
+		PostStats.postMillis = 0;
+
+		PreStats.filterMillis = 0;
+		PreStats.indexMillis = 0;
+		PostStats.groupByMillis = 0;
+		PostStats.aggMillis = 0;
+		PostStats.havingMillis = 0;
+		PostStats.orderMillis = 0;
+
 		JoinStats.nrTuples = 0;
 		JoinStats.nrSamples = 0;
+		JoinStats.nrIndexLookups = 0;
+		JoinStats.nrIndexEntries = 0;
+		JoinStats.nrUniqueIndexLookups = 0;
+		JoinStats.nrUctNodes = 0;
+		JoinStats.nrPlansTried = 0;
+		JoinStats.lastJoinCard = 0;
+		JoinStats.avgReward = 0;
+		JoinStats.maxReward = 0;
+		JoinStats.totalWork = 0;
+
+		JoinStats.dataSize = 0;
+		JoinStats.treeSize = 0;
+		JoinStats.stateSize = 0;
+		JoinStats.joinSize = 0;
 	}
 }

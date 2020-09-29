@@ -16,6 +16,10 @@ public class JoinStats {
 	 */
 	public static long joinMillis = 0;
     /**
+     * Duration of materialization phase in milliseconds.
+     */
+    public static long matMillis = 0;
+    /**
      * Number of (complete and partial) tuples considered
      * during the last invocation.
      */
@@ -70,51 +74,23 @@ public class JoinStats {
      */
     public static int lastJoinCard = -1;
     /**
-     * Number of tuples in join result (before post-processing).
-     */
-    public static List<Integer> skinnerJoinCards;
-    /**
-     * A list of total materialization time for sub queries.
-     */
-    public static List<Long> subMateriazed;
-    /**
      * Total execution time
      */
     public static long exeTime = 0;
     /**
-     * A list of total join time for sub queries.
-     */
-    public static List<Long> subJoinTime;
-    /**
-     * A list of median execution time for sub queries.
-     */
-    public static List<Long> subExeTime;
-    /**
-     * A list of all execution time for sub queries.
-     */
-    public static List<String> subAllExeTime;
-    /**
-     * A list of all iterations for sub queries.
-     */
-    public static List<String> subAllSamples;
-    /**
-     * A list of all generated tuples for sub queries.
-     */
-    public static List<String> subAllTuples;
-    /**
      * Size of temporary tables and indexes.
      */
-    public static List<Long> temporaryTableIndexSize;
+    public static long dataSize = 0;
     /**
      * Size of uct tree.
      */
-    public static List<Long> uctTreeSize;
+    public static long treeSize = 0;
     /**
      * Size of progress tracker.
      */
-    public static List<Long> progressTrackerSize;
+    public static long stateSize = 0;
     /**
      * Size of join algorithm.
      */
-    public static List<Long> algorithmSize;
+    public static long joinSize = 0;
 }

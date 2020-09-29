@@ -121,7 +121,6 @@ public class LockFreeParallelization extends Parallelization {
         List<Future<LockFreeResult>> futures = executorService.invokeAll(tasks);
         long executionEnd = System.currentTimeMillis();
         JoinStats.exeTime = executionEnd - executionStart;
-        JoinStats.subExeTime.add(JoinStats.exeTime);
 
         int maxSize = 0;
         context.resultTuplesList = new ArrayList<>(nrThreads);
@@ -181,14 +180,14 @@ public class LockFreeParallelization extends Parallelization {
         long size = resultList.size();
         // memory consumption
         if (StartupConfig.Memory) {
-            JoinStats.uctTreeSize.add(root.getSize());
+            JoinStats.treeSize = root.getSize();
             if (ParallelConfig.PARALLEL_SPEC == 0 && nrThreads == 1) {
-                JoinStats.progressTrackerSize.add(((ModJoin)dpJoins.get(0)).oldTracker.getSize());
+                JoinStats.stateSize = ((ModJoin)dpJoins.get(0)).oldTracker.getSize();
             }
             else {
-                JoinStats.progressTrackerSize.add(((ModJoin)dpJoins.get(0)).tracker.getSize());
+                JoinStats.stateSize = ((ModJoin)dpJoins.get(0)).tracker.getSize();
             }
-            JoinStats.algorithmSize.add(size * nrTables * 4);
+            JoinStats.joinSize = size * nrTables * 4;
         }
     }
 }

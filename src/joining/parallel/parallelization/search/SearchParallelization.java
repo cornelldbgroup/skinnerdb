@@ -84,7 +84,6 @@ public class SearchParallelization extends Parallelization {
         List<Future<SearchResult>> futures = executorService.invokeAll(tasks);
         long executionEnd = System.currentTimeMillis();
         JoinStats.exeTime = executionEnd - executionStart;
-        JoinStats.subExeTime.add(JoinStats.exeTime);
         futures.forEach(futureResult -> {
             try {
                 SearchResult result = futureResult.get();

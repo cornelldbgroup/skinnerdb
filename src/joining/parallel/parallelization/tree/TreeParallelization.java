@@ -82,7 +82,6 @@ public class TreeParallelization extends Parallelization {
         List<Future<TreeResult>> futures = executorService.invokeAll(tasks);
         long executionEnd = System.currentTimeMillis();
         JoinStats.exeTime = executionEnd - executionStart;
-        JoinStats.subExeTime.add(JoinStats.exeTime);
         // inserting tuples into a result list
         for (int i = 0; i < nrThreads; i++) {
             Future<TreeResult> futureResult = futures.get(i);

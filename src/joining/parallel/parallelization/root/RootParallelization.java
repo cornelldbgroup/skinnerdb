@@ -87,7 +87,6 @@ public class RootParallelization extends Parallelization {
         List<Future<RootResult>> futures = executorService.invokeAll(tasks);
         long executionEnd = System.currentTimeMillis();
         JoinStats.exeTime = executionEnd - executionStart;
-        JoinStats.subExeTime.add(JoinStats.exeTime);
         // inserting tuples into a result list
         for (int i = 0; i < nrThreads; i++) {
             Future<RootResult> futureResult = futures.get(i);

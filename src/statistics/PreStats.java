@@ -20,21 +20,9 @@ public class PreStats {
 	/**
 	 * Period of filtering columns.
 	 */
-	public static long filterTime = 0;
+	public static long filterMillis = 0;
 	/**
 	 * Period of creating indices.
 	 */
-	public static long indexTime = 0;
-	/**
-	 * A list of Preprocessing time in milliseconds for sub-queries.
-	 */
-	public static List<Long> subPreMillis;
-	/**
-	 * A list of index creation time in milliseconds for sub-queries.
-	 */
-	public static List<Long> subIndexMillis;
-	/**
-	 * A list of filtering time in milliseconds for sub-queries.
-	 */
-    public static List<Long> subFilterMillis;
+	public static long indexMillis = 0;
 }

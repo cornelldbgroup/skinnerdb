@@ -223,12 +223,12 @@ public class Preprocessor {
 		}
 		// Measure filtering time
 		long filterTime = System.currentTimeMillis() - startMillis;
-		PreStats.subFilterMillis.add(filterTime);
+		PreStats.filterMillis = filterTime;
 
 		// Create missing indices for columns involved in equi-joins.
 		log("Creating indices ...");
 		if (terminated) {
-			PreStats.subPreMillis.add(System.currentTimeMillis() - startMillis);
+			PreStats.preMillis = System.currentTimeMillis() - startMillis;
 			return preSummary;
 		}
 		long indexStart = System.currentTimeMillis();
@@ -237,7 +237,7 @@ public class Preprocessor {
 
 		// Measure processing time
 		long indexTime = indexEnd - indexStart;
-		PreStats.subIndexMillis.add(indexTime);
+		PreStats.indexMillis = indexTime;
 		System.out.println("Filter: " + filterTime + "\tIndex: " + indexTime);
 		// construct mapping from join tables to index for each join predicate
 		query.equiJoinPreds.forEach(expressionInfo -> {

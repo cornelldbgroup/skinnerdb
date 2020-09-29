@@ -93,7 +93,6 @@ public class AdaptiveSearchParallelization extends Parallelization {
         List<Future<SearchResult>> futures = executorService.invokeAll(tasks);
         long executionEnd = System.currentTimeMillis();
         JoinStats.exeTime = executionEnd - executionStart;
-        JoinStats.subExeTime.add(JoinStats.exeTime);
         futures.forEach(futureResult -> {
             try {
                 SearchResult result = futureResult.get();
@@ -131,9 +130,9 @@ public class AdaptiveSearchParallelization extends Parallelization {
         long size = resultList.size();
         // memory consumption
         if (StartupConfig.Memory) {
-            JoinStats.uctTreeSize.add(root.getSize(true));
-            JoinStats.progressTrackerSize.add(spJoins.get(0).tracker.getSize());
-            JoinStats.algorithmSize.add(size * nrTables * 4);
+            JoinStats.treeSize = root.getSize(true);
+            JoinStats.stateSize = spJoins.get(0).tracker.getSize();
+            JoinStats.joinSize = size * nrTables * 4;
         }
 
         System.out.println("Result Set: " + size);
