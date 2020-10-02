@@ -436,23 +436,27 @@ public class ModJoin extends DPJoin {
         boolean isSplit = nextTable == splitTable;
         if (indexWrappers.isEmpty()) {
             if (isSplit) {
-                if (tupleIndices[nextTable] % nrThreads != tid) {
+                int tuple = tupleIndices[nextTable];
+                int hashedTid = (tuple / nrThreads + tid) % nrThreads;
+                if (tuple % nrThreads != hashedTid) {
                     return false;
                 }
             }
         }
-        for (JoinPartitionIndexWrapper wrapper : indexWrappers) {
-            if (first && isSplit) {
-                if (!wrapper.evaluateInScope(tupleIndices, tid)) {
-                    return false;
+        else {
+            for (JoinPartitionIndexWrapper wrapper : indexWrappers) {
+                if (first && isSplit) {
+                    if (!wrapper.evaluateInScope(tupleIndices, tid)) {
+                        return false;
+                    }
                 }
-            }
-            else {
-                if (!wrapper.evaluate(tupleIndices)) {
-                    return false;
+                else {
+                    if (!wrapper.evaluate(tupleIndices)) {
+                        return false;
+                    }
                 }
+                first = false;
             }
-            first = false;
         }
         // evaluate non-equi join predicates
         boolean nonEquiResults = true;
@@ -484,13 +488,19 @@ public class ModJoin extends DPJoin {
         boolean beforeSplit = curIndex < splitIndex && finishedTables[nextTable] != null;
         if (indexWrappers.isEmpty()) {
             if (isSplit) {
-                if (tupleIndices[nextTable] % nrThreads != tid) {
+                int tuple = tupleIndices[nextTable];
+                int hashedTid = (tuple / nrThreads + tid) % nrThreads;
+                if (tuple % nrThreads != hashedTid) {
                     return false;
                 }
             }
             else if (beforeSplit) {
                 IntSet finishedThreads = finishedTables[nextTable];
-                if (finishedThreads.contains(tupleIndices[nextTable] % nrThreads)) {
+                int tuple = tupleIndices[nextTable];
+                int hashedTid = tuple % nrThreads;
+                int offset = (tuple / nrThreads) % nrThreads;
+                int thread = (hashedTid - offset + nrThreads) % nrThreads;
+                if (finishedThreads.contains(thread)) {
                     return false;
                 }
             }
@@ -552,7 +562,9 @@ public class ModJoin extends DPJoin {
         boolean isSplit = nextTable == splitTable;
         if (indexWrappers.isEmpty()) {
             if (isSplit) {
-                int jump = (nrThreads + tid - tupleIndices[nextTable] % nrThreads) % nrThreads;
+                int tuple = tupleIndices[nextTable];
+                int hashedTid = (tuple / nrThreads + tid) % nrThreads;
+                int jump = (nrThreads + hashedTid - tuple % nrThreads) % nrThreads;
                 jump = jump == 0 ? nrThreads : jump;
                 tupleIndices[nextTable] += jump;
             }
@@ -630,16 +642,24 @@ public class ModJoin extends DPJoin {
         boolean beforeSplit = curIndex < splitIndex && finishedTables[nextTable] != null;
         if (indexWrappers.isEmpty()) {
             if (isSplit) {
-                int jump = (nrThreads + tid - tupleIndices[nextTable] % nrThreads) % nrThreads;
+                int tuple = tupleIndices[nextTable];
+                int hashedTid = (tuple / nrThreads + tid) % nrThreads;
+                int jump = (nrThreads + hashedTid - tuple % nrThreads) % nrThreads;
                 jump = jump == 0 ? nrThreads : jump;
                 tupleIndices[nextTable] += jump;
             }
             else if (beforeSplit) {
                 IntSet finishedThreads = finishedTables[nextTable];
                 tupleIndices[nextTable]++;
-                while (finishedThreads.contains(tupleIndices[nextTable] % nrThreads)
+                int hashedTid = tupleIndices[nextTable] % nrThreads;
+                int offset = (tupleIndices[nextTable] / nrThreads) % nrThreads;
+                int thread = (hashedTid - offset + nrThreads) % nrThreads;
+                while (finishedThreads.contains(thread)
                         && tupleIndices[nextTable] < nextCardinality) {
                     tupleIndices[nextTable]++;
+                    hashedTid = tupleIndices[nextTable] % nrThreads;
+                    offset = (tupleIndices[nextTable] / nrThreads) % nrThreads;
+                    thread = (hashedTid - offset + nrThreads) % nrThreads;
                 }
             }
             else {

@@ -523,7 +523,7 @@ public class SkinnerCmd {
         // Number of test case
         GeneralConfig.TEST_CASE = Integer.parseInt(Configuration.getProperty("TEST_CASE", "1"));
         // Number of warmup run
-        GeneralConfig.Nr_Warmup = Integer.parseInt(Configuration.getProperty("WarmUp", "1"));
+        GeneralConfig.Nr_Warmup = Integer.parseInt(Configuration.getProperty("WARMUP", "1"));
         // Batch size
         ParallelConfig.NR_BATCHES = Integer.parseInt(Configuration.getProperty("NRBATCHES", "60"));
         if (GeneralConfig.isParallel) {
@@ -572,8 +572,8 @@ public class SkinnerCmd {
                 System.err.println("Error processing command: ");
                 e.printStackTrace();
             }
-            scanner.close();
         }
+        scanner.close();
         ThreadPool.close();
     }
 }
