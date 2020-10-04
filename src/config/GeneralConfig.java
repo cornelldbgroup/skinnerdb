@@ -15,15 +15,7 @@ public class GeneralConfig {
 	/**
 	 * Whether to apply parallel methods.
 	 */
-	public static boolean isParallel = true;
-	/**
-	 * Whether to apply parallel methods.
-	 */
-	public static boolean parallelPre = true;
-	/**
-	 * Whether to apply parallel methods.
-	 */
-	public static boolean parallelPost = true;
+	public final static boolean isParallel = true;
 	/**
 	 * Number of test cases.
 	 */
@@ -31,7 +23,11 @@ public class GeneralConfig {
 	/**
 	 * Number of test cases.
 	 */
-	public static int Nr_Warmup = 1;
+	public static int NR_WARMUP = 1;
+	/**
+	 * Whether to write query results to file
+	 */
+	public static boolean WRITE_RESULTS = false;
 	/**
 	 * Whether it is the test case.
 	 */

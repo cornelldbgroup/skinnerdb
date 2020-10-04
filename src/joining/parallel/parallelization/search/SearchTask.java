@@ -23,16 +23,36 @@ import java.util.stream.IntStream;
  * @author Ziyun Wei
  */
 public class SearchTask implements Callable<SearchResult> {
+    /**
+     * The query to process.
+     */
     private final QueryInfo query;
+    /**
+     * Query processing context.
+     */
     private final Context context;
+    /**
+     * Root of uct tree.
+     */
     private final SPNode root;
+    /**
+     * Search parallel operator.
+     */
     private final SPJoin spJoin;
+    /**
+     * Atomic boolean flag to represent
+     * the end of query.
+     */
     private final AtomicBoolean finish;
+    /**
+     * Controls search partitions for each thread.
+     */
     private final SearchScheduler scheduler;
     private boolean isSample = true;
 
     public SearchTask(QueryInfo query, Context context,
-                      SPNode root, SPJoin spJoin, SearchScheduler scheduler, AtomicBoolean finish) {
+                      SPNode root, SPJoin spJoin,
+                      SearchScheduler scheduler, AtomicBoolean finish) {
         this.query = query;
         this.context = context;
         this.root = root;
@@ -112,9 +132,7 @@ public class SearchTask implements Callable<SearchResult> {
                 }
                 break;
             }
-//            joinOp.writeLog("Episode Time: " + (end - start) + "\tReward: " + reward);
         }
-        // Materialize result table
         long timer2 = System.currentTimeMillis();
         System.out.println("Thread " + tid + " " + (timer2 - timer1)
                 + "\tRound: " + roundCtr + "\tOrder: " + Arrays.toString(joinOrder));

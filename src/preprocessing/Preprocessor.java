@@ -244,6 +244,7 @@ public class Preprocessor {
 			expressionInfo.extractIndex(preSummary);
 			expressionInfo.setColumnType();
 		});
+		PreStats.preMillis = indexEnd - startMillis;
 		return preSummary;
 	}
 	/**

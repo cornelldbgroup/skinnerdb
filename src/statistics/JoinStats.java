@@ -78,6 +78,10 @@ public class JoinStats {
      */
     public static long exeTime = 0;
     /**
+     * Total time of merging results tuples
+     */
+    public static long mergeTime = 0;
+    /**
      * Size of temporary tables and indexes.
      */
     public static long dataSize = 0;

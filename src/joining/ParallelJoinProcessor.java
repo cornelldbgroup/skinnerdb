@@ -12,20 +12,14 @@ import joining.parallel.parallelization.search.SearchParallelization;
 import joining.parallel.parallelization.task.StandardParallelization;
 import joining.parallel.parallelization.task.TaskParallelization;
 import joining.parallel.parallelization.tree.TreeParallelization;
-import joining.result.MinJoinResult;
 import joining.result.ResultTuple;
 import operators.Materialize;
 import joining.parallel.parallelization.Parallelization;
 import joining.parallel.parallelization.lockfree.LockFreeParallelization;
-import postprocessing.ParallelPostProcessor;
-import postprocessing.PostProcessor;
 import preprocessing.Context;
-import preprocessing.Preprocessor;
 import query.ColumnRef;
 import query.QueryInfo;
 import statistics.JoinStats;
-import statistics.PostStats;
-import statistics.PreStats;
 
 import java.util.*;
 
@@ -65,6 +59,7 @@ public class ParallelJoinProcessor {
             // Measure execution time for join phase
             JoinStats.exeTime = 0;
             JoinStats.joinMillis = 0;
+            JoinStats.matMillis = 0;
             // Update processing context
             context.columnMapping.clear();
             for (ColumnRef postCol : query.colsForPostProcessing) {
@@ -79,8 +74,8 @@ public class ParallelJoinProcessor {
             JoinStats.lastJoinCard = skinnerJoinCard;
         }
         else {
+            long startMillis = System.currentTimeMillis();
             Set<ResultTuple> resultTuples = new HashSet<>();
-//            int nrCases = GeneralConfig.ISTESTCASE ? GeneralConfig.TEST_CASE : 1;
             // DPD async
             if (ParallelConfig.PARALLEL_SPEC == 0) {
                 Parallelization parallelization = new LockFreeParallelization(ParallelConfig.EXE_THREADS,
@@ -187,7 +182,6 @@ public class ParallelJoinProcessor {
             System.out.println("Finish Parallel Join!");
 
             int skinnerJoinCard;
-            long materializeStart = System.currentTimeMillis();
             String targetRelName = NamingConfig.JOINED_NAME;
             if (context.uniqueJoinResult != null) {
                 String resultRel = query.plainSelect.getIntoTables().get(0).getName();
@@ -218,7 +212,7 @@ public class ParallelJoinProcessor {
                 context.columnMapping.put(postCol, newRef);
             }
             long materializeEnd = System.currentTimeMillis();
-            JoinStats.matMillis = materializeEnd - materializeStart;
+            JoinStats.matMillis = materializeEnd - startMillis - JoinStats.exeTime;
             JoinStats.lastJoinCard = skinnerJoinCard;
             JoinStats.joinMillis = JoinStats.exeTime;
             // Store number of join result tuples

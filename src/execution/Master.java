@@ -148,6 +148,7 @@ public class Master {
 		PreStats.preMillis = 0;
 		JoinStats.joinMillis = 0;
 		JoinStats.exeTime = 0;
+		JoinStats.mergeTime = 0;
 		JoinStats.matMillis = 0;
 		PostStats.postMillis = 0;
 

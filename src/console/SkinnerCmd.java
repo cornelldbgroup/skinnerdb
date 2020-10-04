@@ -1,7 +1,6 @@
 package console;
 
-import java.io.File;
-import java.io.PrintWriter;
+import java.io.*;
 import java.util.*;
 import java.util.Map.Entry;
 import java.util.regex.Pattern;
@@ -86,6 +85,11 @@ public class SkinnerCmd {
                 String outputName = inputFrags[2];
                 PrintWriter benchOut = new PrintWriter(outputName);
                 BenchUtil.writeBenchHeader(benchOut);
+                boolean writeResult = GeneralConfig.WRITE_RESULTS;
+                PrintWriter queryOut = null;
+                if (writeResult) {
+                    queryOut = new PrintWriter(outputName + ".res");
+                }
                 // Load all queries to benchmark
                 Map<String, Statement> nameToQuery =
                         BenchUtil.readAllQueries(dirPath);
@@ -101,11 +105,13 @@ public class SkinnerCmd {
                     System.out.println(query.toString());
                     QueryStats.queryName = queryName;
                     QueryStats.optimal = nameToOptimal.get(queryName);
-                    processSQL(query.toString(), benchOut);
-                    BenchUtil.writeStats(queryName, QueryStats.time, benchOut);
+                    processSQL(query.toString(), benchOut, queryOut);
                 }
                 // Close benchmark result file
                 benchOut.close();
+                if (queryOut != null) {
+                    queryOut.close();
+                }
             }
         }
     }
@@ -186,11 +192,13 @@ public class SkinnerCmd {
     /**
      * Process input string as SQL statement.
      *
-     * @param input     input text
-     * @param benchOut	writer to benchmark result file
+     * @param input         input text
+     * @param benchOut	    writer to benchmark result file
+     * @param queryOut	    writer to query result file
+     *
      * @throws Exception
      */
-    static void processSQL(String input, PrintWriter benchOut) throws Exception {
+    static void processSQL(String input, PrintWriter benchOut, PrintWriter queryOut) throws Exception {
         // Try parsing as SQL query
         Statement sqlStatement = null;
         String name = QueryStats.queryName;
@@ -213,7 +221,7 @@ public class SkinnerCmd {
             PlainSelect plainSelect = (PlainSelect) createView.getSelectBody();
             Table view = createView.getView();
             try {
-                for (int warmupCtr = 0; warmupCtr < GeneralConfig.Nr_Warmup; warmupCtr++) {
+                for (int warmupCtr = 0; warmupCtr < GeneralConfig.NR_WARMUP; warmupCtr++) {
                     GeneralConfig.ISTESTCASE = false;
                     Master.executeSelect(plainSelect,
                             false, -1, -1, null, name, benchOut);
@@ -283,7 +291,7 @@ public class SkinnerCmd {
                 boolean printResult = plainSelect.getIntoTables() == null;
                 BufferManager.unloadCache(name.charAt(0) + "" + name.charAt(1));
                 try {
-                    for (int warmupCtr = 0; warmupCtr < GeneralConfig.Nr_Warmup; warmupCtr++) {
+                    for (int warmupCtr = 0; warmupCtr < GeneralConfig.NR_WARMUP; warmupCtr++) {
                         GeneralConfig.ISTESTCASE = false;
                         Master.executeSelect(plainSelect,
                                 false, -1, -1, null, name, benchOut);
@@ -304,6 +312,9 @@ public class SkinnerCmd {
                         // Display on console
                         RelationPrinter.print(
                                 NamingConfig.FINAL_RESULT_NAME);
+                    }
+                    if (queryOut != null) {
+                        RelationPrinter.write(NamingConfig.FINAL_RESULT_NAME, queryOut);
                     }
                 } catch (SQLexception e) {
                     System.out.println(e.getMessage());
@@ -462,15 +473,18 @@ public class SkinnerCmd {
             Compressor.compress();
         } else if (input.startsWith("exec")) {
             processFile(input);
+        } else if (input.startsWith("set")) {
+            changeConfig(input);
         } else if (input.startsWith("explain")) {
             String[] inputFrags = input.split("\\s");
             processExplain(inputFrags);
         } else if (input.equals("help")) {
-            System.out.println("'bench <query Dir> <output file>' to benchmark queries in *.sql files");
+            System.out.println("'bench <query dir> <output file>' to benchmark queries in *.sql files");
             System.out.println("'compress' to compress database");
             System.out.println("'exec <SQL file>' to execute file");
             System.out.println("'explain <Plot Dir> <Plot Bound> "
                     + "<Plot Frequency> <Query>' to visualize query execution");
+            System.out.println("'set <parameter> <value>' to change the value of parameter");
             System.out.println("'help' for help");
             System.out.println("'index all' to index each column");
             System.out.println("'list' to list database tables");
@@ -489,12 +503,95 @@ public class SkinnerCmd {
             // Nothing to do ...
         } else {
             try {
-                processSQL(input, null);
+                processSQL(input, null, null);
             } catch (SQLexception e) {
                 System.out.println(e.getMessage());
             }
         }
         return true;
+    }
+
+    /**
+     * Change the value of parameter to the given value.
+     *
+     * @param input        input command to process
+     */
+    private static void changeConfig(String input) {
+        // Delete semicolons if any
+        input = input.replace(";", "");
+        String[] input_array = input.split(" ");
+        if (input_array.length == 3) {
+            Configuration.setProperty(input_array[1], input_array[2]);
+            System.out.println("Set " + input_array[1] + " to " + input_array[2] + " successfully!");
+        }
+        else {
+            System.out.println("Please input 'set <parameter> <value>' to change the value of parameter");
+        }
+    }
+
+    public static int mapToParallelAlgorithm(String algoName) {
+        int algoSpec = 0;
+        switch (algoName) {
+            case "DP": {
+                algoSpec = 0;
+                break;
+            }
+            case "SP-O": {
+                algoSpec = 8;
+                break;
+            }
+            case "SP-P": {
+                algoSpec = 2;
+                break;
+            }
+            case "SP-C": {
+                // TODO: activate constraint
+                algoSpec = 8;
+
+                break;
+            }
+            case "SP-H": {
+                algoSpec = 10;
+                break;
+            }
+            case "Root": {
+                algoSpec = 4;
+                break;
+            }
+            case "Leaf": {
+                algoSpec = 5;
+                break;
+            }
+            case "Tree": {
+                algoSpec = 6;
+                break;
+            }
+            case "TP": {
+                algoSpec = 9;
+                break;
+            }
+        }
+        return algoSpec;
+    }
+
+    /**
+     * Set parameters based on the configuration file.
+     */
+    public static void loadConfigs() {
+        // Number of test case
+        GeneralConfig.TEST_CASE = Integer.parseInt(Configuration.getProperty("TEST_CASE", "1"));
+        // Number of warmup run
+        GeneralConfig.NR_WARMUP = Integer.parseInt(Configuration.getProperty("NR_WARMUP", "1"));
+        // Number of executors in task parallel
+        ParallelConfig.NR_EXECUTORS = Integer.parseInt(Configuration.getProperty("NR_EXECUTORS", "1"));
+        // Batch size
+        ParallelConfig.NR_BATCHES = Integer.parseInt(Configuration.getProperty("NR_BATCHES", "60"));
+        // Whether to write results
+        GeneralConfig.WRITE_RESULTS = Boolean.parseBoolean(
+                Configuration.getProperty("WRITE_RESULTS", "true"));
+        // Parallel algorithms
+        ParallelConfig.PARALLEL_SPEC = mapToParallelAlgorithm(
+                Configuration.getProperty("PARALLEL_ALGO", "DP"));
     }
 
     /**
@@ -510,31 +607,21 @@ public class SkinnerCmd {
                     + " to database directory!");
             return;
         }
+        dbDir = args[0];
+        // Initialize configuration file
+        Configuration.initConfiguration(dbDir);
 
         // Load parameters from the command line
         if (args.length > 1) {
             ParallelConfig.EXE_THREADS = Integer.parseInt(args[1]);
         }
-        // Load parameters from the configuration file
-        // Number of executors in task parallel
-        ParallelConfig.EXE_EXECUTORS = Integer.parseInt(Configuration.getProperty("THREADS", "1"));
-        // Whether to use parallel algorithm
-		GeneralConfig.isParallel = Integer.parseInt(Configuration.getProperty("ISPARALLEL", "0")) == 1;
-        // Number of test case
-        GeneralConfig.TEST_CASE = Integer.parseInt(Configuration.getProperty("TEST_CASE", "1"));
-        // Number of warmup run
-        GeneralConfig.Nr_Warmup = Integer.parseInt(Configuration.getProperty("WARMUP", "1"));
-        // Batch size
-        ParallelConfig.NR_BATCHES = Integer.parseInt(Configuration.getProperty("NRBATCHES", "60"));
-        if (GeneralConfig.isParallel) {
-			ParallelConfig.PARALLEL_SPEC = Integer.parseInt(Configuration.getProperty("PARALLEL_SPEC", "0"));
-        }
         else {
-            ParallelConfig.EXE_THREADS = 1;
-            ParallelConfig.PARALLEL_SPEC = 0;
+            int defaultNrThreads = Runtime.getRuntime().availableProcessors();
+            ParallelConfig.EXE_THREADS = Integer.parseInt(Configuration.getProperty("THREADS",
+                    String.valueOf(defaultNrThreads)));
         }
+        loadConfigs();
 		// Load database schema and initialize path mapping
-		dbDir = args[0];
         PathUtil.initSchemaPaths(dbDir);
         CatalogManager.loadDB(PathUtil.schemaPath);
         PathUtil.initDataPaths(CatalogManager.currentDB);

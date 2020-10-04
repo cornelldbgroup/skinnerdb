@@ -1,11 +1,13 @@
 package print;
 
+import java.io.PrintWriter;
 import java.sql.Date;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
 
+import config.GeneralConfig;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.time.DurationFormatUtils;
 
@@ -19,6 +21,7 @@ import data.IntData;
 import data.LongData;
 import data.StringData;
 import query.ColumnRef;
+import statistics.QueryStats;
 import types.SQLtype;
 
 /**
@@ -86,6 +89,62 @@ public class RelationPrinter {
 		}
 		printSeparator('-', headerLength);
 		System.out.flush();
+	}
+	/**
+	 * Write relation of given name to the file.
+	 *
+	 * @param tableName	name of table to print
+	 * @param queryOut	output file
+	 */
+	public static void write(String tableName, PrintWriter queryOut) throws Exception {
+		// Get table meta-data
+		TableInfo tableInfo = CatalogManager.
+				currentDB.nameToTable.get(tableName);
+		if (tableInfo == null) {
+			return;
+		}
+		int nrCols = tableInfo.columnNames.size();
+		// Print query name
+		String queryName = QueryStats.queryName;
+		queryOut.write(queryName + "\n");
+		// Print table header
+		String header = StringUtils.join(tableInfo.columnNames, "\t");
+		int headerLength = header.length() + nrCols * 7;
+		StringBuilder separator = new StringBuilder();
+		for (int i = 0; i < headerLength; ++i) {
+			separator.append('-');
+		}
+		separator.append("\n");
+		queryOut.write(separator.toString());
+		queryOut.write(header + "\n");
+		queryOut.write(separator.toString());
+		// Extract column types
+		List<SQLtype> colTypes = new ArrayList<>();
+		for (String colName : tableInfo.columnNames) {
+			ColumnRef colRef = new ColumnRef(tableName, colName);
+			ColumnInfo colInfo = CatalogManager.getColumn(colRef);
+			colTypes.add(colInfo.type);
+		}
+		// Get table data
+		List<ColumnData> colsData = new ArrayList<>();
+		for (String colName : tableInfo.columnNames) {
+			ColumnRef colRef = new ColumnRef(tableName, colName);
+			ColumnData data = BufferManager.getData(colRef);
+			colsData.add(data);
+		}
+		int cardinality = CatalogManager.getCardinality(tableName);
+		// Print out table content
+		for (int rowCtr = 0; rowCtr < cardinality; ++rowCtr) {
+			StringBuilder rowStr = new StringBuilder();
+			for (int colCtr = 0; colCtr < nrCols; ++colCtr) {
+				ColumnData colData = colsData.get(colCtr);
+				SQLtype type = colTypes.get(colCtr);
+				rowStr.append(printCell(type, colData, rowCtr)).append("\t");
+			}
+			rowStr.append("\n");
+			queryOut.write(rowStr.toString());
+		}
+		queryOut.write(separator.toString());
 	}
 	/**
 	 * Print out cell content, formatted according to given data type.

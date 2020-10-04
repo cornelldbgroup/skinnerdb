@@ -8,6 +8,7 @@ import java.util.stream.IntStream;
 
 import catalog.CatalogManager;
 import com.sun.jna.platform.win32.FlagEnum;
+import config.GeneralConfig;
 import config.NamingConfig;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.statement.Statement;
@@ -74,6 +75,9 @@ public class BenchUtil {
 	}
 
 	public static Map<String, int[]> readOptimalJoinOrders(String path) throws IOException {
+		if (path == null) {
+			return new HashMap<>();
+		}
 		File optimalFile = new File(path);
 		BufferedReader br = new BufferedReader(new FileReader(optimalFile));
 		Map<String, int[]> optimalOrders = new HashMap<>();
@@ -98,7 +102,7 @@ public class BenchUtil {
 	 * @param benchOut	channel to benchmark file
 	 */
 	public static void writeBenchHeader(PrintWriter benchOut) {
-		benchOut.println("Query\tMillis\tPreMillis\tJoinMillis\tMatMillis\tPostMillis\t"
+		benchOut.println("Query\tIsWarmup\tMillis\tPreMillis\tJoinMillis\tMatMillis\tPostMillis\t"
 				+ "FilterMillis\tIndexMillis\tGroupByMillis\tAggregateMillis\tHavingMillis\tOrderMillis\t"
 				+ "Tuples\tSamples\tLookups\tNrIndexEntries\tnrUniqueLookups\t"
 				+ "NrUctNodes\tNrPlans\tJoinCard\tAvgReward\tMaxReward\tTotalWork"
@@ -117,6 +121,7 @@ public class BenchUtil {
 			PrintWriter benchOut) {
 		// Generate output
 		benchOut.print(queryName + "\t");
+		benchOut.print(!GeneralConfig.ISTESTCASE + "\t");
 		benchOut.print(totalMillis + "\t");
 		benchOut.print(PreStats.preMillis + "\t");
 		benchOut.print(JoinStats.joinMillis + "\t");

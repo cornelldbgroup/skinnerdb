@@ -31,5 +31,7 @@ public class CreateDB {
 		CatalogManager.currentDB = new DbInfo(name);
 		PathUtil.initDataPaths(CatalogManager.currentDB);
 		CatalogManager.currentDB.storeDB();
+		PathUtil.initConfigPaths(dbDir);
+		PathUtil.createConfig();
 	}
 }

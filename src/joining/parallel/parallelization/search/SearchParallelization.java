@@ -2,7 +2,6 @@ package joining.parallel.parallelization.search;
 
 import config.LoggingConfig;
 import config.ParallelConfig;
-import joining.parallel.join.DPJoin;
 import joining.parallel.join.SPJoin;
 import joining.parallel.join.SubJoin;
 import joining.parallel.parallelization.Parallelization;
@@ -68,7 +67,6 @@ public class SearchParallelization extends Parallelization {
         AtomicBoolean end = new AtomicBoolean(false);
         int nrTables = query.nrJoined;
         List<SearchTask> tasks = new ArrayList<>();
-        // logs list
         List<String>[] logs = new List[nrThreads];
         for (int i = 0; i < nrThreads; i++) {
             logs[i] = new ArrayList<>();
@@ -95,9 +93,9 @@ public class SearchParallelization extends Parallelization {
             } catch (InterruptedException | ExecutionException e) {
                 e.printStackTrace();
             }
-
         });
-
+        long mergeEnd = System.currentTimeMillis();
+        JoinStats.mergeTime = mergeEnd - executionEnd;
         long nrSamples = 0;
         for (SPJoin joinOp: spJoins) {
             nrSamples = Math.max(joinOp.roundCtr, nrSamples);

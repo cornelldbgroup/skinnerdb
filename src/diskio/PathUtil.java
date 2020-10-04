@@ -1,5 +1,6 @@
 package diskio;
 
+import java.io.FileOutputStream;
 import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
@@ -24,6 +25,10 @@ public class PathUtil {
 	 * Path to database schema file.
 	 */
 	public static String schemaPath = null;
+	/**
+	 * Path to configuration file.
+	 */
+	public static String configPath = null;
 	/**
 	 * Path to directory containing data.
 	 */
@@ -67,5 +72,34 @@ public class PathUtil {
 				colToPath.put(colInfo, colPath);
 			}
 		}
+	}
+	/**
+	 * Initializes all paths related to configuration file.
+	 *
+	 * @param dbDir	main database directory
+	 */
+	public static void initConfigPaths(String dbDir) {
+		configPath = Paths.get(dbDir, "config.sdb").toString();
+	}
+	/**
+	 * Create the configuration file for specific database
+	 * and set parameters to default values.
+	 *
+	 * @throws Exception
+	 */
+	public static void createConfig() throws Exception {
+		String configPath = PathUtil.configPath;
+		FileOutputStream fileOut = new FileOutputStream(configPath);
+		String[] parameters = new String[]{
+				"PARALLEL_ALGO", "NR_WARMUP",
+				"NR_EXECUTORS", "NR_BATCHES",
+				"WRITE_RESULTS"};
+		String[] values = new String[]{"DP", "1", "1", "120", "true"};
+		for (int paraCtr = 0; paraCtr < parameters.length; paraCtr++) {
+			String line = parameters[paraCtr] + "=" + values[paraCtr] + "\n";
+			byte[] strToBytes = line.getBytes();
+			fileOut.write(strToBytes);
+		}
+		fileOut.close();
 	}
 }
