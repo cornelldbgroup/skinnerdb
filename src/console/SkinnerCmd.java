@@ -545,9 +545,7 @@ public class SkinnerCmd {
                 break;
             }
             case "SP-C": {
-                // TODO: activate constraint
-                algoSpec = 8;
-
+                algoSpec = 14;
                 break;
             }
             case "SP-H": {

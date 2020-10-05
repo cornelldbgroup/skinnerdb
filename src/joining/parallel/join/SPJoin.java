@@ -2,6 +2,7 @@ package joining.parallel.join;
 
 import catalog.CatalogManager;
 import config.LoggingConfig;
+import config.ParallelConfig;
 import expressions.ExpressionInfo;
 import expressions.compilation.EvaluatorType;
 import expressions.compilation.ExpressionCompiler;
@@ -164,15 +165,6 @@ public abstract class SPJoin {
         this.constraintsStats = new HashMap<>();
         query.constraints.forEach(pair -> constraintsStats.put(pair, new int[2]));
         joinStats = new ConcurrentHashMap<>();
-
-//        if (query.nonEquiJoinPreds.size() > 0) {
-//            ExpressionInfo predInfo = query.nonEquiJoinPreds.get(0);
-//            compiler = new ExpressionCompiler(predInfo,
-//                    preSummary.columnMapping, query.aliasToIndex, null,
-//                    EvaluatorType.KARY_BOOLEAN);
-//            predInfo.finalExpression.accept(compiler);
-//            boolEval = (KnaryBoolEval) compiler.getBoolEval();
-//        }
     }
 
     /**
@@ -196,12 +188,13 @@ public abstract class SPJoin {
      * @return          the first large table
      */
     public int getFirstLargeTable(int[] order) {
+        int firstTable = order[0];
         for (int table : order) {
             if (cardinalities[table] > 1) {
                 return table;
             }
         }
-        return order[0];
+        return firstTable;
     }
 
     /**

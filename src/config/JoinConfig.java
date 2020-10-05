@@ -81,4 +81,8 @@ public class JoinConfig {
 	 * Whether to share offsets among different thread.
 	 */
 	public static boolean OFFSETS_SHARING = true;
+	/**
+	 * Whether to choose the first table to share offsets.
+	 */
+	public static boolean FIRST_TABLE = false;
 }

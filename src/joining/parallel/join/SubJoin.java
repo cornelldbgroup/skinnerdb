@@ -135,7 +135,10 @@ public class SubJoin extends SPJoin {
 //        long timer1 = System.currentTimeMillis();
         // Execute from ing state, save progress, return progress
         int leftTable = order[0];
-        int firstTable = getFirstLargeTable(order);
+        int firstTable = leftTable;
+        if (!JoinConfig.FIRST_TABLE) {
+            firstTable = getFirstLargeTable(order);
+        }
 //        int firstTable = leftTable;
         State state = tracker.continueFromSP(joinOrder, tid, firstTable);
         if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
@@ -180,7 +183,7 @@ public class SubJoin extends SPJoin {
         executeWithBudget(plan, state, offsets);
 //        long timer3 = System.currentTimeMillis();
         // update stats for the constraints
-        if (ParallelConfig.CONSTRAINTS && ParallelConfig.PARALLEL_SPEC == 8) {
+        if (ParallelConfig.PARALLEL_SPEC == 14) {
             Set<Integer> joinedTable = new HashSet<>(nrJoined);
             boolean single = query.joinConnection.get(leftTable).size() == 1;
             for (int i = 0; i < nrJoined - 1; i++) {

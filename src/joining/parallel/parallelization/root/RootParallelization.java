@@ -1,5 +1,6 @@
 package joining.parallel.parallelization.root;
 
+import config.JoinConfig;
 import config.LoggingConfig;
 import joining.parallel.join.SPJoin;
 import joining.parallel.join.SubJoin;
@@ -69,6 +70,7 @@ public class RootParallelization extends Parallelization {
         ExecutorService executorService = ThreadPool.executorService;
         // Mutex shared by multiple threads.
         AtomicBoolean end = new AtomicBoolean(false);
+        JoinConfig.FIRST_TABLE = true;
         List<RootTask> tasks = new ArrayList<>();
         // logs list
         List<String>[] logs = new List[nrThreads];
@@ -110,6 +112,6 @@ public class RootParallelization extends Parallelization {
             LogUtils.writeLogs(logs, "verbose/root/" + QueryStats.queryName);
         }
         System.out.println("Result Set: " + resultList.size());
-
+        JoinConfig.FIRST_TABLE = false;
     }
 }

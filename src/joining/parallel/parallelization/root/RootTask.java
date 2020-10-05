@@ -81,7 +81,6 @@ public class RootTask implements Callable<RootResult> {
             if (!spJoin.isFinished()) {
                 accReward += reward;
             }
-            // broadcasting the finished plan.
             else {
                 if (finish.compareAndSet(false, true)) {
                     System.out.println("Finish id: " + tid + "\t" + Arrays.toString(joinOrder) + "\t" + roundCtr);
@@ -95,7 +94,6 @@ public class RootTask implements Callable<RootResult> {
             }
 //            joinOp.writeLog("Episode Time: " + (end - start) + "\tReward: " + reward);
         }
-        // Materialize result table
         long timer2 = System.currentTimeMillis();
         System.out.println("Thread " + tid + " " + (timer2 - timer1) + "\t Round: " + roundCtr);
         Set<ResultTuple> tuples = spJoin.result.tuples;

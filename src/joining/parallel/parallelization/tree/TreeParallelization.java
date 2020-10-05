@@ -1,5 +1,6 @@
 package joining.parallel.parallelization.tree;
 
+import config.JoinConfig;
 import config.LoggingConfig;
 import joining.parallel.join.SPJoin;
 import joining.parallel.join.SubJoin;
@@ -60,6 +61,7 @@ public class TreeParallelization extends Parallelization {
     public void execute(Set<ResultTuple> resultList) throws Exception {
         // Initialize UCT join order search tree.
         SPNode root = new SPNode(0, query, true, nrThreads);
+        JoinConfig.FIRST_TABLE = true;
         // Initialize a thread pool.
         ExecutorService executorService = ThreadPool.executorService;
         // Mutex shared by multiple threads.
@@ -101,6 +103,7 @@ public class TreeParallelization extends Parallelization {
         if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
             LogUtils.writeLogs(logs, "verbose/tree/" + QueryStats.queryName);
         }
+        JoinConfig.FIRST_TABLE = false;
         System.out.println("Result Set: " + resultList.size());
     }
 }

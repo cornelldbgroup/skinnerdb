@@ -105,7 +105,7 @@ public class BenchUtil {
 		benchOut.println("Query\tIsWarmup\tMillis\tPreMillis\tJoinMillis\tMatMillis\tPostMillis\t"
 				+ "FilterMillis\tIndexMillis\tGroupByMillis\tAggregateMillis\tHavingMillis\tOrderMillis\t"
 				+ "Tuples\tSamples\tLookups\tNrIndexEntries\tnrUniqueLookups\t"
-				+ "NrUctNodes\tNrPlans\tJoinCard\tAvgReward\tMaxReward\tTotalWork"
+				+ "NrUctNodes\tNrPlans\tJoinCard\tAvgReward\tMaxReward\tTotalWork\t"
 				+ "DataSize\tUctSize\tStateSize\tJoinSize");
 	}
 	/**

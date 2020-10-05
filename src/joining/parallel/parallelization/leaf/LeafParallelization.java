@@ -67,6 +67,7 @@ public class LeafParallelization extends Parallelization {
     public void execute(Set<ResultTuple> resultList) throws Exception {
         long executionStart = System.currentTimeMillis();
         long nextForget = 10;
+        JoinConfig.FIRST_TABLE = true;
         // Initialize UCT join order search tree
         SyncNode root = new SyncNode(0, query, true, nrThreads);
         // Initialize counters and variables
@@ -94,13 +95,6 @@ public class LeafParallelization extends Parallelization {
                     finish = true;
                 }
             }
-//            if (roundCtr == 1000000) {
-//                for (int i = 0; i < nrThreads; i++) {
-//                    logs[i] = joinOps.get(i).logs;
-//                }
-//                LogUtils.writeLogs(logs, "verbose/leaf/" + QueryStats.queryName);
-//                System.out.println("Write to logs!");
-//            }
             // Consider memory loss
             if (JoinConfig.FORGET && roundCtr == nextForget) {
                 root = new SyncNode(0, query, true, nrThreads);
@@ -121,6 +115,7 @@ public class LeafParallelization extends Parallelization {
         }
         JoinStats.exeTime = executionEnd - executionStart;
         JoinStats.nrSamples = roundCtr;
+        JoinConfig.FIRST_TABLE = false;
         System.out.println("Result Set: " + resultList.size() + " " + JoinStats.exeTime + " " + roundCtr);
     }
 }
