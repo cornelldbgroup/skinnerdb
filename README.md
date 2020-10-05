@@ -1,3 +1,7 @@
+# Important Note
+
+Please use commits from September 2019 for benchmarking, the latest commits in the Master branch introduce new features that currently degrade performance.
+
 # SkinnerDB
 
 This repository contains a very early version of a (slightly refined) re-implementation of SkinnerDB, 
