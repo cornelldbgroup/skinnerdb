@@ -27,7 +27,7 @@ import java.util.*;
  * Different threads synchronize after each episode
  * on a single UCT tree.
  *
- * @author Ziyun Wei
+ * @author Anonymous
  */
 public class LeafParallelization extends Parallelization {
     /**

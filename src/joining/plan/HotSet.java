@@ -20,7 +20,7 @@ import java.util.stream.Collectors;
  * Represents an intermediate result
  * (a set of table included in the join order).
  *
- * @author Ziyun Wei
+ * @author Anonymous
  *
  */
 public class HotSet {

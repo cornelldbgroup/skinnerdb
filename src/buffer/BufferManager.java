@@ -26,7 +26,7 @@ import types.TypeUtil;
 /**
  * Manages the main memory database buffer.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class BufferManager {

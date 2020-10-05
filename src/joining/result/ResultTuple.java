@@ -8,7 +8,7 @@ import java.util.List;
 /**
  * Represents one tuple of the join result.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class ResultTuple {

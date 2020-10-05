@@ -4,7 +4,7 @@ package joining.progress;
  * Captures evaluation progress made for one specific table
  * for a given join order prefix.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class Progress {

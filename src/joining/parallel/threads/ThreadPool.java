@@ -10,7 +10,7 @@ import static net.openhft.affinity.AffinityStrategies.*;
 /**
  * Threads pool for joining.parallel execution.
  *
- * @author Ziyun Wei
+ * @author Anonymous
  *
  */
 public class ThreadPool {

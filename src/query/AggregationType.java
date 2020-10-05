@@ -3,7 +3,7 @@ package query;
 /**
  * Describes what kind of aggregation a query requires.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public enum AggregationType {

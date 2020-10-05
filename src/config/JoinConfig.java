@@ -7,7 +7,7 @@ import joining.uct.SelectionPolicy;
  * Configures reinforcement-learning based
  * search for optimal join orders.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class JoinConfig {

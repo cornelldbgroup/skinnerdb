@@ -86,7 +86,7 @@ import types.TypeUtil;
  * Assigns types to each expression part and adds casts
  * if necessary.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class TypeVisitor extends SkinnerVisitor {

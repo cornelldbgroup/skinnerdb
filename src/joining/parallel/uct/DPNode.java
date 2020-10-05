@@ -17,7 +17,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 /**
  * Represents node in data joining.parallel UCT search tree.
  *
- * @author Ziyun Wei
+ * @author Anonymous
  */
 public class DPNode {
     /**

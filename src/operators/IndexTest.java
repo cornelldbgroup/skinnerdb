@@ -65,7 +65,7 @@ import java.util.Deque;
  * evaluated using indices alone. This class
  * must be kept in sync with IndexFilter.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class IndexTest implements ExpressionVisitor {

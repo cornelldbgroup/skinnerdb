@@ -20,7 +20,7 @@ import types.SQLtype;
  * and faster processing. Currently focused on compressing string
  * columns.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class Compressor {

@@ -22,7 +22,7 @@ import types.SQLtype;
  * Calculates the sum (total or per group)
  * from a given input column.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class SumAggregate {

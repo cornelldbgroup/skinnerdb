@@ -7,7 +7,7 @@ import java.util.List;
  * refer to counts achieved during the last query
  * evaluation.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class JoinStats {

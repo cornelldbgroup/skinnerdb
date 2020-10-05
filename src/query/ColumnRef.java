@@ -4,7 +4,7 @@ package query;
  * Represents a reference to a specific column
  * within a specific table alias.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class ColumnRef {

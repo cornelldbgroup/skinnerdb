@@ -19,7 +19,7 @@ import types.SQLtype;
  * a consecutive group ID, based on values
  * in a given set of columns.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class GroupBy {

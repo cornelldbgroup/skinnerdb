@@ -5,7 +5,7 @@ package statistics;
  * including the name of query
  * predicates, etc.
  *
- * @author Ziyun Wei
+ * @author Anonymous
  */
 public class QueryStats {
     /**

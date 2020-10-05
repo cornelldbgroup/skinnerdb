@@ -1,9 +1,9 @@
 package config;
 
 /**
- * Configures behavior of SkinnerDB during startup.
+ * Configures behavior of SkinnerMT during startup.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class StartupConfig {

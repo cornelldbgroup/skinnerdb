@@ -35,7 +35,7 @@ import statistics.PostStats;
  * sorting. Produces the final result of a
  * query block.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class PostProcessor {

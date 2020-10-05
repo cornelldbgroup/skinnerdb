@@ -45,7 +45,7 @@ import org.apache.commons.lang3.StringUtils;
 /**
  * Contains information on the query to execute.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class QueryInfo {

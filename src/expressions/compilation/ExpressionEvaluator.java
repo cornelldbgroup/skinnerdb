@@ -5,7 +5,7 @@ package expressions.compilation;
  * generate byte code implementing this interface for specific
  * expressions.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public interface ExpressionEvaluator {

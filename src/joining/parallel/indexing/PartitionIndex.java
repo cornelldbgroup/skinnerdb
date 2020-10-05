@@ -8,7 +8,7 @@ import predicate.Operator;
 /**
  * Common superclass of all partition indexing structures.
  *
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public abstract class PartitionIndex extends Index {

@@ -15,7 +15,7 @@ import java.util.function.UnaryOperator;
 /**
  * The plan information of the first terminated thread.
  *
- * @author Ziyun Wei
+ * @author Anonymous
  */
 public class EndPlan {
     /**

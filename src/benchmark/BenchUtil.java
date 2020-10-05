@@ -19,9 +19,9 @@ import statistics.PostStats;
 import statistics.PreStats;
 
 /**
- * Several auxiliary methods for benchmarking SkinnerDB.
+ * Several auxiliary methods for benchmarking SkinnerMT.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class BenchUtil {
@@ -105,7 +105,7 @@ public class BenchUtil {
 		benchOut.println("Query\tIsWarmup\tMillis\tPreMillis\tJoinMillis\tMatMillis\tPostMillis\t"
 				+ "FilterMillis\tIndexMillis\tGroupByMillis\tAggregateMillis\tHavingMillis\tOrderMillis\t"
 				+ "Tuples\tSamples\tLookups\tNrIndexEntries\tnrUniqueLookups\t"
-				+ "NrUctNodes\tNrPlans\tJoinCard\tAvgReward\tMaxReward\tTotalWork\t"
+				+ "NrPlans\tJoinCard\tAvgReward\tMaxReward\tTotalWork\t"
 				+ "DataSize\tUctSize\tStateSize\tJoinSize");
 	}
 	/**
@@ -140,7 +140,6 @@ public class BenchUtil {
 		benchOut.print(JoinStats.nrIndexLookups + "\t");
 		benchOut.print(JoinStats.nrIndexEntries + "\t");
 		benchOut.print(JoinStats.nrUniqueIndexLookups + "\t");
-		benchOut.print(JoinStats.nrUctNodes + "\t");
 		benchOut.print(JoinStats.nrPlansTried + "\t");
 		benchOut.print(JoinStats.lastJoinCard + "\t");
 		benchOut.print(JoinStats.avgReward + "\t");

@@ -15,7 +15,7 @@ import joining.result.ResultTuple;
 /**
  * Represents content of numeric column.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class DoubleData extends ColumnData implements Serializable {

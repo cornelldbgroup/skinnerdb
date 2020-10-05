@@ -4,7 +4,7 @@ package config;
  * Configures debugging output for different stages of
  * query analysis and query processing.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class LoggingConfig {

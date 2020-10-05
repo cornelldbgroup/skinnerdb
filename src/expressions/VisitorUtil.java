@@ -8,7 +8,7 @@ import net.sf.jsqlparser.statement.select.SelectVisitor;
  * Some generic utility methods 
  * for the Skinner visitor.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class VisitorUtil {

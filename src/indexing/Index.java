@@ -8,7 +8,7 @@ import config.LoggingConfig;
 /**
  * Common superclass of all indexing structures.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public abstract class Index {

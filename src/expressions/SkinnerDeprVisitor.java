@@ -69,7 +69,7 @@ import query.SQLexception;
  * allowing to throw SQL exceptions during processing (e.g.,
  * if tables are referenced that do not appear in the catalog).
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public interface SkinnerDeprVisitor {

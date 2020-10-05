@@ -14,7 +14,7 @@ import java.util.stream.IntStream;
 /**
  * Indexes integer values (not necessarily unique).
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class IntIndex extends Index {

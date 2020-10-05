@@ -1,6 +1,5 @@
 package catalog.stats;
 
-import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -12,7 +11,7 @@ import diskio.PathUtil;
  * Statistics about database content (e.g., the
  * cardinality of each database table).
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class DbStats {

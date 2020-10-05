@@ -7,7 +7,7 @@ import joining.join.JoinMove;
 /**
  * Captures processing state for a specific join order.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class State {

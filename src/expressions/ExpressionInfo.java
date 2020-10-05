@@ -28,7 +28,7 @@ import types.TypeUtil;
 /**
  * Stores information on one expression (e.g., a predicate).
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class ExpressionInfo {

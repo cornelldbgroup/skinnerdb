@@ -7,7 +7,7 @@ import java.util.List;
 /**
  * Execution results for search parallelization
  *
- * @author Ziyun Wei
+ * @author Anonymous
  */
 public class SearchResult {
     /**

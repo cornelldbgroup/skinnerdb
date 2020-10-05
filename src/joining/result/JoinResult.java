@@ -7,7 +7,7 @@ import java.util.Map.Entry;
  * Represents the result of a query in compact form
  * (indices of joined result tuples in base tables).
  *
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class JoinResult {

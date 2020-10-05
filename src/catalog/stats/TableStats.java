@@ -8,7 +8,7 @@ import query.ColumnRef;
 /**
  * Statistical meta-data about table content.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class TableStats {

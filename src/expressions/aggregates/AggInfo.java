@@ -8,7 +8,7 @@ import query.QueryInfo;
 /**
  * Information about an aggregate expression.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class AggInfo {

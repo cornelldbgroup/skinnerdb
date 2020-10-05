@@ -18,7 +18,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * and collect results that satisfy with predicates.
  * Rewards will be updated in a centralized UCT tree.
  *
- * @author Ziyun Wei
+ * @author Anonymous
  */
 public class TreeTask implements Callable<TreeResult> {
     /**

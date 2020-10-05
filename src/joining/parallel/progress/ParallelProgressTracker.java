@@ -18,7 +18,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * and methods to retrieve the state from which evaluation
  * for one specific join order should continue.
  *
- * @author Ziyun Wei
+ * @author Anonymous
  */
 public class ParallelProgressTracker {
     /**

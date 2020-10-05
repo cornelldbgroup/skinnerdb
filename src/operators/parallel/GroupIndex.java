@@ -8,7 +8,7 @@ import java.util.List;
  * same value in a set of columns of the
  * same cardinality.
  *
- * @author Ziyun Wei
+ * @author Anonymous
  *
  */
 public class GroupIndex {

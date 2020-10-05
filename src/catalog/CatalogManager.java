@@ -17,7 +17,7 @@ import query.ColumnRef;
 /**
  * Provides access to schema information for current database.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class CatalogManager {

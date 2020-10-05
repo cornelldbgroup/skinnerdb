@@ -1,23 +1,27 @@
 # SkinnerMT
 
-This directory contains a parallel version based on re-implementation of SkinnerDB, 
-described in the paper <a href="https://dl.acm.org/citation.cfm?id=3275600">SkinnerDB: Regret-bounded query evaluation via reinforcement learning</a> at SIGMOD 2019 (see video recording of SIGMOD talk <a href="https://www.youtube.com/watch?v=QRYVnKaZ9fw">here</a>). 
-
+This directory contains a prototype of parallel database which applies three different parallel algorithms to speedup query optimization and execution. The prototype needs to load data from the disk into main memory which might takes several minutes. We expect to implement a Client-Server DBMS architecture to avoid redundant loading time.
 
 # Running Benchmarks
 
-In SkinnerMT, we provided three benchmarks. The <a href="http://www.vldb.org/pvldb/vol9/p204-leis.pdf">join order benchmark</a> is a popular benchmark for query optimizers. The <a href="http://www.tpc.org/tpch/">TPC-H</a> is easy to optimized due to uniform data. The <a href="https://doi.org/10.1007/978-3-319-72401-0_8">JCC-H</a> is difficult due to slightly skewed data. Execute the following steps to run SkinnerMT on those benchmarks:
+In SkinnerMT, we provided three benchmarks. The <a href="http://www.vldb.org/pvldb/vol9/p204-leis.pdf">join order benchmark</a> is a popular benchmark for query optimizers. The <a href="http://www.tpc.org/tpch/">TPC-H</a> (scaling factor of 10) is easy to optimized due to uniform data. The <a href="https://doi.org/10.1007/978-3-319-72401-0_8">JCC-H</a> (scaling factor of 10) is difficult due to skewed data. Execute the following steps to run SkinnerMT on those benchmarks:
 
 <ol>
-<li>Download the database in the SkinnerMT format <a href="https://drive.google.com/file/d/1UCXtiPvVlwzUCWxKM6ic-XqIryk4OTgE/view?usp=sharing">here</a>. Decompress the linked .zip file.</li>
-<li>Start SkinnerDB using the bash script <code>Skinner.sh</code>. For Linux, use the following command to initialize SkinnerMT (while replacing /path/to/skinner/data by the path to the decompressed database and nr_threads by the number of running threads): 
+<li>Download the database in the SkinnerMT format <a href="https://drive.google.com/drive/folders/1QwLJGys31Dp9iUhnTK78q3fPvQh6_-B5?usp=sharing">databases.zip</a>. Decompress the linked .zip file. Then download and decompress source codes and executable jar files <a href="https://drive.google.com/drive/folders/1QwLJGys31Dp9iUhnTK78q3fPvQh6_-B5?usp=sharing">skinnermt.zip</a>.</li>
+<li>Start SkinnerMT using the bash script <code>Skinner.sh</code>. For Linux, use the following command to initialize SkinnerMT (while replacing /path/to/skinner/data by the path to the decompressed database and nr_threads by the number of running threads): 
 <p>
 <code>
 ./Skinner.sh /path/to/skinner/data nr_threads
 </code>
+For example,
+<code>
+./Skinner.sh ./imdb 30
+</code>
+
+The setting for heap space is 100 GB (-Xmx100G) for our benchmarking platform in default to avoid potential garbage collection overhead. Running under less heap space (50 GB at the minimum) can save main memory but as a trade-off it may loss a few seconds of end-to-end performance.
 </p> 
 </li>
-<li>Run a benchmark using the bench command in the SkinnerMT console. For example, <code>bench ../imdb/queries outputfile.txt</code> command will benchmark queries in ../imdb/queries directory and write experimental results into outputfile.txt. You may need to adapt the relative path to the directory containing benchmark queries, replace <code>outputfile.txt</code> by a file name of your choosing.</li>
+<li>Run a benchmark using the bench command in the SkinnerMT console. For example, <code>bench ./imdb/queries outputfile.txt</code> command will benchmark queries in ./imdb/queries directory and write experimental results into outputfile.txt. You may need to adapt the relative path to the directory containing benchmark queries, replace <code>outputfile.txt</code> by a file name of your choosing.</li>
 </ol>
 
 # Output
@@ -25,6 +29,7 @@ After running the benchmark, benchmark results can be found in the specified out
 
 <ol>
 <li>Query: name of query to process</li>
+<li>IsWarmup: end-to-end performance of the running query</li>
 <li>Millis: end-to-end performance of the running query</li>
 <li>PreMillis: time of pre-processing phase</li>
 <li>JoinMillis: time of join phase</li>
@@ -37,10 +42,18 @@ After running the benchmark, benchmark results can be found in the specified out
 <li>OrderMillis: time of ordering in post-processing phase</li>
 <li>Tuples: number of partial or completed tuples considered during the join phase</li>
 <li>Samples: number of learning samples during the join phase</li>
+<li>Lookups: number of index lookups during the join phase (<b>implemented only for sequential version</b>)</li>
+<li>NrIndexEntries: sum of index entries for the values used in index lookups (<b>implemented only for sequential version</b>)</li>
+<li>nrUniqueLookups: number of index lookups where the number of corresponding entries is at most one (<b>implemented only for sequential version</b>)</li>
+<li>NrPlans: number of query plans tried during the join phase (<b>implemented only for sequential version</b>)</li>
+<li>JoinCard: join result cardinality of last processed sub-query</li>
+<li>AvgReward: average reward obtained during the join phase (<b>implemented only for sequential version</b>)</li>
+<li>MaxReward: maximum reward obtained during the join phase (<b>implemented only for sequential version</b>)</li>
+<li>TotalWork: total work (including redundant work) that is calculated based on table offsets after query evaluation (<b>implemented only for sequential version</b>)</li>
 <li>DataSize: memory consumption of relations, columns and indexes</li>
 <li>UctSize: memory consumption of uct trees</li>
 <li>StateSize: memory consumption of progress tracker tree</li>
-<li>JoinSize: memory consumption of data structures initialized during the join phase</li>
+<li>JoinSize: memory consumption of data structures used in the join phase</li>
 </ol>
 
 

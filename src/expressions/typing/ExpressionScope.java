@@ -5,7 +5,7 @@ package expressions.typing;
  * (i.e., whether it evaluates to one value per
  * tuple or per tuple group).
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public enum ExpressionScope {

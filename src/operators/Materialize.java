@@ -35,7 +35,7 @@ import types.TypeUtil;
  * Materializes parts of a table, defined by
  * a subset of columns and a subset of rows.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class Materialize {

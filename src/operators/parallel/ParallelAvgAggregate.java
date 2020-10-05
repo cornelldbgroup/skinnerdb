@@ -33,7 +33,7 @@ import java.util.stream.IntStream;
  * Calculates the average (total or per group)
  * from a given input column.
  * 
- * @author Ziyun Wei
+ * @author Anonymous
  *
  */
 public class ParallelAvgAggregate {

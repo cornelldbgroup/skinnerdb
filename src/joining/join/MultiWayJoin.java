@@ -20,7 +20,7 @@ import query.QueryInfo;
  * order. Collects result tuples over different episodes
  * and contains finally a complete join result.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public abstract class MultiWayJoin {

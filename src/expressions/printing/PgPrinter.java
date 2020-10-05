@@ -11,9 +11,9 @@ import types.SQLtype;
 /**
  * Prints out expressions while adding collation instructions
  * for Postgres. This is used to test consistency between
- * SkinnerDB and Postgres.
+ * SkinnerMT and Postgres.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class PgPrinter extends ExpressionDeParser {

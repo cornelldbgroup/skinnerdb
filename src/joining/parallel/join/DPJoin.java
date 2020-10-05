@@ -38,7 +38,7 @@ import java.util.Map;
  * order. Collects result tuples over different episodes
  * and contains finally a complete join result.
  *
- * @author Ziyun Wei
+ * @author Anonymous
  */
 public abstract class DPJoin {
     /**

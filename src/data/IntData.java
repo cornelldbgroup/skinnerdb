@@ -15,7 +15,7 @@ import joining.result.ResultTuple;
 /**
  * Represents content of integer column.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class IntData extends ColumnData implements Serializable {

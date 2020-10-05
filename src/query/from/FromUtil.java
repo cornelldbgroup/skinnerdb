@@ -10,7 +10,7 @@ import net.sf.jsqlparser.statement.select.PlainSelect;
 /**
  * Auxiliary functions for analyzing the FROM clause.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class FromUtil {

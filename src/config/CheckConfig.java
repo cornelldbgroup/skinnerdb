@@ -4,7 +4,7 @@ package config;
  * Configures run time checks (useful for
  * debugging).
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class CheckConfig {

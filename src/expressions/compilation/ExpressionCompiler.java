@@ -116,7 +116,7 @@ import org.objectweb.asm.util.TraceMethodVisitor;
  * whether a non-null value results. The null value is on top of
  * the stack to allow quick checks for NULL values.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class ExpressionCompiler extends SkinnerVisitor {

@@ -4,7 +4,7 @@ package expressions.compilation;
  * Interface for evaluating integer
  * expressions on single tables.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public interface UnaryIntEval {

@@ -18,7 +18,7 @@ import java.util.stream.Collectors;
  * tuple to satisfy binary equality condition
  * on two partitioned columns.
  *
- * @author Ziyun Wei
+ * @author Anonymous
  */
 public abstract class JoinPartitionIndexWrapper {
     /**

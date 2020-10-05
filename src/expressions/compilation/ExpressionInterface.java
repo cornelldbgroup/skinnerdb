@@ -6,7 +6,7 @@ import java.util.Arrays;
  * Wrapper class containing input and output to
  * compiled expressions.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class ExpressionInterface {

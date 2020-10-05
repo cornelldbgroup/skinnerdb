@@ -9,7 +9,7 @@ import java.util.List;
 /**
  * Utils of writing logs.
  *
- * @author Ziyun Wei
+ * @author Anonymous
  */
 public class LogUtils {
     /**

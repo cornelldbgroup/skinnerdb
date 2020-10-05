@@ -40,7 +40,7 @@ import java.util.stream.IntStream;
  * Evaluates a given expression on each row of a source table and
  * stores results in newly created column.
  *
- * @author Ziyun Wei
+ * @author Anonymous
  */
 public class ParallelMapRows {
     /**

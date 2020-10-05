@@ -9,7 +9,7 @@ import java.util.List;
  * The state of progress saved for
  * each working thread individually.
  *
- * @author Ziyun Wei
+ * @author Anonymous
  */
 public class ThreadState {
     /**

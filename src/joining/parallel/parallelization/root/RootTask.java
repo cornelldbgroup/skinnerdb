@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * and collect results that satisfy with predicates.
  * Rewards will be updated in different local UCT trees for threads.
  *
- * @author Ziyun Wei
+ * @author Anonymous
  */
 public class RootTask implements Callable<RootResult> {
     /**

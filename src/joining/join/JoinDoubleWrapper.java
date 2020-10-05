@@ -13,7 +13,7 @@ import query.QueryInfo;
  * tuple to satisfy binary equality condition
  * on two double columns.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class JoinDoubleWrapper extends JoinIndexWrapper {

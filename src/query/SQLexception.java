@@ -4,7 +4,7 @@ package query;
  * An exception caused by an error in the input query
  * (or DDL statement).
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class SQLexception extends Exception {

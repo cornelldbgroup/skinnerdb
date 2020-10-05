@@ -38,7 +38,7 @@ import java.util.Properties;
  * Compares the output sizes against the sizes of results produced by
  * Postgres or MonetDB.
  *
- * @author Ziyun Wei
+ * @author Anonymous
  *
  */
 public class QueryVerify {

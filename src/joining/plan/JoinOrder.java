@@ -8,7 +8,7 @@ import java.util.Arrays;
  * not yet fix the point at which predicates
  * are evaluated).
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class JoinOrder {

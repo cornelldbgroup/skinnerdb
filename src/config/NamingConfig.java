@@ -4,7 +4,7 @@ package config;
  * Configuration parameter concerning naming
  * for intermediate result tables and columns.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class NamingConfig {

@@ -13,7 +13,7 @@ import joining.uct.UctNode;
  * Provides functions to visualize the UCT search tree
  * used during join order learning.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class TreePlotter {

@@ -46,7 +46,7 @@ import statistics.JoinStats;
  * the output sizes against the sizes of results produced by
  * Postgres.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class BenchAndVerify {
@@ -63,7 +63,7 @@ public class BenchAndVerify {
 	public static void main(String[] args) throws Exception {
 		// Check for command line parameters
 		if (args.length != 4 && args.length != 5) {
-			System.out.println("Specify Skinner DB dir, "
+			System.out.println("Specify SkinnerMT dir, "
 					+ "query directory, Postgres DB name, "
 					+ "Postgres user, and Postgres password!");
 			return;

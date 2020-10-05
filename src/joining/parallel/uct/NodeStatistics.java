@@ -5,7 +5,7 @@ import java.util.Arrays;
 /**
  * Represents node statistics in UCT search tree.
  *
- * @author Ziyun Wei
+ * @author Anonymous
  */
 public class NodeStatistics {
     /**

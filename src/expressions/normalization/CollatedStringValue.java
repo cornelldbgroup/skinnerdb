@@ -6,7 +6,7 @@ import net.sf.jsqlparser.expression.StringValue;
  * Represents String value with associated collation (determining
  * string sort order in Postgres).
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class CollatedStringValue extends StringValue {

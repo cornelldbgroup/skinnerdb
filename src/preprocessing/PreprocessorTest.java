@@ -33,12 +33,12 @@ class PreprocessorTest {
 	@Test
 	void test() throws Exception {
 		// Initialize database
-		CatalogManager.loadDB("/Users/immanueltrummer/"
+		CatalogManager.loadDB("/Users/Anonymous/"
 				+ "Documents/Temp/SkinnerSchema/imdb");
 		// Read all queries from files
 		Map<String, PlainSelect> nameToQuery = 
 				new TreeMap<String, PlainSelect>();
-		File dir = new File("/Users/immanueltrummer/Development"
+		File dir = new File("/Users/Anonymous/Development"
 				+ "/mcts_db_tests/imdb/imdb_queries/remaining");
 		for (File file : dir.listFiles()) {
 			if (file.getName().endsWith(".sql")) {
@@ -53,7 +53,7 @@ class PreprocessorTest {
 		// Open connection to Postgres 
 		String url = "jdbc:postgresql:imdb";
 		Properties props = new Properties();
-		props.setProperty("user","immanueltrummer");
+		props.setProperty("user","Anonymous");
 		props.setProperty("password","");
 		Connection connection = DriverManager.getConnection(url, props);
 		java.sql.Statement pgStatement = connection.createStatement();

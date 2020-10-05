@@ -22,7 +22,7 @@ import types.TypeUtil;
  * by a join order and by the time at which predicates
  * are evaluated.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class LeftDeepPlan {

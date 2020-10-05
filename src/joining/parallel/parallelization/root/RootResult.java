@@ -9,7 +9,7 @@ import java.util.Set;
 /**
  * Execution results for root parallelization
  *
- * @author Ziyun Wei
+ * @author Anonymous
  */
 public class RootResult {
     /**

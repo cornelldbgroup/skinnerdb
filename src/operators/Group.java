@@ -10,7 +10,7 @@ import data.ColumnData;
  * same value in a set of columns of the
  * same cardinality.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class Group {

@@ -1,10 +1,10 @@
 package types;
 
 /**
- * Represents the Java type that SkinnerDB uses
+ * Represents the Java type that SkinnerMT uses
  * to represent values internally.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public enum JavaType {

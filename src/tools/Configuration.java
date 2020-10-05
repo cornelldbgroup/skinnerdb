@@ -8,7 +8,7 @@ import java.util.Properties;
  * Configuration tools:
  * Read configuration parameters from the local file.
  *
- * @author Ziyun Wei
+ * @author Anonymous
  */
 public class Configuration {
     /**

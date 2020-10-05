@@ -16,7 +16,7 @@ import java.util.stream.IntStream;
 /**
  * Represents node in search parallel UCT search tree.
  *
- * @author Ziyun Wei
+ * @author Anonymous
  */
 public class ASPNode {
     /**

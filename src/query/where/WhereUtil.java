@@ -21,7 +21,7 @@ import query.from.FromUtil;
 /**
  * Utility functions for analyzing the WHERE clause.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class WhereUtil {

@@ -2,7 +2,7 @@ package postprocessing;
 /**
  * Represents a range of index for parallel batch processing.
  *
- * @author Ziyun Wei
+ * @author Anonymous
  *
  */
 public class IndexRange {

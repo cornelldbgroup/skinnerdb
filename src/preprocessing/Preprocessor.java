@@ -39,7 +39,7 @@ import statistics.PreStats;
  * result in newly created tables. Creates hash tables
  * for columns with binary equality join predicates.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class Preprocessor {

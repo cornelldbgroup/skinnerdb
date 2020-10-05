@@ -16,7 +16,7 @@ import query.QueryInfo;
  * tuple to satisfy binary equality condition
  * on two columns.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public abstract class JoinIndexWrapper {

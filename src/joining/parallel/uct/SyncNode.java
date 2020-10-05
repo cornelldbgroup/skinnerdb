@@ -18,7 +18,7 @@ import java.util.concurrent.*;
  * In each training episode, synchronize reward gains
  * for all threads.
  *
- * @author Ziyun Wei
+ * @author Anonymous
  */
 public class SyncNode {
     /**

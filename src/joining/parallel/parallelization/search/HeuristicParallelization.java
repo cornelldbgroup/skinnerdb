@@ -31,7 +31,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * learning. By doing this, the parallelization doesn't
  * rely on any heuristics.
  *
- * @author Ziyun Wei
+ * @author Anonymous
  */
 public class HeuristicParallelization extends Parallelization {
     /**

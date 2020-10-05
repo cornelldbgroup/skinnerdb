@@ -44,7 +44,7 @@ import java.util.stream.IntStream;
  * materializing filtered rows into new tables. Creates hash tables
  * for columns with binary equality join predicates.
  *
- * @author Ziyun Wei
+ * @author Anonymous
  *
  */
 public class NewPreprocessor {

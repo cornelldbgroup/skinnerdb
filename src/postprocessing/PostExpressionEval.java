@@ -24,7 +24,7 @@ import java.util.Map;
  *  compile evaluator for each column involved in the expression.
  *  Then return the final result of evaluation.
  *
- * @author Ziyun Wei
+ * @author Anonymous
  */
 public class PostExpressionEval extends PlainVisitor {
     public ExpressionNode expressionNode;

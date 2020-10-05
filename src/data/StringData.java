@@ -16,7 +16,7 @@ import joining.result.ResultTuple;
 /**
  * Represents content of string column.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class StringData extends ColumnData implements Serializable {

@@ -28,7 +28,7 @@ import java.util.*;
  * data processing in joining.parallel via multiple
  * threads.
  *
- * @author Ziyun Wei
+ * @author Anonymous
  *
  */
 public class ParallelJoinProcessor {

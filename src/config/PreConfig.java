@@ -4,7 +4,7 @@ package config;
  * Configuration parameters influencing the
  * pre-processing phase.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class PreConfig {

@@ -4,7 +4,7 @@ package config;
  * Configuration parameters that influence
  * several of the three processing phases.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class GeneralConfig {

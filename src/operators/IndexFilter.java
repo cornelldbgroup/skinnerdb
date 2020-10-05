@@ -34,7 +34,7 @@ import types.TypeUtil;
  * indices. The index filter should only be applied
  * to expressions that pass the IndexTest.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class IndexFilter extends PlainVisitor {

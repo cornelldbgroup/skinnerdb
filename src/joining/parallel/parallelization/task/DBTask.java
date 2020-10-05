@@ -12,10 +12,8 @@ import joining.uct.SelectionPolicy;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.NotExpression;
 import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
-import predicate.NonEquiNode;
 import query.ColumnRef;
 import query.QueryInfo;
-import query.SQLexception;
 import statistics.JoinStats;
 
 import java.sql.*;

@@ -3,7 +3,7 @@ package types;
 /**
  * Represents the type of an SQL expression.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public enum SQLtype {

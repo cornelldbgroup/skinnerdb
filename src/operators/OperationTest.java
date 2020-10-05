@@ -17,7 +17,7 @@ import java.util.Deque;
 /**
 
  * 
- * @author Ziyun Wei
+ * @author Anonymous
  *
  */
 public class OperationTest extends PlainVisitor {

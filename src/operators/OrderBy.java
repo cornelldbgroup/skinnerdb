@@ -14,7 +14,7 @@ import query.ColumnRef;
  * Performs an in-place sort of the rows in a relation,
  * using a given list of columns to specify sort order.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class OrderBy {

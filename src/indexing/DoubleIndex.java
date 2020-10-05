@@ -15,7 +15,7 @@ import java.util.stream.IntStream;
 /**
  * Indexes double values (not necessarily unique).
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class DoubleIndex extends Index {

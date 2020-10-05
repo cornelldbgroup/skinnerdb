@@ -4,7 +4,7 @@ package expressions.compilation;
  * Interface for evaluating Boolean expressions
  * on multiple tables.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public interface KnaryBoolEval {

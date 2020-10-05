@@ -35,7 +35,7 @@ import types.JavaType;
 /**
  * Filters a table by applying a unary predicate.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class Filter {

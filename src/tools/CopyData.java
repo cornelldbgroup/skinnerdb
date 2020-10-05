@@ -16,7 +16,7 @@ import types.SQLtype;
 /**
  * Copies part of a database into a new repository.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class CopyData {

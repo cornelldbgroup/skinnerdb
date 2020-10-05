@@ -8,7 +8,7 @@ import query.ColumnRef;
 public class CompressionTest {
 
 	public static void main(String[] args) throws Exception {
-		CatalogManager.loadDB("/Users/immanueltrummer/"
+		CatalogManager.loadDB("/Users/Anonymous/"
 				+ "Documents/Temp/SkinnerSchema/imdb.db");
 		ColumnRef colRef = new ColumnRef("title", "title");
 		IntData intData = (IntData)BufferManager.getData(colRef);

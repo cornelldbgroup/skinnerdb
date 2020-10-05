@@ -8,7 +8,7 @@ import com.koloboke.collect.map.hash.HashIntIntMaps;
 /**
  * Represents a range of index creation.
  *
- * @author Ziyun Wei
+ * @author Anonymous
  *
  */
 public class DoubleIndexRange {

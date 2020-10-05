@@ -15,7 +15,7 @@ import query.QueryInfo;
  * and methods to retrieve the state from which evaluation
  * for one specific join order should continue.
  *
- * @author immanueltrummer
+ * @author Anonymous
  */
 public class ProgressTracker {
     /**

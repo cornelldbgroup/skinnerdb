@@ -19,7 +19,7 @@ import types.SQLtype;
 /**
  * Features utility functions for creating indexes.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class Indexer {

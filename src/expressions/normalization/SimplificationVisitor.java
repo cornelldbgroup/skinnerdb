@@ -90,7 +90,7 @@ import query.where.WhereUtil;
  * 		(avoids recalculating them for each tuple at run time).
  * 
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class SimplificationVisitor extends SkinnerVisitor {

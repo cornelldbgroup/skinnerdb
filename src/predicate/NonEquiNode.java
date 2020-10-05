@@ -20,7 +20,7 @@ import java.util.Map;
  * By parsing the complex predicates into tree structure,
  * the conjunction of predicates is able to be evaluated.
  *
- * @author  Ziyun Wei
+ * @author  Anonymous
  */
 public class NonEquiNode {
     /**

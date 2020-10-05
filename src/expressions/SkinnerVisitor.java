@@ -10,7 +10,7 @@ import query.SQLexception;
  * Common super-class of all classes that traverse SQL expressions
  * recursively which may produce errors.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public abstract class SkinnerVisitor implements ExpressionVisitor {

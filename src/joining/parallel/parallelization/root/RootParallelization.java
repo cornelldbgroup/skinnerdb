@@ -28,7 +28,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Different threads run training episodes
  * on separate UCT trees.
  *
- * @author Ziyun Wei
+ * @author Anonymous
  */
 public class RootParallelization extends Parallelization {
     /**

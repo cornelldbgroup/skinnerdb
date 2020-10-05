@@ -21,7 +21,7 @@ import java.util.stream.IntStream;
  * Calculates minimum or maximum values (per group
  * or overall) from a given input data column. 
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class ParallelMinMaxAggregate {

@@ -4,7 +4,7 @@ package config;
  * Describes criteria according to which columns
  * are selected for indexing at startup time.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public enum IndexingMode {

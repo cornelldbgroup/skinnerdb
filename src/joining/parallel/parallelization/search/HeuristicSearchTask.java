@@ -24,7 +24,7 @@ import java.util.stream.Collectors;
  * In the task, a thread will run learning samples
  * and collect results that satisfy with predicates.
  *
- * @author Ziyun Wei
+ * @author Anonymous
  */
 public class HeuristicSearchTask implements Callable<SearchResult> {
     /**

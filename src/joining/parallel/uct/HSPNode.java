@@ -13,7 +13,7 @@ import java.util.concurrent.ThreadLocalRandom;
 /**
  * Represents node in search parallel UCT search tree.
  *
- * @author Ziyun Wei
+ * @author Anonymous
  */
 public class HSPNode {
     /**

@@ -8,7 +8,7 @@ import java.util.List;
  * the input query is translated into a sequence
  * of queries during unnesting.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class PostStats {

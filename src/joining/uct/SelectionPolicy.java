@@ -5,7 +5,7 @@ package joining.uct;
  * actions (i.e., tables to join) are
  * selected for each search tree node.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public enum SelectionPolicy {

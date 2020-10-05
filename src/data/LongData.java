@@ -15,7 +15,7 @@ import joining.result.ResultTuple;
 /**
  * Represents content of long column.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class LongData extends ColumnData implements Serializable {

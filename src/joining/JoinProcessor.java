@@ -27,7 +27,7 @@ import visualization.TreePlotter;
 /**
  * Controls the join phase.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class JoinProcessor {

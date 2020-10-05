@@ -27,7 +27,7 @@ import java.util.*;
  * by a join order and by the time at which predicates
  * are evaluated.
  *
- * @author Ziyun Wei
+ * @author Anonymous
  *
  */
 public class RightDeepPartitionPlan {

@@ -27,7 +27,7 @@ import types.TypeUtil;
 /**
  * Processes statements for creating (permanent) tables.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class TableCreator {

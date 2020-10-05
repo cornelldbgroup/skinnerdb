@@ -8,7 +8,7 @@ import java.util.Set;
 /**
  * Execution results for tree parallelization
  *
- * @author Ziyun Wei
+ * @author Anonymous
  */
 public class TreeResult {
     /**

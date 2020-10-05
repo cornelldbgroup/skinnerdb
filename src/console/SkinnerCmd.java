@@ -38,7 +38,7 @@ import tools.Configuration;
 /**
  * Runs Skinner command line console.
  *
- * @author immanueltrummer
+ * @author Anonymous
  */
 public class SkinnerCmd {
     /**
@@ -642,7 +642,7 @@ public class SkinnerCmd {
             ThreadPool.initThreadsPool(ParallelConfig.EXE_THREADS, ParallelConfig.PRE_THREADS);
         }
 
-        System.out.println("SkinnerDB is using " +
+        System.out.println("SkinnerMT is using " +
                 ParallelConfig.EXE_THREADS + " threads.");
         // Command line processing
         System.out.println("Enter 'help' for help and 'quit' to exit");

@@ -3,7 +3,7 @@ package config;
 /**
  * Configures how many rows to load for quick test.
  *
- * @author Ziyun Wei
+ * @author Anonymous
  *
  */
 public class LoadConfig {

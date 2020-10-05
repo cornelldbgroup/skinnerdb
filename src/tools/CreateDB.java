@@ -7,7 +7,7 @@ import diskio.PathUtil;
 /**
  * Creates a new database.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class CreateDB {

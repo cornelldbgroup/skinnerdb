@@ -8,7 +8,7 @@ import net.sf.jsqlparser.schema.Column;
 /**
  * Substitutes aliases by expressions in a given expression.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class SubstitutionVisitor extends CopyVisitor {

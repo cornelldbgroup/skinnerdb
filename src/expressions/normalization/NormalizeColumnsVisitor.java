@@ -11,7 +11,7 @@ import query.SQLexception;
  * - transforming all references to lower case letters,
  * - and making implicit table references explicit.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class NormalizeColumnsVisitor extends CopyVisitor {

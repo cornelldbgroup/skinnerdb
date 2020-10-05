@@ -4,7 +4,7 @@ package joining.uct;
  * Defines how the weight for the exploration term
  * in the UCT algorithm is updated over time.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public enum ExplorationWeightPolicy {

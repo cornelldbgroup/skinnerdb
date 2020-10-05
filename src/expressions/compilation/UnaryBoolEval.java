@@ -4,7 +4,7 @@ package expressions.compilation;
  * Interface for evaluating Boolean expressions
  * on unary tables.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public interface UnaryBoolEval {

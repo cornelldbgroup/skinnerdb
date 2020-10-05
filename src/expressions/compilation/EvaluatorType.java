@@ -3,7 +3,7 @@ package expressions.compilation;
 /**
  * Describes type of expression evaluator to generate.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public enum EvaluatorType {

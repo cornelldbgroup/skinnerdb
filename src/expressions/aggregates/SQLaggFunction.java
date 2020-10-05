@@ -3,7 +3,7 @@ package expressions.aggregates;
 /**
  * Represents an SQL standard aggregation function.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public enum SQLaggFunction {

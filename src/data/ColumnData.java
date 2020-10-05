@@ -11,7 +11,7 @@ import joining.result.ResultTuple;
 /**
  * Represents data contained in one table column.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public abstract class ColumnData implements Serializable {

@@ -29,7 +29,7 @@ import java.util.List;
  * sorting. Produces the final result of a
  * query block in parallel.
  *
- * @author Ziyun Wei
+ * @author Anonymous
  *
  */
 public class ParallelPostProcessor {

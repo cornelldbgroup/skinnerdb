@@ -4,7 +4,7 @@ package udf;
  * UDF predicate returning 1 if two integers are equal
  * (0 otherwise).
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class UdfIntEquals {

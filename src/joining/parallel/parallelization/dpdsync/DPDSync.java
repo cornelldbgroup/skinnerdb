@@ -5,17 +5,13 @@ import config.LoggingConfig;
 import expressions.compilation.KnaryBoolEval;
 import joining.parallel.join.DPJoin;
 import joining.parallel.join.ModJoin;
-import joining.parallel.join.SPJoin;
 import joining.parallel.parallelization.Parallelization;
 import joining.parallel.plan.LeftDeepPartitionPlan;
 import joining.parallel.progress.ParallelProgressTracker;
-import joining.parallel.threads.ThreadPool;
-import joining.parallel.uct.DPNode;
 import joining.parallel.uct.SyncNode;
 import joining.result.ResultTuple;
 import joining.result.UniqueJoinResult;
 import joining.uct.SelectionPolicy;
-import joining.uct.UctNode;
 import logs.LogUtils;
 import net.sf.jsqlparser.expression.Expression;
 import predicate.NonEquiNode;
@@ -23,12 +19,8 @@ import preprocessing.Context;
 import query.QueryInfo;
 import statistics.JoinStats;
 import statistics.QueryStats;
-import visualization.TreePlotter;
-
-import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
 
 public class DPDSync extends Parallelization {
     /**

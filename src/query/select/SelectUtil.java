@@ -19,7 +19,7 @@ import query.SQLexception;
  * Utility functions that refer to entries
  * in the SQL select clause.
  * 
- * @author immanueltrummer
+ * @author Anonymous
  *
  */
 public class SelectUtil {
