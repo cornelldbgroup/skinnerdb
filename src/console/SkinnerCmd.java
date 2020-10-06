@@ -523,6 +523,7 @@ public class SkinnerCmd {
         if (input_array.length == 3) {
             Configuration.setProperty(input_array[1], input_array[2]);
             System.out.println("Set " + input_array[1] + " to " + input_array[2] + " successfully!");
+            loadConfigs();
         }
         else {
             System.out.println("Please input 'set <parameter> <value>' to change the value of parameter");

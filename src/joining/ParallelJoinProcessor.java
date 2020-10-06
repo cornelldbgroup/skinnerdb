@@ -51,7 +51,19 @@ public class ParallelJoinProcessor {
      */
     public static void process(QueryInfo query,
                                Context context) throws Exception {
-        // there is no predicate to evaluate in join phase.
+        // Initialize join statistics
+        JoinStats.nrTuples = 0;
+        JoinStats.nrSamples = 0;
+        JoinStats.nrIndexLookups = 0;
+        JoinStats.nrIndexEntries = 0;
+        JoinStats.nrUniqueIndexLookups = 0;
+        JoinStats.nrUctNodes = 0;
+        JoinStats.nrPlansTried = 0;
+        JoinStats.lastJoinCard = 0;
+        JoinStats.avgReward = 0;
+        JoinStats.maxReward = 0;
+        JoinStats.totalWork = 0;
+        // There is no predicate to evaluate in join phase.
         if (query.equiJoinPreds.size() == 0 && query.nonEquiJoinPreds.size() == 0 && PreConfig.FILTER) {
             String targetRelName = NamingConfig.JOINED_NAME;
             Materialize.executeFromExistingTable(query.colsForPostProcessing,
@@ -166,7 +178,7 @@ public class ParallelJoinProcessor {
                         JoinConfig.BUDGET_PER_EPISODE, query, context);
                 parallelization.execute(resultTuples);
             }
-            // CAPS
+            // PJ
             else if (ParallelConfig.PARALLEL_SPEC == 15) {
                 Parallelization parallelization = new JoinParallelization(ParallelConfig.EXE_THREADS,
                         JoinConfig.BUDGET_PER_EPISODE, query, context);

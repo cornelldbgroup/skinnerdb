@@ -1,13 +1,10 @@
 package joining.parallel.parallelization.lockfree;
 
-import buffer.BufferManager;
 import config.JoinConfig;
 import config.LoggingConfig;
 import config.ParallelConfig;
 import config.StartupConfig;
-import expressions.ExpressionInfo;
 import expressions.compilation.KnaryBoolEval;
-import indexing.Index;
 import joining.parallel.plan.LeftDeepPartitionPlan;
 import joining.progress.ProgressTracker;
 import joining.result.ResultTuple;
@@ -23,7 +20,6 @@ import logs.LogUtils;
 import net.sf.jsqlparser.expression.Expression;
 import predicate.NonEquiNode;
 import preprocessing.Context;
-import query.ColumnRef;
 import query.QueryInfo;
 import statistics.JoinStats;
 import statistics.QueryStats;
