@@ -93,8 +93,8 @@ public class PathUtil {
 		String[] parameters = new String[]{
 				"PARALLEL_ALGO", "NR_WARMUP",
 				"NR_EXECUTORS", "NR_BATCHES",
-				"WRITE_RESULTS"};
-		String[] values = new String[]{"DP", "1", "1", "120", "true"};
+				"WRITE_RESULTS", "TEST_MEM"};
+		String[] values = new String[]{"DP", "1", "1", "120", "true", "false"};
 		for (int paraCtr = 0; paraCtr < parameters.length; paraCtr++) {
 			String line = parameters[paraCtr] + "=" + values[paraCtr] + "\n";
 			byte[] strToBytes = line.getBytes();

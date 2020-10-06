@@ -1,10 +1,10 @@
 # SkinnerMT
 
-This directory contains a prototype of parallel database which applies three different parallel algorithms to speedup query optimization and execution. The prototype needs to load data from the disk into main memory which might takes several minutes. We expect to implement a Client-Server DBMS architecture to avoid redundant loading time.
+This directory contains a prototype of a parallel database system using intra-query learning. SkinnerMT applies three different parallel algorithms to speedup query optimization and execution. The prototype needs to load data from the disk into main memory which might takes several minutes. We expect to implement a Client-Server DBMS architecture to avoid redundant loading time.
 
 # Running Benchmarks
 
-In SkinnerMT, we provided three benchmarks. The <a href="http://www.vldb.org/pvldb/vol9/p204-leis.pdf">join order benchmark</a> is a popular benchmark for query optimizers. The <a href="http://www.tpc.org/tpch/">TPC-H</a> (scaling factor of 10) is easy to optimized due to uniform data. The <a href="https://doi.org/10.1007/978-3-319-72401-0_8">JCC-H</a> (scaling factor of 10) is difficult due to skewed data. Execute the following steps to run SkinnerMT on those benchmarks:
+In SkinnerMT, we provided three benchmarks. The <a href="http://www.vldb.org/pvldb/vol9/p204-leis.pdf">join order benchmark</a> is a popular benchmark for query optimizers. The <a href="http://www.tpc.org/tpch/">TPC-H benchmark</a> (scaling factor of 10) is easy to optimize due to uniform data. The <a href="https://doi.org/10.1007/978-3-319-72401-0_8">JCC-H benchmark</a> (scaling factor of 10) is difficult due to skewed data. Execute the following steps to run SkinnerMT on those benchmarks:
 
 <ol>
 <li>Download the database in the SkinnerMT format <a href="https://drive.google.com/drive/folders/1QwLJGys31Dp9iUhnTK78q3fPvQh6_-B5?usp=sharing">databases.zip</a>. Decompress the linked .zip file. Then download and decompress source codes and executable jar files <a href="https://drive.google.com/drive/folders/1QwLJGys31Dp9iUhnTK78q3fPvQh6_-B5?usp=sharing">skinnermt.zip</a>.</li>
@@ -13,47 +13,43 @@ In SkinnerMT, we provided three benchmarks. The <a href="http://www.vldb.org/pvl
 <code>
 ./Skinner.sh /path/to/skinner/data nr_threads
 </code>
-For example,
-<code>
-./Skinner.sh ./imdb 30
-</code>
 
-The setting for heap space is 100 GB (-Xmx100G) for our benchmarking platform in default to avoid potential garbage collection overhead. Running under less heap space (50 GB at the minimum) can save main memory but as a trade-off it may loss a few seconds of end-to-end performance.
+The setting for heap space is 100 GB (-Xmx100G) for our benchmarking platform by default to avoid potential garbage collection overhead. Running under less heap space (50 GB at the minimum) can save main memory but as a trade-off it may loss a few seconds of end-to-end performance.
 </p> 
 </li>
-<li>Run a benchmark using the bench command in the SkinnerMT console. For example, <code>bench ./imdb/queries outputfile.txt</code> command will benchmark queries in ./imdb/queries directory and write experimental results into outputfile.txt. You may need to adapt the relative path to the directory containing benchmark queries, replace <code>outputfile.txt</code> by a file name of your choosing.</li>
+<li>Run a benchmark using the bench command in the SkinnerMT console. Queries for each database can be found under the according directory. For example, <code>bench ./imdb/queries outputfile.txt</code> command will benchmark queries in ./imdb/queries directory and write experimental results into outputfile.txt. You may need to adapt the relative path to the directory containing benchmark queries, replace <code>outputfile.txt</code> by a file name of your choosing.</li>
 </ol>
 
 # Output
-After running the benchmark, benchmark results can be found in the specified output file. Benchmark results include per-query times for each of the processing phases (pre-processing, join phase, and post-processing) as well as many other statistics such as the number of tuples generated (column "Tuples") or the memory consumption. Some columns related to performance and memory consumption:
+After running the benchmark, benchmark results can be found in the specified output file. Benchmark results include per-query times for each of the processing phases (pre-processing, join phase, and post-processing) as well as many other statistics such as the number of tuples generated (column "Tuples") or the memory consumption:
 
 <ol>
 <li>Query: name of query to process</li>
-<li>IsWarmup: end-to-end performance of the running query</li>
+<li>IsWarmup: boolean flag to present whether the run is warmup or not</li>
 <li>Millis: end-to-end performance of the running query</li>
 <li>PreMillis: time of pre-processing phase</li>
 <li>JoinMillis: time of join phase</li>
 <li>MatMillis: time of materialization</li>
 <li>PostMillis: time of post-processing phase</li>
-<li>FilterMillis: time of filtering in pre-processing phase</li>
-<li>IndexMillis: time of index creation in pre-processing phase</li>
-<li>GroupByMillis: time of groupby in post-processing phase</li>
-<li>AggregateMillis: time of aggregation in post-processing phase</li>
-<li>OrderMillis: time of ordering in post-processing phase</li>
+<li>FilterMillis: time of filtering in the pre-processing phase</li>
+<li>IndexMillis: time of index creation in the pre-processing phase</li>
+<li>GroupByMillis: time of groupby in the post-processing phase</li>
+<li>AggregateMillis: time of aggregation in the post-processing phase</li>
+<li>OrderMillis: time of ordering in the post-processing phase</li>
 <li>Tuples: number of partial or completed tuples considered during the join phase</li>
 <li>Samples: number of learning samples during the join phase</li>
 <li>Lookups: number of index lookups during the join phase (<b>implemented only for sequential version</b>)</li>
 <li>NrIndexEntries: sum of index entries for the values used in index lookups (<b>implemented only for sequential version</b>)</li>
 <li>nrUniqueLookups: number of index lookups where the number of corresponding entries is at most one (<b>implemented only for sequential version</b>)</li>
 <li>NrPlans: number of query plans tried during the join phase (<b>implemented only for sequential version</b>)</li>
-<li>JoinCard: join result cardinality of last processed sub-query</li>
+<li>JoinCard: join result cardinality of last processed sub-query (for queries that only return single result row (e.g. MIN or MAX operators on selected columns), post-processing is directly conducted whenever completed result tuples are found, making the JoinCard always less or equal 1.)</li>
 <li>AvgReward: average reward obtained during the join phase (<b>implemented only for sequential version</b>)</li>
 <li>MaxReward: maximum reward obtained during the join phase (<b>implemented only for sequential version</b>)</li>
 <li>TotalWork: total work (including redundant work) that is calculated based on table offsets after query evaluation (<b>implemented only for sequential version</b>)</li>
-<li>DataSize: memory consumption of relations, columns and indexes</li>
-<li>UctSize: memory consumption of uct trees</li>
-<li>StateSize: memory consumption of progress tracker tree</li>
-<li>JoinSize: memory consumption of data structures used in the join phase</li>
+<li>DataSize: memory consumption of relations, columns and indexes (<b>works when TEST_MEM is set to true</b>)</li>
+<li>UctSize: memory consumption of uct trees (<b>works when TEST_MEM is set to true</b>)</li>
+<li>StateSize: memory consumption of progress tracker tree (<b>works when TEST_MEM is set to true</b>)</li>
+<li>JoinSize: memory consumption of data structures used in the join phase (<b>works when TEST_MEM is set to true</b>)</li>
 </ol>
 
 
@@ -61,7 +57,7 @@ After running the benchmark, benchmark results can be found in the specified out
 
 SkinnerMT includes parameters for specific benchmarks and data sets. Those parameters are set to some default values. You can find these parameters in config.sdb under the database directory. The configuration file includes:
 <ol>
-<li>THREADS: number of available threads for SkinnerMT. In default, it is the number of available processors in the running machine</li>
+<li>THREADS: number of available threads for SkinnerMT. By default, it is the number of available processors in the running machine</li>
 <li>NR_WARMUP: number of warm-up runs before the actual run</li>
 <li>NR_EXECUTORS: number of executors for task parallel</li>
 <li>NR_BATCHES: number of batches for task parallel</li>
@@ -72,6 +68,7 @@ SkinnerMT includes parameters for specific benchmarks and data sets. Those param
         <li>Task Parallel: TP</li>
     </ul>
 </li>
+<li>TEST_MEM: whether to measure memory consumption including base tables, indexes, uct tree, progress tracker and auxiliary data structures (Note that open this flag may add overhead of measuring memory consumption)</li>
 <li>WRITE_RESULTS: whether to write results of queries into a file for the 'bench' command. The output file is named by outputfile.txt.res </li>
 </ol>
 

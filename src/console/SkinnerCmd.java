@@ -590,6 +590,9 @@ public class SkinnerCmd {
         // Parallel algorithms
         ParallelConfig.PARALLEL_SPEC = mapToParallelAlgorithm(
                 Configuration.getProperty("PARALLEL_ALGO", "DP"));
+        // Whether to measure memory consumption
+        StartupConfig.Memory = Boolean.parseBoolean(
+                Configuration.getProperty("TEST_MEM", "false"));
     }
 
     /**
