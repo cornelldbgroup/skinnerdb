@@ -8,12 +8,10 @@ import java.util.Map;
 
 public class JoinOrderLogger implements EpisodeDataConsumer {
     int iteration = 0;
-    String[] names;
 
     public void init(QueryInfo query) {
-        names = new String[query.nrJoined];
         for (int i = 0; i < query.nrJoined; i++) {
-            names[i] = query.aliasToTable.get(query.aliases[i]);
+            System.err.println(query.aliasToTable.get(query.aliases[i]));;
         }
     }
 
@@ -22,7 +20,9 @@ public class JoinOrderLogger implements EpisodeDataConsumer {
             System.err.print(" ");
         }
         if (!node.joinedTables.isEmpty()) {
-            System.err.print(names[node.joinedTables.get(node.joinedTables.size() - 1)]);
+            System.err.print(node.joinedTables.get(node.joinedTables.size() - 1));
+            System.err.print(" ");
+            System.err.print(node.createdIn);
         }
         System.err.println();
 
@@ -33,12 +33,11 @@ public class JoinOrderLogger implements EpisodeDataConsumer {
         }
     }
 
-    public void update(UctNode node) {
-        System.err.println("Iteration " + iteration);
+    public void finalPlan(UctNode node) {
         print(node, 0);
-        System.err.println();
-        iteration++;
     }
+
+    public void update(UctNode node) {}
 
     public void update(int[] joinOrder, double reward, int[] tupleIndices,
                        int[] tableCardinality) {

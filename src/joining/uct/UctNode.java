@@ -25,7 +25,7 @@ public class UctNode {
     /**
      * Iteration in which node was created.
      */
-    final long createdIn;
+    public final long createdIn;
     /**
      * Level of node in tree (root node has level 0).
      * At the same time the join order index into
