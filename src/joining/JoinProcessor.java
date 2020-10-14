@@ -147,9 +147,7 @@ public class JoinProcessor {
             log("Table cardinalities:\t" + Arrays.toString(joinOp.cardinalities));
 
             if (query.explain) {
-                State state = joinOp.tracker.lastState;
-                explainer.update(joinOrder, reward,
-                        state.tupleIndices, joinOp.cardinalities);
+                explainer.update(root);
             }
         }
 
@@ -197,6 +195,10 @@ public class JoinProcessor {
                 getCardinality(NamingConfig.JOINED_NAME);
         // Measure execution time for join phase
         JoinStats.joinMillis = System.currentTimeMillis() - startMillis;
+
+        if (query.explain) {
+            explainer.finalPlan(root);
+        }
     }
 
     /**

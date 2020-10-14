@@ -66,7 +66,7 @@ public class UctNode {
      * Set of already joined tables (each UCT node represents
      * a state in which a subset of tables are joined).
      */
-    final Set<Integer> joinedTables;
+    public final List<Integer> joinedTables;
     /**
      * List of unjoined tables (we use a list instead of a set
      * to enable shuffling during playouts).
@@ -119,7 +119,7 @@ public class UctNode {
         childNodes = new UctNode[nrActions];
         nrTries = new int[nrActions];
         accumulatedReward = new double[nrActions];
-        joinedTables = new HashSet<Integer>();
+        joinedTables = new ArrayList<>();
         unjoinedTables = new ArrayList<>();
         nextTable = new int[nrTables];
         for (int tableCtr = 0; tableCtr < nrTables; ++tableCtr) {
@@ -152,7 +152,7 @@ public class UctNode {
         accumulatedReward = new double[nrActions];
         query = parent.query;
         nrTables = parent.nrTables;
-        joinedTables = new HashSet<Integer>();
+        joinedTables = new ArrayList<>();
         joinedTables.addAll(parent.joinedTables);
         joinedTables.add(joinedTable);
         unjoinedTables = new ArrayList<Integer>();
@@ -175,7 +175,9 @@ public class UctNode {
                 int table = nextTable[actionCtr];
                 // Check if at least one predicate connects current
                 // tables to new table.
-                if (query.connected(joinedTables, table)) {
+                HashSet<Integer> joinSet = new HashSet<>();
+                joinSet.addAll(joinedTables);
+                if (query.connected(joinSet, table)) {
                     recommendedActions.add(actionCtr);
                 } // over predicates
             } // over actions
