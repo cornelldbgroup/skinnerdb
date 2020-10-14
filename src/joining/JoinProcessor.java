@@ -14,6 +14,8 @@ import preprocessing.Context;
 import query.ColumnRef;
 import query.QueryInfo;
 import statistics.JoinStats;
+import visualization.EpisodeDataConsumer;
+import visualization.JoinOrderLogger;
 import visualization.Visualization;
 
 import java.util.Arrays;
@@ -41,11 +43,11 @@ public class JoinProcessor {
      */
     public static void process(QueryInfo query,
                                Context context) throws Exception {
-        Visualization visualization = null;
+        EpisodeDataConsumer explainer = null;
         boolean forget = JoinConfig.FORGET;
         if (query.explain) {
-            visualization = new Visualization();
-            visualization.init(query);
+            explainer = new JoinOrderLogger();
+            explainer.init(query);
             forget = false;
         }
 
@@ -146,7 +148,7 @@ public class JoinProcessor {
 
             if (query.explain) {
                 State state = joinOp.tracker.lastState;
-                visualization.update(joinOrder, reward,
+                explainer.update(joinOrder, reward,
                         state.tupleIndices, joinOp.cardinalities);
             }
         }

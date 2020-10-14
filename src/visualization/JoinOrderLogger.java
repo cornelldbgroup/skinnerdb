@@ -7,9 +7,8 @@ import java.util.Map;
 
 public class JoinOrderLogger implements EpisodeDataConsumer {
     public void init(QueryInfo query) {
-        for (Map.Entry<String,Integer> entry : query.aliasToIndex.entrySet()) {
-            String alias = entry.getKey();
-            int index = entry.getValue();
+        for (int i = 0; i < query.nrJoined; i++) {
+            System.err.println(query.aliasToTable.get(query.aliases[i]));
         }
     }
 
