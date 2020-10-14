@@ -56,3 +56,7 @@ db-*
 # Data
 imdb/data/
 tpch/data/
+
+benchmarks/
+db/
+skinnerimdb/

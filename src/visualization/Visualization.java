@@ -20,7 +20,7 @@ import java.util.logging.Logger;
 /**
  * Creates and manages a visualization of the query.
  */
-public class Visualization extends BaseMouseListener {
+public class Visualization extends BaseMouseListener implements EpisodeDataConsumer {
     private SingleGraph graph;
     private Viewer viewer;
     private SpriteManager spriteManager;
