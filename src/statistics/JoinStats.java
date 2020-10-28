@@ -1,5 +1,6 @@
 package statistics;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -97,4 +98,5 @@ public class JoinStats {
      * Size of join algorithm.
      */
     public static long joinSize = 0;
+    public static List<Integer> nrJoined = new ArrayList<>();
 }

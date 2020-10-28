@@ -7,7 +7,7 @@ This directory contains a prototype of a parallel database system using intra-qu
 In SkinnerMT, we provided three benchmarks. The <a href="http://www.vldb.org/pvldb/vol9/p204-leis.pdf">join order benchmark</a> is a popular benchmark for query optimizers. The <a href="http://www.tpc.org/tpch/">TPC-H benchmark</a> (scaling factor of 10) is easy to optimize due to uniform data. The <a href="https://doi.org/10.1007/978-3-319-72401-0_8">JCC-H benchmark</a> (scaling factor of 10) is difficult due to skewed data. Execute the following steps to run SkinnerMT on those benchmarks:
 
 <ol>
-<li>Download the database in the SkinnerMT format <a href="https://drive.google.com/file/d/19OvQCWCCaaajvg4gTzrR8xuir52WPFkL/view?usp=sharing">databases.zip</a>. Decompress the linked .zip file. Then download and decompress source codes and executable jar files <a href="https://drive.google.com/drive/folders/1QwLJGys31Dp9iUhnTK78q3fPvQh6_-B5?usp=sharing">skinnermt.zip</a>.</li>
+<li>Download the database in the SkinnerMT format <a href="https://drive.google.com/file/d/19OvQCWCCaaajvg4gTzrR8xuir52WPFkL/view?usp=sharing">databases.zip</a>. Decompress the linked .zip file. Then download and decompress source codes and executable jar files <a href="https://drive.google.com/file/d/1beFsbIsqWxyiIraG7Va-_gPZcYSmX0mO/view?usp=sharing">skinnermt.zip</a>.</li>
 
 <li>Start SkinnerMT using the bash script <code>Skinner.sh</code>. For Linux, use the following command to initialize SkinnerMT (while replacing /path/to/skinner/data by the path to the decompressed database and nr_threads by the number of running threads): 
 <p>
@@ -15,7 +15,7 @@ In SkinnerMT, we provided three benchmarks. The <a href="http://www.vldb.org/pvl
 ./Skinner.sh /path/to/skinner/data nr_threads
 </code>
 
-The script will run corresponding .jar file that can be invoked directly on different platforms. Running under less heap space (50 GB at the minimum) can save main memory but as a trade-off it may loss a few seconds of end-to-end performance. We recommend setting a high value for Java heap space (e.g. adding java option command -Xmx100G) to minimize garbage collection overheads (the current SkinnerMT version isn't optimized for main memory footprint).
+The script will run corresponding .jar file that can be invoked directly on different platforms. We recommend setting a high value for Java heap space (parameter Xmx) to minimize garbage collection overheads (the current SkinnerMT version isn't optimized for main memory footprint).
 </p> 
 </li>
 <li>Run a benchmark using the bench command in the SkinnerMT console. Queries for each database can be found under the according directory. For example, <code>bench ./imdb/queries outputfile.txt</code> command will benchmark queries in ./imdb/queries directory and write experimental results into outputfile.txt. You may need to adapt the relative path to the directory containing benchmark queries, replace <code>outputfile.txt</code> by a file name of your choosing.</li>

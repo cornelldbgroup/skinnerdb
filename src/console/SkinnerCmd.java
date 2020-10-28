@@ -32,6 +32,7 @@ import net.sf.jsqlparser.statement.select.Select;
 import print.RelationPrinter;
 import query.ColumnRef;
 import query.SQLexception;
+import statistics.JoinStats;
 import statistics.QueryStats;
 import tools.Configuration;
 
@@ -107,6 +108,7 @@ public class SkinnerCmd {
                     QueryStats.optimal = nameToOptimal.get(queryName);
                     processSQL(query.toString(), benchOut, queryOut);
                 }
+                System.out.println(Arrays.toString(JoinStats.nrJoined.toArray()));
                 // Close benchmark result file
                 benchOut.close();
                 if (queryOut != null) {

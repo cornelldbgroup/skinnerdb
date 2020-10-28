@@ -137,6 +137,7 @@ public class Master {
 				long totalMillis = System.currentTimeMillis() - startMillis;
 				BenchUtil.writeStats(queryName, totalMillis, benchOut);
 			}
+			JoinStats.nrJoined.add(subQueryInfo.nrJoined);
 			// Clean up intermediate results except result table
 			subQueryResults.add(resultRel);
 			BufferManager.unloadTempData(subQueryResults);
