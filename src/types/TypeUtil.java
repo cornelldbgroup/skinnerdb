@@ -1,5 +1,8 @@
 package types;
 
+import org.apache.spark.sql.types.*;
+import static org.apache.spark.sql.types.DataTypes.*;
+
 /**
  * Contains utility methods for dealing with types.
  * 
@@ -35,6 +38,36 @@ public class TypeUtil {
 			return JavaType.STRING;
 		default:
 			return null;
+		}
+	}
+	/**
+	 * Returns the Java type that Skinner uses internally
+	 * to represent SQL expression types.
+	 *
+	 * @param expressionType	expression SQL type
+	 * @return					corresponding Scala type
+	 */
+	public static DataType toScalaType(SQLtype expressionType) {
+		switch (expressionType) {
+			case BOOL:
+			case BYTE:
+			case INT:
+			case STRING_CODE:
+			case DATE:
+			case TIME:
+			case TIMESTAMP:
+			case YM_INTERVAL:
+			case DT_INTERVAL:
+				return IntegerType;
+			case LONG:
+				return LongType;
+			case DOUBLE:
+				return DoubleType;
+			case CHAR:
+			case STRING:
+				return StringType;
+			default:
+				return null;
 		}
 	}
 	/**

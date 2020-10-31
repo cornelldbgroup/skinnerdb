@@ -9,6 +9,7 @@ import joining.parallel.parallelization.root.RootParallelization;
 import joining.parallel.parallelization.search.AdaptiveSearchParallelization;
 import joining.parallel.parallelization.search.HeuristicParallelization;
 import joining.parallel.parallelization.search.SearchParallelization;
+import joining.parallel.parallelization.task.SparkParallelization;
 import joining.parallel.parallelization.task.StandardParallelization;
 import joining.parallel.parallelization.task.TaskParallelization;
 import joining.parallel.parallelization.tree.TreeParallelization;
@@ -186,7 +187,7 @@ public class ParallelJoinProcessor {
             }
             // DBTP
             else if (ParallelConfig.PARALLEL_SPEC == 16) {
-                Parallelization parallelization = new StandardParallelization(ParallelConfig.EXE_THREADS,
+                Parallelization parallelization = new SparkParallelization(ParallelConfig.EXE_THREADS,
                         JoinConfig.BUDGET_PER_EPISODE, query, context);
                 parallelization.execute(resultTuples);
             }

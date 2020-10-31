@@ -45,7 +45,7 @@ public class SkinnerCmd {
     /**
      * Path to database directory.
      */
-    static String dbDir;
+    public static String dbDir;
 
     /**
      * Checks whether file exists and displays
@@ -569,6 +569,10 @@ public class SkinnerCmd {
             }
             case "TP": {
                 algoSpec = 9;
+                break;
+            }
+            case "SPARK": {
+                algoSpec = 16;
                 break;
             }
         }
