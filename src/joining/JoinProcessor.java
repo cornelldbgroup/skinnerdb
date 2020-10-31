@@ -62,12 +62,10 @@ public class JoinProcessor {
 		DefaultJoin joinOp = new DefaultJoin(query, preSummary, 
 				LearningConfig.BUDGET_PER_EPISODE);
 		*/
-		/*
 		OldJoin joinOp = new OldJoin(query, context, 
 				JoinConfig.BUDGET_PER_EPISODE);
-		*/
 		//LFTjoin joinOp = new LFTjoin(query, context);
-		DynamicLFTJ joinOp = new DynamicLFTJ(query, context);
+		//DynamicLFTJ joinOp = new DynamicLFTJ(query, context);
 		// Initialize UCT join order search tree
 		UctNode root = new UctNode(0, query, true, joinOp);
 		// Initialize counters and variables
