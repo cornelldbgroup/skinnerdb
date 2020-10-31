@@ -1,8 +1,16 @@
 package joining;
 
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.PrintWriter;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
 
 import catalog.CatalogManager;
 import config.LoggingConfig;
@@ -64,6 +72,11 @@ public class JoinProcessor {
 			context.joinedTable = table;
 			return;
 		}
+		// Open file for analysis results
+		PrintWriter out = new PrintWriter(
+				new BufferedWriter(
+						new FileWriter(
+								"analysis.txt", true)));
 		// Initialize multi-way join operator
 		OldJoin joinOp = new OldJoin(query, context, 
 				JoinConfig.BUDGET_PER_EPISODE);
@@ -105,12 +118,16 @@ public class JoinProcessor {
 		long nextForget = 1;
 		// Initialize plot counter
 		int plotCtr = 0;
+		// Collect join orders tried - use ResultTuple class
+		// to represent join orders.
+		List<ResultTuple> joinOrderSeq = new ArrayList<>();
 		// Iterate until join result was generated
 		double accReward = 0;
 		double maxReward = Double.NEGATIVE_INFINITY;
 		while (!joinOp.isFinished()) {
 			++roundCtr;
 			double reward = root.sample(roundCtr, joinOrder, policy);
+			//joinOrderSeq.add(new ResultTuple(joinOrder));
 			// Count reward except for final sample
 			if (!joinOp.isFinished()) {
 				accReward += reward;
@@ -152,6 +169,52 @@ public class JoinProcessor {
 				++plotCtr;
 			}
 		}
+		// Count how often each order was tried
+		/*
+		Map<ResultTuple, Integer> orderToCount = new HashMap<>();
+		for (ResultTuple curOrder : joinOrderSeq) {
+			int priorCount = orderToCount.getOrDefault(curOrder, 0);
+			orderToCount.put(curOrder, priorCount+1);
+		}
+		int maxSelections = 0;
+		int[] winnerOrder = null;
+		for (Entry<ResultTuple, Integer> entry : 
+			orderToCount.entrySet()) {
+			int nrSelections = entry.getValue();
+			if (nrSelections > maxSelections) {
+				maxSelections = nrSelections;
+				winnerOrder = entry.getKey().baseIndices;
+			}
+		}
+		*/
+		long firstTotal = System.currentTimeMillis() - startMillis;
+		long firstTuples = JoinStats.nrTuples;
+		long firstEpisodes = roundCtr;
+		System.out.println("Total time for first run: " + firstTotal);
+		System.out.flush();
+		long rerunStart = System.currentTimeMillis();
+		//JoinStats.nrTuples = 0;
+		//roundCtr = 0;
+		/*
+		OldJoin rerunJoinOp = new OldJoin(query, context, 
+				JoinConfig.BUDGET_PER_EPISODE);
+		while (!rerunJoinOp.isFinished()) {
+			++roundCtr;
+			//rerunJoinOp.execute(winnerOrder);
+			rerunJoinOp.execute(joinOrder);
+		}
+		*/
+		long rerunTotal = System.currentTimeMillis() - rerunStart;
+		long rerunTuples = JoinStats.nrTuples;
+		long rerunEpisodes = roundCtr;
+		System.out.println("Total millis for re-run: " + rerunTotal);
+		out.println(firstTotal + "\t" + 
+				rerunTotal + "\t" + 
+				firstTuples + "\t" +
+				rerunTuples + "\t" +
+				firstEpisodes + "\t" +
+				rerunEpisodes + "\t" +
+				query.nrJoined);
 		// Output most frequently used join order
 		root.sample(roundCtr, joinOrder, SelectionPolicy.MAX_VISIT);
 		System.out.print("MFJO: ");
@@ -214,6 +277,8 @@ public class JoinProcessor {
 				getCardinality(NamingConfig.DEFAULT_JOINED_NAME);
 		// Measure execution time for join phase
 		JoinStats.joinMillis = System.currentTimeMillis() - startMillis;
+		// Close analysis output file
+		out.close();
 	}
 	/**
 	 * Print out log entry if the maximal number of log
