@@ -55,6 +55,8 @@ public class Indexer {
 	public static Index partitionIndex(ColumnRef colRef, ColumnRef queryRef, PartitionIndex oldIndex,
 									  boolean isPrimary, boolean isSeq, boolean sorted) throws Exception {
 		// Check if index already exists
+		int nrThreads = ParallelConfig.PARALLEL_SPEC == 18 ?
+				Math.max(1, ParallelConfig.EXE_THREADS - ParallelConfig.SEARCH_THREADS): ParallelConfig.EXE_THREADS;
 		if (!BufferManager.colToIndex.containsKey(colRef)) {
 			ColumnData data = BufferManager.getData(colRef);
 			if (data instanceof IntData) {
@@ -62,7 +64,7 @@ public class Indexer {
 				IntPartitionIndex intIndex = oldIndex == null ? null : (IntPartitionIndex) oldIndex;
 				int keySize = intIndex == null ? 0 : intIndex.keyToPositions.size();
 				IndexPolicy policy = Indexer.indexPolicy(isPrimary, isSeq, keySize, intData.cardinality);
-				IntPartitionIndex index = new IntPartitionIndex(intData, ParallelConfig.EXE_THREADS, colRef, queryRef,
+				IntPartitionIndex index = new IntPartitionIndex(intData, nrThreads, colRef, queryRef,
 						intIndex, policy);
 				if (sorted) {
 					index.sortRows();
@@ -74,7 +76,7 @@ public class Indexer {
 				DoublePartitionIndex doubleIndex = oldIndex == null ? null : (DoublePartitionIndex) oldIndex;
 				int keySize = doubleIndex == null ? 0 : doubleIndex.keyToPositions.size();
 				IndexPolicy policy = Indexer.indexPolicy(isPrimary, isSeq, keySize, doubleData.cardinality);
-				DoublePartitionIndex index = new DoublePartitionIndex(doubleData, ParallelConfig.EXE_THREADS,
+				DoublePartitionIndex index = new DoublePartitionIndex(doubleData, nrThreads,
 						colRef, queryRef, doubleIndex, policy);
 				if (sorted) {
 					index.sortRows();
@@ -135,7 +137,7 @@ public class Indexer {
 		if (isPrimary) {
 			policy = IndexPolicy.Key;
 		}
-		else if (cardinality <= ParallelConfig.PARALLEL_SIZE || isSeq) {
+		else if (cardinality <= ParallelConfig.PARALLEL_SIZE || isSeq || keySize == 0) {
 			policy = IndexPolicy.Sequential;
 		}
 		else if (keySize >= ParallelConfig.SPARSE_KEY_SIZE) {

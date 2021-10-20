@@ -3,11 +3,13 @@ package joining;
 import catalog.CatalogManager;
 import config.*;
 import joining.parallel.parallelization.dpdsync.DPDSync;
+import joining.parallel.parallelization.hybrid.HybridParallelization;
 import joining.parallel.parallelization.join.JoinParallelization;
 import joining.parallel.parallelization.leaf.LeafParallelization;
 import joining.parallel.parallelization.root.RootParallelization;
 import joining.parallel.parallelization.search.AdaptiveSearchParallelization;
 import joining.parallel.parallelization.search.HeuristicParallelization;
+import joining.parallel.parallelization.search.NewSearchParallelization;
 import joining.parallel.parallelization.search.SearchParallelization;
 import joining.parallel.parallelization.task.StandardParallelization;
 import joining.parallel.parallelization.task.TaskParallelization;
@@ -187,6 +189,18 @@ public class ParallelJoinProcessor {
             // DBTP
             else if (ParallelConfig.PARALLEL_SPEC == 16) {
                 Parallelization parallelization = new StandardParallelization(ParallelConfig.EXE_THREADS,
+                        JoinConfig.BUDGET_PER_EPISODE, query, context);
+                parallelization.execute(resultTuples);
+            }
+            // New SP
+            else if (ParallelConfig.PARALLEL_SPEC == 17) {
+                Parallelization parallelization = new NewSearchParallelization(ParallelConfig.EXE_THREADS,
+                        JoinConfig.BUDGET_PER_EPISODE, query, context);
+                parallelization.execute(resultTuples);
+            }
+            // Hybrid Parallelization
+            else if (ParallelConfig.PARALLEL_SPEC == 18) {
+                Parallelization parallelization = new HybridParallelization(ParallelConfig.EXE_THREADS,
                         JoinConfig.BUDGET_PER_EPISODE, query, context);
                 parallelization.execute(resultTuples);
             }

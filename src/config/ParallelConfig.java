@@ -113,6 +113,8 @@ public class ParallelConfig {
 	 * 1: minimal joined cardinality.
 	 */
 	public static final int HEURISTIC_POLICY = 1;
-
-	public static final int BRANCH_FACTOR = 10;
+	/**
+	 * Number of threads working on search parallelization
+	 */
+	public static final int SEARCH_THREADS = 4;
 }

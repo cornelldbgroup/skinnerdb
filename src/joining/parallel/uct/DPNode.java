@@ -251,7 +251,10 @@ public class DPNode {
             }
         } // if heuristic is used
         else {
-            recommendedActions = null;
+            recommendedActions = new HashSet<>();
+            for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
+                recommendedActions.add(actionCtr);
+            }
         }
 
         List<Integer> priorityActions = new ArrayList<>();
@@ -479,14 +482,22 @@ public class DPNode {
             Iterator<Integer> unjoinedTablesIter = unjoinedTables.iterator();
             // Fill in remaining join order positions
             for (int posCtr = treeLevel + 1; posCtr < nrTables; ++posCtr) {
+//                if (!unjoinedTablesIter.hasNext()) {
+//                    System.out.println(Arrays.toString(unjoinedTables.toArray()));
+//                    System.out.println(Arrays.toString(joinedTables.toArray()));
+//                }
                 int nextTable = unjoinedTablesIter.next();
                 while (nextTable == lastTable) {
+//                    System.out.println(Arrays.toString(unjoinedTables.toArray()));
+//                    System.out.println(Arrays.toString(joinedTables.toArray()));
+//                    System.out.println(Arrays.toString(joinOrder));
+//                    System.out.println(lastTable);
                     nextTable = unjoinedTablesIter.next();
                 }
                 joinOrder[posCtr] = nextTable;
             }
         }
-//        joinOrder = new int[]{8, 2, 5, 7, 3, 9, 1, 6, 4, 0};
+
         int splitTable = getSplitTableByCard(joinOrder, joinOp.cardinalities);
         double reward = joinOp.execute(joinOrder, splitTable, (int) roundCtr);
 
@@ -541,7 +552,10 @@ public class DPNode {
             }
         } else {
             // inner node - select next action and expand tree if necessary
+//            long actionStart = System.currentTimeMillis();
             int action = selectAction(policy, tid, joinOp);
+//            long actionEnd = System.currentTimeMillis();
+//            System.out.println(treeLevel + " action: " + (actionEnd - actionStart));
             int table = nextTable[action];
             joinOrder[treeLevel] = table;
             // grow tree if possible
@@ -560,9 +574,14 @@ public class DPNode {
             }
             // evaluate via recursive invocation or via playout
             boolean isSample = child != null;
+//            long sampleStart = System.currentTimeMillis();
             double reward = isSample ?
                     child.sample(roundCtr, joinOrder, joinOp, policy):
                     playout(roundCtr, joinOrder, joinOp);
+//            long sampleEnd = System.currentTimeMillis();
+//            if (!isSample) {
+//                System.out.println(treeLevel + " playout: " + (sampleEnd - sampleStart));
+//            }
             // update UCT statistics and return reward
 //            reward = 0.01;
             if (ParallelConfig.PARALLEL_SPEC == 0 || ParallelConfig.PARALLEL_SPEC == 11
@@ -661,9 +680,7 @@ public class DPNode {
             return splitTable;
         }
         int end = Math.min(splitLen, nrTables);
-//        int end = nrTables;
         int start = nrTables <= splitLen + 1 ? 0 : 1;
-//        int start = 0;
         for (int i = start; i < end; i++) {
             int table = joinOrder[i];
             int cardinality = cardinalities[table];
@@ -681,6 +698,7 @@ public class DPNode {
         }
         int splitLen = 5;
         int splitSize = ParallelConfig.PARTITION_SIZE;
+//        int splitSize = nrThreads;
         int splitTable = -1;
         int end = Math.min(splitLen, joinOrder.length);
 //        int start = nrTables <= splitLen + 1 ? 0 : 1;

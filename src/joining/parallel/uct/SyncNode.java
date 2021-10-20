@@ -6,6 +6,8 @@ import joining.parallel.join.DPJoin;
 import joining.parallel.join.ParaJoin;
 import joining.parallel.join.SPJoin;
 import joining.parallel.threads.ThreadPool;
+import joining.plan.JoinOrder;
+import joining.progress.State;
 import joining.uct.SelectionPolicy;
 import query.QueryInfo;
 import statistics.JoinStats;
@@ -598,7 +600,8 @@ public class SyncNode {
     }
 
     public double syncExecuteDP(List<DPJoin> joinOps, int[] joinOrder, long roundCtr) {
-        double reward = 0;
+        double reward;
+        int nrJoined = joinOrder.length;
         List<Future<Double>> futures = new ArrayList<>();
         // Initialize a thread pool.
         ExecutorService executorService = ThreadPool.executorService;
@@ -607,16 +610,34 @@ public class SyncNode {
         for (DPJoin joinOp : joinOps) {
             futures.add(executorService.submit(() -> joinOp.execute(joinOrder, splitTable, (int) roundCtr)));
         }
+        double slowestReward = Double.MAX_VALUE;
         for (int threadCtr = 0; threadCtr < joinOps.size(); threadCtr++) {
             Future<Double> futureResult = futures.get(threadCtr);
             try {
                 double result = futureResult.get();
-                reward += result;
+                slowestReward = Math.min(result, slowestReward);
             } catch (InterruptedException | ExecutionException e) {
                 e.printStackTrace();
             }
         }
-        reward = reward / joinOps.size();
+        // Find the slowest state
+        State slowestState = null;
+        for (DPJoin joinOp : joinOps) {
+            State joinState = joinOp.lastState;
+            if (slowestState == null) {
+                slowestState = joinState;
+            }
+            else if (joinState.isAhead(joinOrder, slowestState, nrJoined)) {
+                slowestState = joinState;
+            }
+        }
+        if (slowestState != null && !slowestState.isFinished()) {
+            JoinOrder order = new JoinOrder(joinOrder);
+            int firstTable = joinOps.get(0).getFirstLargeTable(joinOrder);
+            joinOps.get(0).tracker.updateProgress(order, 0, slowestState, 0,
+                    (int)roundCtr, splitTable, firstTable);
+        }
+        reward = slowestReward;
         return reward;
     }
 

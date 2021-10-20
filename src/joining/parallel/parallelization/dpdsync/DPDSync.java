@@ -50,7 +50,7 @@ public class DPDSync extends Parallelization {
         int nrTables = query.nrJoined;
         int nrSplits = query.equiJoinPreds.size() + nrTables;
         Map<Integer, LeftDeepPartitionPlan> planCache = new ConcurrentHashMap<>();
-        ParallelProgressTracker tracker = new ParallelProgressTracker(nrTables, nrThreads, nrSplits);
+        ParallelProgressTracker tracker = new ParallelProgressTracker(nrTables, 1, 1);
         for (int i = 0; i < nrThreads; i++) {
             ModJoin modJoin = new ModJoin(query, context, budget, nrThreads, i, predToEval, predToComp, planCache);
             modJoin.tracker = tracker;
@@ -62,7 +62,7 @@ public class DPDSync extends Parallelization {
     public void execute(Set<ResultTuple> resultList) throws Exception {
         long executionStart = System.currentTimeMillis();
         // Initialize UCT join order search tree.
-        SyncNode root = new SyncNode(0, query, true, nrThreads);
+        SyncNode root = new SyncNode(0, query, JoinConfig.AVOID_CARTESIAN, nrThreads);
         // Initialize counters and variables
         int[] joinOrder = new int[query.nrJoined];
         // Initialize counter until memory loss
@@ -90,10 +90,11 @@ public class DPDSync extends Parallelization {
             }
             // Consider memory loss
             if (JoinConfig.FORGET && roundCtr==nextForget) {
-                root = new SyncNode(0, query, true, nrThreads);
+                root = new SyncNode(0, query, JoinConfig.AVOID_CARTESIAN, nrThreads);
                 nextForget *= 10;
             }
         }
+        System.out.println("Round: " + roundCtr + "\tJoin order: " + Arrays.toString(joinOrder));
         long executionEnd = System.currentTimeMillis();
         for (int threadCtr = 0; threadCtr < nrThreads; threadCtr++) {
             DPJoin joinOp = dpJoins.get(threadCtr);

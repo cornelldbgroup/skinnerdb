@@ -80,9 +80,13 @@ public class JoinConfig {
 	/**
 	 * Whether to share offsets among different thread.
 	 */
-	public static boolean OFFSETS_SHARING = true;
+	public static boolean OFFSETS_SHARING = false;
 	/**
 	 * Whether to choose the first table to share offsets.
 	 */
-	public static boolean FIRST_TABLE = false;
+	public static boolean FIRST_TABLE = true;
+	/**
+	 * Whether to avoid cartesian product.
+	 */
+	public static final boolean AVOID_CARTESIAN = true;
 }

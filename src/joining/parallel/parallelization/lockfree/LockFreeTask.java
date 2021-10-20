@@ -55,7 +55,9 @@ public class LockFreeTask implements Callable<LockFreeResult>{
      * Join executor.
      */
     private final DPJoin joinOp;
-
+    /**
+    **/
+    public final int[] optimal;
 
     public LockFreeTask(QueryInfo query, Context context, DPNode root, EndPlan endPlan,
                         AtomicBoolean finish, AtomicBoolean terminated, ReentrantLock lock, DPJoin dpJoin) {
@@ -67,6 +69,8 @@ public class LockFreeTask implements Callable<LockFreeResult>{
         this.terminated = terminated;
         this.lock = lock;
         this.joinOp = dpJoin;
+        this.optimal = new int[query.nrJoined];
+        optimal[0] = -1;
     }
 
     @Override
@@ -87,6 +91,8 @@ public class LockFreeTask implements Callable<LockFreeResult>{
         double accReward = 0;
         Set<Integer> finishedTables = new HashSet<>();
         while (!terminated.get()) {
+//            long optimizeStart = System.currentTimeMillis();
+//            System.out.println( "Optimize Start: " + optimizeStart);
             DPNode root = endPlan.root;
             ++roundCtr;
             double reward = 0;
@@ -152,8 +158,17 @@ public class LockFreeTask implements Callable<LockFreeResult>{
                 }
             }
             else {
-                reward = root.sample(roundCtr, joinOrder, joinOp, policy);
+                if (optimal[0] >= 0) {
+                    int split = root.getSplitTableByCard(optimal, joinOp.cardinalities);
+                    System.arraycopy(optimal, 0, joinOrder, 0, nrJoined);
+                    reward = joinOp.execute(optimal, split, (int) roundCtr);
+                }
+                else {
+                    reward = root.sample(roundCtr, joinOrder, joinOp, policy);
+                }
             }
+//            long optimizeEnd = System.currentTimeMillis();
+
             // Count reward except for final sample
             if (!joinOp.isFinished()) {
                 accReward += reward;
@@ -162,8 +177,6 @@ public class LockFreeTask implements Callable<LockFreeResult>{
             else {
                 int prevSplitTable = joinOp.lastTable;
                 if (finish.compareAndSet(false, true)) {
-//                    joinOrder = new int[]{8, 2, 5, 7, 3, 9, 1, 6, 4, 0};
-//                    splitTable = 2;
                     System.out.println(tid + " shared: " + Arrays.toString(joinOrder) + " splitting " + prevSplitTable);
                     endPlan.setJoinOrder(joinOrder);
                     endPlan.setSplitTable(prevSplitTable);
@@ -183,7 +196,8 @@ public class LockFreeTask implements Callable<LockFreeResult>{
                     }
                 }
             }
-//            if (roundCtr == 100000) {
+//            System.out.println(roundCtr + ": " + (optimizeEnd - optimizeStart));
+            if (roundCtr == 100000) {
 //                List<String>[] logs = new List[1];
 //                for (int i = 0; i < 1; i++) {
 //                    logs[i] = joinOp.logs;
@@ -191,9 +205,14 @@ public class LockFreeTask implements Callable<LockFreeResult>{
 //                LogUtils.writeLogs(logs, "verbose/lockFree/" + QueryStats.queryName);
 //                System.out.println("Write to logs!");
 //                System.exit(0);
-//            }
+                long timer2 = System.currentTimeMillis();
+                joinOp.roundCtr = roundCtr;
+                System.out.println("Thread " + tid + ": " + (timer2 - timer1) + "\t Round: " + roundCtr);
+                Collection<ResultTuple> tuples = joinOp.result.getTuples();
+                return new LockFreeResult(tuples, joinOp.logs, tid);
+            }
             if (JoinConfig.FORGET && roundCtr == nextForget && tid == 0) {
-                endPlan.root = new DPNode(roundCtr, query, true, ParallelConfig.EXE_THREADS);
+                endPlan.root = new DPNode(roundCtr, query, JoinConfig.AVOID_CARTESIAN, ParallelConfig.EXE_THREADS);
                 nextForget *= 10;
             }
         }

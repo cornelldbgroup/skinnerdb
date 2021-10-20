@@ -36,7 +36,8 @@ public class LockFreeParallelization extends Parallelization {
     /**
      * Multiple join operators for threads
      */
-    private List<DPJoin> dpJoins = new ArrayList<>();
+    private final List<DPJoin> dpJoins = new ArrayList<>();
+    private final List<DPJoin> optimalJoins = new ArrayList<>();
     /**
      * initialization of parallelization
      *
@@ -84,17 +85,45 @@ public class LockFreeParallelization extends Parallelization {
                 dpJoins.add(modJoin);
             }
         }
+
+        if (JoinConfig.NEWTRACKER && nrThreads > 1 && ParallelConfig.PARALLEL_SPEC == 0) {
+            ParallelProgressTracker tracker = new ParallelProgressTracker(nrTables, nrThreads, nrSplits);
+            for (int i = 0; i < nrThreads; i++) {
+                ModJoin modJoin = new ModJoin(query, context, budget, nrThreads, i, predToEval, predToComp, planCache);
+                modJoin.tracker = tracker;
+                optimalJoins.add(modJoin);
+            }
+        }
+        else if (ParallelConfig.PARALLEL_SPEC == 13) {
+            for (int i = 0; i < nrThreads; i++) {
+                ModJoin modJoin = new ModJoin(query, context, budget, nrThreads, i, predToEval, predToComp, planCache);
+                modJoin.trackers = new ProgressTracker[nrTables];
+                for (int table = 0; table < nrTables; table++) {
+                    modJoin.trackers[table] = new ProgressTracker(nrTables, modJoin.cardinalities);
+                }
+                optimalJoins.add(modJoin);
+            }
+        }
+        else {
+            for (int i = 0; i < nrThreads; i++) {
+                ModJoin modJoin = new ModJoin(query, context, budget, nrThreads, i, predToEval, predToComp, planCache);
+                modJoin.oldTracker = new ProgressTracker(nrTables, modJoin.cardinalities);
+                optimalJoins.add(modJoin);
+            }
+        }
+
+
     }
 
     @Override
     public void execute(Set<ResultTuple> resultList) throws Exception {
         // Initialize UCT join order search tree.
-        DPNode root = new DPNode(0, query, true, nrThreads);
+        DPNode root = new DPNode(0, query, JoinConfig.AVOID_CARTESIAN, nrThreads);
         // Initialize a thread pool.
         ExecutorService executorService = ThreadPool.executorService;
         // Initialize variables for broadcasting.
         int nrTables = query.nrJoined;
-        // initialize an end plan.
+        // Initialize an end plan.
         EndPlan endPlan = new EndPlan(nrThreads, nrTables, root);
         List<LockFreeTask> tasks = new ArrayList<>();
         // Mutex shared by multiple threads.
@@ -110,13 +139,34 @@ public class LockFreeParallelization extends Parallelization {
             JoinConfig.PARALLEL_WEIGHT = JoinConfig.EXPLORATION_WEIGHT;
         }
         for (int i = 0; i < nrThreads; i++) {
-            LockFreeTask lockFreeTask = new LockFreeTask(query, context, root, endPlan, end, finish, lock, dpJoins.get(i));
+            LockFreeTask lockFreeTask = new LockFreeTask(query, context, root, endPlan,
+                    end, finish, lock, dpJoins.get(i));
             tasks.add(lockFreeTask);
         }
-        long executionStart = System.currentTimeMillis();
+        long executionStart1 = System.currentTimeMillis();
         List<Future<LockFreeResult>> futures = executorService.invokeAll(tasks);
-        long executionEnd = System.currentTimeMillis();
-        JoinStats.exeTime = executionEnd - executionStart;
+        long executionEnd1 = System.currentTimeMillis();
+        JoinStats.exeTime = executionEnd1 - executionStart1;
+        // Optimal run
+        // Initialize an end plan.
+//        EndPlan endPlan2 = new EndPlan(nrThreads, nrTables, root);
+//        List<LockFreeTask> tasks2 = new ArrayList<>();
+//        // Mutex shared by multiple threads.
+//        ReentrantLock lock2 = new ReentrantLock();
+//        AtomicBoolean end2 = new AtomicBoolean(false);
+//        AtomicBoolean finish2 = new AtomicBoolean(false);
+//        int[] optimal = endPlan.getJoinOrder();
+//        for (int thread = 0; thread < nrThreads; thread++) {
+//            LockFreeTask lockFreeTask = new LockFreeTask(query, context, root, endPlan2, end2,
+//                    finish2, lock2, optimalJoins.get(thread));
+//            System.arraycopy(optimal, 0, lockFreeTask.optimal, 0 , nrTables);
+//            tasks2.add(lockFreeTask);
+//        }
+//
+//        long executionStart = System.currentTimeMillis();
+//        List<Future<LockFreeResult>> futures = executorService.invokeAll(tasks2);
+//        long executionEnd = System.currentTimeMillis();
+//        JoinStats.exeTime = executionEnd - executionStart;
 
         int maxSize = 0;
         context.resultTuplesList = new ArrayList<>(nrThreads);

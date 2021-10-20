@@ -5,10 +5,12 @@ import config.LoggingConfig;
 import config.ParallelConfig;
 import config.PreConfig;
 import expressions.compilation.KnaryBoolEval;
+import joining.parallel.indexing.OffsetIndex;
 import joining.parallel.plan.LeftDeepPartitionPlan;
 import joining.parallel.progress.ParallelProgressTracker;
 import joining.plan.HotSet;
 import joining.plan.JoinOrder;
+import joining.progress.ProgressTracker;
 import joining.progress.State;
 import net.sf.jsqlparser.expression.Expression;
 import predicate.NonEquiNode;
@@ -18,7 +20,7 @@ import query.QueryInfo;
 import java.util.*;
 import java.util.stream.Collectors;
 
-public class SubJoin extends SPJoin {
+public class OldJoin extends SPJoin {
     /**
      * Number of completed tuples produced
      * during last invocation.
@@ -31,7 +33,7 @@ public class SubJoin extends SPJoin {
     /**
      * Avoids redundant evaluation work by tracking evaluation progress.
      */
-    public ParallelProgressTracker tracker;
+    public final ParallelProgressTracker tracker;
     /**
      * Associates each table index with unary predicates.
      */
@@ -41,10 +43,6 @@ public class SubJoin extends SPJoin {
      * indices when comparing start state and final state.
      */
     public final int[] tupleIndexDelta;
-    /**
-     * Counts number of log entries made.
-     */
-    int logCtr = 0;
     /**
      * Whether the join phase is terminated
      */
@@ -58,20 +56,31 @@ public class SubJoin extends SPJoin {
      */
     public int[] tableIndex;
     /**
+     * Offset index for each thread.
+     */
+    public final OffsetIndex[][] threadOffsets;
+    /**
+     * The table that has the largest progress.
+     */
+    public int quickTable = 0;
+    /**
      * Initializes join algorithm for given input query.
      *
      * @param query			query to process
      * @param preSummary	summary of pre-processing
      * @param budget		budget per episode
      */
-    public SubJoin(QueryInfo query, Context preSummary,
-                   int budget, int nrThreads, int tid, Map<Expression, NonEquiNode> predToEval) throws Exception {
+    public OldJoin(QueryInfo query, Context preSummary,
+                   int budget, int nrThreads, int tid,
+                   Map<Expression, NonEquiNode> predToEval, OffsetIndex[][] threadOffsets) throws Exception {
         super(query, preSummary, budget, nrThreads, tid, predToEval);
         this.planCache = new HashMap<>();
         // Collect unary predicates
         this.unaryPreds = new KnaryBoolEval[nrJoined];
         this.tupleIndexDelta = new int[nrJoined];
         this.tableIndex = new int[nrJoined];
+        this.tracker = new ParallelProgressTracker(nrJoined, 1, 1);
+        this.threadOffsets = threadOffsets;
     }
     /**
      * Calculates reward for progress during one invocation.
@@ -135,28 +144,21 @@ public class SubJoin extends SPJoin {
         }
         long timer2 = System.currentTimeMillis();
         // Execute from ing state, save progress, return progress
-        int leftTable = order[0];
-        int firstTable = leftTable;
-        if (!JoinConfig.FIRST_TABLE) {
-            firstTable = getFirstLargeTable(order);
-        }
-//        int firstTable = leftTable;
-        State state = tracker.continueFromSP(joinOrder, tid, firstTable);
+        int firstTable = getFirstLargeTable(order);
+        State state = tracker.continueFromSP(joinOrder);
         if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
             writeLog("Round: " + roundCtr + "\t" + "Join: " + Arrays.toString(order));
         }
-        int[] offsets;
+        int[] offsets = tracker.tableOffsetMaps[0][0];
         if (JoinConfig.OFFSETS_SHARING) {
-            offsets = new int[nrJoined];
-            for (int table = 0; table < nrJoined; table++) {
-                for (int i = 0; i < nrThreads; i++) {
-                    offsets[table] = Math.max(offsets[table], tracker.tableOffsetMaps[i][0][table]);
+            for (int threadCtr = 0; threadCtr < nrThreads; threadCtr++) {
+                for (int tableCtr = 0; tableCtr < nrJoined; tableCtr++) {
+                    offsets[tableCtr] = Math.max(offsets[tableCtr],
+                            threadOffsets[threadCtr][tableCtr].index);
                 }
             }
         }
-        else {
-            offsets = tracker.tableOffsetMaps[tid][0];
-        }
+        int lastFirstIndex = offsets[firstTable];
         if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
             writeLog("Start: " + state.toString() + "\t" + "Offset: " + Arrays.toString(offsets));
         }
@@ -178,68 +180,46 @@ public class SubJoin extends SPJoin {
             }
             plan.joinIndices.get(i).forEach(index ->index.reset(state.tupleIndices));
         }
-        if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
-            writeLog("After: " + state.toString());
-        }
         long timer3 = System.currentTimeMillis();
         executeWithBudget(plan, state, offsets);
         long timer4 = System.currentTimeMillis();
-//        long timer3 = System.currentTimeMillis();
-        // update stats for the constraints
-        if (ParallelConfig.PARALLEL_SPEC == 14) {
-            Set<Integer> joinedTable = new HashSet<>(nrJoined);
-            boolean single = query.joinConnection.get(leftTable).size() == 1;
-            for (int i = 0; i < nrJoined - 1; i++) {
-                joinedTable.add(order[i]);
-                if (!(i == 1 && single)) {
-                    HotSet hotSet = new HotSet(joinedTable, nrJoined);
-                    int preValue = joinStats.getOrDefault(hotSet, 0);
-                    if (joinStats.size() <= ParallelConfig.STATISTICS_SIZE || preValue > 0 || roundCtr < 80) {
-                        joinStats.put(hotSet, preValue + 1);
-                        statsCount++;
-                    }
-                }
-            }
-            if (roundCtr == 80 && joinStats.size() > ParallelConfig.STATISTICS_SIZE) {
-                int size = joinStats.size();
-                List<HotSet> sortedJoin = joinStats.keySet().stream().sorted(
-                        Comparator.comparing(joinStats::get)).collect(Collectors.toList()).
-                        subList(0, size - ParallelConfig.STATISTICS_SIZE);
-                sortedJoin.forEach(joinStats::remove);
-            }
-        }
-        int prefixSum = 0;
-        for (int i = nrJoined - 1; i >= 0; i--) {
-            int table = order[i];
-            prefixSum += nrVisited[table];
-            visits[table] += prefixSum;
-        }
-//        long timer4 = System.currentTimeMillis();
 
         // progress in the left table.
         double reward = reward(joinOrder.order, tupleIndexDelta, offsets, state.tupleIndices);
-        if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
-            double[] saving = new double[nrJoined];
-            double weight = 1;
-            for (int pos = 0; pos < nrJoined; ++pos) {
-                // Scale down weight by cardinality of current table
-                int curTable = order[pos];
-                int curCard = cardinalities[curTable];
-                //int remainingCard = cardinalities[curTable];
-                weight *= 1.0 / curCard;
-                // Fully processed tuples from this table
-                saving[curTable] = nrVisited[curTable] * weight;
-
-            }
-            writeLog("Visit: "  + Arrays.toString(nrVisited) + "\tSave: " + Arrays.toString(saving));
-            writeLog("End: "  + state.toString() + "\tReward: " + reward + "\tProgress: " + this.progress);
-        }
         // Get the first table whose cardinality is larger than 1.
         state.roundCtr = 0;
         for (int table: query.temporaryTables) {
             state.tupleIndices[table] = 0;
         }
-        tracker.updateProgressSP(joinOrder, state, tid, roundCtr, firstTable);
+        tracker.updateProgressSP(joinOrder, state, roundCtr, firstTable);
+        // Update table offset considering last fully treated tuple
+        int lastTreatedTuple = state.tupleIndices[firstTable] - 1;
+        if (lastTreatedTuple > lastFirstIndex) {
+            tracker.tableOffsetMaps[0][0][firstTable] = lastTreatedTuple;
+            if (JoinConfig.OFFSETS_SHARING) {
+                threadOffsets[tid][firstTable].index = lastTreatedTuple;
+            }
+        }
+        // Retrieve the quick table
+        double maxProgress = 0;
+        for (int table = 0; table < nrJoined; table++) {
+            int offsetIndex = offsets[table];
+            int cardinality = cardinalities[table];
+            double progress = (offsetIndex + 0.0) / cardinality;
+            if (progress > maxProgress) {
+                maxProgress = progress;
+                quickTable = table;
+            }
+        }
+        if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
+            double[] progress = new double[nrJoined];
+            for (int table = 0; table < nrJoined; table++) {
+                int offsetIndex = offsets[table];
+                int cardinality = cardinalities[table];
+                progress[table] = (offsetIndex + 0.0) / cardinality;
+            }
+            writeLog("Progress: " + Arrays.toString(progress) + "\tReward: " + reward);
+        }
         long timer5 = System.currentTimeMillis();
         lastState = state;
 //        long timer5 = System.currentTimeMillis();
@@ -431,14 +411,14 @@ public class SubJoin extends SPJoin {
         int joinIndex = 1;
         System.arraycopy(state.tupleIndices, 0, tupleIndices, 0, nrTables);
         int remainingBudget = budget;
-        for (int i = 0; i < nrTables; i++) {
-            int table = plan.joinOrder.order[i];
-            joinIndex = i;
+        for (int joinCtr = 0; joinCtr < nrTables; joinCtr++) {
+            int table = plan.joinOrder.order[joinCtr];
+            joinIndex = joinCtr;
             remainingBudget--;
             if (query.temporaryTables.contains(table)) {
                 tupleIndices[table] = offsets[table];
             }
-            if (!evaluateInScope(joinIndices.get(i), applicablePreds.get(i),
+            if (!evaluateInScope(joinIndices.get(joinCtr), applicablePreds.get(joinCtr),
                     tupleIndices, table)) {
                 for (int back = joinIndex + 1; back < nrTables; back++) {
                     int backTable = plan.joinOrder.order[back];

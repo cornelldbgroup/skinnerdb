@@ -1,12 +1,16 @@
 package joining.parallel.parallelization.search;
 
+import config.JoinConfig;
 import config.LoggingConfig;
 import config.ParallelConfig;
+import joining.parallel.indexing.OffsetIndex;
+import joining.parallel.join.OldJoin;
 import joining.parallel.join.SPJoin;
 import joining.parallel.join.SubJoin;
 import joining.parallel.parallelization.Parallelization;
 import joining.parallel.progress.ParallelProgressTracker;
 import joining.parallel.threads.ThreadPool;
+import joining.parallel.uct.NSPNode;
 import joining.parallel.uct.SPNode;
 import joining.result.ResultTuple;
 import logs.LogUtils;
@@ -23,11 +27,11 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public class SearchParallelization extends Parallelization {
+public class NewSearchParallelization extends Parallelization {
     /**
      * Multiple join operators for threads
      */
-    private List<SPJoin> spJoins = new ArrayList<>();
+    private List<OldJoin> oldJoins = new ArrayList<>();
     /**
      * initialization of parallelization
      *
@@ -36,10 +40,12 @@ public class SearchParallelization extends Parallelization {
      * @param query     select query with join predicates
      * @param context   query execution context
      */
-    public SearchParallelization(int nrThreads, int budget, QueryInfo query, Context context) throws Exception {
+    public NewSearchParallelization(int nrThreads, int budget, QueryInfo query, Context context) throws Exception {
         super(nrThreads, budget, query, context);
         // Compile predicates
         Map<Expression, NonEquiNode> predToEval = new HashMap<>();
+        int nrJoined = query.nrJoined;
+        OffsetIndex[][] threadOffsets = new OffsetIndex[nrThreads][nrJoined];
         for (int i = 0; i < query.nonEquiJoinNodes.size(); i++) {
             // Compile predicate and store in lookup table
             Expression pred = query.nonEquiJoinPreds.get(i).finalExpression;
@@ -47,37 +53,32 @@ public class SearchParallelization extends Parallelization {
             predToEval.put(pred, node);
         }
         // Initialize multi-way join operator
-        int nrTables = query.nrJoined;
-        ParallelProgressTracker tracker = new ParallelProgressTracker(nrTables, nrThreads, 1);
-        for (int i = 0; i < nrThreads; i++) {
-            SubJoin modJoin = new SubJoin(query, context, budget, nrThreads, i, predToEval);
-            modJoin.tracker = tracker;
-            spJoins.add(modJoin);
+        for (int threadCtr = 0; threadCtr < nrThreads; threadCtr++) {
+            for (int tableCtr = 0; tableCtr < nrJoined; tableCtr++) {
+                threadOffsets[threadCtr][tableCtr] = new OffsetIndex();
+            }
+            OldJoin oldJoin = new OldJoin(query, context, budget,
+                    nrThreads, threadCtr, predToEval, threadOffsets);
+            oldJoins.add(oldJoin);
         }
     }
-
     @Override
     public void execute(Set<ResultTuple> resultList) throws Exception {
+        List<String>[] logs = new List[nrThreads];
+        List<SPTask> tasks = new ArrayList<>();
+        // Mutex shared by multiple threads.
+        AtomicBoolean isFinished = new AtomicBoolean(false);
+
         // Initialize UCT join order search tree.
-        SPNode root = new SPNode(0, query, false, nrThreads);
-        SearchScheduler scheduler = new SearchScheduler(query, root, spJoins, nrThreads);
+        for (int threadCtr = 0; threadCtr < nrThreads; threadCtr++) {
+            logs[threadCtr] = new ArrayList<>();
+            SPTask searchTask = new SPTask(
+                    query, context, oldJoins.get(threadCtr),
+                    threadCtr, nrThreads, isFinished);
+            tasks.add(searchTask);
+        }
         // Initialize a thread pool.
         ExecutorService executorService = ThreadPool.executorService;
-        // Mutex shared by multiple threads.
-        AtomicBoolean end = new AtomicBoolean(false);
-        int nrTables = query.nrJoined;
-        List<SearchTask> tasks = new ArrayList<>();
-        List<String>[] logs = new List[nrThreads];
-        for (int i = 0; i < nrThreads; i++) {
-            logs[i] = new ArrayList<>();
-        }
-        for (int i = 0; i < nrThreads; i++) {
-            SPJoin spJoin = spJoins.get(i);
-            if (spJoin.nextActions != null) {
-                SearchTask searchTask = new SearchTask(query, context, root, spJoin, scheduler, end);
-                tasks.add(searchTask);
-            }
-        }
         long executionStart = System.currentTimeMillis();
         List<Future<SearchResult>> futures = executorService.invokeAll(tasks);
         long executionEnd = System.currentTimeMillis();
@@ -97,12 +98,7 @@ public class SearchParallelization extends Parallelization {
         long mergeEnd = System.currentTimeMillis();
         JoinStats.mergeTime = mergeEnd - executionEnd;
         long nrSamples = 0;
-        for (SPJoin joinOp: spJoins) {
-            nrSamples = Math.max(joinOp.roundCtr, nrSamples);
-            JoinStats.nrTuples += joinOp.statsInstance.nrTuples;
-        }
         JoinStats.nrSamples = nrSamples;
-
         // Write log to the local file.
         if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
             if (ParallelConfig.PARALLEL_SPEC == 2) {
@@ -112,7 +108,6 @@ public class SearchParallelization extends Parallelization {
                 LogUtils.writeLogs(logs, "verbose/dynamic_search/" + QueryStats.queryName);
             }
         }
-
         System.out.println("Result Set: " + resultList.size());
     }
 }

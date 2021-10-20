@@ -241,7 +241,10 @@ public class SPNode {
             }
         } // if heuristic is used
         else {
-            recommendedActions = null;
+            recommendedActions = new HashSet<>();
+            for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
+                recommendedActions.add(actionCtr);
+            }
         }
 
         List<Integer> priorityActions = new ArrayList<>();

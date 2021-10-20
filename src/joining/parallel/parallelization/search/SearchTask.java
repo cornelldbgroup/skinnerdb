@@ -78,6 +78,7 @@ public class SearchTask implements Callable<SearchResult> {
         // Iterate until join result was generated
         double accReward = 0;
         while (!finish.get()) {
+            long roundStart = System.currentTimeMillis();
             ++roundCtr;
             double reward;
             int adaptive = scheduler.adaptiveCtr;
@@ -132,6 +133,8 @@ public class SearchTask implements Callable<SearchResult> {
                 }
                 break;
             }
+            long roundEnd = System.currentTimeMillis();
+            spJoin.writeLog("Round Time: " + (roundEnd - roundStart) + " ms");
         }
         long timer2 = System.currentTimeMillis();
         System.out.println("Thread " + tid + " " + (timer2 - timer1)

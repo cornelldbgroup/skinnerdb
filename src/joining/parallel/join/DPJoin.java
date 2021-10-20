@@ -14,6 +14,8 @@ import expressions.aggregates.SQLaggFunction;
 import expressions.compilation.EvaluatorType;
 import expressions.compilation.ExpressionCompiler;
 import expressions.compilation.KnaryBoolEval;
+import joining.parallel.progress.ParallelProgressTracker;
+import joining.progress.ProgressTracker;
 import joining.progress.State;
 import joining.result.JoinResult;
 import joining.result.MaxJoinResult;
@@ -128,6 +130,18 @@ public abstract class DPJoin {
      * Store result if the selected columns are unique
      */
     public final UniqueJoinResult uniqueJoinResult;
+    /**
+     * Avoids redundant evaluation work by tracking evaluation progress.
+     */
+    public ParallelProgressTracker tracker;
+    /**
+     * Avoids redundant evaluation work by tracking evaluation progress.
+     */
+    public ProgressTracker[] trackers;
+    /**
+     * Avoids redundant evaluation work by using old progress tracker.
+     */
+    public ProgressTracker oldTracker;
 
     ExpressionCompiler compiler;
     KnaryBoolEval boolEval;

@@ -21,7 +21,7 @@ public class EndPlan {
     /**
      * Finished join order.
      */
-    private volatile int[] joinOrder;
+    private final int[] joinOrder;
     /**
      * Finished split table.
      */
@@ -31,26 +31,20 @@ public class EndPlan {
      */
     public final boolean[][] finishFlags;
     /**
-     * Array of slowest state for different thread
+     * Array of the slowest state for different thread
      */
     public final AtomicReference<State> slowestState;
     /**
-     * the slowest thread id for each split table
-     */
-    public int[] slowThreads;
-    /**
-     * Root of
+     * Root of UCT tree
      */
     public volatile DPNode root;
-
+    
     public volatile State[][] threadSlowStates;
 
     public EndPlan(int nrThreads, int nrTables, DPNode root) {
         joinOrder = new int[nrTables];
         finishFlags = new boolean[nrThreads][nrTables];
         splitTable = -1;
-        this.slowThreads = new int[nrTables];
-        Arrays.fill(slowThreads, -1);
         State firstState = new State(nrTables);
         firstState.tid = -1;
         this.slowestState = new AtomicReference<>(firstState);
@@ -63,7 +57,8 @@ public class EndPlan {
     }
 
     public void setJoinOrder(int[] joinOrder) {
-        System.arraycopy(joinOrder, 0, this.joinOrder, 0, joinOrder.length);
+        System.arraycopy(joinOrder, 0,
+                this.joinOrder, 0, joinOrder.length);
     }
 
     public int getSplitTable() {
