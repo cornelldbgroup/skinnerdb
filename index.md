@@ -1,4 +1,4 @@
-# SkinnerDB: Adaptive Processing with Reinforcement Learning
+# SkinnerDB
 
 SkinnerDB is a relational database management system for data analysis. It processes SQL queries adaptively, i.e. the query plan keeps changing during query execution. This helps SkinnerDB to deal with queries for which it is hard to decide e.g. a good join order in advance. 
 
