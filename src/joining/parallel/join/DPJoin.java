@@ -4,6 +4,7 @@ import buffer.BufferManager;
 import catalog.CatalogManager;
 import com.koloboke.collect.set.IntSet;
 import com.koloboke.collect.set.hash.HashIntSets;
+import config.JoinConfig;
 import config.LoggingConfig;
 import config.ParallelConfig;
 import config.PreConfig;
@@ -15,6 +16,7 @@ import expressions.compilation.EvaluatorType;
 import expressions.compilation.ExpressionCompiler;
 import expressions.compilation.KnaryBoolEval;
 import joining.parallel.progress.ParallelProgressTracker;
+import joining.parallel.progress.ThreadProgressTracker;
 import joining.progress.ProgressTracker;
 import joining.progress.State;
 import joining.result.JoinResult;
@@ -137,6 +139,10 @@ public abstract class DPJoin {
     /**
      * Avoids redundant evaluation work by tracking evaluation progress.
      */
+    public final ThreadProgressTracker threadTracker;
+    /**
+     * Avoids redundant evaluation work by tracking evaluation progress.
+     */
     public ProgressTracker[] trackers;
     /**
      * Avoids redundant evaluation work by using old progress tracker.
@@ -166,6 +172,8 @@ public abstract class DPJoin {
         this.tid = tid;
         this.statsInstance = new StatsInstance();
         this.logs = new ArrayList<>();
+        int nrSplits = query.equiJoinPreds.size() + nrJoined;
+        this.threadTracker = new ThreadProgressTracker(nrJoined, nrSplits);
         for (Map.Entry<String, Integer> entry :
                 query.aliasToIndex.entrySet()) {
             String alias = entry.getKey();
@@ -208,7 +216,7 @@ public abstract class DPJoin {
             for (ExpressionInfo expressionInfo: query.selectExpressions) {
                 Function function = expressionInfo.aggregates.iterator().next();
                 String name = function.getName();
-                if (!name.equals("MIN") && !name.equals("MAX")) {
+                if ((!name.equals("MIN") && !name.equals("MAX")) || !JoinConfig.EARLY_AGGREGATION) {
                     uniqueJoinResult = null;
                     return;
                 }

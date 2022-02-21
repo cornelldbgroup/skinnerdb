@@ -35,10 +35,10 @@ public class EndPlan {
      */
     public final AtomicReference<State> slowestState;
     /**
-     * Root of UCT tree
+     * Root of UCT tree。
      */
     public volatile DPNode root;
-    
+
     public volatile State[][] threadSlowStates;
 
     public EndPlan(int nrThreads, int nrTables, DPNode root) {
@@ -73,12 +73,8 @@ public class EndPlan {
         int nrTables = joinOrder.length;
         return slowestState.updateAndGet(previousState -> {
             this.splitTable = optimalTable;
-            if (previousState.isAhead(joinOrder, state, nrTables)) {
-                return state;
-            }
-            else {
-                return previousState;
-            }
+            boolean isAhead = previousState.isAhead(joinOrder, state, nrTables);
+            return isAhead ? state : previousState;
         });
     }
 

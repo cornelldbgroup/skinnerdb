@@ -6,6 +6,7 @@ import joining.parallel.parallelization.dpdsync.DPDSync;
 import joining.parallel.parallelization.hybrid.HybridParallelization;
 import joining.parallel.parallelization.join.JoinParallelization;
 import joining.parallel.parallelization.leaf.LeafParallelization;
+import joining.parallel.parallelization.lockfree.DataParallelization;
 import joining.parallel.parallelization.root.RootParallelization;
 import joining.parallel.parallelization.search.AdaptiveSearchParallelization;
 import joining.parallel.parallelization.search.HeuristicParallelization;
@@ -92,7 +93,9 @@ public class ParallelJoinProcessor {
             Set<ResultTuple> resultTuples = new HashSet<>();
             // DPD async
             if (ParallelConfig.PARALLEL_SPEC == 0) {
-                Parallelization parallelization = new LockFreeParallelization(ParallelConfig.EXE_THREADS,
+//                Parallelization parallelization = new LockFreeParallelization(ParallelConfig.EXE_THREADS,
+//                        JoinConfig.BUDGET_PER_EPISODE, query, context);
+                Parallelization parallelization = new DataParallelization(ParallelConfig.EXE_THREADS,
                         JoinConfig.BUDGET_PER_EPISODE, query, context);
                 parallelization.execute(resultTuples);
             }

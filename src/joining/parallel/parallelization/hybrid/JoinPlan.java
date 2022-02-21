@@ -1,7 +1,12 @@
 package joining.parallel.parallelization.hybrid;
 
+import com.google.common.util.concurrent.AtomicDouble;
+import joining.parallel.plan.LeftDeepPartitionPlan;
+import joining.progress.State;
+
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * The plan information of the join plan
@@ -27,6 +32,18 @@ public class JoinPlan {
      */
     public final AtomicBoolean[] finishFlags;
     /**
+     * Progress for different tables.
+     */
+    public final AtomicDouble[] progress;
+    /**
+     * States for different tables.
+     */
+    public final AtomicReference<State>[] states;
+    /**
+     * The slowest state by comparing different split tables
+     */
+    public volatile State slowestState;
+    /**
      * The average reward of given join order.
      */
     public final double reward;
@@ -34,17 +51,28 @@ public class JoinPlan {
      * Thread id of the join plan.
      */
     public final int tid;
+    /**
+     * Represents a left deep query plan
+     */
+    public final LeftDeepPartitionPlan plan;
 
 
-    public JoinPlan(int[] joinOrder, int nrThreads, int nrTables, double reward, int tid) {
-        this.joinOrder = joinOrder;
+    public JoinPlan(int[] joinOrder, int nrThreads, int nrTables,
+                    double reward, int tid, LeftDeepPartitionPlan plan) {
+        this.joinOrder = joinOrder.clone();
         this.finishFlags = new AtomicBoolean[nrThreads * nrTables];
+        this.progress = new AtomicDouble[nrThreads * nrTables];
+        this.states = new AtomicReference[nrThreads * nrTables];
         for (int flagCtr = 0; flagCtr < nrThreads * nrTables; flagCtr++) {
             this.finishFlags[flagCtr] = new AtomicBoolean(false);
+            this.progress[flagCtr] = new AtomicDouble(0);
+            this.states[flagCtr] = new AtomicReference<>(new State(nrTables));
         }
+        this.slowestState = new State(nrTables);
         this.nrThreads = nrThreads;
         this.reward = reward;
         this.tid = tid;
+        this.plan = plan;
     }
     /**
      * Set finish flag to True and check

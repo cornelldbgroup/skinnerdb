@@ -62,6 +62,10 @@ public class ModJoin extends DPJoin {
      */
     public final double[] upOps;
     /**
+     * Progress of current state indices.
+     */
+    public double progress;
+    /**
      * Initializes join algorithm for given input query.
      *
      * @param query			query to process
@@ -103,18 +107,23 @@ public class ModJoin extends DPJoin {
      * @param tableOffsets		table offsets (number of tuples fully processed)
      * @return					reward between 0 and 1, proportional to progress
      */
-    double reward(int[] joinOrder, int[] tupleIndexDelta, int[] tableOffsets) {
+    double reward(int[] joinOrder, int[] tupleIndexDelta, int[] tableOffsets, int[] tupleIndices) {
         double progress = 0;
         double weight = 1;
+        this.progress = 0;
+        double pWeight = 1;
         for (int pos = 0; pos < nrJoined; ++pos) {
             // Scale down weight by cardinality of current table
             int curTable = joinOrder[pos];
-            int remainingCard = cardinalities[curTable] -
+            int curCard = cardinalities[curTable];
+            int remainingCard = curCard -
                     (tableOffsets[curTable]);
             //int remainingCard = cardinalities[curTable];
             weight *= 1.0 / remainingCard;
             // Fully processed tuples from this table
             progress += tupleIndexDelta[curTable] * weight;
+            this.progress += pWeight * (tupleIndices[curTable] + 0.0) / curCard;
+            pWeight *= 1.0 / curCard;
         }
         return JoinConfig.INPUT_REWARD_WEIGHT * progress
                 + JoinConfig.OUTPUT_REWARD_WEIGHT * nrResultTuples/(double)budget;
@@ -138,7 +147,7 @@ public class ModJoin extends DPJoin {
                 return 1;
             }
         }
-        System.arraycopy(new int[]{4, 5, 0, 1, 2, 3}, 0, order, 0, nrJoined);
+//        System.arraycopy(new int[]{4, 5, 0, 1, 2, 3}, 0, order, 0, nrJoined);
 //        splitTable = 2;
         this.roundCtr = roundCtr;
         slowest = false;
@@ -227,7 +236,7 @@ public class ModJoin extends DPJoin {
             }
         }
 
-        double reward = reward(joinOrder.order, tupleIndexDelta, offsets);
+        double reward = reward(joinOrder.order, tupleIndexDelta, offsets, state.tupleIndices);
         // Get the first table whose cardinality is larger than 1.
         int firstTable = getFirstLargeTable(order);
 //        int firstTable = order[0];
@@ -256,14 +265,125 @@ public class ModJoin extends DPJoin {
         if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
             writeLog("Visit: " + Arrays.toString(nrVisits) + "\tLarge: " + largeTable + "\t" + progressLog +
                     "\t" + Arrays.toString(downOps) + "\t" + Arrays.toString(upOps));
-            writeLog("End: " + state + "\tReward: " + reward + "\tLevel: " + deepIndex);
+            writeLog("End: " + state + "\tReward: " + reward + "\tLevel: " + deepIndex
+                    + "\tTime: " + System.nanoTime());
+        }
+        return reward;
+    }
+
+    /**
+     * Execution algorithm for hybrid data parallelization
+     *
+     * @param order
+     * @param splitTable
+     * @param roundCtr
+     * @param slowState
+     * @return
+     * @throws Exception
+     */
+    public double execute(int[] order, int splitTable, int roundCtr,
+                          State slowState, LeftDeepPartitionPlan plan) throws Exception {
+//        long timer0 = System.currentTimeMillis();
+        // Treat special case: at least one input relation is empty
+        for (int tableCtr=0; tableCtr<nrJoined; ++tableCtr) {
+            if (cardinalities[tableCtr]==0) {
+                isFinished = true;
+                return 1;
+            }
+        }
+//        System.arraycopy(new int[]{4, 5, 0, 1, 2, 3}, 0, order, 0, nrJoined);
+//        splitTable = 2;
+        this.roundCtr = roundCtr;
+        slowest = false;
+        // Lookup or generate left-deep query plan
+        JoinOrder joinOrder = new JoinOrder(order);
+        int splitHash = nrThreads == 1 ? 0 : plan.splitStrategies[splitTable];
+        // Execute from ing state, save progress, return progress
+        State state = threadTracker.continueFrom(joinOrder, splitHash);
+        System.arraycopy(tracker.tableOffset, 0, offsets, 0, nrJoined);
+        if (slowState != null && state.isAhead(order, slowState, nrJoined)) {
+            System.arraycopy(slowState.tupleIndices, 0, state.tupleIndices, 0, nrJoined);
+        }
+        if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
+            writeLog("Round: " + roundCtr + "\tJoin Order: " +
+                    Arrays.toString(order) + "\tSplit: " + splitTable);
+            writeLog("Start progress: " + state + " Slow: " + slowState);
+        }
+//        long timer2 = System.currentTimeMillis();
+        boolean forward = false;
+        for (int i = 0; i < nrJoined; i++) {
+            int table = order[i];
+            if (!forward) {
+                if (state.tupleIndices[table] < offsets[table]) {
+                    state.tupleIndices[table] = offsets[table];
+                    forward = true;
+                    state.lastIndex = Math.min(state.lastIndex, i);
+                }
+            }
+            else {
+                state.tupleIndices[table] = Math.max(0, offsets[table]);
+            }
+        }
+        executeWithBudget(plan, splitTable, state, offsets, tid);
+//        long timer3 = System.currentTimeMillis();
+//        writeLog((timer2 - timer1) + "\t" + (timer3 - timer2));
+        largeTable = splitTable;
+
+        // Estimate sequential statistics
+        int firstEligibleCtr = 0;
+        for (int joinCtr = 0; joinCtr < nrJoined; joinCtr++) {
+            int table = order[joinCtr];
+            int sizeForSeq = nrVisits[table];
+            if (sizeForSeq > nrThreads &&
+                    !query.temporaryTables.contains(table)) {
+                firstEligibleCtr = joinCtr;
+                break;
+            }
+        }
+
+        double progress = Integer.MIN_VALUE;
+        StringBuilder progressLog = new StringBuilder();
+        int largeIndex = 0;
+        for (int joinCtr = 0; joinCtr < nrJoined; joinCtr++) {
+            int table = order[joinCtr];
+            if (cardinalities[table] >= nrThreads &&
+                    !query.temporaryTables.contains(table)
+                    && nrVisits[table] > nrThreads) {
+                double tableProgress = getSplitTableReward(order, joinCtr, firstEligibleCtr);
+                progressLog.append("|").append(table).append("|").append(tableProgress);
+                if (tableProgress > progress) {
+                    progress = tableProgress;
+                    largeTable = table;
+                    largeIndex = joinCtr;
+                }
+            }
+        }
+
+        double reward = reward(joinOrder.order, tupleIndexDelta, offsets, state.tupleIndices);
+        // Get the first table whose cardinality is larger than 1.
+        int firstTable = getFirstLargeTable(order);
+//        int firstTable = order[0];
+        if (!state.isFinished()) {
+            state.roundCtr = 0;
+            threadTracker.updateProgress(joinOrder, splitHash, state,
+                    roundCtr, firstTable);
+        }
+        lastState = state;
+        state.tid = tid;
+        lastTable = splitTable;
+        noProgressOnSplit = nrVisits[splitTable] == 0;
+        if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
+            writeLog("Visit: " + Arrays.toString(nrVisits) + "\tLarge: " + largeTable + "\t" + progressLog +
+                    "\t" + Arrays.toString(downOps) + "\t" + Arrays.toString(upOps));
+            writeLog("End: " + state + "\tReward: " + reward + "\tLevel: " + deepIndex
+                    + "\tTime: " + System.nanoTime());
         }
         return reward;
     }
 
     public double execute(int[] order, int splitTable, int roundCtr,
                           boolean[][] finishFlags, State slowState) throws Exception {
-        System.arraycopy(new int[]{4, 5, 0, 1, 2, 3}, 0, order, 0, nrJoined);
+//        System.arraycopy(new int[]{4, 5, 0, 1, 2, 3}, 0, order, 0, nrJoined);
 //        splitTable = 2;
         // Treat special case: at least one input relation is empty
         if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
@@ -385,7 +505,7 @@ public class ModJoin extends DPJoin {
 //            largeTable = nextTable;
 //        }
 
-        double reward = reward(joinOrder.order, tupleIndexDelta, offsets);
+        double reward = reward(joinOrder.order, tupleIndexDelta, offsets, state.tupleIndices);
         // Get the first table whose cardinality is larger than 1.
         int firstTable = getFirstLargeTable(order);
         if (!state.isFinished()) {
@@ -625,6 +745,8 @@ public class ModJoin extends DPJoin {
             nextTable = joinOrder[curIndex];
             nextCardinality = cardinalities[nextTable];
             tupleIndices[nextTable] += 1;
+            // Update statistics
+            this.nrVisits[nextTable] = cardinalities[nextTable];
             downOps[nextTable]++;
         }
         return curIndex;

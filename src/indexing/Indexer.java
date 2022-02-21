@@ -55,8 +55,21 @@ public class Indexer {
 	public static Index partitionIndex(ColumnRef colRef, ColumnRef queryRef, PartitionIndex oldIndex,
 									  boolean isPrimary, boolean isSeq, boolean sorted) throws Exception {
 		// Check if index already exists
-		int nrThreads = ParallelConfig.PARALLEL_SPEC == 18 ?
-				Math.max(1, ParallelConfig.EXE_THREADS - ParallelConfig.SEARCH_THREADS): ParallelConfig.EXE_THREADS;
+		int nrThreads;
+		switch (ParallelConfig.PARALLEL_SPEC) {
+			case 18: {
+				nrThreads = Math.max(1, ParallelConfig.EXE_THREADS - ParallelConfig.SEARCH_THREADS);
+				break;
+			}
+			case 0: {
+				nrThreads = Math.max(1, ParallelConfig.EXE_THREADS - 1);
+				break;
+			}
+			default: {
+				nrThreads = ParallelConfig.EXE_THREADS;
+				break;
+			}
+		}
 		if (!BufferManager.colToIndex.containsKey(colRef)) {
 			ColumnData data = BufferManager.getData(colRef);
 			if (data instanceof IntData) {

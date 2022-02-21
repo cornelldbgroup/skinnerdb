@@ -33,9 +33,9 @@ public class ThreadPool {
 //            executorService = Executors.newFixedThreadPool(nrThreads,
 //                    new AffinityThreadFactory("bg", SAME_CORE, DIFFERENT_SOCKET, ANY));
         }
-        if (preThreads > 0) {
-            preprocessingService = Executors.newFixedThreadPool(preThreads);
-        }
+//        if (preThreads > 0) {
+//            preprocessingService = Executors.newFixedThreadPool(preThreads);
+//        }
     }
 
     public static void close() {

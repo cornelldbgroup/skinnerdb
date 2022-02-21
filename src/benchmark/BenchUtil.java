@@ -102,11 +102,11 @@ public class BenchUtil {
 	 * @param benchOut	channel to benchmark file
 	 */
 	public static void writeBenchHeader(PrintWriter benchOut) {
-		benchOut.println("Query\tIsWarmup\tMillis\tPreMillis\tJoinMillis\tMatMillis\tPostMillis\t"
-				+ "FilterMillis\tIndexMillis\tGroupByMillis\tAggregateMillis\tHavingMillis\tOrderMillis\t"
-				+ "Tuples\tSamples\tLookups\tNrIndexEntries\tnrUniqueLookups\t"
-				+ "NrPlans\tJoinCard\tAvgReward\tMaxReward\tTotalWork\t"
-				+ "DataSize\tUctSize\tStateSize\tJoinSize");
+		benchOut.println("Query,IsWarmup,Millis,PreMillis,JoinMillis,MatMillis,PostMillis,"
+				+ "FilterMillis,IndexMillis,GroupByMillis,AggregateMillis,HavingMillis,OrderMillis,"
+				+ "Tuples,Samples,Lookups,NrIndexEntries,nrUniqueLookups,"
+				+ "NrPlans,JoinCard,AvgReward,MaxReward,TotalWork,"
+				+ "DataSize,UctSize,StateSize,JoinSize");
 	}
 	/**
 	 * Writes out statistics concerning last query execution
@@ -120,35 +120,35 @@ public class BenchUtil {
 	public static void writeStats(String queryName, long totalMillis, 
 			PrintWriter benchOut) {
 		// Generate output
-		benchOut.print(queryName + "\t");
-		benchOut.print(!GeneralConfig.ISTESTCASE + "\t");
-		benchOut.print(totalMillis + "\t");
-		benchOut.print(PreStats.preMillis + "\t");
-		benchOut.print(JoinStats.joinMillis + "\t");
-		benchOut.print(JoinStats.matMillis + "\t");
-		benchOut.print(PostStats.postMillis + "\t");
+		benchOut.print(queryName + ",");
+		benchOut.print(!GeneralConfig.ISTESTCASE + ",");
+		benchOut.print(totalMillis + ",");
+		benchOut.print(PreStats.preMillis + ",");
+		benchOut.print(JoinStats.joinMillis + ",");
+		benchOut.print(JoinStats.matMillis + ",");
+		benchOut.print(PostStats.postMillis + ",");
 		// Break down statistics
-		benchOut.print(PreStats.filterMillis + "\t");
-		benchOut.print(PreStats.indexMillis + "\t");
-		benchOut.print(PostStats.groupByMillis + "\t");
-		benchOut.print(PostStats.aggMillis + "\t");
-		benchOut.print(PostStats.havingMillis + "\t");
-		benchOut.print(PostStats.orderMillis + "\t");
+		benchOut.print(PreStats.filterMillis + ",");
+		benchOut.print(PreStats.indexMillis + ",");
+		benchOut.print(PostStats.groupByMillis + ",");
+		benchOut.print(PostStats.aggMillis + ",");
+		benchOut.print(PostStats.havingMillis + ",");
+		benchOut.print(PostStats.orderMillis + ",");
 		// Additional statistics
-		benchOut.print(JoinStats.nrTuples + "\t");
-		benchOut.print(JoinStats.nrSamples + "\t");
-		benchOut.print(JoinStats.nrIndexLookups + "\t");
-		benchOut.print(JoinStats.nrIndexEntries + "\t");
-		benchOut.print(JoinStats.nrUniqueIndexLookups + "\t");
-		benchOut.print(JoinStats.nrPlansTried + "\t");
-		benchOut.print(JoinStats.lastJoinCard + "\t");
-		benchOut.print(JoinStats.avgReward + "\t");
-		benchOut.print(JoinStats.maxReward + "\t");
-		benchOut.print(JoinStats.totalWork + "\t");
+		benchOut.print(JoinStats.nrTuples + ",");
+		benchOut.print(JoinStats.nrSamples + ",");
+		benchOut.print(JoinStats.nrIndexLookups + ",");
+		benchOut.print(JoinStats.nrIndexEntries + ",");
+		benchOut.print(JoinStats.nrUniqueIndexLookups + ",");
+		benchOut.print(JoinStats.nrPlansTried + ",");
+		benchOut.print(JoinStats.lastJoinCard + ",");
+		benchOut.print(JoinStats.avgReward + ",");
+		benchOut.print(JoinStats.maxReward + ",");
+		benchOut.print(JoinStats.totalWork + ",");
 		// Memory consumption statistics
-		benchOut.print(JoinStats.dataSize + "\t");
-		benchOut.print(JoinStats.treeSize + "\t");
-		benchOut.print(JoinStats.stateSize + "\t");
+		benchOut.print(JoinStats.dataSize + ",");
+		benchOut.print(JoinStats.treeSize + ",");
+		benchOut.print(JoinStats.stateSize + ",");
 		benchOut.println(JoinStats.joinSize);
 		benchOut.flush();
 	}

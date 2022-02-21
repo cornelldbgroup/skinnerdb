@@ -663,22 +663,22 @@ public class SkinnerCmd {
         System.out.println("SkinnerMT is using " +
                 ParallelConfig.EXE_THREADS + " threads.");
 //        processInput("exec ./imdb/queries/33c.sql");
-        processInput("exec ./jcch/queries/q07.sql");
+//        processInput("exec ./jcch/queries/q07.sql");
         // Command line processing
-//        System.out.println("Enter 'help' for help and 'quit' to exit");
-//        Scanner scanner = new Scanner(System.in);
-//        boolean continueProcessing = true;
-//        while (continueProcessing) {
-//            System.out.print("> ");
-//            String input = scanner.nextLine();
-//            try {
-//                continueProcessing = processInput(input);
-//            } catch (Exception e) {
-//                System.err.println("Error processing command: ");
-//                e.printStackTrace();
-//            }
-//        }
-//        scanner.close();
+        System.out.println("Enter 'help' for help and 'quit' to exit");
+        Scanner scanner = new Scanner(System.in);
+        boolean continueProcessing = true;
+        while (continueProcessing) {
+            System.out.print("> ");
+            String input = scanner.nextLine();
+            try {
+                continueProcessing = processInput(input);
+            } catch (Exception e) {
+                System.err.println("Error processing command: ");
+                e.printStackTrace();
+            }
+        }
+        scanner.close();
         ThreadPool.close();
     }
 }

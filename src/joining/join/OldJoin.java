@@ -216,7 +216,7 @@ public class OldJoin extends MultiWayJoin {
         // at each iteration start, tuple indices contain next tuple
         // combination to look at.
         while (remainingBudget > 0 && joinIndex >= 0) {
-        	++JoinStats.nrIterations;
+//        	++JoinStats.nrIterations;
         	//log("Offsets:\t" + Arrays.toString(offsets));
         	//log("Indices:\t" + Arrays.toString(tupleIndices));
             // Get next table in join order
@@ -231,7 +231,7 @@ public class OldJoin extends MultiWayJoin {
             if ((PreConfig.PRE_FILTER || unaryPred == null || 
             		unaryPred.evaluate(tupleIndices)>0) &&
             		evaluateAll(applicablePreds.get(joinIndex), tupleIndices)) {
-            	++JoinStats.nrTuples;
+//            	++JoinStats.nrTuples;
                 // Do we have a complete result row?
                 if(joinIndex == plan.joinOrder.order.length - 1) {
                     // Complete result row -> add to result

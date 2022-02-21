@@ -191,7 +191,8 @@ public class DPNode {
      * @param parent      parent node in UCT tree
      * @param joinedTable new joined table
      */
-    public DPNode(long roundCtr, DPNode parent, int joinedTable, int[] joinOrder, int[] cardinalities) {
+    public DPNode(long roundCtr, DPNode parent, int joinedTable,
+                  int[] joinOrder, int[] cardinalities) {
         // Count node generation
         createdIn = roundCtr;
         treeLevel = parent.treeLevel + 1;
@@ -253,13 +254,22 @@ public class DPNode {
         else {
             recommendedActions = new HashSet<>();
             for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
-                recommendedActions.add(actionCtr);
+                int table = nextTable[actionCtr];
+                if (!query.temporaryTables.contains(table)) {
+                    recommendedActions.add(actionCtr);
+                }
+            }
+            if (recommendedActions.isEmpty()) {
+                // add all actions to recommended actions
+                for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
+                    recommendedActions.add(actionCtr);
+                }
             }
         }
 
         List<Integer> priorityActions = new ArrayList<>();
         for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
-            if (!useHeuristic || recommendedActions.contains(actionCtr)) {
+            if (recommendedActions.contains(actionCtr)) {
                 priorityActions.add(actionCtr);
             }
         }
@@ -267,56 +277,6 @@ public class DPNode {
         this.prioritySet = new LinkedList[nrThreads];
         for (int i = 0; i < nrThreads; i++) {
             prioritySet[i] = new LinkedList<>(priorityActions);
-        }
-
-//        this.prioritySet = new ConcurrentLinkedDeque<>(priorityActions);
-
-
-        if (nrActions == 0) {
-            // initialize tree node
-            tableRoot =  new BaseUctInner(null, -1, nrTables, nrThreads);
-            int end = Math.min(5, joinOrder.length);
-            for (int i = 0; i < end; i++) {
-                int table = joinOrder[i];
-                if (cardinalities[table] >= ParallelConfig.PARTITION_SIZE && !query.temporaryTables.contains(table)) {
-                    tableRoot.expand(table, true, nrThreads);
-                }
-            }
-//            DPNode node = parent;
-//            BaseUctNode child = null;
-//            DPNode firstNode = null;
-//            while (node.parent != null) {
-//                int table = joinOrder[node.treeLevel - 1];
-//                if (cardinalities[table] >= ParallelConfig.PARTITION_SIZE
-//                        && node.treeLevel <= 5 && node.treeLevel > 1 && !query.temporaryTables.contains(table)) {
-//                    child = tableRoot.expandFirst(table, true, nrThreads);
-//                    firstNode = node;
-//                }
-//                node = node.parent;
-//            }
-            // retrieve rewards
-//            if (firstNode != null) {
-//                DPNode nodeParent = firstNode.parent;
-//                int firstTable = joinOrder[firstNode.treeLevel - 1];
-//                int action = -1;
-//                for (int i = 0; i < nodeParent.nextTable.length; i++) {
-//                    if (nodeParent.nextTable[i] == firstTable) {
-//                        action = i;
-//                        break;
-//                    }
-//                }
-//                double rewards = 0;
-//                int visits = 0;
-//                for (int t = 0; t < nrThreads; t++) {
-//                    NodeStatistics threadStats = nodeParent.nodeStatistics[t];
-//                    visits += threadStats.nrTries[action];
-//                    rewards += threadStats.accumulatedReward[action];
-//                }
-//                child.accumulatedReward = rewards;
-//                tableRoot.accumulatedReward = rewards;
-//                child.nrVisits = visits;
-//                tableRoot.nrVisits = visits;
-//            }
         }
 
         // initialize read-write lock for DPDsync
@@ -476,28 +436,55 @@ public class DPNode {
                     joinOrder[posCtr] = found;
                 }
             }
+        }
+        else if (query.temporaryTables.size() > 0) {
+            Set<Integer> newlyJoined = new HashSet<>(joinedTables);
+            newlyJoined.add(lastTable);
+            // Iterate over join order positions to fill
+            List<Integer> unjoinedTablesShuffled = new ArrayList<>(unjoinedTables);
+            Collections.shuffle(unjoinedTablesShuffled, ThreadLocalRandom.current());
+            for (int posCtr = treeLevel + 1; posCtr < nrTables; ++posCtr) {
+                boolean foundTable = false;
+                for (int table : unjoinedTablesShuffled) {
+                    if (!newlyJoined.contains(table) &&
+                            (query.connected(newlyJoined, table))) {
+                        joinOrder[posCtr] = table;
+                        newlyJoined.add(table);
+                        foundTable = true;
+                        break;
+                    }
+                }
+                int found = -1;
+                if (!foundTable) {
+                    for (int table : unjoinedTablesShuffled) {
+                        if (!newlyJoined.contains(table)) {
+                            found = table;
+                            joinOrder[posCtr] = table;
+                            newlyJoined.add(table);
+                            foundTable = true;
+                            break;
+                        }
+                    }
+                }
+                if (!foundTable) {
+                    joinOrder[posCtr] = found;
+                }
+            }
         } else {
             // Shuffle remaining tables
-            Collections.shuffle(unjoinedTables);
-            Iterator<Integer> unjoinedTablesIter = unjoinedTables.iterator();
+            List<Integer> unjoinedTablesShuffled = new ArrayList<>(unjoinedTables);
+            Collections.shuffle(unjoinedTablesShuffled, ThreadLocalRandom.current());
+            Iterator<Integer> unjoinedTablesIter = unjoinedTablesShuffled.iterator();
             // Fill in remaining join order positions
             for (int posCtr = treeLevel + 1; posCtr < nrTables; ++posCtr) {
-//                if (!unjoinedTablesIter.hasNext()) {
-//                    System.out.println(Arrays.toString(unjoinedTables.toArray()));
-//                    System.out.println(Arrays.toString(joinedTables.toArray()));
-//                }
                 int nextTable = unjoinedTablesIter.next();
                 while (nextTable == lastTable) {
-//                    System.out.println(Arrays.toString(unjoinedTables.toArray()));
-//                    System.out.println(Arrays.toString(joinedTables.toArray()));
-//                    System.out.println(Arrays.toString(joinOrder));
-//                    System.out.println(lastTable);
                     nextTable = unjoinedTablesIter.next();
                 }
                 joinOrder[posCtr] = nextTable;
             }
         }
-
+//        System.arraycopy(new int[]{6, 11, 13, 12, 7, 2, 3, 4, 1, 9, 0, 8, 5, 10}, 0, joinOrder, 0, nrTables);
         int splitTable = getSplitTableByCard(joinOrder, joinOp.cardinalities);
         double reward = joinOp.execute(joinOrder, splitTable, (int) roundCtr);
 
@@ -519,7 +506,7 @@ public class DPNode {
         if (nrActions == 0) {
             if (ParallelConfig.HEURISTIC_SHARING) {
                 // Initialize table nodes
-//                joinOrder = new int[]{8, 2, 5, 7, 3, 9, 1, 6, 4, 0};
+//                System.arraycopy(new int[]{6, 11, 13, 12, 7, 2, 3, 4, 1, 9, 0, 8, 5, 10}, 0, joinOrder, 0, nrTables);
                 int splitTable = getSplitTableByCard(joinOrder, joinOp.cardinalities);
                 double reward = joinOp.execute(joinOrder, splitTable, (int) roundCtr);
                 return reward;
@@ -662,7 +649,7 @@ public class DPNode {
 //            }
 //        }
         int splitLen = 5;
-        int splitSize = ParallelConfig.PARTITION_SIZE;
+        int splitSize = JoinConfig.AVOID_CARTESIAN ? ParallelConfig.PARTITION_SIZE : ParallelConfig.PARTITION_SIZE / 10;
 //        int splitSize = 53000;
         int splitTable = joinOrder[0];
         if (ParallelConfig.PARALLEL_SPEC == 11) {
@@ -679,9 +666,8 @@ public class DPNode {
             }
             return splitTable;
         }
-        int end = Math.min(splitLen, nrTables);
         int start = nrTables <= splitLen + 1 ? 0 : 1;
-        for (int i = start; i < end; i++) {
+        for (int i = start; i < nrTables; i++) {
             int table = joinOrder[i];
             int cardinality = cardinalities[table];
             if (cardinality >= splitSize && !query.temporaryTables.contains(table)) {

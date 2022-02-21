@@ -1,6 +1,7 @@
 package operators;
 
 import java.util.*;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
@@ -25,12 +26,15 @@ import indexing.Index;
 import joining.parallel.indexing.DoublePartitionIndex;
 import joining.parallel.indexing.IntPartitionIndex;
 import joining.parallel.indexing.PartitionIndex;
+import joining.parallel.parallelization.search.SearchResult;
 import joining.parallel.threads.ThreadPool;
 import predicate.NonEquiNode;
 import predicate.NonEquiNodesTest;
 import query.ColumnRef;
 import query.QueryInfo;
 import types.JavaType;
+
+import javax.swing.text.html.StyleSheet;
 
 /**
  * Filters a table by applying a unary predicate.
@@ -109,7 +113,8 @@ public class Filter {
 	 * @return				list of satisfying row indices
 	 */
 	public static List<Integer> executeToList(IndexFilter filter,
-			String tableName, Map<ColumnRef, ColumnRef> columnMapping, QueryInfo query, List<ColumnRef> requiredCols)
+											  String tableName, Map<ColumnRef, ColumnRef> columnMapping,
+											  QueryInfo query, List<ColumnRef> requiredCols)
 					throws Exception {
 		ExpressionInfo unaryPred = filter.remainingInfo;
 		// Load required columns for predicate evaluation
@@ -242,6 +247,87 @@ public class Filter {
 		return result;
 	}
 	/**
+	 * Returns list of indices of rows satisfying given
+	 * unary predicate.s
+	 *
+	 * @param tableName		name of DB table to which predicate applies
+	 * @param columnMapping	maps query columns to buffered columns -
+	 * 						assume identity mapping if null is specified.
+	 * @return				array of satisfying row indices
+	 */
+	public static int[] executeToArray(IndexFilter filter,
+											  String tableName, Map<ColumnRef, ColumnRef> columnMapping,
+											   QueryInfo query, List<ColumnRef> requiredCols)
+			throws Exception {
+		ExpressionInfo unaryPred = filter.remainingInfo;
+		// Load required columns for predicate evaluation
+		loadPredCols(unaryPred, columnMapping);
+		// Compile unary predicate for fast evaluation
+		UnaryBoolEval unaryBoolEval = compilePred(unaryPred, columnMapping);
+		// Get cardinality of table referenced in predicate
+		int cardinality = CatalogManager.getCardinality(tableName);
+		// Initialize filter result
+		int[] result;
+//		long s3 = System.currentTimeMillis();
+		// Choose between sequential and joining.parallel processing
+		if (cardinality <= ParallelConfig.PRE_BATCH_SIZE || !GeneralConfig.isParallel) {
+			RowRange allTuples = new RowRange(0, cardinality - 1);
+			result = filterBatch(unaryBoolEval, allTuples).stream().mapToInt(Integer::intValue).toArray();
+		} else {
+			// Divide tuples into batches
+			int nrThreads = 200;
+			ExecutorService executorService = ThreadPool.executorService;
+			ColumnRef columnRef = columnMapping.get(unaryPred.columnsMentioned.iterator().next());
+			ColumnData data = BufferManager.getData(columnRef);
+			List<Callable<int[]>> tasks = new ArrayList<>(nrThreads);
+			int base = cardinality / nrThreads;
+			int remainingTuples = cardinality - base * nrThreads;
+			for (int threadCtr = 0; threadCtr < nrThreads; threadCtr++) {
+				int prevRemaining = Math.min(remainingTuples, threadCtr);
+				int first = threadCtr * base + prevRemaining;
+				int end = first + base + (threadCtr < remainingTuples ? 1 : 0);
+				int size = end - first;
+				tasks.add(() -> {
+					int[] subResult = new int[size+1];
+					// Evaluate predicate for each table row
+//					long start = System.currentTimeMillis();
+					int count = 0;
+					for (int rowCtr = first; rowCtr < end; ++rowCtr) {
+						if (data.longForRow(rowCtr) != Integer.MIN_VALUE
+								&& unaryBoolEval.evaluate(rowCtr) > 0) {
+							subResult[count+1] = rowCtr;
+							count++;
+						}
+					}
+					subResult[0] = count;
+//					long terminate = System.currentTimeMillis();
+//					System.out.println(Thread.currentThread() + ":" + (terminate - start) + " " + size);
+					return subResult;
+				});
+			}
+			long executionStart = System.currentTimeMillis();
+			List<Future<int[]>> futures = executorService.invokeAll(tasks);
+			long executionEnd = System.currentTimeMillis();
+			System.out.println("Parallel Execution: " + (executionEnd - executionStart));
+			int totalSize = 0;
+			List<int[]> threadResults = new ArrayList<>(nrThreads);
+			for (int threadCtr = 0; threadCtr < nrThreads; threadCtr++) {
+				int[] threadResult = futures.get(threadCtr).get();
+				totalSize += threadResult[0];
+				threadResults.add(threadResult);
+			}
+			result = new int[totalSize];
+			int prefix = 0;
+			for (int[] threadResult: threadResults) {
+				int nrTuples = threadResult[0];
+				System.arraycopy(threadResult, 1, result, prefix, nrTuples);
+				prefix += nrTuples;
+			}
+
+		}
+		return result;
+	}
+	/**
 	 * Splits table with given cardinality into tuple batches
 	 * according to the configuration for joining.parallel processing.
 	 * 
@@ -319,31 +405,6 @@ public class Filter {
 			if (unaryBoolEval.evaluate(rowCtr) > 0) {
 				result.add(rowCtr);
 			}
-		}
-		return result;
-	}
-
-	static SimpleLinkedList<Integer> filterSimpleBatch(UnaryBoolEval unaryBoolEval,
-									 RowRange rowRange) {
-		SimpleLinkedList<Integer> result = new SimpleLinkedList<>();
-		// Evaluate predicate for each table row
-//		long s1 = System.currentTimeMillis();
-		for (int rowCtr=rowRange.firstTuple;
-			 rowCtr<=rowRange.lastTuple; ++rowCtr) {
-			if (unaryBoolEval.evaluate(rowCtr) > 0) {
-				result.add(rowCtr);
-			}
-		}
-//		long s2 = System.currentTimeMillis();
-//		System.out.println("Start: " + rowRange.firstTuple + "\tTime: " + (s2 - s1));
-		return result;
-	}
-
-	static List<Integer> filterBatch(UnaryBoolEval unaryBoolEval, int rowCtr) {
-		List<Integer> result = new ArrayList<Integer>();
-		// Evaluate predicate for each table row
-		if (unaryBoolEval.evaluate(rowCtr) > 0) {
-			result.add(rowCtr);
 		}
 		return result;
 	}

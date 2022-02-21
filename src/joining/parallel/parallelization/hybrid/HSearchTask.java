@@ -103,7 +103,7 @@ public class HSearchTask implements Callable<SearchResult> {
             nextJoinOrder.updateAndGet(prevPlan -> prevPlan == null || firstReward > prevPlan.reward
                     || tid == prevPlan.tid ?
                     new JoinPlan(optimalJoinOrder, nrDPThreadsPerSpace,
-                            nrJoined, firstReward, tid) : prevPlan);
+                            nrJoined, firstReward, tid, null) : prevPlan);
             // Count reward except for final sample
             if (!this.joinOp.isFinished()) {
                 accReward += reward;

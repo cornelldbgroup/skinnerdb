@@ -129,6 +129,7 @@ public class JoinProcessor {
 			double reward = root.sample(roundCtr, joinOrder, policy);
 			if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
 				joinOp.logs.add("Round: " + roundCtr + "\tJoin order: " + Arrays.toString(joinOrder));
+				joinOp.logs.add("Reward: " + reward);
 			}
 			// Count reward except for final sample
 			if (!joinOp.isFinished()) {

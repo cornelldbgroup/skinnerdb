@@ -89,4 +89,8 @@ public class JoinConfig {
 	 * Whether to avoid cartesian product.
 	 */
 	public static final boolean AVOID_CARTESIAN = true;
+	/**
+	 * Whether to avoid redundant intermediate results for minmax queries.
+	 */
+	public static final boolean EARLY_AGGREGATION = false;
 }

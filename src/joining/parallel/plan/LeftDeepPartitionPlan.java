@@ -36,7 +36,6 @@ public class LeftDeepPartitionPlan {
 	 * table which do not satisfy equality join predicates).
 	 */
 	public final List<List<JoinPartitionIndexWrapper>> joinIndices;
-
 	/**
 	 * Associates join order positions with applicable
 	 * predicates (null if no new predicate is applicable).
@@ -60,7 +59,8 @@ public class LeftDeepPartitionPlan {
 	 * @param joinOrder		join order
 	 * @throws Exception
 	 */
-	public LeftDeepPartitionPlan(QueryInfo query, Map<Expression, NonEquiNode> evalMap, JoinOrder joinOrder)
+	public LeftDeepPartitionPlan(QueryInfo query, Map<Expression, NonEquiNode> evalMap,
+								 JoinOrder joinOrder)
 					throws Exception {
 		// Count generated plan
 		int nrTables = query.nrJoined;

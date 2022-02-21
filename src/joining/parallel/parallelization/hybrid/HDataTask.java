@@ -4,10 +4,10 @@ import config.JoinConfig;
 import config.ParallelConfig;
 import joining.parallel.join.ModJoin;
 import joining.parallel.parallelization.search.SearchResult;
-import joining.parallel.uct.NSPNode;
-import joining.plan.JoinOrder;
+import joining.progress.State;
 import joining.result.ResultTuple;
-import joining.uct.SelectionPolicy;
+import org.apache.commons.lang3.tuple.ImmutablePair;
+import org.apache.commons.lang3.tuple.Pair;
 import preprocessing.Context;
 import query.QueryInfo;
 
@@ -67,19 +67,54 @@ public class HDataTask implements Callable<SearchResult> {
         long timer1 = System.currentTimeMillis();
         int[] joinOrder = null;
         long roundCtr = 0;
+        int nrJoined = query.nrJoined;
         while (!isFinished.get()) {
             JoinPlan joinPlan = nextJoinOrder.get();
             if (joinPlan != null) {
                 ++roundCtr;
                 joinOrder = joinPlan.joinOrder;
-                int splitTable = getSplitTableByCard(joinOrder, joinOp.cardinalities);
-                joinOp.execute(joinOrder, splitTable, (int) roundCtr);
-                if (this.joinOp.isFinished()) {
-                    boolean isFinished = joinPlan.setFinished(tid, splitTable);
-                    if (isFinished) {
-                        this.isFinished.set(true);
-                        break;
-                    }
+                int splitTable = joinPlan.splitTable;
+                State slowestState = joinPlan.slowestState;
+                joinOp.execute(joinOrder, splitTable, (int) roundCtr, slowestState, joinPlan.plan);
+                int largeTable = joinOp.largeTable;
+                boolean threadFinished = this.joinOp.isFinished();
+                double progress = threadFinished ? Double.MAX_VALUE : (joinOp.progress + largeTable);
+                joinPlan.states[splitTable * nrThreads + tid].set(joinOp.lastState);
+                joinPlan.progress[splitTable * nrThreads + tid].set(progress);
+//                boolean isSlow = true;
+                // Whether the current state is the slowest
+//                for (int threadCtr = 0; threadCtr < nrThreads; threadCtr++) {
+//                    int threadIndex = splitTable * nrThreads + threadCtr;
+//                    double threadProgress = joinPlan.progress[threadIndex].get();
+//                    if (threadProgress < progress) {
+//                        joinOp.writeLog("Violate thread: " + threadCtr + " " + threadProgress + " " + progress);
+//                        isSlow = false;
+//                        break;
+//                    }
+//                }
+//                // Set the slowest state
+//                if (isSlow) {
+//                    State currentSlowestState = joinPlan.slowestState;
+//                    if (currentSlowestState.isAhead(joinOrder, joinOp.lastState, nrJoined)) {
+//                        joinPlan.slowestState = joinOp.lastState;
+//                    }
+//                    joinPlan.splitTable = largeTable;
+//                    joinOp.writeLog("Set split table to: " + largeTable + " with " + joinPlan.slowestState);
+//                    if (threadFinished) {
+//                        this.isFinished.set(true);
+//                        break;
+//                    }
+//                }
+
+                if (roundCtr == 1000) {
+                    isFinished.set(true);
+                    long timer2 = System.currentTimeMillis();
+                    joinOp.roundCtr = roundCtr;
+                    System.out.println("Thread " + tid + ": " + (timer2 - timer1) + "\t Round: " + roundCtr);
+                    Collection<ResultTuple> tuples = joinOp.result.getTuples();
+                    SearchResult searchResult = new SearchResult(tuples, joinOp.logs, tid);
+                    searchResult.isSearch = false;
+                    return searchResult;
                 }
             }
         }
@@ -90,32 +125,5 @@ public class HDataTask implements Callable<SearchResult> {
         SearchResult searchResult = new SearchResult(tuples, joinOp.logs, tid);
         searchResult.isSearch = false;
         return searchResult;
-    }
-    /**
-     * Get the split table candidate based on cardinalities of tables.
-     *
-     * @param joinOrder         join order
-     * @param cardinalities     cardinalities of tables
-     * @return
-     */
-    public int getSplitTableByCard(int[] joinOrder, int[] cardinalities) {
-        if (nrThreads == 1) {
-            return 0;
-        }
-        int splitLen = 5;
-        int splitSize = ParallelConfig.PARTITION_SIZE;
-        int nrJoined = query.nrJoined;
-        int splitTable = joinOrder[0];
-        int end = Math.min(splitLen, nrJoined);
-        int start = nrJoined <= splitLen + 1 ? 0 : 1;
-        for (int i = start; i < end; i++) {
-            int table = joinOrder[i];
-            int cardinality = cardinalities[table];
-            if (cardinality >= splitSize && !query.temporaryTables.contains(table)) {
-                splitTable = table;
-                break;
-            }
-        }
-        return splitTable;
     }
 }

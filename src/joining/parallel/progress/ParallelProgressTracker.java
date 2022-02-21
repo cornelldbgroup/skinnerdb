@@ -523,6 +523,31 @@ public class ParallelProgressTracker {
         }
     }
 
+    public void updateAheadProgress(JoinOrder joinOrder,
+                                 State state, State otherState, int roundCtr) {
+        // Update state for all join order prefixes
+        ThreadProgress curPrefixProgress = sharedProgress;
+        // Iterate over position in join order
+        int upperLevel = Math.min(THRESHOLD, nrTables);
+        for (int joinCtr = 0; joinCtr < upperLevel; ++joinCtr) {
+            int table = joinOrder.order[joinCtr];
+            int stateIndex = state.tupleIndices[table];
+            if (curPrefixProgress.childNodes[table] == null) {
+                curPrefixProgress.childNodes[table] = new ThreadProgress(nrTables, nrThreads,false);
+            }
+            curPrefixProgress = curPrefixProgress.childNodes[table];
+            ThreadState tableState = curPrefixProgress.latestStates[0];
+            if (tableState == null) {
+                state.roundCtr = roundCtr;
+                curPrefixProgress.latestStates[0] = new ThreadState(stateIndex, 0, roundCtr,
+                        state.lastIndex, 0, 1);
+            }
+            else {
+                tableState.updateProgress(state, stateIndex, 0, roundCtr, state.lastIndex);
+            }
+        }
+    }
+
     public State continueFromSP(JoinOrder joinOrder) {
         int[] order = joinOrder.order;
         State state = new State(nrTables);

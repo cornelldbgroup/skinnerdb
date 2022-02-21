@@ -108,7 +108,8 @@ public class OldJoin extends SPJoin {
             this.progress += pWeight * (tupleIndices[curTable] + 0.0) / curCard;
             pWeight *= 1.0 / curCard;
         }
-        return 0.5*progress + 0.5*nrResultTuples/(double)budget;
+        return JoinConfig.INPUT_REWARD_WEIGHT * progress
+                + JoinConfig.OUTPUT_REWARD_WEIGHT * nrResultTuples/(double)budget;
 //        return progress;
     }
     /**
@@ -129,7 +130,7 @@ public class OldJoin extends SPJoin {
             }
         }
 //        order = new int[]{3, 0, 1, 2, 4, 5};
-        long timer1 = System.currentTimeMillis();
+//        long timer1 = System.currentTimeMillis();
         // Lookup or generate left-deep query plan
         JoinOrder joinOrder = new JoinOrder(order);
         for (int i = 0; i < nrJoined; i++) {
@@ -142,7 +143,7 @@ public class OldJoin extends SPJoin {
             plan = new LeftDeepPartitionPlan(query, predToEval, joinOrder);
             planCache.putIfAbsent(joinHash, plan);
         }
-        long timer2 = System.currentTimeMillis();
+//        long timer2 = System.currentTimeMillis();
         // Execute from ing state, save progress, return progress
         int firstTable = getFirstLargeTable(order);
         State state = tracker.continueFromSP(joinOrder);
@@ -180,9 +181,9 @@ public class OldJoin extends SPJoin {
             }
             plan.joinIndices.get(i).forEach(index ->index.reset(state.tupleIndices));
         }
-        long timer3 = System.currentTimeMillis();
+//        long timer3 = System.currentTimeMillis();
         executeWithBudget(plan, state, offsets);
-        long timer4 = System.currentTimeMillis();
+//        long timer4 = System.currentTimeMillis();
 
         // progress in the left table.
         double reward = reward(joinOrder.order, tupleIndexDelta, offsets, state.tupleIndices);
@@ -211,20 +212,12 @@ public class OldJoin extends SPJoin {
                 quickTable = table;
             }
         }
-        if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
-            double[] progress = new double[nrJoined];
-            for (int table = 0; table < nrJoined; table++) {
-                int offsetIndex = offsets[table];
-                int cardinality = cardinalities[table];
-                progress[table] = (offsetIndex + 0.0) / cardinality;
-            }
-            writeLog("Progress: " + Arrays.toString(progress) + "\tReward: " + reward);
-        }
-        long timer5 = System.currentTimeMillis();
+//        long timer5 = System.currentTimeMillis();
         lastState = state;
 //        long timer5 = System.currentTimeMillis();
-        writeLog((timer5 - timer1) + "\t" + (timer2 - timer1) + "\t" + (timer3 - timer2)
-                + "\t" + (timer4 - timer3) + "\t" + (timer5 - timer4));
+//        writeLog((timer5 - timer1) + "\t" + (timer2 - timer1) + "\t" + (timer3 - timer2)
+//                + "\t" + (timer4 - timer3) + "\t" + (timer5 - timer4));
+        this.roundCtr = roundCtr;
         return reward;
     }
     /**
@@ -324,45 +317,24 @@ public class OldJoin extends SPJoin {
         }
         else {
             boolean first = true;
-//            long timer0 = System.currentTimeMillis();
             for (JoinPartitionIndexWrapper wrapper : indexWrappers) {
 //                long timer10 = System.currentTimeMillis();
                 if (!first) {
                     if (wrapper.evaluate(tupleIndices)) {
-//                        long timer11 = System.currentTimeMillis();
-//                        time.add("" + (timer11 - timer10));
                         continue;
                     }
                 }
-//                long timer11 = System.currentTimeMillis();
                 int nextRaw = wrapper.nextIndex(tupleIndices, null);
 //                int nextRaw = wrapper.nextIndexFromLast(tupleIndices, null, tid);
-//                long timer12 = System.currentTimeMillis();
                 if (nextRaw < 0 || nextRaw == nextCardinality) {
                     tupleIndices[nextTable] = nextCardinality;
-//                    long timer13 = System.currentTimeMillis();
-//                    time.add((timer11 - timer10) + "\t" + (timer12 - timer11) + "\t: " + (timer13 - timer12));
                     break;
                 }
                 else {
                     tupleIndices[nextTable] = nextRaw;
                 }
                 first = false;
-//                long timer13 = System.currentTimeMillis();
-//                time.add((timer11 - timer10) + "\t" + (timer12 - timer11) + "\t" + (timer13 - timer12));
             }
-//            long timer1 = System.currentTimeMillis();
-//            if (timer1 - timer0 > 100) {
-//                StringBuilder wrapperStr = new StringBuilder();
-//                for (JoinPartitionIndexWrapper wrapper: indexWrappers) {
-//                    wrapperStr.append(wrapper.toString());
-//                }
-//                for (JoinPartitionIndexWrapper wrapper : indexWrappers) {
-//                    writeLog("Index Size: " + wrapper.nrIndexed(tupleIndices));
-//                }
-//                writeLog(Arrays.toString(time.toArray()) + "\t" + (timer1 - timer0));
-//                writeLog(wrapperStr.toString());
-//            }
         }
         // Have reached end of current table? -> we backtrack.
         while (tupleIndices[nextTable] >= nextCardinality) {

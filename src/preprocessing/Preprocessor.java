@@ -146,11 +146,11 @@ public class Preprocessor {
 						//ExpressionInfo remainingPred = curUnaryPred;
 						// Filter remaining rows by remaining predicate
 						if (remainingPred != null) {
-							List<Integer> rows = filterProject(query, alias, filter,
+							filterProject(query, alias, filter,
 									curRequiredCols, preSummary);
-							if (inCached && rows.size() > 0 && rows.get(0) >= 0 && filter.qualifyingRows.size() == 0) {
-								BufferManager.indexCache.putIfAbsent(curUnaryPred.pid, rows);
-							}
+//							if (inCached && rows.size() > 0 && rows.get(0) >= 0 && filter.qualifyingRows.size() == 0) {
+//								BufferManager.indexCache.putIfAbsent(curUnaryPred.pid, rows);
+//							}
 							String filteredName = NamingConfig.FILTERED_PRE + alias;
 							size = CatalogManager.getCardinality(filteredName);
 							if (size == 0) {
@@ -427,6 +427,8 @@ public class Preprocessor {
 		// Determine rows satisfying unary predicate
 		List<Integer> satisfyingRows = Filter.executeToList(
 				filter, tableName, preSummary.columnMapping, query, requiredCols);
+//		int[] satisfyingRows = Filter.executeToArray(
+//				filter, tableName, preSummary.columnMapping, query, requiredCols);
 		if (satisfyingRows == null) {
 			List<Integer> returnedResults = new ArrayList<>();
 			returnedResults.add(-1);
@@ -438,11 +440,11 @@ public class Preprocessor {
 		for (ColumnRef colRef : requiredCols) {
 			columnNames.add(colRef.columnName);
 		}
-//		long s2 = System.currentTimeMillis();
+		long s2 = System.currentTimeMillis();
 		Materialize.execute(tableName, columnNames, 
 				satisfyingRows, null, filteredName, true);
-//		long s3 = System.currentTimeMillis();
-//		System.out.println("Materializing after filtering " + unaryPred + " took " + (s3 - s2));
+		long s3 = System.currentTimeMillis();
+		System.out.println("Materializing after filtering " + unaryPred + " took " + (s3 - s2));
 		// Update pre-processing summary
 		for (ColumnRef srcRef : requiredCols) {
 			String columnName = srcRef.columnName;

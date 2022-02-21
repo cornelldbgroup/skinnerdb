@@ -111,8 +111,6 @@ public class LockFreeParallelization extends Parallelization {
                 optimalJoins.add(modJoin);
             }
         }
-
-
     }
 
     @Override
