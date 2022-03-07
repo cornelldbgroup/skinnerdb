@@ -9,7 +9,7 @@ SkinnerDB uses reinforcement learning to decide which plans to try. It executes 
 
 # Publications
 
-**TODS 2021** [SkinnerDB: Regret-bounded query evaluation via reinforcement learning](https://dl.acm.org/doi/10.1145/3464389). _Immanuel Trummer, Junxiong Wang, Ziyun Wei, Deepak Maram, Samuel Moseley, Saehan Jo, Joseph Antonakakis, Ankush Rhayabhari_
+**TODS 2021 - Best of SIGMOD Edition** [SkinnerDB: Regret-bounded query evaluation via reinforcement learning](https://dl.acm.org/doi/10.1145/3464389). _Immanuel Trummer, Junxiong Wang, Ziyun Wei, Deepak Maram, Samuel Moseley, Saehan Jo, Joseph Antonakakis, Ankush Rhayabhari_
 
 **SIGMOD 2019** SkinnerDB: Regret-bounded query evaluation via reinforcement learning. _Immanuel Trummer, Junxiong Wang, Ziyun Wei, Deepak Maram, Samuel Moseley, Saehan Jo, Joseph Antonakakis_ **Selected for Best of SIGMOD**
 
