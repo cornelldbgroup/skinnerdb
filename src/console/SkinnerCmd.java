@@ -312,8 +312,8 @@ public class SkinnerCmd {
                     // and if this is not a benchmark run.
                     if (benchOut == null && printResult) {
                         // Display on console
-                        RelationPrinter.print(
-                                NamingConfig.FINAL_RESULT_NAME);
+//                        RelationPrinter.print(
+//                                NamingConfig.FINAL_RESULT_NAME);
                     }
                     if (queryOut != null) {
                         RelationPrinter.write(NamingConfig.FINAL_RESULT_NAME, queryOut);
@@ -626,10 +626,18 @@ public class SkinnerCmd {
         dbDir = args[0];
         // Initialize configuration file
         Configuration.initConfiguration(dbDir);
-
+        if (dbDir.contains("imdb")) {
+            PreConfig.GROUP_INDEX = false;
+        }
         // Load parameters from the command line
         if (args.length > 1) {
             ParallelConfig.EXE_THREADS = Integer.parseInt(args[1]);
+            // Threads setting for hybrid algorithm
+            ParallelConfig.SEARCH_THREADS = (int) Math.round(ParallelConfig.HYBRID_RATIO *
+                    ParallelConfig.EXE_THREADS);
+            if (args.length == 3) {
+                ParallelConfig.SEARCH_THREADS = Integer.parseInt(args[2]);
+            }
         }
         else {
             int defaultNrThreads = Runtime.getRuntime().availableProcessors();
@@ -661,9 +669,10 @@ public class SkinnerCmd {
         }
 
         System.out.println("SkinnerMT is using " +
-                ParallelConfig.EXE_THREADS + " threads.");
+                ParallelConfig.EXE_THREADS + " threads (" +
+                ParallelConfig.SEARCH_THREADS + ")");
 //        processInput("exec ./imdb/queries/33c.sql");
-//        processInput("exec ./jcch/queries/q07.sql");
+//        processInput("exec ../jcch-sf-10/queries/q03.sql");
         // Command line processing
         System.out.println("Enter 'help' for help and 'quit' to exit");
         Scanner scanner = new Scanner(System.in);

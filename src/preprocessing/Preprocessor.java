@@ -111,7 +111,6 @@ public class Preprocessor {
 				query.aliasToTable.keySet().parallelStream():
 				query.aliasToTable.keySet().stream();
 		// Iterate over query aliases
-		long filterStart = System.currentTimeMillis();
 		aliasStream.forEach(alias -> {
 			long s1 = System.currentTimeMillis();
 			// Collect required columns (for joins and post-processing) for this table
@@ -209,14 +208,10 @@ public class Preprocessor {
 			}
 			long s2 = System.currentTimeMillis();
 			if (curUnaryPred != null) {
-				System.out.println("Predicate: " + curUnaryPred.toString() + "\tSize: " + size + "\tTime: " + (s2 - s1));
+				System.out.println("Predicate: " + curUnaryPred + "\tSize: " + size + "\tTime: " + (s2 - s1));
 			}
 		});
 
-
-//		for (String alias: query.aliasToTable.keySet()) {
-//
-//		}
 		// Abort pre-processing if filtering error occurred
 		if (hadError) {
 			throw new Exception("Error in pre-processor.");
@@ -298,35 +293,45 @@ public class Preprocessor {
 		List<Expression> nonIndexedConjuncts = new ArrayList<>();
 		List<Expression> sortedConjuncts = new ArrayList<>();
 		List<Expression> unsortedConjuncts = new ArrayList<>();
+		Set<String> unsortedColumns = new HashSet<>();
+		Set<String> sortedColumns = new HashSet<>();
+		Set<String> indexedColumns = new HashSet<>();
 		for (Expression conjunct : unaryPred.conjuncts) {
 			// Re-initialize index test
 			indexTest.canUseIndex = true;
 			indexTest.constantQueue.clear();
+			indexTest.columnNames.clear();
 			indexTest.sorted = true;
+
+
 			// Compare predicate against indexes
 			conjunct.accept(indexTest);
 			// Can conjunct be evaluated only from indices?
 			if (indexTest.canUseIndex && PreConfig.CONSIDER_INDICES) {
 				if (indexTest.sorted) {
 					sortedConjuncts.add(conjunct);
+					sortedColumns.addAll(indexTest.columnNames);
 				}
 				else {
 					unsortedConjuncts.add(conjunct);
+					unsortedColumns.addAll(indexTest.columnNames);
 				}
 			} else {
 				nonIndexedConjuncts.add(conjunct);
 			}
 		}
 		if (LoggingConfig.PREPROCESSING_VERBOSE) {
-			log("Indexed:\t" + indexedConjuncts.toString() +
-					"; other: " + nonIndexedConjuncts.toString());
+			log("Indexed:\t" + indexedConjuncts +
+					"; other: " + nonIndexedConjuncts);
 		}
 		// Create remaining predicate expression
 		if (unsortedConjuncts.size() > 0) {
 			indexedConjuncts.addAll(unsortedConjuncts);
+			indexedColumns.addAll(unsortedColumns);
 			nonIndexedConjuncts.addAll(sortedConjuncts);
 		}
 		else {
+			indexedColumns.addAll(sortedColumns);
 			indexedConjuncts.addAll(sortedConjuncts);
 		}
 		Expression remainingExpr = conjunction(nonIndexedConjuncts);
@@ -334,14 +339,12 @@ public class Preprocessor {
 		if (!indexedConjuncts.isEmpty()) {
 			long indexStart = System.currentTimeMillis();
 			IndexFilter indexFilter = new IndexFilter(query);
+			indexFilter.isSameColumn = indexedColumns.size() == 1;
 			Expression indexedExpr = conjunction(indexedConjuncts);
 			indexedExpr.accept(indexFilter);
 			long indexEnd = System.currentTimeMillis();
 			// Create filtered table
 			List<Integer> rows = indexFilter.qualifyingRows.peek();
-//			if (rows.size() < 10) {
-//				System.out.println("Indexing " + unaryPred + " " + Arrays.toString(rows.toArray()) + " " + indexFilter.isFull);
-//			}
 			// Need to keep columns for evaluating remaining predicates, if any
 			ExpressionInfo remainingInfo = null;
 			String alias = unaryPred.aliasesMentioned.iterator().next();
@@ -359,8 +362,21 @@ public class Preprocessor {
 					map(c -> c.columnName).collect(Collectors.toList());
 			String targetRelName = NamingConfig.IDX_FILTERED_PRE + alias;
 			if (indexFilter.isFull) {
-				Materialize.execute(table, requiredCols, rows,
-						null, targetRelName, true);
+				if (nonIndexedConjuncts.isEmpty()) {
+					String originalTableName = query.aliasToTable.get(alias);
+					List<String> joinedColumnNames = query.indexCols.stream().
+							filter(c -> c.aliasName.equals(alias)).
+							map(c -> c.columnName).collect(Collectors.toList());
+					long s2 = System.currentTimeMillis();
+					Materialize.execute(table, requiredCols, rows,
+							null, targetRelName, true);
+					long s3 = System.currentTimeMillis();
+					System.out.println("Materializing after filtering " + unaryPred + " took " + (s3 - s2));
+				}
+				else {
+					Materialize.execute(table, requiredCols, rows,
+							null, targetRelName, true);
+				}
 			}
 			else if (!indexFilter.equalFull && rows != null && rows.size() == 1) {
 				Materialize.executeEqualPos(table, requiredCols, rows,
@@ -383,7 +399,8 @@ public class Preprocessor {
 				Materialize.executeRange(table, requiredCols, rows,
 						sort, targetRelName, true);
 				long materialEnd = System.currentTimeMillis();
-				System.out.println("Index Filter: " + (indexEnd - indexStart) + "\tMaterialization: "
+				System.out.println("Index Filter: " + (indexEnd - indexStart) +
+						"\tMaterialization: "
 						+ (materialEnd - materialStart));
 			}
 			// Update pre-processing summary
@@ -437,10 +454,15 @@ public class Preprocessor {
 		// Materialize relevant rows and columns
 		String filteredName = NamingConfig.FILTERED_PRE + alias;
 		List<String> columnNames = new ArrayList<>();
+		List<String> joinedColumnNames = new ArrayList<>();
 		for (ColumnRef colRef : requiredCols) {
 			columnNames.add(colRef.columnName);
+			if (query.indexCols.contains(colRef)) {
+				joinedColumnNames.add(colRef.columnName);
+			}
 		}
 		long s2 = System.currentTimeMillis();
+		String originalTableName = query.aliasToTable.get(alias);
 		Materialize.execute(tableName, columnNames, 
 				satisfyingRows, null, filteredName, true);
 		long s3 = System.currentTimeMillis();
@@ -473,11 +495,11 @@ public class Preprocessor {
 			throws Exception {
 		// Iterate over columns in equi-joins
 		long startMillis = System.currentTimeMillis();
-		Stream<ColumnRef> joinColStream = GeneralConfig.isParallel?
-				query.indexCols.parallelStream():
-				query.indexCols.stream();
+//		Stream<ColumnRef> joinColStream = GeneralConfig.isParallel?
+//				query.indexCols.parallelStream():
+//				query.indexCols.stream();
 
-		joinColStream.forEach(queryRef -> {
+		query.indexCols.forEach(queryRef -> {
 			try {
 				// Resolve query-specific column reference
 				ColumnRef dbRef = preSummary.columnMapping.get(queryRef);

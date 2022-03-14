@@ -9,6 +9,7 @@ import com.koloboke.collect.map.hash.HashIntIntMaps;
 import com.koloboke.collect.map.hash.HashLongIntMaps;
 import com.koloboke.collect.set.IntSet;
 import config.ParallelConfig;
+import config.PreConfig;
 import data.DoubleData;
 import predicate.Operator;
 import query.ColumnRef;
@@ -102,33 +103,22 @@ public class DoublePartitionIndex extends PartitionIndex {
             keyToPositions = HashDoubleIntMaps.newMutableMap(nrKeys);
             log(colRef + ": Number of keys:\t" + nrKeys);
             sequentialIndex(colRef, keyToNr);
-            valueToGroups = HashLongIntMaps.newMutableMap(keyToPositions.size());
-            if (positions != null) {
+            if (positions != null && PreConfig.GROUP_INDEX) {
                 groupIds = keyToPositions.values().toIntArray();
-                groupPerRow = new int[doubleData.cardinality];
-                IntStream.range(0, groupIds.length).parallel().forEach(gid -> {
-                    int pos = groupIds[gid];
-                    int values = positions[pos];
-                    for (int posCtr = pos + 1; posCtr <= pos + values; posCtr++) {
-                        int row = positions[posCtr];
-                        groupPerRow[row] = gid;
-                    }
-                });
-                for (int groupCtr = 0; groupCtr < groupIds.length; groupCtr++) {
-                    double value = data[positions[groupIds[groupCtr] + 1]];
-                    long key = Double.doubleToRawLongBits(value);
-                    valueToGroups.put(key, groupCtr);
-                }
+//                groupPerRow = new int[doubleData.cardinality];
+//                IntStream.range(0, groupIds.length).parallel().forEach(gid -> {
+//                    int pos = groupIds[gid];
+//                    int values = positions[pos];
+//                    for (int posCtr = pos + 1; posCtr <= pos + values; posCtr++) {
+//                        int row = positions[posCtr];
+//                        groupPerRow[row] = gid;
+//                    }
+//                });
             }
-            else {
-                groupPerRow = new int[doubleData.cardinality];
-                Arrays.parallelSetAll(groupPerRow, index -> index);
-                for (int groupCtr = 0; groupCtr < data.length; groupCtr++) {
-                    double value = data[groupCtr];
-                    long key = Double.doubleToRawLongBits(value);
-                    valueToGroups.put(key, groupCtr);
-                }
-            }
+//            else {
+//                groupPerRow = new int[doubleData.cardinality];
+//                Arrays.parallelSetAll(groupPerRow, index -> index);
+//            }
         }
         else {
             double[] data = doubleData.data;
@@ -686,11 +676,6 @@ public class DoublePartitionIndex extends PartitionIndex {
         sortedRow = IntStream.range(0, cardinality)
                 .boxed().sorted(Comparator.comparingDouble(i -> doubleData.data[i]))
                 .mapToInt(ele -> ele).toArray();
-    }
-
-    @Override
-    public int groupKey(long rowVal) {
-        return valueToGroups.getOrDefault(rowVal, -1);
     }
 
     @Override

@@ -64,7 +64,7 @@ public class HybridParallelization extends Parallelization {
                 threadOffsets[threadCtr][tableCtr] = new OffsetIndex();
             }
             OldJoin oldJoin = new OldJoin(query, context, budget,
-                    nrSPThreads, threadCtr, predToEval, threadOffsets);
+                    nrSPThreads, threadCtr, predToEval, threadOffsets, null);
             oldJoins.add(oldJoin);
         }
     }
@@ -86,18 +86,19 @@ public class HybridParallelization extends Parallelization {
             logs[searchCtr] = new ArrayList<>();
             OldJoin oldJoin = oldJoins.get(searchCtr);
             HSearchTask searchTask = new HSearchTask(query, context, oldJoin,
-                    searchCtr, nrSPThreads, nrDPThreads, isFinished, nextJoinOrder);
-            tasks.add(searchTask);
+                    searchCtr, nrSPThreads, nrDPThreads, isFinished, nextJoinOrder, planCache);
+            if (searchTask.runnable) {
+                tasks.add(searchTask);
+            }
         }
-        int nrSplits = query.equiJoinPreds.size() + nrJoined;
+        nrSPThreads = tasks.size();
+//        nrDPThreads = ParallelConfig.EXE_THREADS - nrSPThreads;
         ModJoin[] joins = new ModJoin[nrDPThreads];
-        ParallelProgressTracker tracker = new ParallelProgressTracker(nrJoined, nrDPThreads, nrSplits);
         for (int dataCtr = 0; dataCtr < nrDPThreads; dataCtr++) {
             logs[nrSPThreads + dataCtr] = new ArrayList<>();
             ModJoin modJoin = new ModJoin(query, context, oldJoins.get(0).budget,
                     nrDPThreads, dataCtr, oldJoins.get(0).predToEval, predToComp, planCache);
             joins[dataCtr] = modJoin;
-            modJoin.tracker = tracker;
             HDataTask dataTask = new HDataTask(query, context, modJoin,
                     dataCtr, nrDPThreads, isFinished, nextJoinOrder);
             tasks.add(dataTask);
@@ -108,35 +109,44 @@ public class HybridParallelization extends Parallelization {
         List<Future<SearchResult>> futures = executorService.invokeAll(tasks);
         long executionEnd = System.currentTimeMillis();
         JoinStats.exeTime = executionEnd - executionStart;
-        context.resultTuplesList = new ArrayList<>(nrDPThreads);
-        futures.forEach(futureResult -> {
+        int maxSize = 0;
+        context.resultTuplesList = new ArrayList<>(nrDPThreads+nrSPThreads);
+        long avgNrEpisode = 0;
+        for (int futureCtr = 0; futureCtr < tasks.size(); futureCtr++) {
             try {
-                SearchResult result = futureResult.get();
+                SearchResult result = futures.get(futureCtr).get();
                 context.resultTuplesList.add(result.result);
                 if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
                     int id = result.isSearch ? result.id : nrSPThreads + result.id;
                     logs[id] = result.logs;
                 }
                 if (!result.isSearch) {
+                    maxSize += result.result.size();
+                    context.resultTuplesList.add(result.result);
                     UniqueJoinResult uniqueJoinResult = joins[result.id].uniqueJoinResult;
+                    avgNrEpisode += joins[result.id].roundCtr;
                     if (uniqueJoinResult != null) {
                         if (context.uniqueJoinResult == null) {
                             context.uniqueJoinResult = uniqueJoinResult;
-                        }
-                        else {
+                        } else {
                             context.uniqueJoinResult.merge(uniqueJoinResult);
                         }
                     }
+                } else {
+                    Set<ResultTuple> resultTuples =
+                            new HashSet<>(oldJoins.get(result.id).concurrentList);
+                    maxSize += resultTuples.size();
+                    context.resultTuplesList.add(resultTuples);
                 }
 
             } catch (InterruptedException | ExecutionException e) {
                 e.printStackTrace();
             }
-        });
+        }
+        context.maxSize = maxSize;
         long mergeEnd = System.currentTimeMillis();
         JoinStats.mergeTime = mergeEnd - executionEnd;
-        long nrSamples = 0;
-        JoinStats.nrSamples = nrSamples;
+        JoinStats.nrSamples = avgNrEpisode / nrDPThreads;
         // Write log to the local file.
         if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
             LogUtils.writeLogs(logs, "verbose/hybrid/" + QueryStats.queryName);

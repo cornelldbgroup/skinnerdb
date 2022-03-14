@@ -46,7 +46,11 @@ public class JoinPlan {
     /**
      * The average reward of given join order.
      */
-    public final double reward;
+    public volatile double reward;
+    /**
+     * The average reward of given join order.
+     */
+    public volatile double firstReward;
     /**
      * Thread id of the join plan.
      */

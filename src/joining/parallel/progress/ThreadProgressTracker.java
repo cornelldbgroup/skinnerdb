@@ -97,7 +97,6 @@ public class ThreadProgressTracker {
         // Local id
         int threadID = 0;
 
-        int key = joinOrder.getPrefixKey(Math.min(2, nrTables));
         state.lastIndex = nrTables;
         for (int joinCtr = 0; joinCtr < nrTables; ++joinCtr) {
             int table = order[joinCtr];

@@ -96,11 +96,11 @@ public class NSPNode {
     /**
      * The start thread available for the child node.
      */
-    final int startThreads;
+    public final int startThreads;
     /**
      * The ebd thread for the child node. (exclusive)
      */
-    final int endThreads;
+    public final int endThreads;
 
     /**
      * Initialize UCT root node.
@@ -133,33 +133,43 @@ public class NSPNode {
         recommendedActions = new HashSet<>();
         // Available actions
         int nrThreads = end - start;
-        if (nrThreads <= nrActions) {
-            int baseThreads = nrActions / nrThreads;
-            int remainingActions = nrActions - baseThreads * nrThreads;
+        List<Integer> filteredActions = new ArrayList<>(nrActions);
+        // Iterate over all actions
+        for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
+            // Get table associated with (join) action
+            int table = nextTable[actionCtr];
+            if (!query.temporaryTables.contains(table)) {
+                filteredActions.add(actionCtr);
+            }
+        } // over actions
+        int nrFilteredActions = filteredActions.size();
+        if (nrThreads <= nrFilteredActions) {
+            int baseThreads = nrFilteredActions / nrThreads;
+            int remainingActions = nrFilteredActions - baseThreads * nrThreads;
             int startAction = tid * baseThreads + Math.min(remainingActions, tid);
             int endAction = startAction + baseThreads + (tid < remainingActions ? 1 : 0);
-            for (int actionCtr = startAction; actionCtr < endAction; ++actionCtr) {
-                int table = nextTable[actionCtr];
-                if (!query.temporaryTables.contains(table)) {
-                    priorityActions.add(actionCtr);
-                    recommendedActions.add(actionCtr);
-                }
+            for (int filteredActionCtr = startAction; filteredActionCtr < endAction; ++filteredActionCtr) {
+                int actionCtr = filteredActions.get(filteredActionCtr);
+                priorityActions.add(actionCtr);
+                recommendedActions.add(actionCtr);
             }
             startThreads = tid;
             endThreads = tid + 1;
         }
         else {
-            int baseActions = nrThreads / nrActions;
-            int remainingThreads = nrThreads - baseActions * nrActions;
+            int baseActions = nrThreads / nrFilteredActions;
+            int remainingThreads = nrThreads - baseActions * nrFilteredActions;
             int differentID = remainingThreads * (baseActions + 1);
             int targetAction = tid < differentID ? tid / (baseActions + 1) : (tid - remainingThreads) / baseActions;
             int startThread = baseActions * targetAction + Math.min(remainingThreads, targetAction);
             int endThread = startThread + baseActions + (targetAction < remainingThreads ? 1 : 0);
-            priorityActions.add(targetAction);
-            recommendedActions.add(targetAction);
+            int actionCtr = filteredActions.get(targetAction);
+            priorityActions.add(actionCtr);
+            recommendedActions.add(actionCtr);
             startThreads = startThread;
             endThreads = endThread;
         }
+
         Arrays.fill(accumulatedReward, 0);
     }
     /**
@@ -209,14 +219,31 @@ public class NSPNode {
             if (filteredActions.isEmpty()) {
                 // add all actions to recommended actions
                 for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
+                    int table = nextTable[actionCtr];
+                    if (!query.temporaryTables.contains(table)) {
+                        filteredActions.add(actionCtr);
+                    }
+                }
+            }
+            if (filteredActions.isEmpty()) {
+                // add all actions to recommended actions
+                for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
                     filteredActions.add(actionCtr);
                 }
             }
         } // if heuristic is used
         else {
-            // add all actions to recommended actions
             for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
-                filteredActions.add(actionCtr);
+                int table = nextTable[actionCtr];
+                if (!query.temporaryTables.contains(table)) {
+                    filteredActions.add(actionCtr);
+                }
+            }
+            if (filteredActions.isEmpty()) {
+                // add all actions to recommended actions
+                for (int actionCtr = 0; actionCtr < nrActions; ++actionCtr) {
+                    filteredActions.add(actionCtr);
+                }
             }
         }
 
@@ -226,6 +253,7 @@ public class NSPNode {
         recommendedActions = new HashSet<>();
         priorityActions = new ArrayList<>();
         int nrFilteredActions = filteredActions.size();
+
         if (nrThreads == 1) {
             for (int action : filteredActions) {
                 priorityActions.add(action);
@@ -262,10 +290,27 @@ public class NSPNode {
             endThreads = endThread + parent.startThreads;
         }
         else {
-            startThreads = tid;
-            endThreads = tid + 1;
+            startThreads = parent.startThreads;
+            endThreads = parent.endThreads;
         }
         Arrays.fill(accumulatedReward, 0);
+    }
+
+    public NSPNode spaceNode() {
+        // Initialize the node using the root
+        NSPNode node = this;
+        while (!(node.startThreads == tid && node.endThreads == tid + 1)) {
+            if (node.nrActions == 0) {
+                break;
+            }
+            int action = node.recommendedActions.iterator().next();
+            int table = node.nextTable[action];
+            if (node.childNodes[action] == null) {
+                node.childNodes[action] = new NSPNode(node.createdIn, node, table);
+            }
+            node = node.childNodes[action];
+        }
+        return node;
     }
 
 

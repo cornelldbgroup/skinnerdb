@@ -57,8 +57,7 @@ import net.sf.jsqlparser.statement.select.SubSelect;
 import query.ColumnRef;
 import query.QueryInfo;
 
-import java.util.ArrayDeque;
-import java.util.Deque;
+import java.util.*;
 
 /**
  * Verifies whether a unary predicate can be
@@ -82,6 +81,11 @@ public class IndexTest implements ExpressionVisitor {
 	 */
 	public Deque<Boolean> constantQueue =
 			new ArrayDeque<>();
+	/**
+	 * List of column names in the predicate.
+	 */
+	public Set<String> columnNames =
+			new HashSet<>();
 	/**
 	 * Whether the index is sorted.
 	 */
@@ -309,6 +313,7 @@ public class IndexTest implements ExpressionVisitor {
 		String aliasName = tableColumn.getTable().getName();
 		String tableName = query.aliasToTable.get(aliasName);
 		String columnName = tableColumn.getColumnName();
+		columnNames.add(columnName);
 		ColumnRef colRef = new ColumnRef(tableName, columnName);
 		// Check that index of right type is available
 		Index index = BufferManager.colToIndex.get(colRef);

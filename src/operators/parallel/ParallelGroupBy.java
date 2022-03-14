@@ -285,19 +285,6 @@ public class ParallelGroupBy {
         return nrGroups;
     }
 
-    public static long groupToLongBits(List<Index> sourceIndexes, List<ColumnData> sourceData, int row) {
-        long groupBits = 0;
-        int card = 1;
-        for (int groupColumn = 0; groupColumn < sourceIndexes.size(); groupColumn++) {
-            long key = sourceData.get(groupColumn).longForRow(row);
-            Index index = sourceIndexes.get(groupColumn);
-            long columnBits = index.groupKey(key);
-            groupBits += columnBits * card;
-            card *= index.groupIds.length;
-        }
-        return groupBits;
-    }
-
     public static int executeBySimpleIndex(Collection<ColumnRef> sourceRefs,
                                            ColumnRef targetRef, QueryInfo query, Context context) throws Exception {
         // Register result column
@@ -418,6 +405,7 @@ public class ParallelGroupBy {
         for (ColumnRef srcRef : sourceRefs) {
             sourceCols.add(BufferManager.getData(srcRef));
         }
+        System.out.println("[Optimize]: " + targetRef);
         // Fill result column
         int[] groupSrc = index.groupPerRow;
         System.arraycopy(groupSrc, 0, groupData.data, 0, cardinality);

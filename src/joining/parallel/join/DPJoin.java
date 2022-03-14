@@ -172,7 +172,7 @@ public abstract class DPJoin {
         this.tid = tid;
         this.statsInstance = new StatsInstance();
         this.logs = new ArrayList<>();
-        int nrSplits = query.equiJoinPreds.size() + nrJoined;
+        int nrSplits = query.equiJoinPreds.size() * 2 + nrJoined;
         this.threadTracker = new ThreadProgressTracker(nrJoined, nrSplits);
         for (Map.Entry<String, Integer> entry :
                 query.aliasToIndex.entrySet()) {

@@ -27,4 +27,8 @@ public class PreConfig {
 	 * Whether to write filtered rows in the cache.
 	 */
 	public static final boolean PROCESS_KEYS = false;
+	/**
+	 * Whether to create index for groupby clause.
+	 */
+	public static boolean GROUP_INDEX = true;
 }

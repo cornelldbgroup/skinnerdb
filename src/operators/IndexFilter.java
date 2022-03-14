@@ -1,6 +1,7 @@
 package operators;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 import buffer.BufferManager;
 import com.google.common.primitives.Ints;
@@ -20,6 +21,8 @@ import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
 import net.sf.jsqlparser.expression.operators.conditional.OrExpression;
 import net.sf.jsqlparser.expression.operators.relational.*;
 import net.sf.jsqlparser.schema.Column;
+import org.apache.commons.lang3.tuple.ImmutablePair;
+import org.apache.commons.lang3.tuple.Pair;
 import org.objectweb.asm.Opcodes;
 import query.ColumnRef;
 import query.QueryInfo;
@@ -46,8 +49,15 @@ public class IndexFilter extends PlainVisitor {
 	 * Contains indexes of all rows satisfying
 	 * the predicate.
 	 */
-	public final Deque<List<Integer>> qualifyingRows = 
+	public final Deque<List<Integer>> qualifyingRows =
 			new ArrayDeque<>();
+	/**
+	 * Contains column names involved for the predicate.
+	 */
+	public boolean isSameColumn = false;
+	public boolean lazyMaterialization = false;
+	public int level = 0;
+	public final List<Pair<IntPartitionIndex, Integer>> lazyInformation = new ArrayList<>();
 	/**
 	 * Contains last extracted integer constants.
 	 */
@@ -146,50 +156,99 @@ public class IndexFilter extends PlainVisitor {
 	public void visit(OrExpression or) {
 		isFull = true;
 		equalFull = true;
+		lazyMaterialization = isSameColumn;
+		int level = this.level;
+		this.level++;
 		or.getLeftExpression().accept(this);
 		or.getRightExpression().accept(this);
-		// Merge sorted row index lists
-		List<Integer> rows1 = qualifyingRows.pop();
-		List<Integer> rows2 = qualifyingRows.pop();
-		resultType = 0;
-		if (rows1.isEmpty()) {
-			qualifyingRows.push(rows2);
-		} else if (rows2.isEmpty()) {
-			qualifyingRows.push(rows1);
-		} else {
-			Iterator<Integer> row1iter = rows1.iterator();
-			Iterator<Integer> row2iter = rows2.iterator();
-			int row1 = row1iter.next();
-			int row2 = row2iter.next();
-			if (row1 == Integer.MAX_VALUE - 1) {
+		if (lazyMaterialization) {
+			if (level == 0) {
+				int size = 0;
+				for (Pair<IntPartitionIndex, Integer> pair: lazyInformation) {
+					IntPartitionIndex index = pair.getKey();
+					int pos = pair.getValue();
+					if (pos >= 0) {
+						if (index.unique) {
+							size += 1;
+						}
+						else {
+							int nr = index.positions[pos];
+							size += nr;
+						}
+					}
+
+				}
+				int[] allResults = new int[size];
+				int start = 0;
+				for (Pair<IntPartitionIndex, Integer> pair: lazyInformation) {
+					int pos = pair.getValue();
+					IntPartitionIndex index = pair.getKey();
+					if (pos >= 0) {
+						if (index.unique) {
+							allResults[start] = pos;
+							start += 1;
+						}
+						else {
+							int[] positions = index.positions;
+							int nr = positions[pos];
+							System.arraycopy(positions, pos + 1, allResults, start, nr);
+							start += nr;
+						}
+					}
+				}
+				Arrays.parallelSort(allResults, 0, size);
+				// Both input lists are non-empty
+				List<Integer> mergedRows = Arrays.stream(allResults).boxed()
+						.collect(Collectors.toList());;
+				qualifyingRows.push(mergedRows);
+			}
+		}
+		else {
+			// Merge sorted row index lists
+			List<Integer> rows1 = qualifyingRows.pop();
+			List<Integer> rows2 = qualifyingRows.pop();
+			resultType = 0;
+
+			if (rows1.isEmpty()) {
 				qualifyingRows.push(rows2);
-				return;
-			}
-
-			if (row2 == Integer.MAX_VALUE - 1) {
+			} else if (rows2.isEmpty()) {
 				qualifyingRows.push(rows1);
-				return;
-			}
+			} else {
 
-			// Both input lists are non-empty
-			List<Integer> mergedRows = new ArrayList<>(rows1.size() + rows2.size());
-			qualifyingRows.push(mergedRows);
-			// Assume that tables contain at most Integer.MAX_VALUE - 1 elements
-			while (row1 != Integer.MAX_VALUE || 
-					row2 != Integer.MAX_VALUE) {
-				if (row1 < row2) {
-					mergedRows.add(row1);
-					row1 = row1iter.hasNext()?row1iter.next():Integer.MAX_VALUE;
-				} else if (row2 < row1) {
-					mergedRows.add(row2);
-					row2 = row2iter.hasNext()?row2iter.next():Integer.MAX_VALUE;
-				} else {
-					// row1 == row2
-					mergedRows.add(row1);
-					if (row1iter.hasNext()) {
-						row1 = row1iter.next();
+				Iterator<Integer> row1iter = rows1.iterator();
+				Iterator<Integer> row2iter = rows2.iterator();
+				int row1 = row1iter.next();
+				int row2 = row2iter.next();
+				if (row1 == Integer.MAX_VALUE - 1) {
+					qualifyingRows.push(rows2);
+					return;
+				}
+
+				if (row2 == Integer.MAX_VALUE - 1) {
+					qualifyingRows.push(rows1);
+					return;
+				}
+
+				// Both input lists are non-empty
+				List<Integer> mergedRows = new ArrayList<>(rows1.size() + rows2.size());
+				qualifyingRows.push(mergedRows);
+				// Assume that tables contain at most Integer.MAX_VALUE - 1 elements
+				while (row1 != Integer.MAX_VALUE ||
+						row2 != Integer.MAX_VALUE) {
+					if (row1 < row2) {
+						mergedRows.add(row1);
+						row1 = row1iter.hasNext()?row1iter.next():Integer.MAX_VALUE;
+					} else if (row2 < row1) {
+						mergedRows.add(row2);
+						row2 = row2iter.hasNext()?row2iter.next():Integer.MAX_VALUE;
 					} else {
-						row2 = row2iter.next();
+						// row1 == row2
+						mergedRows.add(row1);
+						if (row1iter.hasNext()) {
+							row1 = row1iter.next();
+						} else {
+							row2 = row2iter.next();
+						}
 					}
 				}
 			}
@@ -206,48 +265,29 @@ public class IndexFilter extends PlainVisitor {
 		int constant = extractedConstants.pop();
 		IntPartitionIndex index = (IntPartitionIndex) applicableIndices.pop();
 		int startPos = index.keyToPositions.getOrDefault(constant, -1);
-//		if (!equalFull) {
-//			// Collect indices of satisfying rows via index
-//			List<Integer> rows = new ArrayList<>();
-//			qualifyingRows.push(rows);
-//			rows.add(startPos);
-//			lastIndex = index;
-//			isFull = false;
-//			fullResults.push(false);
-//			resultType = 2;
-//		}
-//		else {
-//			if (startPos >= 0) {
-//				int nrEntries = index.positions[startPos];
-//				// Collect indices of satisfying rows via index
-//				int[] newArray = Arrays.copyOfRange(index.positions, startPos + 1, startPos + 1 + nrEntries);
-//				List<Integer> rows = Ints.asList(newArray);
-//				qualifyingRows.push(rows);
-//			}
-//			else {
-//				qualifyingRows.push(new ArrayList<>());
-//			}
-//			isFull = true;
-//			fullResults.push(true);
-//			resultType = 0;
-//		}
-		if (startPos >= 0) {
-			if (index.unique) {
-				List<Integer> rows = new ArrayList<>();
-				rows.add(startPos);
-				qualifyingRows.push(rows);
-			}
-			else {
-				int nrEntries = index.positions[startPos];
-				// Collect indices of satisfying rows via index
-				int[] newArray = Arrays.copyOfRange(index.positions, startPos + 1, startPos + 1 + nrEntries);
-				List<Integer> rows = Ints.asList(newArray);
-				qualifyingRows.push(rows);
-			}
+		if (lazyMaterialization) {
+			lazyInformation.add(new ImmutablePair<>(index, startPos));
 		}
 		else {
-			qualifyingRows.push(new ArrayList<>());
+			if (startPos >= 0) {
+				if (index.unique) {
+					List<Integer> rows = new ArrayList<>();
+					rows.add(startPos);
+					qualifyingRows.push(rows);
+				}
+				else {
+					int nrEntries = index.positions[startPos];
+					// Collect indices of satisfying rows via index
+					int[] newArray = Arrays.copyOfRange(index.positions, startPos + 1, startPos + 1 + nrEntries);
+					List<Integer> rows = Ints.asList(newArray);
+					qualifyingRows.push(rows);
+				}
+			}
+			else {
+				qualifyingRows.push(new ArrayList<>());
+			}
 		}
+
 		isFull = true;
 		fullResults.push(true);
 		resultType = 0;

@@ -3,6 +3,7 @@ package operators;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicIntegerArray;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -10,6 +11,7 @@ import buffer.BufferManager;
 import catalog.CatalogManager;
 import catalog.info.ColumnInfo;
 import catalog.info.TableInfo;
+import com.google.common.util.concurrent.AtomicLongMap;
 import config.GeneralConfig;
 import config.NamingConfig;
 import config.ParallelConfig;
@@ -89,7 +91,7 @@ public class Materialize {
 			String columnName = sourceColRef.columnName;
 			ColumnRef resultColRef = new ColumnRef(targetRelName, columnName);
 			ColumnInfo sourceCol = CatalogManager.getColumn(sourceColRef);
-
+			boolean isJoined = false;
 			JavaType jType = TypeUtil.toJavaType(sourceCol.type);
 			switch (jType) {
 				case INT: {
@@ -145,6 +147,134 @@ public class Materialize {
 		if (!GeneralConfig.inMemory) {
 			for (ColumnRef sourceColRef : sourceColRefs) {
 				BufferManager.unloadColumn(sourceColRef);				
+			}
+		}
+	}
+
+	/**
+	 * Creates a temporary table with given name and copies into it
+	 * values at given row indices and for given columns in source
+	 * table.
+	 *
+	 * @param sourceRelName	name of source table to copy from
+	 * @param columnNames	names of columns to be copied
+	 * @param rowList		list of row indices to copy, can be null
+	 * @param rowBitSet		rows to copy in BitSet representation, can be null
+	 * @param targetRelName	name of target table
+	 * @param tempResult	whether to create temporary result relation
+	 * @throws Exception
+	 */
+	public static void execute(String sourceRelName, List<String> columnNames,
+							   List<Integer> rowList, BitSet rowBitSet, String targetRelName,
+							   boolean tempResult, List<String> joinColumns, String original) throws Exception {
+		// Generate references to source columns
+		List<ColumnRef> sourceColRefs = new ArrayList<>();
+		for (String columnName : columnNames) {
+			sourceColRefs.add(new ColumnRef(sourceRelName, columnName));
+		}
+		// Update catalog, inserting materialized table
+		TableInfo resultTable = new TableInfo(targetRelName, tempResult);
+		CatalogManager.currentDB.addTable(resultTable);
+		for (ColumnRef sourceColRef : sourceColRefs) {
+			// Add result column to result table, using type of source column
+			ColumnInfo sourceCol = CatalogManager.getColumn(sourceColRef);
+			ColumnInfo resultCol = new ColumnInfo(sourceColRef.columnName,
+					sourceCol.type, sourceCol.isPrimary,
+					sourceCol.isUnique, sourceCol.isNotNull,
+					sourceCol.isForeign);
+			resultTable.addColumn(resultCol);
+		}
+		// Load source data if necessary
+		if (!GeneralConfig.inMemory) {
+			for (ColumnRef sourceColRef : sourceColRefs) {
+				BufferManager.loadColumn(sourceColRef);
+			}
+		}
+		int cardinality = rowList.size();
+		List<RowRange> batches = split(cardinality);
+		// Generate column data
+		Stream<ColumnRef> sourceColStream = GeneralConfig.isParallel?
+				sourceColRefs.parallelStream():sourceColRefs.stream();
+		sourceColStream.forEach(sourceColRef -> {
+			// Copy relevant rows into result column
+			ColumnData srcData = BufferManager.colToData.get(sourceColRef);
+			String columnName = sourceColRef.columnName;
+			ColumnRef resultColRef = new ColumnRef(targetRelName, columnName);
+			ColumnInfo sourceCol = CatalogManager.getColumn(sourceColRef);
+			boolean isJoined = joinColumns.contains(columnName);
+			JavaType jType = TypeUtil.toJavaType(sourceCol.type);
+
+			switch (jType) {
+				case INT: {
+					IntData intTargetData = new IntData(cardinality);
+					IntData intSourceData = (IntData) srcData;
+					BufferManager.colToData.put(resultColRef, intTargetData);
+					int[] target = intTargetData.data;
+					int[] source = intSourceData.data;
+					IntPartitionIndex index = null;
+					if (isJoined) {
+						index = (IntPartitionIndex) BufferManager.colToIndex.get(new ColumnRef(original, columnName));
+						int nrKeys = index.nrKeys;
+						if (nrKeys >= ParallelConfig.SPARSE_KEY_SIZE && !index.unique) {
+							index.filteredNumbers = new AtomicIntegerArray(index.positions.length);
+						}
+						else {
+							index = null;
+						}
+					}
+					IntPartitionIndex finalIndex = index;
+					batches.parallelStream().forEach(batch -> {
+						int batchFirst = batch.firstTuple;
+						int batchLast = batch.lastTuple;
+						for (int rowCtr = batchFirst; rowCtr <= batchLast; rowCtr++) {
+							int row = rowList.get(rowCtr);
+							// Treat special case: insertion of null values
+							if (!intSourceData.isNull.get(row)) {
+								int val = source[row];
+								target[rowCtr] = val;
+								if (finalIndex != null) {
+									int pos = finalIndex.keyToPositions.get(val);
+									finalIndex.filteredNumbers.incrementAndGet(pos);
+								}
+							}
+							else {
+								target[rowCtr] = Integer.MIN_VALUE;
+							}
+						}
+					});
+					break;
+				}
+				case DOUBLE: {
+					DoubleData doubleTargetData = new DoubleData(cardinality);
+					DoubleData doubleSourceData = (DoubleData) srcData;
+					BufferManager.colToData.put(resultColRef, doubleTargetData);
+					double[] target = doubleTargetData.data;
+					double[] source = doubleSourceData.data;
+					batches.parallelStream().forEach(batch -> {
+						int batchFirst = batch.firstTuple;
+						int batchLast = batch.lastTuple;
+						for (int rowCtr = batchFirst; rowCtr <= batchLast; rowCtr++) {
+							int row = rowList.get(rowCtr);
+							// Treat special case: insertion of null values
+							if (!doubleSourceData.isNull.get(row)) {
+								target[rowCtr] = source[row];
+							}
+							else {
+								target[rowCtr] = Integer.MIN_VALUE;
+							}
+						}
+					});
+					break;
+				}
+			}
+		});
+
+		// Update statistics in catalog
+		CatalogManager.updateStats(targetRelName);
+		// Unload source data if necessary
+		if (!GeneralConfig.inMemory) {
+			for (ColumnRef sourceColRef : sourceColRefs) {
+				BufferManager.unloadColumn(sourceColRef);
 			}
 		}
 	}

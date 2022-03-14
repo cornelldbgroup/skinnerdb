@@ -25,6 +25,7 @@ import query.QueryInfo;
 import statistics.JoinStats;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * This variant of the join processor parallelize
@@ -90,7 +91,7 @@ public class ParallelJoinProcessor {
         }
         else {
             long startMillis = System.currentTimeMillis();
-            Set<ResultTuple> resultTuples = new HashSet<>();
+            Set<ResultTuple> resultTuples = new HashSet<>(1000000);
             // DPD async
             if (ParallelConfig.PARALLEL_SPEC == 0) {
 //                Parallelization parallelization = new LockFreeParallelization(ParallelConfig.EXE_THREADS,
@@ -198,7 +199,7 @@ public class ParallelJoinProcessor {
             // New SP
             else if (ParallelConfig.PARALLEL_SPEC == 17) {
                 Parallelization parallelization = new NewSearchParallelization(ParallelConfig.EXE_THREADS,
-                        JoinConfig.BUDGET_PER_EPISODE, query, context);
+                        JoinConfig.BUDGET_PER_EPISODE, query, context, resultTuples);
                 parallelization.execute(resultTuples);
             }
             // Hybrid Parallelization

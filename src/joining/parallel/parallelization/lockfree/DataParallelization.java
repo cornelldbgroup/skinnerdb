@@ -66,7 +66,7 @@ public class DataParallelization extends Parallelization {
         }
         // Initialize multi-way join operator
         oldJoin = new OldJoin(query, context, budget,
-                1, 0, predToEval, threadOffsets);
+                1, 0, predToEval, threadOffsets, null);
     }
 
     @Override
@@ -78,7 +78,6 @@ public class DataParallelization extends Parallelization {
         int nrDPThreads = ParallelConfig.EXE_THREADS - 1;
         int nrSPThreads = 1;
         int nrJoined = query.nrJoined;
-        HDataTask[] dataTasks = new HDataTask[nrDPThreads];
         // Mutex shared by multiple threads.
         AtomicBoolean isFinished = new AtomicBoolean(false);
         // Initialize search and data parallelization task.
@@ -86,7 +85,7 @@ public class DataParallelization extends Parallelization {
         logs[0] = new ArrayList<>();
         SampleTask sampleTask = new SampleTask(query, context, oldJoin,
                 0, nrSPThreads, nrDPThreads, isFinished, nextJoinOrder,
-                planCache, dataTasks);
+                planCache);
         tasks.add(sampleTask);
 
         int nrSplits = query.equiJoinPreds.size() + nrJoined;
@@ -101,7 +100,6 @@ public class DataParallelization extends Parallelization {
             HDataTask dataTask = new HDataTask(query, context, modJoin,
                     dataCtr, nrDPThreads, isFinished, nextJoinOrder);
             tasks.add(dataTask);
-            dataTasks[dataCtr] = dataTask;
         }
 
 
@@ -112,7 +110,9 @@ public class DataParallelization extends Parallelization {
         long executionEnd = System.currentTimeMillis();
         JoinStats.exeTime = executionEnd - executionStart;
         int maxSize = 0;
-        context.resultTuplesList = new ArrayList<>(nrDPThreads+1);
+        context.resultTuplesList = nrDPThreads == 0 ? null :
+                new ArrayList<>(nrDPThreads+1);
+        long avgNrEpisode = 0;
         for (int futureCtr = 0; futureCtr < nrThreads; futureCtr++) {
             try {
                 SearchResult result = futures.get(futureCtr).get();
@@ -124,6 +124,8 @@ public class DataParallelization extends Parallelization {
                     maxSize += result.result.size();
                     context.resultTuplesList.add(result.result);
                     UniqueJoinResult uniqueJoinResult = joins[result.id].uniqueJoinResult;
+                    long threadCtr = joins[result.id].roundCtr;
+                    avgNrEpisode += threadCtr;
                     if (uniqueJoinResult != null) {
                         if (context.uniqueJoinResult == null) {
                             context.uniqueJoinResult = uniqueJoinResult;
@@ -134,8 +136,14 @@ public class DataParallelization extends Parallelization {
                     }
                 }
                 else {
-                    maxSize += result.result.size();
-                    context.resultTuplesList.add(result.result);
+                    if (context.resultTuplesList == null) {
+                        resultList.addAll(oldJoin.concurrentList);
+                    }
+                    else {
+                        Set<ResultTuple> resultTuples = new HashSet<>(oldJoin.concurrentList);
+                        maxSize += resultTuples.size();
+                        context.resultTuplesList.add(resultTuples);
+                    }
                 }
 
             } catch (InterruptedException | ExecutionException e) {
@@ -145,8 +153,7 @@ public class DataParallelization extends Parallelization {
         context.maxSize = maxSize;
         long mergeEnd = System.currentTimeMillis();
         JoinStats.mergeTime = mergeEnd - executionEnd;
-
-        JoinStats.nrSamples = oldJoin.roundCtr;
+        JoinStats.nrSamples = avgNrEpisode / nrDPThreads;
 
         // Write log to the local file.
         if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {

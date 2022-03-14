@@ -116,5 +116,9 @@ public class ParallelConfig {
 	/**
 	 * Number of threads working on search parallelization
 	 */
-	public static final int SEARCH_THREADS = 4;
+	public static int SEARCH_THREADS = 4;
+	/**
+	 * Ratio of search and data parallelization
+	 */
+	public static final double HYBRID_RATIO = 0.2;
 }

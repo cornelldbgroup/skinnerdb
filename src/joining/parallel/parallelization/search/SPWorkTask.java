@@ -1,13 +1,10 @@
-package joining.parallel.parallelization.hybrid;
+package joining.parallel.parallelization.search;
 
-import config.JoinConfig;
-import config.ParallelConfig;
 import joining.parallel.join.ModJoin;
-import joining.parallel.parallelization.search.SearchResult;
+import joining.parallel.join.OldJoin;
+import joining.parallel.parallelization.hybrid.JoinPlan;
 import joining.progress.State;
 import joining.result.ResultTuple;
-import org.apache.commons.lang3.tuple.ImmutablePair;
-import org.apache.commons.lang3.tuple.Pair;
 import preprocessing.Context;
 import query.QueryInfo;
 
@@ -17,7 +14,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
-public class HDataTask implements Callable<SearchResult> {
+public class SPWorkTask implements Callable<SearchResult> {
     /**
      * The query to process.
      */
@@ -25,7 +22,7 @@ public class HDataTask implements Callable<SearchResult> {
     /**
      * Search parallel operator.
      */
-    private final ModJoin joinOp;
+    private final OldJoin joinOp;
     /**
      * Atomic boolean flag to represent
      * the end of query.
@@ -51,9 +48,9 @@ public class HDataTask implements Callable<SearchResult> {
      * @param nrThreads
      * @param isFinished
      */
-    public HDataTask(QueryInfo query, Context context,
-                     ModJoin joinOp, int tid, int nrThreads,
-                     AtomicBoolean isFinished, AtomicReference<JoinPlan> nextJoinOrder) {
+    public SPWorkTask(QueryInfo query, Context context,
+                      OldJoin joinOp, int tid, int nrThreads,
+                      AtomicBoolean isFinished, AtomicReference<JoinPlan> nextJoinOrder) {
         this.query = query;
         this.nrThreads = nrThreads;
         this.joinOp = joinOp;
@@ -68,24 +65,15 @@ public class HDataTask implements Callable<SearchResult> {
         int[] joinOrder = null;
         long roundCtr = 0;
         int nrJoined = query.nrJoined;
-        boolean prevFinished = false;
         while (!isFinished.get()) {
             JoinPlan joinPlan = nextJoinOrder.get();
             if (joinPlan != null) {
                 ++roundCtr;
                 joinOrder = joinPlan.joinOrder;
-                int splitTable = joinPlan.splitTable;
-                State slowestState = joinPlan.slowestState;
-                joinOp.execute(joinOrder, splitTable, (int) roundCtr, slowestState, joinPlan.plan);
-                int largeTable = joinOp.largeTable;
-                boolean threadFinished = this.joinOp.isFinished();
-                double progress = threadFinished ? Double.MAX_VALUE : (joinOp.progress + largeTable);
-                joinPlan.progress[splitTable * nrThreads + tid].set(progress);
-                joinPlan.states[splitTable * nrThreads + tid].set(joinOp.lastState);
-                if (threadFinished) {
-                    roundCtr--;
+                joinOp.executeWorker(joinOrder, (int) roundCtr, joinPlan.plan);
+                if (joinOp.lastState.isFinished()) {
+                    isFinished.set(true);
                 }
-
 //                if (roundCtr == 10000) {
 //                    isFinished.set(true);
 //                    long timer2 = System.currentTimeMillis();
@@ -99,7 +87,7 @@ public class HDataTask implements Callable<SearchResult> {
             }
         }
         long timer2 = System.currentTimeMillis();
-        System.out.println("Data thread " + tid + " " + (timer2 - timer1)
+        System.out.println("Work thread " + tid + " " + (timer2 - timer1)
                 + "\tRound: " + roundCtr + "\tOrder: " + Arrays.toString(joinOrder));
         Collection<ResultTuple> tuples = joinOp.result.getTuples();
         SearchResult searchResult = new SearchResult(tuples, joinOp.logs, tid);

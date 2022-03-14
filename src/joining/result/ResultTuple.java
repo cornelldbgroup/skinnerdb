@@ -24,8 +24,7 @@ public class ResultTuple {
 	 * @param baseIndices	tuple index for each base table
 	 */
 	public ResultTuple(int[] baseIndices) {
-		int nrTables = baseIndices.length;
-		this.baseIndices = Arrays.copyOf(baseIndices, nrTables);
+		this.baseIndices = baseIndices.clone();
 	}
 
 	@Override
@@ -42,22 +41,22 @@ public class ResultTuple {
 		return Arrays.toString(baseIndices);
 	}
 
-	/**
-	 * Generate group keys based on group index.
-	 *
-	 * @param sourceIndexes
-	 * @return
-	 */
-	public long groupKey(List<Index> sourceIndexes, List<Integer> tableIndexes) {
-		long groupBits = 0;
-		int card = 1;
-		for (int columnCtr = 0; columnCtr < sourceIndexes.size(); columnCtr++) {
-			Index index = sourceIndexes.get(columnCtr);
-			int table = tableIndexes.get(columnCtr);
-			int row = baseIndices[table];
-			groupBits += index.groupKey(row) * card;
-			card *= index.groupIds.length;
-		}
-		return groupBits;
-	}
+//	/**
+//	 * Generate group keys based on group index.
+//	 *
+//	 * @param sourceIndexes
+//	 * @return
+//	 */
+//	public long groupKey(List<Index> sourceIndexes, List<Integer> tableIndexes) {
+//		long groupBits = 0;
+//		int card = 1;
+//		for (int columnCtr = 0; columnCtr < sourceIndexes.size(); columnCtr++) {
+//			Index index = sourceIndexes.get(columnCtr);
+//			int table = tableIndexes.get(columnCtr);
+//			int row = baseIndices[table];
+//			groupBits += index.groupKey(row) * card;
+//			card *= index.groupIds.length;
+//		}
+//		return groupBits;
+//	}
 }

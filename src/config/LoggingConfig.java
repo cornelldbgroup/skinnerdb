@@ -63,7 +63,7 @@ public class LoggingConfig {
 	/**
 	 * Whether to generate debugging output during joining.parallel join.
 	 */
-	public final static boolean PARALLEL_JOIN_VERBOSE = true;
+	public final static boolean PARALLEL_JOIN_VERBOSE = false;
 	/**
 	 * Whether to generate performance output during.
 	 */

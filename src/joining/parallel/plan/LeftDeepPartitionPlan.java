@@ -87,7 +87,7 @@ public class LeftDeepPartitionPlan {
 		}
 		// Iterate over join order positions, adding tables
 		Set<Integer> availableTables = new HashSet<>();
-		int noEquiPredsId = query.equiJoinPreds.size();
+		int nrEquiJoins = query.equiJoinPreds.size();
 		for (int joinCtr=0; joinCtr<nrTables; ++joinCtr) {
 			int nextTable = order[joinCtr];
 			availableTables.add(nextTable);
@@ -100,7 +100,13 @@ public class LeftDeepPartitionPlan {
 						equiPred.aliasIdxMentioned)) {
 					// initialize split strategy
 					if (first) {
-						splitStrategies[nextTable] = equiPred.pid;
+						Iterator<Integer> tableIter = equiPred.aliasIdxMentioned.iterator();
+						int table1 = tableIter.next();
+						int table2 = tableIter.next();
+						int smallTable = Math.min(table1, table2);
+						int times = smallTable == nextTable ? 0 : 1;
+						int firstTable = times * nrEquiJoins + equiPred.pid;
+						splitStrategies[nextTable] = firstTable;
 						first = false;
 					}
 					switch (equiPred.type) {
@@ -118,8 +124,8 @@ public class LeftDeepPartitionPlan {
 				}
 			}
 			if (first) {
-				splitStrategies[nextTable] = noEquiPredsId;
-				noEquiPredsId++;
+				splitStrategies[nextTable] = nrEquiJoins * 2 + nextTable;
+//				noEquiPredsId++;
 			}
 			// Iterate over remaining other predicates
 			Iterator<ExpressionInfo> generalPredsIter =

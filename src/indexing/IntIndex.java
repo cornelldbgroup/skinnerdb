@@ -170,9 +170,4 @@ public class IntIndex extends Index {
 				})
 				.mapToInt(ele -> ele).toArray();
 	}
-
-	@Override
-	public int groupKey(long rowVal) {
-		return 0;
-	}
 }

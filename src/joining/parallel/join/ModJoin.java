@@ -300,7 +300,10 @@ public class ModJoin extends DPJoin {
         int splitHash = nrThreads == 1 ? 0 : plan.splitStrategies[splitTable];
         // Execute from ing state, save progress, return progress
         State state = threadTracker.continueFrom(joinOrder, splitHash);
-        System.arraycopy(tracker.tableOffset, 0, offsets, 0, nrJoined);
+//        System.arraycopy(tracker.tableOffset, 0, offsets, 0, nrJoined);
+        int firstTable = getFirstLargeTable(order);
+        int tableOffset = slowState == null ? 0 : (slowState.tupleIndices[firstTable] - 1);
+        offsets[firstTable] = Math.max(offsets[firstTable], tableOffset);
         if (slowState != null && state.isAhead(order, slowState, nrJoined)) {
             System.arraycopy(slowState.tupleIndices, 0, state.tupleIndices, 0, nrJoined);
         }
@@ -361,12 +364,12 @@ public class ModJoin extends DPJoin {
 
         double reward = reward(joinOrder.order, tupleIndexDelta, offsets, state.tupleIndices);
         // Get the first table whose cardinality is larger than 1.
-        int firstTable = getFirstLargeTable(order);
 //        int firstTable = order[0];
         if (!state.isFinished()) {
             state.roundCtr = 0;
             threadTracker.updateProgress(joinOrder, splitHash, state,
                     roundCtr, firstTable);
+            state.lastIndex = largeTable;
         }
         lastState = state;
         state.tid = tid;

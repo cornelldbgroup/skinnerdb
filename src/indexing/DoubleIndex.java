@@ -161,9 +161,4 @@ public class DoubleIndex extends Index {
 				.boxed().sorted(Comparator.comparingDouble(i -> doubleData.data[i]))
 				.mapToInt(ele -> ele).toArray();
 	}
-
-	@Override
-	public int groupKey(long rowVal) {
-		return 0;
-	}
 }

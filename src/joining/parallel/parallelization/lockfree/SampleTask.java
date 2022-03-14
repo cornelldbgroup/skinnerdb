@@ -67,10 +67,6 @@ public class SampleTask implements Callable<SearchResult> {
      * Map to store the next join plan.
      */
     public final Map<Integer, JoinPlan> taskCache;
-    /**
-     * List of data parallel tasks.
-     */
-    public final HDataTask[] dataTasks;
 
     /**
      * @param query
@@ -85,8 +81,7 @@ public class SampleTask implements Callable<SearchResult> {
                       int tid, int nrThreads, int nrDPThreadsPerSpace,
                       AtomicBoolean isFinished,
                       AtomicReference<JoinPlan> nextJoinOrder,
-                      Map<Integer, LeftDeepPartitionPlan> planCache,
-                      HDataTask[] dataTasks) {
+                      Map<Integer, LeftDeepPartitionPlan> planCache) {
         this.query = query;
         this.context = context;
         this.root = new NSPNode(0, query,
@@ -99,7 +94,6 @@ public class SampleTask implements Callable<SearchResult> {
         this.nrDPThreadsPerSpace = nrDPThreadsPerSpace;
         this.planCache = planCache;
         this.taskCache = new HashMap<>();
-        this.dataTasks = dataTasks;
     }
 
     @Override
@@ -115,13 +109,15 @@ public class SampleTask implements Callable<SearchResult> {
         double accReward = 0;
         double maxReward = Double.NEGATIVE_INFINITY;
         int[] joinOrder = new int[nrJoined];
+        boolean setSplitTable = false;
         while (!isFinished.get()) {
             ++roundCtr;
             double reward = root.sample(roundCtr, joinOrder, this.joinOp, policy);
             // Optimal join order
-//            int[] optimalJoinOrder = root.optimalJoinOrder();
+            int[] optimalJoinOrder = root.optimalJoinOrder();
 //            int[] optimalJoinOrder = new int[]{8, 2, 0, 9, 1, 5, 3, 7, 6, 4};
-            int[] optimalJoinOrder = joinOrder;
+//            int[] optimalJoinOrder = new int[]{9, 12, 1, 2, 3, 5, 0, 4, 10, 6, 11, 7, 13, 14, 8, 15, 16};
+//            int[] optimalJoinOrder = joinOrder;
             JoinPlan prevPlan = nextJoinOrder.get();
             // Maintain the progress and split table for the slowest thread
             if (prevPlan != null) {
@@ -131,68 +127,47 @@ public class SampleTask implements Callable<SearchResult> {
                 double progress = Double.MAX_VALUE;
                 int slowThread = -1;
                 int nextSplitTable = -1;
+                State slowestState = null;
                 for (int threadCtr = 0; threadCtr < nrDPThreadsPerSpace; threadCtr++) {
                     int threadIndex = splitTable * nrDPThreadsPerSpace + threadCtr;
-                    double value = prevPlan.progress[threadIndex].get();
-                    if (value != Double.MAX_VALUE) {
-                        int largeTable = (int) value;
-                        double threadProgress = value - largeTable;
-                        if (threadProgress < progress) {
-                            slowThread = tid;
-                            progress = threadProgress;
+                    State threadState = prevPlan.states[threadIndex].get();
+//                    double value = prevPlan.progress[threadIndex].get();
+                    if (!threadState.isFinished()) {
+//                        int largeTable = (int) value;
+                        int largeTable = threadState.lastIndex;
+//                        double threadProgress = value - largeTable;
+                        if (slowestState == null ||
+                                threadState.isAhead(prevOrder, slowestState, nrJoined)) {
+                            slowThread = threadCtr;
+//                            progress = threadProgress;
                             nextSplitTable = largeTable;
+                            slowestState = threadState;
                         }
                     }
+                    else {
+                        setSplitTable = true;
+                    }
                 }
-
-                if (slowThread == -1) {
+                progress = slowestState == null ?
+                        0 : Arrays.stream(slowestState.tupleIndices).sum();
+                if (slowThread == -1 && nrDPThreadsPerSpace > 0) {
                     isFinished.set(true);
                 }
-                // Update the slowest state
-                State slowestState = prevPlan.
-                        states[splitTable * nrDPThreadsPerSpace + slowThread].get();
-                if (prevPlan.slowestState.isAhead(prevOrder, slowestState, nrJoined)) {
+                State prevState = prevPlan.slowestState;
+                if (slowestState != null &&
+                        prevState.isAhead(prevOrder, slowestState, nrJoined)) {
                     prevPlan.slowestState = slowestState;
                     joinOp.writeLog("Slowest state: " + slowestState);
                 }
                 // Update the split table
-                if (progress > 0 && nextSplitTable >= 0 && nextSplitTable != splitTable) {
+                if (setSplitTable && progress > 0 &&
+                        nextSplitTable >= 0 && nextSplitTable != splitTable) {
                     prevPlan.splitTable = nextSplitTable;
                     joinOp.writeLog("Set Split Table to: " + nextSplitTable + " " +
                             Arrays.toString(prevOrder));
                 }
             }
-//            if (prevPlan != null) {
-//                int[] prevOrder = prevPlan.joinOrder;
-//                // Calculate the slowest state from the dp threads
-//                State slowestState = null;
-//                for (int tid = 0; tid < nrDPThreadsPerSpace; tid++) {
-//                    Pair<int[], State> threadState = dataTasks[tid].prevState;
-//                    if (threadState == null) {
-//                        break;
-//                    }
-//                    int[] threadOrder = threadState.getKey();
-//                    State threadProgress = threadState.getValue();
-//                    if(Arrays.equals(threadOrder, prevOrder)) {
-//                        if (slowestState == null || threadProgress.isAhead(prevOrder, slowestState, nrJoined)) {
-//                            slowestState = threadProgress;
-//                        }
-//                    }
-//                    else {
-//                        slowestState = null;
-//                        break;
-//                    }
-//                }
-//                JoinOrder prevJoinOrder = new JoinOrder(prevOrder);
-//                State prevState = joinOp.tracker.continueFromSP(prevJoinOrder);
-//                if (slowestState != null && (prevState == null ||
-//                        (prevState.isAhead(prevOrder, slowestState, nrJoined)))) {
-//                    int firstTable = joinOp.getFirstLargeTable(prevOrder);
-//                    slowestState.roundCtr = 0;
-//                    joinOp.tracker.updateProgressSP(prevJoinOrder, slowestState,
-//                            (int) roundCtr, firstTable);
-//                }
-//            }
+
             // The optimal join order is different from previous optimal join order
             if ((prevPlan == null || !Arrays.equals(optimalJoinOrder, prevPlan.joinOrder))
                     && roundCtr % 10 == 0) {
@@ -209,6 +184,7 @@ public class SampleTask implements Callable<SearchResult> {
                     joinPlan = new JoinPlan(optimalJoinOrder, nrDPThreadsPerSpace,
                             nrJoined, 0, tid, plan);
                     joinPlan.splitTable = getSplitTableByCard(optimalJoinOrder, joinOp.cardinalities);
+                    taskCache.put(joinHash, joinPlan);
                 }
 //                // Read stable state from the tracker
 //                joinPlan.slowestState = joinOp.tracker.continueFromSP(order);
@@ -220,9 +196,8 @@ public class SampleTask implements Callable<SearchResult> {
                 accReward += reward;
                 maxReward = Math.max(reward, maxReward);
             } else {
-                joinOp.writeLog("Terminate flag");
-//                isFinished.set(true);
-//                break;
+                isFinished.set(true);
+                break;
             }
             // Consider memory loss
             if (JoinConfig.FORGET && roundCtr == nextForget) {

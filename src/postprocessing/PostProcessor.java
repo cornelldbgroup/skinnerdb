@@ -303,10 +303,10 @@ public class PostProcessor {
 			ColumnRef groupRef = context.groupRef;
 			switch (aggInfo.aggFunction) {
 			case SUM:
-//				SumAggregate.execute(sourceRef, nrGroups,
-//						groupRef, targetRef);
-				SumAggregate.parallelExecute(sourceRef, nrGroups,
-						groupRef, targetRef, queryInfo);
+				SumAggregate.execute(sourceRef, nrGroups,
+						groupRef, targetRef);
+//				SumAggregate.parallelExecute(sourceRef, nrGroups,
+//						groupRef, targetRef, queryInfo);
 				break;
 			case MIN:
 //				MinMaxAggregate.execute(sourceRef, nrGroups,
