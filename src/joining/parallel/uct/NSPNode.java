@@ -1,6 +1,8 @@
 package joining.parallel.uct;
 
 import config.JoinConfig;
+import joining.parallel.join.HybridJoin;
+import joining.parallel.join.ModJoin;
 import joining.parallel.join.OldJoin;
 import joining.parallel.join.SPJoin;
 import joining.uct.SelectionPolicy;
@@ -473,6 +475,61 @@ public class NSPNode {
         return oldJoin.execute(joinOrder, (int) roundCtr);
     }
     /**
+     * Randomly complete join order with remaining tables,
+     * invoke evaluation, and return obtained reward.
+     *
+     * @param joinOrder partially completed join order
+     * @return obtained reward
+     */
+    double playout(long roundCtr, int[] joinOrder, HybridJoin hybridJoin) throws Exception {
+        // Last selected table
+        int lastTable = joinOrder[treeLevel];
+        // Should we avoid Cartesian product joins?
+        if (useHeuristic) {
+            Set<Integer> newlyJoined = new HashSet<>(joinedTables);
+            newlyJoined.add(lastTable);
+            // Iterate over join order positions to fill
+            List<Integer> unjoinedTablesShuffled = new ArrayList<>(unjoinedTables);
+            Collections.shuffle(unjoinedTablesShuffled, ThreadLocalRandom.current());
+            for (int posCtr = treeLevel + 1; posCtr < nrTables; ++posCtr) {
+                boolean foundTable = false;
+                for (int table : unjoinedTablesShuffled) {
+                    if (!newlyJoined.contains(table) &&
+                            query.connected(newlyJoined, table)) {
+                        joinOrder[posCtr] = table;
+                        newlyJoined.add(table);
+                        foundTable = true;
+                        break;
+                    }
+                }
+                if (!foundTable) {
+                    for (int table : unjoinedTablesShuffled) {
+                        if (!newlyJoined.contains(table)) {
+                            joinOrder[posCtr] = table;
+                            newlyJoined.add(table);
+                            break;
+                        }
+                    }
+                }
+            }
+        } else {
+            // Shuffle remaining tables
+            Collections.shuffle(unjoinedTables, ThreadLocalRandom.current());
+            Iterator<Integer> unjoinedTablesIter = unjoinedTables.iterator();
+            // Fill in remaining join order positions
+            for (int posCtr = treeLevel + 1; posCtr < nrTables; ++posCtr) {
+                int nextTable = unjoinedTablesIter.next();
+                while (nextTable == lastTable) {
+                    nextTable = unjoinedTablesIter.next();
+                }
+                joinOrder[posCtr] = nextTable;
+            }
+        }
+
+        // Evaluate completed join order and return reward
+        return hybridJoin.execute(joinOrder, -1, (int) roundCtr);
+    }
+    /**
      * Recursively sample from UCT tree and return reward.
      *
      * @param roundCtr  current round (used as timestamp for expansion)
@@ -501,6 +558,40 @@ public class NSPNode {
             double reward = (child != null) ?
                     child.sample(roundCtr, joinOrder, oldJoin, policy):
                     playout(roundCtr, joinOrder, oldJoin);
+            // update UCT statistics and return reward
+            updateStatistics(action, reward);
+            return reward;
+        }
+    }
+    /**
+     * Recursively sample from UCT tree and return reward for hybrid algorithm.
+     *
+     * @param roundCtr  current round (used as timestamp for expansion)
+     * @param joinOrder partially completed join order
+     * @param policy	policy used to select actions
+     * @return achieved reward
+     */
+    public double sample(long roundCtr, int[] joinOrder, HybridJoin hybridJoin,
+                         SelectionPolicy policy) throws Exception {
+        // Check if this is a (non-extendible) leaf node
+        if (nrActions == 0) {
+            // leaf node - evaluate join order and return reward
+            return hybridJoin.execute(joinOrder, -1, (int) roundCtr);
+        } else {
+            // inner node - select next action and expand tree if necessary
+            int action = selectAction(policy);
+            int table = nextTable[action];
+            joinOrder[treeLevel] = table;
+            // grow tree if possible
+            boolean canExpand = createdIn != roundCtr;
+            if (childNodes[action] == null && canExpand) {
+                childNodes[action] = new NSPNode(roundCtr, this, table);
+            }
+            // evaluate via recursive invocation or via playout
+            NSPNode child = childNodes[action];
+            double reward = (child != null) ?
+                    child.sample(roundCtr, joinOrder, hybridJoin, policy):
+                    playout(roundCtr, joinOrder, hybridJoin);
             // update UCT statistics and return reward
             updateStatistics(action, reward);
             return reward;
@@ -593,5 +684,9 @@ public class NSPNode {
     public double getReward(int action) {
         int nrTries = this.nrTries[action];
         return nrTries == 0 ? 0 : accumulatedReward[action] / nrTries;
+    }
+
+    public int getTries(int action) {
+        return Math.max(1, this.nrTries[action]);
     }
 }

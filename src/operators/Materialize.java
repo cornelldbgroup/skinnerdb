@@ -45,6 +45,64 @@ public class Materialize {
 	 * Creates a temporary table with given name and copies into it
 	 * values at given row indices and for given columns in source
 	 * table.
+	 *
+	 * @param sourceRelName	name of source table to copy from
+	 * @param columnNames	names of columns to be copied
+	 * @param rowList		list of row indices to copy, can be null
+	 * @param rowBitSet		rows to copy in BitSet representation, can be null
+	 * @param targetRelName	name of target table
+	 * @param tempResult	whether to create temporary result relation
+	 * @throws Exception
+	 */
+	public static void executeOld(String sourceRelName, List<String> columnNames,
+							   List<Integer> rowList, BitSet rowBitSet, String targetRelName,
+							   boolean tempResult) throws Exception {
+		// Generate references to source columns
+		List<ColumnRef> sourceColRefs = new ArrayList<ColumnRef>();
+		for (String columnName : columnNames) {
+			sourceColRefs.add(new ColumnRef(sourceRelName, columnName));
+		}
+		// Update catalog, inserting materialized table
+		TableInfo resultTable = new TableInfo(targetRelName, tempResult);
+		CatalogManager.currentDB.addTable(resultTable);
+		for (ColumnRef sourceColRef : sourceColRefs) {
+			// Add result column to result table, using type of source column
+			ColumnInfo sourceCol = CatalogManager.getColumn(sourceColRef);
+			ColumnInfo resultCol = new ColumnInfo(sourceColRef.columnName,
+					sourceCol.type, sourceCol.isPrimary,
+					sourceCol.isUnique, sourceCol.isNotNull,
+					sourceCol.isForeign);
+			resultTable.addColumn(resultCol);
+		}
+		// Load source data if necessary
+		if (!GeneralConfig.inMemory) {
+			for (ColumnRef sourceColRef : sourceColRefs) {
+				BufferManager.loadColumn(sourceColRef);
+			}
+		}
+		// Generate column data
+		sourceColRefs.parallelStream().forEach(sourceColRef -> {
+			// Copy relevant rows into result column
+			ColumnData srcData = BufferManager.colToData.get(sourceColRef);
+			ColumnData resultData = rowList==null?
+					srcData.copyRows(rowBitSet):srcData.copyRows(rowList);
+			String columnName = sourceColRef.columnName;
+			ColumnRef resultColRef = new ColumnRef(targetRelName, columnName);
+			BufferManager.colToData.put(resultColRef, resultData);
+		});
+		// Update statistics in catalog
+		CatalogManager.updateStats(targetRelName);
+		// Unload source data if necessary
+		if (!GeneralConfig.inMemory) {
+			for (ColumnRef sourceColRef : sourceColRefs) {
+				BufferManager.unloadColumn(sourceColRef);
+			}
+		}
+	}
+	/**
+	 * Creates a temporary table with given name and copies into it
+	 * values at given row indices and for given columns in source
+	 * table.
 	 * 
 	 * @param sourceRelName	name of source table to copy from
 	 * @param columnNames	names of columns to be copied
@@ -215,7 +273,7 @@ public class Materialize {
 					if (isJoined) {
 						index = (IntPartitionIndex) BufferManager.colToIndex.get(new ColumnRef(original, columnName));
 						int nrKeys = index.nrKeys;
-						if (nrKeys >= ParallelConfig.SPARSE_KEY_SIZE && !index.unique) {
+						if (nrKeys >= ParallelConfig.SPARSE_KEY_SIZE && !index.unique && !index.sorted) {
 							index.filteredNumbers = new AtomicIntegerArray(index.positions.length);
 						}
 						else {

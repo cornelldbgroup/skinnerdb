@@ -41,7 +41,7 @@ public class LoadCSV {
 	 * @return		number of lines in file
 	 * @throws Exception
 	 */
-	static int lineCount(String path) throws Exception {
+	public static int lineCount(String path) throws Exception {
 		BufferedReader reader = new BufferedReader(new FileReader(path));
 		@SuppressWarnings("unused")
 		String line = null;
@@ -112,6 +112,7 @@ public class LoadCSV {
 		String[] inputFields;
 		int rowCtr = 0;
 		int maxRows = LoadConfig.MAXROWS;
+		int nullValue = Integer.MIN_VALUE;
 		while ((inputFields = csvReader.readNext()) != null && rowCtr < maxRows) {
 			for (int colCtr=0; colCtr<nrColumns; ++colCtr) {
 				String field = inputFields[colCtr];
@@ -126,19 +127,19 @@ public class LoadCSV {
 					case BYTE:
 					case INT:
 						IntData intData = ((IntData)data.get(colCtr));
-						intData.data[rowCtr] = isNull?0:Integer.parseInt(field);
+						intData.data[rowCtr] = isNull? nullValue : Integer.parseInt(field);
 						break;
 					case LONG:
 						LongData longData = ((LongData)data.get(colCtr));
-						longData.data[rowCtr] = isNull?0:Long.parseLong(field);
+						longData.data[rowCtr] = isNull? nullValue : Long.parseLong(field);
 						break;
 					case DOUBLE:
 						DoubleData doubleData = ((DoubleData)data.get(colCtr));
-						doubleData.data[rowCtr] = isNull?0:Double.parseDouble(field);
+						doubleData.data[rowCtr] = isNull? nullValue: Double.parseDouble(field);
 						break;
 					case STRING:
 						StringData stringData = ((StringData)data.get(colCtr));
-						stringData.data[rowCtr] = isNull?nullRepresentation:field; 
+						stringData.data[rowCtr] = isNull ? nullRepresentation : field;
 						break;
 					case DATE:
 						IntData dateData = ((IntData)data.get(colCtr));

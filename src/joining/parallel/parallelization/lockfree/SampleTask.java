@@ -15,6 +15,7 @@ import joining.uct.SelectionPolicy;
 import org.apache.commons.lang3.tuple.Pair;
 import preprocessing.Context;
 import query.QueryInfo;
+import statistics.QueryStats;
 
 import java.util.*;
 import java.util.concurrent.Callable;
@@ -112,9 +113,19 @@ public class SampleTask implements Callable<SearchResult> {
         boolean setSplitTable = false;
         while (!isFinished.get()) {
             ++roundCtr;
-            double reward = root.sample(roundCtr, joinOrder, this.joinOp, policy);
-            // Optimal join order
-            int[] optimalJoinOrder = root.optimalJoinOrder();
+            double reward = 0;
+            int[] optimalJoinOrder;
+            if (QueryStats.optimal != null) {
+                reward = joinOp.execute(QueryStats.optimal, (int) roundCtr);
+                optimalJoinOrder = Arrays.copyOf(QueryStats.optimal, nrJoined);
+            }
+            else {
+                reward = root.sample(roundCtr, joinOrder, this.joinOp, policy);
+                optimalJoinOrder = root.optimalJoinOrder();
+//                QueryStats.optimal = new int[]{4, 8, 3, 0, 9, 6, 7, 5, 1, 2};
+//                reward = joinOp.execute(QueryStats.optimal, (int) roundCtr);
+//                optimalJoinOrder = Arrays.copyOf(QueryStats.optimal, nrJoined);
+            }
 //            int[] optimalJoinOrder = new int[]{8, 2, 0, 9, 1, 5, 3, 7, 6, 4};
 //            int[] optimalJoinOrder = new int[]{9, 12, 1, 2, 3, 5, 0, 4, 10, 6, 11, 7, 13, 14, 8, 15, 16};
 //            int[] optimalJoinOrder = joinOrder;
@@ -144,7 +155,7 @@ public class SampleTask implements Callable<SearchResult> {
                             slowestState = threadState;
                         }
                     }
-                    else {
+                    else if (ParallelConfig.PARALLEL_SPEC == 0) {
                         setSplitTable = true;
                     }
                 }
@@ -221,6 +232,21 @@ public class SampleTask implements Callable<SearchResult> {
      * @return
      */
     public int getSplitTableByCard(int[] joinOrder, int[] cardinalities) {
+        if (ParallelConfig.PARALLEL_SPEC == 11) {
+            return joinOrder[0];
+        }
+        else if (ParallelConfig.PARALLEL_SPEC == 12) {
+            int size = 0;
+            int splitTable = joinOrder[0];
+            for (int table : joinOrder) {
+                int cardinality = cardinalities[table];
+                if (cardinality > size && !query.temporaryTables.contains(table)) {
+                    size = cardinality;
+                    splitTable = table;
+                }
+            }
+            return splitTable;
+        }
         if (nrDPThreadsPerSpace == 1) {
             return 0;
         }
@@ -229,7 +255,8 @@ public class SampleTask implements Callable<SearchResult> {
         int nrJoined = query.nrJoined;
         int splitTable = joinOrder[0];
         int end = Math.min(splitLen, nrJoined);
-        int start = nrJoined <= splitLen + 1 ? 0 : 1;
+//        int start = nrJoined <= splitLen + 1 ? 0 : 1;
+        int start = 0;
         for (int i = start; i < end; i++) {
             int table = joinOrder[i];
             int cardinality = cardinalities[table];

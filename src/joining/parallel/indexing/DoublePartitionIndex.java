@@ -42,7 +42,7 @@ public class DoublePartitionIndex extends PartitionIndex {
     /**
      * Data is distributed to different scopes of threads.
      */
-    public final byte[] scopes;
+    public final int[] scopes;
     /**
      * The associated column reference mentioned in the query.
      */
@@ -63,7 +63,7 @@ public class DoublePartitionIndex extends PartitionIndex {
         // Extract info
         this.nrThreads = nrThreads;
         this.doubleData = doubleData;
-        this.scopes = new byte[this.cardinality];
+        this.scopes = new int[this.cardinality];
         this.queryRef = queryRef;
 
         if (policy == IndexPolicy.Key || unique) {
@@ -163,6 +163,7 @@ public class DoublePartitionIndex extends PartitionIndex {
             }
             int nrBatches = batches.size();
             // calculate prefix sum for each bath in joining.parallel
+            int finalNrThreads = ParallelConfig.PARALLEL_SPEC == 20 ? Integer.MAX_VALUE : this.nrThreads;
             IntStream.range(0, nrBatches).parallel().forEach(bid -> {
                 DoubleIndexRange batch = batches.get(bid);
                 DoubleIntCursor batchCursor = batch.valuesMap.cursor();
@@ -183,8 +184,8 @@ public class DoublePartitionIndex extends PartitionIndex {
                         int firstPos = keyToPositions.getOrDefault(value, 0);
                         int pos = batch.prefixMap.computeIfPresent(value, (k, v) -> v + 1) - 1;
                         positions[pos] = rowCtr;
-                        int startThread = (pos - firstPos - 1) % nrThreads;
-                        scopes[rowCtr] = (byte) startThread;
+                        int startThread = (pos - firstPos - 1) % finalNrThreads;
+                        scopes[rowCtr] = startThread;
                     }
                 }
             });
@@ -246,7 +247,7 @@ public class DoublePartitionIndex extends PartitionIndex {
         double[] data = doubleData.data;
         positions = new int[doubleIndex.positions.length];
         boolean sorted = doubleIndex.sorted;
-
+        int nrThreads = ParallelConfig.PARALLEL_SPEC == 20 ? Integer.MAX_VALUE : this.nrThreads;
         if (sorted) {
             List<DoubleIndexRange> batches = this.split(true);
             int nrBatches = batches.size();
@@ -261,7 +262,7 @@ public class DoublePartitionIndex extends PartitionIndex {
                         int pos = firstPos + 1 + nr;
                         positions[pos] = rowCtr;
                         int startThread = nr % nrThreads;
-                        scopes[rowCtr] = (byte) startThread;
+                        scopes[rowCtr] = startThread;
                         positions[firstPos]++;
                     }
                 }
@@ -321,7 +322,7 @@ public class DoublePartitionIndex extends PartitionIndex {
                             int pos = batch.prefixMap.computeIfPresent(value, (k, v) -> v + 1) - 1;
                             positions[pos] = rowCtr;
                             int startThread = (pos - firstPos - 1) % nrThreads;
-                            scopes[rowCtr] = (byte) startThread;
+                            scopes[rowCtr] = startThread;
                         }
                     }
                 }
@@ -339,6 +340,7 @@ public class DoublePartitionIndex extends PartitionIndex {
         double[] data = doubleData.data;
         int prefixSum = 0;
         DoubleIntCursor keyToNrCursor = keyToNr.cursor();
+        int nrThreads = ParallelConfig.PARALLEL_SPEC == 20 ? Integer.MAX_VALUE : this.nrThreads;
         while (keyToNrCursor.moveNext()) {
             double key = keyToNrCursor.key();
             keyToPositions.put(key, prefixSum);
@@ -359,7 +361,7 @@ public class DoublePartitionIndex extends PartitionIndex {
                 int offset = positions[startPos];
                 int pos = startPos + offset;
                 positions[pos] = i;
-                scopes[i] = (byte) ((offset - 1) % nrThreads);
+                scopes[i] = ((offset - 1) % nrThreads);
             }
         }
     }
@@ -530,6 +532,60 @@ public class DoublePartitionIndex extends PartitionIndex {
     }
 
     public int nextTupleInScope(double value, int priorIndex, int prevTuple, int tid, int nextTable,
+                                int nrDPThreads, int[] nextSize) {
+        tid = (priorIndex + tid) % nrDPThreads;
+        // Get start position for indexed values
+        int firstPos = keyToPositions.getOrDefault(value, -1);
+        // No indexed values?
+        if (firstPos < 0) {
+            return cardinality;
+        }
+        // Can we return first indexed value?
+        int nrVals = positions[firstPos];
+        if (nextSize != null) {
+            nextSize[nextTable] = nrVals;
+        }
+        int firstOffset = tid + 1;
+        if (firstOffset > nrVals) {
+            return cardinality;
+        }
+        int firstTuple = positions[firstPos + firstOffset];
+        if (firstTuple > prevTuple) {
+            return firstTuple;
+        }
+        // Get number of indexed values
+        int lastOffset = (nrVals - 1) / nrDPThreads * nrDPThreads + tid + 1;
+        // if the offset is beyond the array?
+        if (lastOffset > nrVals) {
+            lastOffset -= nrDPThreads;
+        }
+        int threadVals = (lastOffset - firstOffset) / nrDPThreads + 1;
+        // Update index-related statistics
+        // Restrict search range via binary search
+        int lowerBound = 0;
+        int upperBound = threadVals - 1;
+        while (upperBound - lowerBound > 1) {
+            int middle = lowerBound + (upperBound - lowerBound) / 2;
+            int middleOffset = firstPos + middle * nrDPThreads + tid + 1;
+            if (positions[middleOffset] > prevTuple) {
+                upperBound = middle;
+            } else {
+                lowerBound = middle;
+            }
+        }
+        // Get next tuple
+        for (int pos = lowerBound; pos <= upperBound; ++pos) {
+            int offset = firstPos + pos * nrDPThreads + tid + 1;
+            int nextTuple = positions[offset];
+            if (nextTuple > prevTuple) {
+                return nextTuple;
+            }
+        }
+        // No suitable tuple found
+        return cardinality;
+    }
+
+    public int nextTupleInScope(double value, int priorIndex, int prevTuple, int tid, int nextTable,
                                 int[] nextSize, IntSet finishedThreads) {
         int extra = priorIndex % nrThreads;
         // Get start position for indexed values
@@ -601,6 +657,11 @@ public class DoublePartitionIndex extends PartitionIndex {
     public boolean evaluateInScope(double priorVal, int priorIndex, int curIndex, int tid) {
         tid = (priorIndex + tid) % nrThreads;
         return priorVal == doubleData.data[curIndex] && scopes[curIndex] == tid;
+    }
+
+    public boolean evaluateInScope(double priorVal, int priorIndex, int curIndex, int tid, int nrDPThreads) {
+        tid = (priorIndex + tid) % nrDPThreads;
+        return priorVal == doubleData.data[curIndex] && ((scopes[curIndex]) % nrDPThreads == tid);
     }
 
     public boolean evaluateInScope(double priorVal, int priorIndex, int curIndex, int tid, IntSet finishedThreads) {

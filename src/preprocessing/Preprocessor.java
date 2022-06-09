@@ -272,7 +272,6 @@ public class Preprocessor {
 		List<Integer> rows = BufferManager.indexCache.getOrDefault(curUnaryPred.pid, null);
 		return rows;
 	}
-
 	/**
 	 * Search for applicable index and use it to prune rows. Redirect
 	 * column mappings to index-filtered table if possible.
@@ -302,7 +301,6 @@ public class Preprocessor {
 			indexTest.constantQueue.clear();
 			indexTest.columnNames.clear();
 			indexTest.sorted = true;
-
 
 			// Compare predicate against indexes
 			conjunct.accept(indexTest);
@@ -363,10 +361,6 @@ public class Preprocessor {
 			String targetRelName = NamingConfig.IDX_FILTERED_PRE + alias;
 			if (indexFilter.isFull) {
 				if (nonIndexedConjuncts.isEmpty()) {
-					String originalTableName = query.aliasToTable.get(alias);
-					List<String> joinedColumnNames = query.indexCols.stream().
-							filter(c -> c.aliasName.equals(alias)).
-							map(c -> c.columnName).collect(Collectors.toList());
 					long s2 = System.currentTimeMillis();
 					Materialize.execute(table, requiredCols, rows,
 							null, targetRelName, true);
@@ -444,8 +438,6 @@ public class Preprocessor {
 		// Determine rows satisfying unary predicate
 		List<Integer> satisfyingRows = Filter.executeToList(
 				filter, tableName, preSummary.columnMapping, query, requiredCols);
-//		int[] satisfyingRows = Filter.executeToArray(
-//				filter, tableName, preSummary.columnMapping, query, requiredCols);
 		if (satisfyingRows == null) {
 			List<Integer> returnedResults = new ArrayList<>();
 			returnedResults.add(-1);
@@ -462,8 +454,7 @@ public class Preprocessor {
 			}
 		}
 		long s2 = System.currentTimeMillis();
-		String originalTableName = query.aliasToTable.get(alias);
-		Materialize.execute(tableName, columnNames, 
+		Materialize.execute(tableName, columnNames,
 				satisfyingRows, null, filteredName, true);
 		long s3 = System.currentTimeMillis();
 		System.out.println("Materializing after filtering " + unaryPred + " took " + (s3 - s2));
@@ -495,11 +486,11 @@ public class Preprocessor {
 			throws Exception {
 		// Iterate over columns in equi-joins
 		long startMillis = System.currentTimeMillis();
-//		Stream<ColumnRef> joinColStream = GeneralConfig.isParallel?
-//				query.indexCols.parallelStream():
-//				query.indexCols.stream();
+		Stream<ColumnRef> joinColStream = GeneralConfig.isParallel?
+				query.indexCols.parallelStream():
+				query.indexCols.stream();
 
-		query.indexCols.forEach(queryRef -> {
+		joinColStream.forEach(queryRef -> {
 			try {
 				// Resolve query-specific column reference
 				ColumnRef dbRef = preSummary.columnMapping.get(queryRef);
@@ -516,7 +507,7 @@ public class Preprocessor {
 				PartitionIndex partitionIndex = index == null ? null : (PartitionIndex) index;
 				// Get index generation policy according to statistics.
 				// Create index (unless it exists already)
-				Indexer.partitionIndex(dbRef, queryRef, partitionIndex, columnInfo.isPrimary, !GeneralConfig.isParallel, false);
+				Indexer.partitionIndex(dbRef, queryRef, partitionIndex, columnInfo.isPrimary, true, false);
 				long timer2 = System.currentTimeMillis();
 				System.out.println("Indexing " + queryRef + " " + (timer2 - timer1));
 			} catch (Exception e) {

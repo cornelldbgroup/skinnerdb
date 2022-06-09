@@ -16,11 +16,15 @@ public class ParallelConfig {
 	/**
 	 * Maximal number of tuples per batch during index generation.
 	 */
-	public final static int PRE_INDEX_SIZE = 10000;
+	public final static int PRE_INDEX_SIZE = 1000;
 	/**
 	 * Maximal number of tuples if joining.parallel method is applied.
 	 */
 	public final static int PARALLEL_SIZE = 10000;
+	/**
+	 * Minimal size of large key column.
+	 */
+	public final static int LARGE_KEY_SIZE = 100000;
 	/**
 	 * Whether to collect statistics of all constraints.
 	 */
@@ -33,7 +37,7 @@ public class ParallelConfig {
     /**
 	 * Maximal number of tuples per batch during execution.
 	 */
-	public static int EXE_THREADS = 1;
+	public static int EXE_THREADS = 24;
 	/**
 	 * Maximal number of executors in the task parallel.
 	 */
@@ -49,7 +53,7 @@ public class ParallelConfig {
 	/**
 	 * The minimal size of sparse columns.
 	 */
-	public final static int SPARSE_KEY_SIZE = 10000;
+	public final static int SPARSE_KEY_SIZE = 1000;
 	/**
 	 * The minimal size of sparse columns.
 	 */

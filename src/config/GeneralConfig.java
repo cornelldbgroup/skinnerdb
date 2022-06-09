@@ -36,4 +36,8 @@ public class GeneralConfig {
 	 * Whether to test cache.
 	 */
 	public static boolean TESTCACHE = false;
+	/**
+	 * Path of JNI library.
+	 */
+	public static String JNI_PATH = "";
 }

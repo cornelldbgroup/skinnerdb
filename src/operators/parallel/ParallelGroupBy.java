@@ -3,24 +3,20 @@ package operators.parallel;
 import buffer.BufferManager;
 import catalog.CatalogManager;
 import catalog.info.ColumnInfo;
-import com.koloboke.collect.map.IntIntCursor;
-import com.koloboke.collect.map.IntIntMap;
-import com.koloboke.collect.map.hash.HashIntIntMaps;
 import config.GeneralConfig;
 import config.ParallelConfig;
 import data.ColumnData;
+import data.DoubleData;
 import data.IntData;
 import expressions.ExpressionInfo;
 import indexing.Index;
 import indexing.Indexer;
+import jni.JNIFilter;
 import joining.parallel.indexing.DoublePartitionIndex;
-import joining.parallel.indexing.IntIndexRange;
 import joining.parallel.indexing.IntPartitionIndex;
 import joining.parallel.indexing.PartitionIndex;
+import operators.Filter;
 import operators.Group;
-import operators.OperatorUtils;
-import operators.RowRange;
-import postprocessing.IndexRange;
 import preprocessing.Context;
 import query.ColumnRef;
 import query.QueryInfo;
@@ -29,16 +25,18 @@ import types.SQLtype;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicIntegerArray;
-import java.util.concurrent.atomic.AtomicLongArray;
-import java.util.function.Function;
-import java.util.stream.Collector;
-import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 public class ParallelGroupBy {
+    static {
+        try {
+            System.load(GeneralConfig.JNI_PATH);
+        } catch (UnsatisfiedLinkError e) {
+            System.err.println("Native code library failed to load.\n" + e);
+            System.exit(1);
+        }
+    }
     /**
      * Iterates over rows of input colunms (must have the
      * same cardinality) and calculates consecutive
@@ -131,6 +129,49 @@ public class ParallelGroupBy {
             nrGroups = curGroupToID.size();
         }
 
+        // Update catalog statistics
+        CatalogManager.updateStats(targetTbl);
+        // Retrieve data for
+        return nrGroups;
+    }
+
+    public static int executeJNI(Collection<ColumnRef> sourceRefs,
+                              ColumnRef targetRef, QueryInfo query) throws Exception {
+        // Register result column
+        String targetTbl = targetRef.aliasName;
+        String targetCol = targetRef.columnName;
+        ColumnInfo targetInfo = new ColumnInfo(targetCol,
+                SQLtype.INT, false, false, false, false);
+        CatalogManager.currentDB.nameToTable.get(targetTbl).addColumn(targetInfo);
+        // Generate result column and load it into buffer
+        String firstSourceTbl = sourceRefs.iterator().next().aliasName;
+        int cardinality = CatalogManager.getCardinality(firstSourceTbl);
+        IntData groupData = new IntData(cardinality);
+        BufferManager.colToData.put(targetRef, groupData);
+        // Get data of source columns
+        List<ColumnData> sourceCols = new ArrayList<>();
+        for (ColumnRef srcRef : sourceRefs) {
+            sourceCols.add(BufferManager.getData(srcRef));
+        }
+
+        List<int[]> intSrcCols = new ArrayList<>();
+        List<double[]> doubleSrcCols = new ArrayList<>();
+        for (ColumnRef columnRef: sourceRefs) {
+            ColumnData columnData = BufferManager.getData(columnRef);
+            if (columnData instanceof IntData) {
+                intSrcCols.add(((IntData) columnData).data);
+            }
+            else {
+                doubleSrcCols.add(((DoubleData) columnData).data);
+            }
+        }
+
+        long groupStart = System.currentTimeMillis();
+        int nrGroups = JNIFilter.groupby(intSrcCols.toArray(
+                new int[0][0]), doubleSrcCols.toArray(new double[0][0]),
+                groupData.data, cardinality, ParallelConfig.EXE_THREADS);
+        long groupEnd = System.currentTimeMillis();
+        System.out.println("Group JNI: " + (groupEnd - groupStart));
         // Update catalog statistics
         CatalogManager.updateStats(targetTbl);
         // Retrieve data for
@@ -276,8 +317,6 @@ public class ParallelGroupBy {
             });
             nrGroups = nrKeys[nrKeys.length - 1];
         }
-
-
 
         // Update catalog statistics
         CatalogManager.updateStats(targetTbl);

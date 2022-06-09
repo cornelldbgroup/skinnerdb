@@ -25,9 +25,13 @@ public class NodeStatistics {
      */
     public final int[] nrVisited;
     /**
-     * Number of indexed size for each table
+     * Number of indexed size for each table.
      */
     public final int[] nrIndexed;
+    /**
+     * Progress for each action.
+     */
+    public final double[] progress;
 
     public NodeStatistics(int nrActions) {
         this.nrVisits = 1;
@@ -35,6 +39,7 @@ public class NodeStatistics {
         this.accumulatedReward = new double[nrActions];
         this.nrVisited = new int[nrActions];
         this.nrIndexed = new int[nrActions];
+        this.progress = new double[nrActions];
     }
 
     /**
@@ -55,6 +60,10 @@ public class NodeStatistics {
         this.accumulatedReward[action] += reward;
         this.nrVisited[action] += nrVisited;
         this.nrIndexed[action] += nrIndexed;
+    }
+
+    public void updateProgress(int action, double progress) {
+        this.progress[action] = Math.max(this.progress[action], progress);
     }
 
     /**

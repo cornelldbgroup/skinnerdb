@@ -1,26 +1,18 @@
 package joining.parallel.parallelization.lockfree;
 
-import config.JoinConfig;
 import config.LoggingConfig;
 import config.ParallelConfig;
-import config.StartupConfig;
 import expressions.compilation.KnaryBoolEval;
 import joining.parallel.indexing.OffsetIndex;
-import joining.parallel.join.DPJoin;
 import joining.parallel.join.ModJoin;
 import joining.parallel.join.OldJoin;
-import joining.parallel.parallelization.EndPlan;
-import joining.parallel.parallelization.NewEndPlan;
 import joining.parallel.parallelization.Parallelization;
 import joining.parallel.parallelization.hybrid.HDataTask;
-import joining.parallel.parallelization.hybrid.HSearchTask;
 import joining.parallel.parallelization.hybrid.JoinPlan;
 import joining.parallel.parallelization.search.SearchResult;
 import joining.parallel.plan.LeftDeepPartitionPlan;
 import joining.parallel.progress.ParallelProgressTracker;
 import joining.parallel.threads.ThreadPool;
-import joining.parallel.uct.DPNode;
-import joining.progress.ProgressTracker;
 import joining.result.ResultTuple;
 import joining.result.UniqueJoinResult;
 import logs.LogUtils;
@@ -35,13 +27,12 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.locks.ReentrantLock;
 
 public class DataParallelization extends Parallelization {
     /**
      * Join operators for sampling threads.
      */
-    private final OldJoin oldJoin;
+    public final OldJoin oldJoin;
     /**
      * initialization of parallelization
      *
@@ -102,7 +93,6 @@ public class DataParallelization extends Parallelization {
             tasks.add(dataTask);
         }
 
-
         // Initialize a thread pool.
         ExecutorService executorService = ThreadPool.executorService;
         long executionStart = System.currentTimeMillis();
@@ -153,7 +143,7 @@ public class DataParallelization extends Parallelization {
         context.maxSize = maxSize;
         long mergeEnd = System.currentTimeMillis();
         JoinStats.mergeTime = mergeEnd - executionEnd;
-        JoinStats.nrSamples = avgNrEpisode / nrDPThreads;
+        JoinStats.nrSamples = nrDPThreads == 0 ? oldJoin.roundCtr : avgNrEpisode / nrDPThreads;
 
         // Write log to the local file.
         if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {

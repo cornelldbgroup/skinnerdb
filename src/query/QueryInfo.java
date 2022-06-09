@@ -234,6 +234,12 @@ public class QueryInfo {
 	 */
 	public final Set<Pair<Integer, Integer>> constraints = new HashSet<>();
 	/**
+	 * A temporary position data structures for the sub-query.
+	 */
+	public final Map<ColumnRef, Deque<int[]>> aliasToPositions =
+			new HashMap<>();
+
+	/**
 	 * Extract information from the FROM clause (e.g.,
 	 * all tables referenced with their aliases, the
 	 * number of items in the from clause etc.).

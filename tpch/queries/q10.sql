@@ -29,5 +29,4 @@ group by
 	c_address,
 	c_comment
 order by
-	revenue desc
-LIMIT 20;
+	revenue desc;

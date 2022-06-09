@@ -3,15 +3,13 @@ package joining;
 import catalog.CatalogManager;
 import config.*;
 import joining.parallel.parallelization.dpdsync.DPDSync;
+import joining.parallel.parallelization.hybrid.AdaptiveHybridParallelization;
 import joining.parallel.parallelization.hybrid.HybridParallelization;
 import joining.parallel.parallelization.join.JoinParallelization;
 import joining.parallel.parallelization.leaf.LeafParallelization;
 import joining.parallel.parallelization.lockfree.DataParallelization;
 import joining.parallel.parallelization.root.RootParallelization;
-import joining.parallel.parallelization.search.AdaptiveSearchParallelization;
-import joining.parallel.parallelization.search.HeuristicParallelization;
-import joining.parallel.parallelization.search.NewSearchParallelization;
-import joining.parallel.parallelization.search.SearchParallelization;
+import joining.parallel.parallelization.search.*;
 import joining.parallel.parallelization.task.StandardParallelization;
 import joining.parallel.parallelization.task.TaskParallelization;
 import joining.parallel.parallelization.tree.TreeParallelization;
@@ -96,8 +94,10 @@ public class ParallelJoinProcessor {
             if (ParallelConfig.PARALLEL_SPEC == 0) {
 //                Parallelization parallelization = new LockFreeParallelization(ParallelConfig.EXE_THREADS,
 //                        JoinConfig.BUDGET_PER_EPISODE, query, context);
-                Parallelization parallelization = new DataParallelization(ParallelConfig.EXE_THREADS,
+                DataParallelization parallelization = new DataParallelization(ParallelConfig.EXE_THREADS,
                         JoinConfig.BUDGET_PER_EPISODE, query, context);
+                System.out.println("Alias: " + Arrays.toString(query.aliases));
+                System.out.println("Cards: " + Arrays.toString(parallelization.oldJoin.cardinalities));
                 parallelization.execute(resultTuples);
             }
             // DPD sync
@@ -162,13 +162,13 @@ public class ParallelJoinProcessor {
             }
             // DPL
             else if (ParallelConfig.PARALLEL_SPEC == 11) {
-                Parallelization parallelization = new LockFreeParallelization(ParallelConfig.EXE_THREADS,
+                Parallelization parallelization = new DataParallelization(ParallelConfig.EXE_THREADS,
                         JoinConfig.BUDGET_PER_EPISODE, query, context);
                 parallelization.execute(resultTuples);
             }
             // DPM
             else if (ParallelConfig.PARALLEL_SPEC == 12) {
-                Parallelization parallelization = new LockFreeParallelization(ParallelConfig.EXE_THREADS,
+                Parallelization parallelization = new DataParallelization(ParallelConfig.EXE_THREADS,
                         JoinConfig.BUDGET_PER_EPISODE, query, context);
                 parallelization.execute(resultTuples);
             }
@@ -205,6 +205,18 @@ public class ParallelJoinProcessor {
             // Hybrid Parallelization
             else if (ParallelConfig.PARALLEL_SPEC == 18) {
                 Parallelization parallelization = new HybridParallelization(ParallelConfig.EXE_THREADS,
+                        JoinConfig.BUDGET_PER_EPISODE, query, context);
+                parallelization.execute(resultTuples);
+            }
+            // New SP adaptive
+            else if (ParallelConfig.PARALLEL_SPEC == 19) {
+                Parallelization parallelization = new NewAdaptiveSearchParallelization(ParallelConfig.EXE_THREADS,
+                        JoinConfig.BUDGET_PER_EPISODE, query, context, resultTuples);
+                parallelization.execute(resultTuples);
+            }
+            // New SP adaptive
+            else if (ParallelConfig.PARALLEL_SPEC == 20) {
+                Parallelization parallelization = new AdaptiveHybridParallelization(ParallelConfig.EXE_THREADS,
                         JoinConfig.BUDGET_PER_EPISODE, query, context);
                 parallelization.execute(resultTuples);
             }

@@ -1,24 +1,138 @@
 # SkinnerMT
 
-This directory contains a prototype of a parallel database system using intra-query learning. SkinnerMT applies three different parallel algorithms to speedup query optimization and execution. The prototype needs to load data from the disk into main memory which might takes several minutes. We expect to implement a Client-Server DBMS architecture to avoid redundant loading time.
+
+
+This directory contains a prototype of a parallel database system using intra-query learning. SkinnerMT applies three different parallel algorithms to speedup query optimization and execution. 
+The prototype needs to load data from the disk into main memory which might takes several minutes. We expect to implement a Client-Server DBMS architecture to avoid redundant loading time.
+
+
+# Requirements
+- Ubuntu with Java ≥ 15.
+- gcc and g++ ≥ 9.4.0
+- libcuckoo
+
+We have verified that the SkinnerMT can be built successfully on Amazon EC2 c4.8xlarge with Ubuntu 22.04 LTS and Java 17.0.1 installed.
+
 
 # Running Benchmarks
 
 In SkinnerMT, we provided three benchmarks. The <a href="http://www.vldb.org/pvldb/vol9/p204-leis.pdf">join order benchmark</a> is a popular benchmark for query optimizers. The <a href="http://www.tpc.org/tpch/">TPC-H benchmark</a> (scaling factor of 10) is easy to optimize due to uniform data. The <a href="https://doi.org/10.1007/978-3-319-72401-0_8">JCC-H benchmark</a> (scaling factor of 10) is difficult due to skewed data. Execute the following steps to run SkinnerMT on those benchmarks:
 
 <ol>
-<li>Download the database in the SkinnerMT format <a href="https://drive.google.com/file/d/19OvQCWCCaaajvg4gTzrR8xuir52WPFkL/view?usp=sharing">databases.zip</a>. Decompress the linked .zip file. Then download and decompress source codes and executable jar files <a href="https://drive.google.com/file/d/1beFsbIsqWxyiIraG7Va-_gPZcYSmX0mO/view?usp=sharing">skinnermt.zip</a>.</li>
+<li>Download and decompress source codes and executable jar files <a href="https://drive.google.com/file/d/1CU0sJlR-GvSBKzzfJO-CyaFlM_PmN4Tb/view?usp=sharing">skinnermt.zip</a>. 
+Then download the database in the SkinnerMT format <a href="https://drive.google.com/file/d/1zr9pKMfK33IOlZ26YrvLpO1STi7Rzueu/view?usp=sharing">databases.zip</a>. Decompress the linked .zip file under <code>skinnermt</code>.</li>
+
+You can use the gdown tool to download files from Google Drive via the Linux console.
+```
+sudo apt update
+sudo apt install software-properties-common
+sudo add-apt-repository ppa:deadsnakes/ppa
+sudo apt install python3.9
+sudo apt install python3-pip
+pip install gdown
+sudo pip install --upgrade gdown
+gdown 1RvwNLveDfiRPz7sTfpPX7_zQb77rRgHE
+gdown 1zr9pKMfK33IOlZ26YrvLpO1STi7Rzueu
+sudo apt install unzip
+unzip skinnermt.zip
+unzip databases.zip
+mv imdb skinnermt
+mv tpch-sf-10 skinnermt
+mv jcch-sf-10 skinnermt
+```
+
+The final directory structure should be:
+
+```
+skinnermt
+¦   README.md
+¦
++---Filter
+¦
++---src  
+¦
++---scripts
+¦   ¦   skinnerexp.sh
+¦   ¦   Skinner.sh
+¦   ¦   ...
+¦
+¦
++---imdb
+¦   ¦   data
+¦   ¦   config.sdb
+¦   ¦   ...
+¦
+¦   
++---tpch-sf-10
+¦   ¦   data
+¦   ¦   config.sdb
+¦   ¦   ...
+¦
+¦
++---tpch-sf-10
+¦   ¦   data
+¦   ¦   config.sdb
+¦   ¦   ...
+```
+<li>Install libcuckoo library based on the <a href="https://github.com/efficient/libcuckoo">Github instructions</a>. </li>
+
+```
+
+sudo apt-get update && sudo apt-get install cmake
+mkdir build
+cd build
+git clone https://github.com/efficient/libcuckoo
+cd libcuckoo
+cmake -DCMAKE_INSTALL_PREFIX=../install -DBUILD_EXAMPLES=1 -DBUILD_TESTS=1 .
+make all
+make install
+cd ~/skinnermt/
+
+```
+
+<li>Compile JNI codes under the <code>Filter</code> directory: </li>
+
+```
+cd Filter
+g++ -std=c++11 -lpthread -shared -fPIC -O3 jniFilter.cpp -o jniFilter.so -I/home/ubuntu/build/install/include/
+```
+
+
+**Note: The script will generate the JNI library file <code>jniFilter.so</code>. 
+Please replace the variable <code>JNI_PATH</code> (in <code>config.sdb</code> for each database) by the path to <code>jniFilter.so</code>.**
 
 <li>Start SkinnerMT using the bash script <code>Skinner.sh</code>. For Linux, use the following command to initialize SkinnerMT (while replacing /path/to/skinner/data by the path to the decompressed database and nr_threads by the number of running threads): 
 <p>
-<code>
+
+```
+cd ~/skinnermt/scripts/
 ./Skinner.sh /path/to/skinner/data nr_threads
-</code>
+```
 
 The script will run corresponding .jar file that can be invoked directly on different platforms. We recommend setting a high value for Java heap space (parameter Xmx) to minimize garbage collection overheads (the current SkinnerMT version isn't optimized for main memory footprint).
 </p> 
 </li>
-<li>Run a benchmark using the bench command in the SkinnerMT console. Queries for each database can be found under the according directory. For example, <code>bench ./imdb/queries outputfile.txt</code> command will benchmark queries in ./imdb/queries directory and write experimental results into outputfile.txt. You may need to adapt the relative path to the directory containing benchmark queries, replace <code>outputfile.txt</code> by a file name of your choosing.</li>
+<li>Run a benchmark using the bench command in the SkinnerMT console. Queries for each database can be found under the according directory. For example, <code>bench ../imdb/queries outputfile.txt</code> command will benchmark queries in ../imdb/queries directory and write experimental results into outputfile.txt. You may need to adapt the relative path to the directory containing benchmark queries, replace <code>outputfile.txt</code> by a file name of your choosing.
+</li>
+
+<li>
+Alternatively, we provide a bash script <code>./scripts/skinnerexp.sh</code> to run performance
+experiments automatically.
+<p>
+
+```
+./skinnerexp.sh [nr_runs] [benchmark] [algorithm]
+```
+
+The script will run queries of <code>[benchmark]</code>(e.g. imdb/tpch/jcch) <code>[nr_runs]</code> (e.g. 10)
+times by using <code>[algorithm]</code> parallelization (e.g. dp/sp/hp).
+</p> 
+</li>
+
+For reproducing the experiments in the paper, we recommend using the
+Epsilon GC (<code>-XX:+UnlockExperimentalVMOptions -XX:+UseEpsilonGC -XX:+AlwaysPreTouch</code>) 
+and larger heap space (<code>-Xmx200G</code>). 
+
 </ol>
 
 # Output
@@ -60,17 +174,16 @@ SkinnerMT includes parameters for specific benchmarks and data sets. Those param
 <ol>
 <li>THREADS: number of available threads for SkinnerMT. By default, it is the number of available processors in the running machine</li>
 <li>NR_WARMUP: number of warm-up runs before the actual run</li>
-<li>NR_EXECUTORS: number of executors for task parallel</li>
-<li>NR_BATCHES: number of batches for task parallel</li>
 <li>PARALLEL_ALGO: parallel algorithms used in the join phase. 
     <ul>
         <li>Data Parallel: DP</li>
-        <li>Search Parallel: SP-O, SP-P, SP-H, SP-C, Root, Leaf, Tree</li>
-        <li>Task Parallel: TP</li>
+        <li>Search Parallel: SP</li>
+        <li>Hybrid Parallel: HP</li>
     </ul>
 </li>
 <li>TEST_MEM: whether to measure memory consumption including base tables, indexes, uct tree, progress tracker and auxiliary data structures (Note that open this flag may add overhead of measuring memory consumption)</li>
 <li>WRITE_RESULTS: whether to write results of queries into a file for the 'bench' command. The output file is named by outputfile.txt.res </li>
+<li>JNI_PATH: absolute path to JNI libraries.</li>
 </ol>
 
 # Create databases (Optional)

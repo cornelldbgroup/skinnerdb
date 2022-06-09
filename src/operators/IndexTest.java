@@ -246,7 +246,10 @@ public class IndexTest implements ExpressionVisitor {
 				right instanceof LongValue ||
 				right instanceof StringValue;
 		boolean haveColumn = left instanceof Column ||
-				right instanceof Column;
+				right instanceof Column
+//				|| (left instanceof CastExpression && ((CastExpression) left).getLeftExpression() instanceof Column) ||
+//				(right instanceof CastExpression && ((CastExpression) right).getLeftExpression() instanceof Column)
+				;
 		if (!haveConstant || !haveColumn) {
 			canUseIndex = false;
 		}

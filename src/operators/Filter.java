@@ -12,24 +12,31 @@ import catalog.CatalogManager;
 import catalog.info.ColumnInfo;
 import catalog.info.TableInfo;
 import com.google.common.collect.Iterables;
+import com.google.common.primitives.Ints;
 import com.koloboke.collect.IntCollection;
 import config.GeneralConfig;
 import config.NamingConfig;
 import config.ParallelConfig;
 import config.PreConfig;
 import data.ColumnData;
+import data.Dictionary;
+import data.DoubleData;
+import data.IntData;
 import expressions.ExpressionInfo;
 import expressions.compilation.EvaluatorType;
 import expressions.compilation.ExpressionCompiler;
 import expressions.compilation.UnaryBoolEval;
 import indexing.Index;
+import jni.JNIFilter;
 import joining.parallel.indexing.DoublePartitionIndex;
 import joining.parallel.indexing.IntPartitionIndex;
 import joining.parallel.indexing.PartitionIndex;
 import joining.parallel.parallelization.search.SearchResult;
 import joining.parallel.threads.ThreadPool;
+import operators.parallel.JNIParser;
 import predicate.NonEquiNode;
 import predicate.NonEquiNodesTest;
+import preprocessing.Context;
 import query.ColumnRef;
 import query.QueryInfo;
 import types.JavaType;
@@ -43,6 +50,14 @@ import javax.swing.text.html.StyleSheet;
  *
  */
 public class Filter {
+	static {
+		try {
+			System.load(GeneralConfig.JNI_PATH);
+		} catch (UnsatisfiedLinkError e) {
+			System.err.println("Native code library failed to load.\n" + e);
+			System.exit(1);
+		}
+	}
 	/**
 	 * Load required columns for predicate evaluations into main memory.
 	 * 
@@ -107,6 +122,49 @@ public class Filter {
 	 * Returns list of indices of rows satisfying given
 	 * unary predicate.s
 	 *
+	 * @param unaryPred		unary predicate
+	 * @param tableName		name of DB table to which predicate applies
+	 * @param columnMapping	maps query columns to buffered columns -
+	 * 						assume identity mapping if null is specified.
+	 * @return				list of satisfying row indices
+	 */
+	public static List<Integer> executeToList(ExpressionInfo unaryPred,
+											  String tableName, Map<ColumnRef, ColumnRef> columnMapping)
+			throws Exception {
+		// Load required columns for predicate evaluation
+		loadPredCols(unaryPred, columnMapping);
+		// Compile unary predicate for fast evaluation
+		UnaryBoolEval unaryBoolEval = compilePred(unaryPred, columnMapping);
+		// Get cardinality of table referenced in predicate
+		int cardinality = CatalogManager.getCardinality(tableName);
+		// Initialize filter result
+		List<Integer> result = null;
+		// Choose between sequential and parallel processing
+		if (cardinality <= ParallelConfig.PRE_BATCH_SIZE) {
+			RowRange allTuples = new RowRange(0, cardinality - 1);
+			result = filterBatch(unaryBoolEval, allTuples);
+		} else {
+			// Divide tuples into batches
+			List<RowRange> batches = split(cardinality);
+			// Process batches in parallel
+			result = batches.parallelStream().flatMap(batch ->
+					filterBatch(unaryBoolEval, batch).stream()).collect(
+					Collectors.toList());
+		}
+		// Clean up columns loaded for this operation
+		/*
+		if (!GeneralConfig.inMemory) {
+			for (ColumnRef colRef : unaryPred.columnsMentioned) {
+				BufferManager.unloadColumn(colRef);
+			}
+		}
+		*/
+		return result;
+	}
+	/**
+	 * Returns list of indices of rows satisfying given
+	 * unary predicate.s
+	 *
 	 * @param tableName		name of DB table to which predicate applies
 	 * @param columnMapping	maps query columns to buffered columns -
 	 * 						assume identity mapping if null is specified.
@@ -117,212 +175,176 @@ public class Filter {
 											  QueryInfo query, List<ColumnRef> requiredCols)
 					throws Exception {
 		ExpressionInfo unaryPred = filter.remainingInfo;
-		// Load required columns for predicate evaluation
-		loadPredCols(unaryPred, columnMapping);
 		// Compile unary predicate for fast evaluation
 		UnaryBoolEval unaryBoolEval = compilePred(unaryPred, columnMapping);
 		// Get cardinality of table referenced in predicate
 		int cardinality = CatalogManager.getCardinality(tableName);
 		// Initialize filter result
-		List<Integer> result = null;
+		List<Integer> result;
 //		long s3 = System.currentTimeMillis();
 		// Choose between sequential and joining.parallel processing
 		if (cardinality <= ParallelConfig.PRE_BATCH_SIZE || !GeneralConfig.isParallel) {
 			RowRange allTuples = new RowRange(0, cardinality - 1);
 			result = filterBatch(unaryBoolEval, allTuples);
 		} else {
-			if (unaryPred.columnsMentioned.size() == 1 && PreConfig.PROCESS_KEYS) {
-				// Divide tuples into batches
-				ColumnRef col = unaryPred.columnsMentioned.iterator().next();
-				ColumnRef columnRef = columnMapping.get(col);
-				Index index = BufferManager.colToIndex.get(columnRef);
-				NonEquiNodesTest nonEquiNodesTest = new NonEquiNodesTest(query, columnMapping);
-				unaryPred.finalExpression.accept(nonEquiNodesTest);
-				long timer1 = System.currentTimeMillis();
-				if (index != null && index.posSet().size() < ParallelConfig.SPARSE_FILTER_SIZE) {
-					IntCollection posSet = index.posSet();
-					int size = posSet.size();
-					NonEquiNode evaluator = nonEquiNodesTest.nonEquiNodes.pop();
-					int[] positions = index.positions;
-					List<Integer> posList = new ArrayList<>(posSet);
-					int[] posResults = new int[size];
-					int[] valueResults = new int[size];
-					IntStream.range(0, size).parallel().forEach(pid -> {
-						int pos = posList.get(pid);
-						int nrValues = positions[pos];
-						int rowCtr = positions[pos + 1];
-						if (evaluator.evaluateUnary(rowCtr)) {
-							posResults[pid] = pos;
-							valueResults[pid] = nrValues;
-						} else {
-							posResults[pid] = -1;
-							valueResults[pid] = 0;
-						}
-					});
-					int filteredSize = 0;
-					for (int i = 0; i < size; i++) {
-						filteredSize += valueResults[i];
+			// Divide tuples into batches
+			List<RowRange> batches = split(cardinality);
+			int nrBatches = batches.size();
+			ColumnRef columnRef = columnMapping.get(unaryPred.columnsMentioned.iterator().next());
+			ColumnData data = BufferManager.getData(columnRef);
+			result = new ArrayList<>(cardinality);
+			List<Integer>[] resultsArray = new ArrayList[nrBatches];
+			IntStream.range(0, nrBatches).parallel().forEach(bid -> {
+				RowRange batch = batches.get(bid);
+				int first = batch.firstTuple;
+				int end = batch.lastTuple;
+				List<Integer> subResult = new ArrayList<>(end - first + 1);
+				// Evaluate predicate for each table row
+				for (int rowCtr = first; rowCtr <= end; ++rowCtr) {
+					if (data.longForRow(rowCtr) != Integer.MIN_VALUE
+							&& unaryBoolEval.evaluate(rowCtr) > 0) {
+						subResult.add(rowCtr);
 					}
-					String filteredName = NamingConfig.FILTERED_PRE;
-					List<String> columnNames = new ArrayList<>();
-					for (ColumnRef colRef : requiredCols) {
-						columnNames.add(colRef.columnName);
-						filteredName = NamingConfig.FILTERED_PRE + colRef.aliasName;
-					}
-					if (filteredSize == index.cardinality) {
-						List<ColumnRef> sourceColRefs = new ArrayList<>();
-						for (String columnName : columnNames) {
-							sourceColRefs.add(new ColumnRef(tableName, columnName));
-						}
-						// Update catalog, inserting materialized table
-						TableInfo resultTable = new TableInfo(filteredName, true);
-						CatalogManager.currentDB.addTable(resultTable);
-						for (ColumnRef sourceColRef : sourceColRefs) {
-							// Add result column to result table, using type of source column
-							ColumnInfo sourceCol = CatalogManager.getColumn(sourceColRef);
-							ColumnInfo resultCol = new ColumnInfo(sourceColRef.columnName,
-									sourceCol.type, sourceCol.isPrimary,
-									sourceCol.isUnique, sourceCol.isNotNull,
-									sourceCol.isForeign);
-							resultTable.addColumn(resultCol);
-						}
-						// Generate column data
-						String finalFilteredName = filteredName;
-						sourceColRefs.parallelStream().forEach(sourceColRef -> {
-							// Copy relevant rows into result column
-							ColumnData srcData = BufferManager.colToData.get(sourceColRef);
-							String columnName = sourceColRef.columnName;
-							ColumnRef resultColRef = new ColumnRef(finalFilteredName, columnName);
-							BufferManager.colToData.put(resultColRef, srcData);
-						});
-						CatalogManager.updateStats(finalFilteredName);
-					}
-					else {
-						throw new RuntimeException("Not implemented");
-					}
-					long timer2 = System.currentTimeMillis();
-					System.out.println("Time: " + (timer2 - timer1));
-					return null;
 				}
-				else {
-					List<RowRange> batches = split(cardinality);
-					// Process batches in joining.parallel
-					result = batches.parallelStream().flatMap(batch ->
-							filterBatch(unaryBoolEval, batch).stream()).collect(
-							Collectors.toList());
-				}
-			}
-			else {
-				// Divide tuples into batches
-				List<RowRange> batches = split(cardinality);
-				int nrBatches = batches.size();
-//				result = batches.parallelStream().flatMap(batch ->
-//						filterBatch(unaryBoolEval, batch).stream()).collect(
-//						Collectors.toList());
-//				return result;
-				ColumnRef columnRef = columnMapping.get(unaryPred.columnsMentioned.iterator().next());
-				ColumnData data = BufferManager.getData(columnRef);
-				result = new ArrayList<>(cardinality);
-				List<Integer>[] resultsArray = new ArrayList[batches.size()];
-				IntStream.range(0, nrBatches).parallel().forEach(bid -> {
-					RowRange batch = batches.get(bid);
-					int first = batch.firstTuple;
-					int end = batch.lastTuple;
-
-					List<Integer> subResult = new ArrayList<>(end - first + 1);
-					// Evaluate predicate for each table row
-					for (int rowCtr = first; rowCtr <= end; ++rowCtr) {
-						if (data.longForRow(rowCtr) != Integer.MIN_VALUE
-								&& unaryBoolEval.evaluate(rowCtr) > 0) {
-							subResult.add(rowCtr);
-						}
-					}
-					resultsArray[bid] = subResult;
-				});
-				for (List<Integer> subResult: resultsArray) {
-					result.addAll(subResult);
-				}
+				resultsArray[bid] = subResult;
+			});
+			for (List<Integer> subResult: resultsArray) {
+				result.addAll(subResult);
 			}
 		}
 		return result;
 	}
 	/**
 	 * Returns list of indices of rows satisfying given
-	 * unary predicate.s
+	 * unary predicate by calling C++.
 	 *
 	 * @param tableName		name of DB table to which predicate applies
-	 * @param columnMapping	maps query columns to buffered columns -
+	 * @param preSummary	maps query columns to buffered columns -
 	 * 						assume identity mapping if null is specified.
-	 * @return				array of satisfying row indices
+	 * @return				list of satisfying row indices
 	 */
-	public static int[] executeToArray(IndexFilter filter,
-											  String tableName, Map<ColumnRef, ColumnRef> columnMapping,
-											   QueryInfo query, List<ColumnRef> requiredCols)
+	public static List<Integer> executeToListJNI(IndexFilter filter,
+											  String tableName, Context preSummary,
+											  QueryInfo query, List<ColumnRef> requiredCols, String alias)
 			throws Exception {
 		ExpressionInfo unaryPred = filter.remainingInfo;
-		// Load required columns for predicate evaluation
-		loadPredCols(unaryPred, columnMapping);
-		// Compile unary predicate for fast evaluation
-		UnaryBoolEval unaryBoolEval = compilePred(unaryPred, columnMapping);
+		int[] indexFilteredRows = filter.rows == null ? new int[0] : filter.rows;
 		// Get cardinality of table referenced in predicate
-		int cardinality = CatalogManager.getCardinality(tableName);
+		int cardinality = indexFilteredRows.length == 0 ?
+				CatalogManager.getCardinality(tableName) : indexFilteredRows.length;
 		// Initialize filter result
-		int[] result;
+		List<Integer> result;
 //		long s3 = System.currentTimeMillis();
 		// Choose between sequential and joining.parallel processing
 		if (cardinality <= ParallelConfig.PRE_BATCH_SIZE || !GeneralConfig.isParallel) {
-			RowRange allTuples = new RowRange(0, cardinality - 1);
-			result = filterBatch(unaryBoolEval, allTuples).stream().mapToInt(Integer::intValue).toArray();
+			// Compile unary predicate for fast evaluation
+			UnaryBoolEval unaryBoolEval = compilePred(unaryPred, preSummary.columnMapping);
+			result = new ArrayList<>(cardinality);
+			for (int rowCtr = 0; rowCtr < cardinality; ++rowCtr) {
+				if (unaryBoolEval.evaluate(rowCtr) > 0) {
+					result.add(rowCtr);
+				}
+			}
 		} else {
-			// Divide tuples into batches
-			int nrThreads = 200;
-			ExecutorService executorService = ThreadPool.executorService;
-			ColumnRef columnRef = columnMapping.get(unaryPred.columnsMentioned.iterator().next());
-			ColumnData data = BufferManager.getData(columnRef);
-			List<Callable<int[]>> tasks = new ArrayList<>(nrThreads);
-			int base = cardinality / nrThreads;
-			int remainingTuples = cardinality - base * nrThreads;
-			for (int threadCtr = 0; threadCtr < nrThreads; threadCtr++) {
-				int prevRemaining = Math.min(remainingTuples, threadCtr);
-				int first = threadCtr * base + prevRemaining;
-				int end = first + base + (threadCtr < remainingTuples ? 1 : 0);
-				int size = end - first;
-				tasks.add(() -> {
-					int[] subResult = new int[size+1];
-					// Evaluate predicate for each table row
-//					long start = System.currentTimeMillis();
-					int count = 0;
-					for (int rowCtr = first; rowCtr < end; ++rowCtr) {
-						if (data.longForRow(rowCtr) != Integer.MIN_VALUE
-								&& unaryBoolEval.evaluate(rowCtr) > 0) {
-							subResult[count+1] = rowCtr;
-							count++;
-						}
-					}
-					subResult[0] = count;
-//					long terminate = System.currentTimeMillis();
-//					System.out.println(Thread.currentThread() + ":" + (terminate - start) + " " + size);
-					return subResult;
-				});
+			JNIParser jniParser = new JNIParser(query, preSummary.columnMapping);
+			String filteredName = NamingConfig.FILTERED_PRE + alias;
+			unaryPred.finalExpression.accept(jniParser);
+			long time1 = System.currentTimeMillis();
+			// All columns to be materialized
+			List<int[]> intSrcCols = new ArrayList<>();
+			List<double[]> doubleSrcCols = new ArrayList<>();
+			List<ColumnRef> sourceColRefs = new ArrayList<>();
+			List<ColumnRef> intColRefs = new ArrayList<>();
+			List<ColumnRef> doubleColRefs = new ArrayList<>();
+			for (ColumnRef columnRef: requiredCols) {
+				ColumnRef mapRef = preSummary.columnMapping.get(columnRef);
+				ColumnRef filteredRef = new ColumnRef(filteredName, columnRef.columnName);
+				sourceColRefs.add(mapRef);
+				ColumnData columnData = BufferManager.getData(mapRef);
+				if (columnData instanceof IntData) {
+					intSrcCols.add(((IntData) columnData).data);
+					intColRefs.add(filteredRef);
+				}
+				else {
+					doubleSrcCols.add(((DoubleData) columnData).data);
+					doubleColRefs.add(filteredRef);
+				}
 			}
-			long executionStart = System.currentTimeMillis();
-			List<Future<int[]>> futures = executorService.invokeAll(tasks);
-			long executionEnd = System.currentTimeMillis();
-			System.out.println("Parallel Execution: " + (executionEnd - executionStart));
-			int totalSize = 0;
-			List<int[]> threadResults = new ArrayList<>(nrThreads);
-			for (int threadCtr = 0; threadCtr < nrThreads; threadCtr++) {
-				int[] threadResult = futures.get(threadCtr).get();
-				totalSize += threadResult[0];
-				threadResults.add(threadResult);
+
+			int[][] intTargetCols = new int[intSrcCols.size()][];
+			double[][] doubleTargetCols = new double[doubleSrcCols.size()][];
+			int nrRows = JNIFilter.filter(jniParser.jniAST.toArray(new String[0]),
+					jniParser.intColumns.toArray(new int[0][0]),
+					jniParser.doubleColumns.toArray(new double[0][0]),
+					indexFilteredRows, cardinality,
+					intSrcCols.toArray(new int[0][0]), doubleSrcCols.toArray(new double[0][0]),
+					intTargetCols, doubleTargetCols,
+					ParallelConfig.EXE_THREADS);
+			// Materialize relevant rows and columns
+			// Update catalog, inserting materialized table
+			TableInfo resultTable = new TableInfo(filteredName, true);
+			CatalogManager.currentDB.addTable(resultTable);
+			for (ColumnRef sourceColRef : sourceColRefs) {
+				// Add result column to result table, using type of source column
+				ColumnInfo sourceCol = CatalogManager.getColumn(sourceColRef);
+				ColumnInfo resultCol = new ColumnInfo(sourceColRef.columnName,
+						sourceCol.type, sourceCol.isPrimary,
+						sourceCol.isUnique, sourceCol.isNotNull,
+						sourceCol.isForeign);
+				resultTable.addColumn(resultCol);
 			}
-			result = new int[totalSize];
-			int prefix = 0;
-			for (int[] threadResult: threadResults) {
-				int nrTuples = threadResult[0];
-				System.arraycopy(threadResult, 1, result, prefix, nrTuples);
-				prefix += nrTuples;
+//			// Divide tuples into batches
+//			List<RowRange> batches = split(cardinality);
+//			int nrBatches = batches.size();
+//			ColumnRef columnRef = preSummary.columnMapping.get(unaryPred.columnsMentioned.iterator().next());
+//			ColumnData data = BufferManager.getData(columnRef);
+//			result = new ArrayList<>(cardinality);
+//			List<Integer>[] resultsArray = new ArrayList[nrBatches];
+//			UnaryBoolEval unaryBoolEval = compilePred(unaryPred, preSummary.columnMapping);
+//			IntStream.range(0, nrBatches).parallel().forEach(bid -> {
+//				RowRange batch = batches.get(bid);
+//				int first = batch.firstTuple;
+//				int end = batch.lastTuple;
+//				List<Integer> subResult = new ArrayList<>(end - first + 1);
+//				// Evaluate predicate for each table row
+//				for (int rowCtr = first; rowCtr <= end; ++rowCtr) {
+//					if (data.longForRow(rowCtr) != Integer.MIN_VALUE
+//							&& unaryBoolEval.evaluate(rowCtr) > 0) {
+//						subResult.add(rowCtr);
+//					}
+//				}
+//				resultsArray[bid] = subResult;
+//			});
+//			for (List<Integer> subResult: resultsArray) {
+//				result.addAll(subResult);
+//			}
+			long time2 = System.currentTimeMillis();
+//			int newCardinality = intTargetCols.length > 0 ? intTargetCols[0].length : doubleTargetCols[0].length;
+			for (int intColCtr = 0; intColCtr < intSrcCols.size(); intColCtr++) {
+				int[] target = intTargetCols[intColCtr] == null ?
+						intSrcCols.get(intColCtr) : intTargetCols[intColCtr];
+				IntData intData = new IntData(target);
+				BufferManager.colToData.put(intColRefs.get(intColCtr), intData);
 			}
+			for (int doubleColCtr = 0; doubleColCtr < doubleSrcCols.size(); doubleColCtr++) {
+				double[] target = doubleTargetCols[doubleColCtr] == null ?
+						doubleSrcCols.get(doubleColCtr) : doubleTargetCols[doubleColCtr];
+				DoubleData doubleData = new DoubleData(target);
+				BufferManager.colToData.put(doubleColRefs.get(doubleColCtr), doubleData);
+			}
+			// Update pre-processing summary
+			for (ColumnRef srcRef : requiredCols) {
+				String columnName = srcRef.columnName;
+				ColumnRef resRef = new ColumnRef(filteredName, columnName);
+				preSummary.columnMapping.put(srcRef, resRef);
+			}
+			// Update statistics in catalog
+			CatalogManager.updateStats(filteredName);
+			preSummary.aliasToFiltered.put(alias, filteredName);
+
+			result = new ArrayList<>();
+			long time3 = System.currentTimeMillis();
+			System.out.println("JNI time: " + (time2 - time1) + " " + (time3 - time2));
 
 		}
 		return result;
@@ -348,46 +370,6 @@ public class Filter {
 		return batches;
 	}
 	/**
-	 * Splits table with given cardinality into tuple batches
-	 * according to the configuration for joining.parallel processing.
-	 *
-	 * @param index			column index
-	 * @return				list of row ranges (batches)
-	 */
-	static int[] filterValues(Index index, NonEquiNode unaryBoolEval) {
-		if (index == null) {
-			return null;
-		}
-		IntCollection posSet = index.posSet();
-		int cardinality = posSet.size();
-		if (cardinality < ParallelConfig.SPARSE_FILTER_SIZE) {
-			int[] positions = index.positions;
-			List<Integer> posList = new ArrayList<>(posSet);
-			int[] posResults = new int[cardinality];
-			int[] valueResults = new int[cardinality];
-			IntStream.range(0, cardinality).parallel().forEach(pid -> {
-				int pos = posList.get(pid);
-				int nrValues = positions[pos];
-				int rowCtr = positions[pos + 1];
-				if (unaryBoolEval.evaluateUnary(rowCtr)) {
-//					for (int i = pos + 1; i <= pos + nrValues; i++) {
-//						result.add(positions[i]);
-//					}
-					posResults[pid] = pos;
-					valueResults[pid] = nrValues;
-				}
-				else {
-					posResults[pid] = -1;
-					valueResults[pid] = 0;
-				}
-			});
-			return posResults;
-		}
-		else {
-			return null;
-		}
-	}
-	/**
 	 * Filters given tuple batch using specified predicate evaluator,
 	 * return indices of rows within the batch that satisfy the 
 	 * predicate.
@@ -404,6 +386,28 @@ public class Filter {
 				rowCtr<=rowRange.lastTuple; ++rowCtr) {
 			if (unaryBoolEval.evaluate(rowCtr) > 0) {
 				result.add(rowCtr);
+			}
+		}
+		return result;
+	}
+	/**
+	 * Filters given tuple batch using specified predicate evaluator,
+	 * return indices of rows within the batch that satisfy the
+	 * predicate.
+	 *
+	 * @param unaryBoolEval	unary predicate evaluator
+	 * @param rowRange		range of tuple indices of batch
+	 * @return				list of indices satisfying the predicate
+	 */
+	static List<Integer> filterBatchRows(UnaryBoolEval unaryBoolEval,
+									 RowRange rowRange, List<Integer> rows) {
+		List<Integer> result = new ArrayList<>(rowRange.lastTuple - rowRange.firstTuple);
+		// Evaluate predicate for each table row
+		for (int rowCtr=rowRange.firstTuple;
+			 rowCtr<=rowRange.lastTuple; ++rowCtr) {
+			int row = rows.get(rowCtr);
+			if (unaryBoolEval.evaluate(row) > 0) {
+				result.add(row);
 			}
 		}
 		return result;

@@ -14,6 +14,7 @@ import expressions.aggregates.AggInfo;
 import indexing.Index;
 import net.sf.jsqlparser.schema.Column;
 import operators.*;
+import operators.Materialize;
 import operators.parallel.*;
 import preprocessing.Context;
 import print.RelationPrinter;

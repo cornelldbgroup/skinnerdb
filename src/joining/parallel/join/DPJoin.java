@@ -69,7 +69,7 @@ public abstract class DPJoin {
     /**
      * Maps non-equi join predicates to compiled evaluators.
      */
-    protected final Map<Expression, NonEquiNode> predToEval;
+    public final Map<Expression, NonEquiNode> predToEval;
     /**
      * Collects result tuples and contains
      * finally a complete result.

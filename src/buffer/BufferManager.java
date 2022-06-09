@@ -7,6 +7,7 @@ import catalog.CatalogManager;
 import catalog.info.ColumnInfo;
 import catalog.info.TableInfo;
 import config.LoggingConfig;
+import config.ParallelConfig;
 import config.StartupConfig;
 import data.ColumnData;
 import data.Dictionary;
@@ -55,6 +56,11 @@ public class BufferManager {
 	 * Maps predicate string to associated id.
 	 */
 	public final static Map<String, Integer> predicateToID =
+			new HashMap<>();
+	/**
+	 * Maps table alias to global position array.
+	 */
+	public final static Map<ColumnRef, Deque<int[]>> aliasToPositions =
 			new HashMap<>();
 	/**
 	 * Previous query name.
@@ -138,18 +144,43 @@ public class BufferManager {
 			log("Column data type:\t" + javaType);
 			switch (javaType) {
 			case INT:
-				colToData.put(columnRef, (IntData)object);
+				IntData intData = (IntData)object;
+				if (ParallelConfig.EXE_THREADS > 1) {
+					for (int rowCtr = 0; rowCtr < intData.cardinality; rowCtr++) {
+						if (intData.isNull.get(rowCtr)) {
+							intData.data[rowCtr] = Integer.MIN_VALUE;
+						}
+					}
+				}
+				colToData.put(columnRef, intData);
 				break;
 			case LONG:
-				colToData.put(columnRef, (LongData)object);
+				LongData longData = (LongData)object;
+				if (ParallelConfig.EXE_THREADS > 1) {
+					for (int rowCtr = 0; rowCtr < longData.cardinality; rowCtr++) {
+						if (longData.isNull.get(rowCtr)) {
+							longData.data[rowCtr] = Integer.MIN_VALUE;
+						}
+					}
+				}
+				colToData.put(columnRef, longData);
 				break;
 			case DOUBLE:
+				DoubleData doubleData = (DoubleData)object;
+				if (ParallelConfig.EXE_THREADS > 1) {
+					for (int rowCtr = 0; rowCtr < doubleData.cardinality; rowCtr++) {
+						if (doubleData.isNull.get(rowCtr)) {
+							doubleData.data[rowCtr] = Integer.MIN_VALUE;
+						}
+					}
+				}
 				colToData.put(columnRef, (DoubleData)object);
 				break;
 			case STRING:
 				colToData.put(columnRef, (StringData)object);
 				break;
 			}
+
 			// Generate statistics for output
 			if (LoggingConfig.BUFFER_VERBOSE) {
 				long totalMillis = System.currentTimeMillis() - startMillis;
@@ -158,14 +189,16 @@ public class BufferManager {
 			}
 			// Generate debugging output
 			log("*** Column " + columnRef.toString() + " sample ***");
-			int cardinality = colToData.get(columnRef).getCardinality();
-			int sampleSize = Math.min(10, cardinality);
-			for (int i=0; i<sampleSize; ++i) {
-				switch (column.type) {
-				case STRING_CODE:
-					int code = ((IntData)object).data[i];
-					log(dictionary.getString(code));
-					break;
+			if (LoggingConfig.BUFFER_VERBOSE) {
+				int cardinality = colToData.get(columnRef).getCardinality();
+				int sampleSize = Math.min(10, cardinality);
+				for (int i=0; i<sampleSize; ++i) {
+					switch (column.type) {
+						case STRING_CODE:
+							int code = ((IntData)object).data[i];
+							log(dictionary.getString(code));
+							break;
+					}
 				}
 			}
 			log("******");
@@ -197,7 +230,21 @@ public class BufferManager {
 			System.out.println("Unloading column " + columnRef);
 		}
 		colToData.remove(columnRef);
-		colToIndex.remove(columnRef);
+		Index removedIndex = colToIndex.remove(columnRef);
+		// Initialize for the original index
+		Index originalIndex = null;
+		if (removedIndex instanceof IntPartitionIndex) {
+			ColumnRef queryRef = ((IntPartitionIndex) removedIndex).queryRef;
+			originalIndex = colToIndex.get(queryRef);
+
+		}
+		else if (removedIndex instanceof DoublePartitionIndex) {
+			ColumnRef queryRef = ((DoublePartitionIndex) removedIndex).queryRef;
+			originalIndex = colToIndex.get(queryRef);
+		}
+		if (originalIndex != null && originalIndex.filteredPositions != null) {
+			Arrays.fill(originalIndex.filteredPositions, 0);
+		}
 	}
 	/**
 	 * Unload all columns of temporary tables (typically after

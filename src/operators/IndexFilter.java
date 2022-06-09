@@ -5,13 +5,12 @@ import java.util.stream.Collectors;
 
 import buffer.BufferManager;
 import com.google.common.primitives.Ints;
-import config.GeneralConfig;
 import expressions.ExpressionInfo;
 import expressions.normalization.PlainVisitor;
 import indexing.Index;
-import indexing.IntIndex;
+import it.unimi.dsi.fastutil.ints.IntArrayList;
+import it.unimi.dsi.fastutil.ints.IntListIterator;
 import joining.parallel.indexing.IntPartitionIndex;
-import joining.parallel.indexing.PartitionIndex;
 import net.sf.jsqlparser.expression.*;
 import net.sf.jsqlparser.expression.operators.arithmetic.Addition;
 import net.sf.jsqlparser.expression.operators.arithmetic.Division;
@@ -23,13 +22,10 @@ import net.sf.jsqlparser.expression.operators.relational.*;
 import net.sf.jsqlparser.schema.Column;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
-import org.objectweb.asm.Opcodes;
 import query.ColumnRef;
 import query.QueryInfo;
 import query.SQLexception;
-import types.JavaType;
 import types.SQLtype;
-import types.TypeUtil;
 
 /**
  * Uses all applicable indices to evaluate a unary
@@ -49,7 +45,7 @@ public class IndexFilter extends PlainVisitor {
 	 * Contains indexes of all rows satisfying
 	 * the predicate.
 	 */
-	public final Deque<List<Integer>> qualifyingRows =
+	public final Deque<IntArrayList> qualifyingRows =
 			new ArrayDeque<>();
 	/**
 	 * Contains column names involved for the predicate.
@@ -101,6 +97,10 @@ public class IndexFilter extends PlainVisitor {
 	 */
 	public ExpressionInfo remainingInfo;
 	/**
+	 * Satisfied rows after applying index
+	 */
+	public int[] rows;
+	/**
 	 * Initialize index filter for given query.
 	 * 
 	 * @param query	meta-data on evaluated query
@@ -117,35 +117,35 @@ public class IndexFilter extends PlainVisitor {
 		and.getRightExpression().accept(this);
 		boolean rightFull = fullResults.pop();
 		// Intersect sorted row index lists
-		List<Integer> rows1 = qualifyingRows.pop();
-		List<Integer> rows2 = qualifyingRows.pop();
-		List<Integer> intersectedRows = new ArrayList<>(Math.min(rows1.size(), rows2.size()));
+		IntArrayList rows1 = qualifyingRows.pop();
+		IntArrayList rows2 = qualifyingRows.pop();
+		IntArrayList intersectedRows = new IntArrayList(Math.min(rows1.size(), rows2.size()));
 		qualifyingRows.push(intersectedRows);
 		if (!rows1.isEmpty() && !rows2.isEmpty()) {
 			if (!leftFull && !rightFull) {
 				resultType = 1;
-				int first = Math.max(rows1.get(0), rows2.get(0));
-				int last = Math.min(rows1.get(1), rows2.get(1));
+				int first = Math.max(rows1.getInt(0), rows2.getInt(0));
+				int last = Math.min(rows1.getInt(1), rows2.getInt(1));
 				intersectedRows.add(first);
 				intersectedRows.add(last);
 			}
 			else {
 				resultType = 0;
-				Iterator<Integer> row1iter = rows1.iterator();
-				Iterator<Integer> row2iter = rows2.iterator();
-				int row1 = row1iter.next();
-				int row2 = row2iter.next();
+				IntListIterator row1iter = rows1.iterator();
+				IntListIterator row2iter = rows2.iterator();
+				int row1 = row1iter.nextInt();
+				int row2 = row2iter.nextInt();
 				while (row1 !=Integer.MAX_VALUE &&
 						row2 != Integer.MAX_VALUE) {
 					if (row1 == row2) {
 						intersectedRows.add(row1);
-						row1 = row1iter.hasNext()?row1iter.next():Integer.MAX_VALUE;
-						row2 = row2iter.hasNext()?row2iter.next():Integer.MAX_VALUE;
+						row1 = row1iter.hasNext()?row1iter.nextInt():Integer.MAX_VALUE;
+						row2 = row2iter.hasNext()?row2iter.nextInt():Integer.MAX_VALUE;
 					} else if (row1 < row2) {
-						row1 = row1iter.hasNext()?row1iter.next():Integer.MAX_VALUE;
+						row1 = row1iter.hasNext()?row1iter.nextInt():Integer.MAX_VALUE;
 					} else {
 						// row2 < row1
-						row2 = row2iter.hasNext()?row2iter.next():Integer.MAX_VALUE;
+						row2 = row2iter.hasNext()?row2iter.nextInt():Integer.MAX_VALUE;
 					}
 				}
 			}
@@ -198,15 +198,14 @@ public class IndexFilter extends PlainVisitor {
 				}
 				Arrays.parallelSort(allResults, 0, size);
 				// Both input lists are non-empty
-				List<Integer> mergedRows = Arrays.stream(allResults).boxed()
-						.collect(Collectors.toList());;
+				IntArrayList mergedRows = new IntArrayList(allResults);
 				qualifyingRows.push(mergedRows);
 			}
 		}
 		else {
 			// Merge sorted row index lists
-			List<Integer> rows1 = qualifyingRows.pop();
-			List<Integer> rows2 = qualifyingRows.pop();
+			IntArrayList rows1 = qualifyingRows.pop();
+			IntArrayList rows2 = qualifyingRows.pop();
 			resultType = 0;
 
 			if (rows1.isEmpty()) {
@@ -214,7 +213,6 @@ public class IndexFilter extends PlainVisitor {
 			} else if (rows2.isEmpty()) {
 				qualifyingRows.push(rows1);
 			} else {
-
 				Iterator<Integer> row1iter = rows1.iterator();
 				Iterator<Integer> row2iter = rows2.iterator();
 				int row1 = row1iter.next();
@@ -228,9 +226,8 @@ public class IndexFilter extends PlainVisitor {
 					qualifyingRows.push(rows1);
 					return;
 				}
-
 				// Both input lists are non-empty
-				List<Integer> mergedRows = new ArrayList<>(rows1.size() + rows2.size());
+				IntArrayList mergedRows = new IntArrayList(rows1.size() + rows2.size());
 				qualifyingRows.push(mergedRows);
 				// Assume that tables contain at most Integer.MAX_VALUE - 1 elements
 				while (row1 != Integer.MAX_VALUE ||
@@ -271,20 +268,19 @@ public class IndexFilter extends PlainVisitor {
 		else {
 			if (startPos >= 0) {
 				if (index.unique) {
-					List<Integer> rows = new ArrayList<>();
+					IntArrayList rows = new IntArrayList();
 					rows.add(startPos);
 					qualifyingRows.push(rows);
 				}
 				else {
 					int nrEntries = index.positions[startPos];
 					// Collect indices of satisfying rows via index
-					int[] newArray = Arrays.copyOfRange(index.positions, startPos + 1, startPos + 1 + nrEntries);
-					List<Integer> rows = Ints.asList(newArray);
+					IntArrayList rows = new IntArrayList(index.positions, startPos + 1, nrEntries);
 					qualifyingRows.push(rows);
 				}
 			}
 			else {
-				qualifyingRows.push(new ArrayList<>());
+				qualifyingRows.push(new IntArrayList());
 			}
 		}
 
@@ -394,19 +390,13 @@ public class IndexFilter extends PlainVisitor {
 		int constant = extractedConstants.pop();
 		Index index = applicableIndices.pop();
 		// Collect indices of satisfying rows via index
-		List<Integer> rows = new ArrayList<>();
+		IntArrayList rows = new IntArrayList();
 		qualifyingRows.push(rows);
 		int last = index.cardinality;
 		int lowerBound = 0;
 		int upperBound = last - 1;
 		int first = 0;
 		int[] data;
-//		if (GeneralConfig.isParallel) {
-//			data = ((IntPartitionIndex)index).intData.data;
-//		}
-//		else {
-//			data = ((IntIndex)index).intData.data;
-//		}
 		data = ((IntPartitionIndex)index).intData.data;
 		while (upperBound - lowerBound > 1) {
 			int middle = lowerBound + (upperBound - lowerBound) / 2;
@@ -416,13 +406,7 @@ public class IndexFilter extends PlainVisitor {
 			} else if (data[rid] < constant) {
 				lowerBound = middle;
 			}
-			else if (op == 0) {
-				lowerBound = middle;
-			}
-			else if (op == 1){
-				upperBound = middle;
-			}
-			else if (op == 2){
+			else if (op == 1 || op == 2){
 				upperBound = middle;
 			}
 			else {
@@ -642,7 +626,7 @@ public class IndexFilter extends PlainVisitor {
 	@Override
 	public void visit(CastExpression castExpression) {
 		// Get source and target type
-		List<Integer> rows = new ArrayList<>();
+		IntArrayList rows = new IntArrayList();
 		rows.add(Integer.MAX_VALUE - 1);
 		qualifyingRows.push(rows);
 	}

@@ -144,6 +144,8 @@ public abstract class JoinPartitionIndexWrapper {
      */
     public abstract int nextIndexInScope(int[] tupleIndices, int tid, int[] nextSize);
 
+    public abstract int nextIndexInScope(int[] tupleIndices, int tid, int nrDPThreads, int[] nextSize);
+
     public abstract int nextIndexInScope(int[] tupleIndices, int tid, int[] nextSize, IntSet finishedThreads);
 
     /**
@@ -166,6 +168,8 @@ public abstract class JoinPartitionIndexWrapper {
      * @return	next interesting tuple index or cardinality
      */
     public abstract boolean evaluateInScope(int[] tupleIndices, int tid);
+
+    public abstract boolean evaluateInScope(int[] tupleIndices, int tid, int nrDPThreads);
 
     public abstract boolean evaluateInScope(int[] tupleIndices, int tid, IntSet finishedThreads);
 

@@ -5,6 +5,8 @@ import com.koloboke.collect.map.IntIntMap;
 import com.koloboke.collect.map.hash.HashLongIntMap;
 import config.LoggingConfig;
 
+import java.util.Set;
+
 /**
  * Common superclass of all indexing structures.
  * 
@@ -23,6 +25,13 @@ public abstract class Index {
 	 */
 	public volatile int[] positions;
 	/**
+	 * After indexing: contains for each search key
+	 * the number of entries, followed by the row
+	 * numbers at which those entries are found.
+	 * Note that this is for columns after pre-processing.
+	 */
+	public volatile int[] filteredPositions;
+	/**
 	 * After indexing: contains row id where the element
 	 * is sorted in an increasing way.
 	 */
@@ -36,6 +45,14 @@ public abstract class Index {
 	 * belongs to.
 	 */
 	public volatile int[] groupPerRow;
+	/**
+	 * After indexing: map row count to position count.
+	 */
+	public volatile int[] rowToPositions;
+	/**
+	 * After indexing: map row count to position count.
+	 */
+	public volatile boolean[] isKeys;
 	/**
 	 * Whether it is unique key.
 	 */

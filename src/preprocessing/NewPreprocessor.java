@@ -1,880 +1,613 @@
 package preprocessing;
+import java.util.*;
+import java.util.stream.Collectors;
+
 
 import buffer.BufferManager;
 import catalog.CatalogManager;
 import catalog.info.ColumnInfo;
 import catalog.info.TableInfo;
-import com.koloboke.collect.IntCollection;
-import com.koloboke.collect.map.DoubleIntCursor;
-import com.koloboke.collect.map.IntIntCursor;
-import com.koloboke.collect.map.hash.HashDoubleIntMaps;
-import com.koloboke.collect.map.hash.HashIntIntMaps;
 import config.*;
-import data.*;
+import data.ColumnData;
+import data.DoubleData;
+import data.IntData;
 import expressions.ExpressionInfo;
-import expressions.compilation.EvaluatorType;
-import expressions.compilation.ExpressionCompiler;
-import expressions.compilation.UnaryBoolEval;
 import indexing.Index;
-import joining.parallel.indexing.DoubleIndexRange;
-import joining.parallel.indexing.DoublePartitionIndex;
-import joining.parallel.indexing.IntIndexRange;
-import joining.parallel.indexing.IntPartitionIndex;
-import joining.parallel.threads.ThreadPool;
+import indexing.Indexer;
+import it.unimi.dsi.fastutil.ints.IntArrayList;
+import jni.JNIFilter;
+import joining.parallel.indexing.PartitionIndex;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
-import operators.*;
-import predicate.NonEquiNode;
-import predicate.NonEquiNodesTest;
-import print.RelationPrinter;
+import operators.Filter;
+import operators.IndexFilter;
+import operators.IndexTest;
+import operators.Materialize;
 import query.ColumnRef;
 import query.QueryInfo;
 import statistics.PreStats;
-import types.JavaType;
-import types.TypeUtil;
-
-import java.util.*;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 /**
- * Filters query tables via unary predicates. Try to avoid
- * materializing filtered rows into new tables. Creates hash tables
+ * Filters query tables via unary predicates and stores
+ * result in newly created tables. Creates hash tables
  * for columns with binary equality join predicates.
  *
  * @author Anonymous
  *
  */
 public class NewPreprocessor {
-//    /**
-//     * Whether an error occurred during last invocation.
-//     * This flag is used in cases where an error occurs
-//     * without an exception being thrown.
-//     */
-//    public static boolean hadError = false;
-//    /**
-//     * Whether to calculate performance.
-//     */
-//    public static boolean performance = false;
-//    /**
-//     * Whether to calculate performance.
-//     */
-//    public static boolean terminated = false;
-//    /**
-//     * Translates a column reference using a table
-//     * alias into one using the original table.
-//     *
-//     * @param query		meta-data about query
-//     * @param queryRef	reference to alias column
-//     * @return 			resolved column reference
-//     */
-//    static ColumnRef DBref(QueryInfo query, ColumnRef queryRef) {
-//        String alias = queryRef.aliasName;
-//        String table = query.aliasToTable.get(alias);
-//        String colName = queryRef.columnName;
-//        return new ColumnRef(table, colName);
-//    }
-//
-//    /**
-//     * Executes pre-processing.
-//     *
-//     * @param query			the query to pre-process
-//     * @return 				summary of pre-processing steps
-//     */
-//    public static Context process(QueryInfo query) throws Exception {
-//        // Start counter
-//        long startMillis = System.currentTimeMillis();
-//        // Reset error flag
-//        hadError = false;
-//        terminated = false;
-//        // Collect columns required for joins and post-processing
-//        Set<ColumnRef> requiredCols = new HashSet<>();
-//        requiredCols.addAll(query.colsForJoins);
-//        requiredCols.addAll(query.colsForPostProcessing);
-//        // Initialize pre-processing summary
-//        Context preSummary = new Context();
-//        // Initialize mapping for join and post-processing columns
-//        for (ColumnRef queryRef : requiredCols) {
-//            preSummary.columnMapping.put(queryRef,
-//                    DBref(query, queryRef));
-//        }
-//        // Initialize column mapping for unary predicate columns
-//        for (ExpressionInfo unaryPred : query.unaryPredicates) {
-//            for (ColumnRef queryRef : unaryPred.columnsMentioned) {
-//                preSummary.columnMapping.put(queryRef,
-//                        DBref(query, queryRef));
+    static {
+        try {
+            System.load(GeneralConfig.JNI_PATH);
+        } catch (UnsatisfiedLinkError e) {
+            System.err.println("Native code library failed to load.\n" + e);
+            System.exit(1);
+        }
+    }
+    /**
+     * Whether an error occurred during last invocation.
+     * This flag is used in cases where an error occurs
+     * without an exception being thrown.
+     */
+    public static boolean hadError = false;
+    /**
+     * Whether to calculate performance.
+     */
+    public static boolean performance = false;
+    /**
+     * Whether to calculate performance.
+     */
+    public static boolean terminated = false;
+    /**
+     * Translates a column reference using a table
+     * alias into one using the original table.
+     *
+     * @param query		meta-data about query
+     * @param queryRef	reference to alias column
+     * @return 			resolved column reference
+     */
+    static ColumnRef DBref(QueryInfo query, ColumnRef queryRef) {
+        String alias = queryRef.aliasName;
+        String table = query.aliasToTable.get(alias);
+        String colName = queryRef.columnName;
+        return new ColumnRef(table, colName);
+    }
+    /**
+     * Executes pre-processing.
+     *
+     * @param query			the query to pre-process
+     * @return 				summary of pre-processing steps
+     */
+    public static Context process(QueryInfo query) throws Exception {
+        long dictionaryStart = System.currentTimeMillis();
+        JNIFilter.fill(BufferManager.dictionary.strings);
+        long dictionaryEnd = System.currentTimeMillis();
+        System.out.println("Dictionary loaded: " + (dictionaryEnd - dictionaryStart));
+        // Start counter
+        long startMillis = System.currentTimeMillis();
+        // Reset error flag
+        hadError = false;
+        terminated = false;
+        // Collect columns required for joins and post-processing
+        Set<ColumnRef> requiredCols = new HashSet<>();
+        requiredCols.addAll(query.colsForJoins);
+        requiredCols.addAll(query.colsForPostProcessing);
+        log("Required columns: " + requiredCols);
+        // Initialize pre-processing summary
+        Context preSummary = new Context();
+        // Initialize mapping for join and post-processing columns
+        for (ColumnRef queryRef : requiredCols) {
+            preSummary.columnMapping.put(queryRef,
+                    DBref(query, queryRef));
+        }
+        // Initialize column mapping for unary predicate columns
+        for (ExpressionInfo unaryPred : query.unaryPredicates) {
+            for (ColumnRef queryRef : unaryPred.columnsMentioned) {
+                preSummary.columnMapping.put(queryRef,
+                        DBref(query, queryRef));
+            }
+        }
+        // Initialize mapping from query alias to DB tables
+        preSummary.aliasToFiltered.putAll(query.aliasToTable);
+        boolean inCached = GeneralConfig.ISTESTCASE && PreConfig.IN_CACHE;
+        log("Column mapping:\t" + preSummary.columnMapping.toString());
+        // Iterate over query aliases
+        query.aliasToTable.keySet().forEach(alias -> {
+            long s1 = System.currentTimeMillis();
+            // Collect required columns (for joins and post-processing) for this table
+            List<ColumnRef> curRequiredCols = new ArrayList<>();
+            for (ColumnRef requiredCol : requiredCols) {
+                if (requiredCol.aliasName.equals(alias)) {
+                    curRequiredCols.add(requiredCol);
+                }
+            }
+            // Get applicable unary predicates
+            ExpressionInfo curUnaryPred = null;
+            for (ExpressionInfo exprInfo : query.unaryPredicates) {
+                if (exprInfo.aliasesMentioned.contains(alias)) {
+                    curUnaryPred = exprInfo;
+                }
+            }
+            int size = 0;
+            // Filter and project if enabled
+            if (curUnaryPred != null && PreConfig.FILTER) {
+                try {
+                    //check if the predicate is in the cache
+                    List<Integer> inCacheRows = null;
+                    if (inCached) {
+                        inCacheRows = applyCache(curUnaryPred);
+                    }
+                    if (inCacheRows == null) {
+                        // Apply index to prune rows if possible
+                        IndexFilter filter = applyIndex(
+                                query, curUnaryPred, preSummary);
+                        ExpressionInfo remainingPred = filter.remainingInfo;
+                        String indexedFilterName = preSummary.aliasToFiltered.get(alias);;
+                        size = CatalogManager.getCardinality(indexedFilterName);
+                        if (size == 0) {
+                            terminated = true;
+                        }
+                        // TODO: reinsert index usage
+                        //ExpressionInfo remainingPred = curUnaryPred;
+                        // Filter remaining rows by remaining predicate
+                        if (remainingPred != null) {
+                            filterProject(query, alias, filter,
+                                    curRequiredCols, preSummary);
+//							if (inCached && rows.size() > 0 && rows.get(0) >= 0 && filter.qualifyingRows.size() == 0) {
+//								BufferManager.indexCache.putIfAbsent(curUnaryPred.pid, rows);
+//							}
+                            String filteredName = NamingConfig.FILTERED_PRE + alias;
+                            size = CatalogManager.getCardinality(filteredName);
+                            if (size == 0) {
+                                terminated = true;
+//                                break;
+                            }
+                        }
+                        else {
+                            String filteredName = NamingConfig.IDX_FILTERED_PRE + alias;
+                            size = CatalogManager.getCardinality(filteredName);
+                            if (size == 0) {
+                                terminated = true;
+//								break;
+                            }
+                        }
+                    }
+                    else {
+                        // Materialize relevant rows and columns
+                        String tableName = preSummary.aliasToFiltered.get(alias);
+                        String filteredName = NamingConfig.FILTERED_PRE + alias;
+                        List<String> columnNames = new ArrayList<>();
+                        for (ColumnRef colRef : curRequiredCols) {
+                            columnNames.add(colRef.columnName);
+                        }
+                        long timer1 = System.currentTimeMillis();
+                        Materialize.execute(tableName, columnNames,
+                                inCacheRows, null, filteredName, true);
+                        long timer2 = System.currentTimeMillis();
+                        System.out.println("Materializing after cache: " + filteredName + " took " + (timer2 - timer1) + " ms");
+                        // Update pre-processing summary
+                        for (ColumnRef srcRef : curRequiredCols) {
+                            String columnName = srcRef.columnName;
+                            ColumnRef resRef = new ColumnRef(filteredName, columnName);
+                            preSummary.columnMapping.put(srcRef, resRef);
+                        }
+                        preSummary.aliasToFiltered.put(alias, filteredName);
+                        int cardinality = CatalogManager.getCardinality(filteredName);
+                        if (cardinality == 0) {
+                            terminated = true;
+//							break;
+                        }
+                    }
+                } catch (Exception e) {
+                    System.err.println("Error filtering " + alias);
+                    e.printStackTrace();
+                    hadError = true;
+                }
+            } else {
+                String table = query.aliasToTable.get(alias);
+                preSummary.aliasToFiltered.put(alias, table);
+            }
+            long s2 = System.currentTimeMillis();
+            if (curUnaryPred != null) {
+                System.out.println("Predicate: " + curUnaryPred + "\tSize: " + size + "\tTime: " + (s2 - s1));
+            }
+        });
+
+        // Abort pre-processing if filtering error occurred
+        if (hadError) {
+            throw new Exception("Error in pre-processor.");
+        }
+        // Measure filtering time
+        long filterTime = System.currentTimeMillis() - startMillis;
+        PreStats.filterMillis = filterTime;
+
+        // Create missing indices for columns involved in equi-joins.
+        log("Creating indices ...");
+        if (terminated) {
+            PreStats.preMillis = System.currentTimeMillis() - startMillis;
+            return preSummary;
+        }
+        long indexStart = System.currentTimeMillis();
+        createJoinIndices(query, preSummary);
+        long indexEnd = System.currentTimeMillis();
+
+        // Measure processing time
+        long indexTime = indexEnd - indexStart;
+        PreStats.indexMillis = indexTime;
+        System.out.println("Filter: " + filterTime + "\tIndex: " + indexTime);
+        // construct mapping from join tables to index for each join predicate
+        query.equiJoinPreds.forEach(expressionInfo -> {
+            expressionInfo.extractIndex(preSummary);
+            expressionInfo.setColumnType();
+        });
+        PreStats.preMillis = indexEnd - startMillis;
+        return preSummary;
+    }
+    /**
+     * Forms a conjunction between given conjuncts.
+     *
+     * @param conjuncts	list of conjuncts
+     * @return	conjunction between all conjuncts or null
+     * 			(iff the input list of conjuncts is empty)
+     */
+    static Expression conjunction(List<Expression> conjuncts) {
+        Expression result = null;
+        for (Expression conjunct : conjuncts) {
+            if (result == null) {
+                result = conjunct;
+            } else {
+                result = new AndExpression(
+                        result, conjunct);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Check whether thee given predicate has some satisfied rows saved in the cache.
+     *
+     * @param curUnaryPred		current evaluating unary predicate.
+     * @return					satisfied rows corresponding to given predicate.
+     */
+    static List<Integer> applyCache(ExpressionInfo curUnaryPred) {
+        List<Integer> rows = BufferManager.indexCache.getOrDefault(curUnaryPred.pid, null);
+        return rows;
+    }
+    /**
+     * Search for applicable index and use it to prune rows. Redirect
+     * column mappings to index-filtered table if possible.
+     *
+     * @param query			query to pre-process
+     * @param unaryPred		unary predicate on that table
+     * @param preSummary	summary of pre-processing steps
+     * @return	remaining unary predicate to apply afterwards
+     */
+    static IndexFilter applyIndex(QueryInfo query, ExpressionInfo unaryPred,
+                                  Context preSummary) throws Exception {
+        log("Searching applicable index for " + unaryPred + " ...");
+        // Divide predicate conjuncts depending on whether they can
+        // be evaluated using indices alone.
+        log("Conjuncts for " + unaryPred + ": " + unaryPred.conjuncts.toString());
+        IndexTest indexTest = new IndexTest(query);
+        List<Expression> indexedConjuncts = new ArrayList<>();
+        List<Expression> nonIndexedConjuncts = new ArrayList<>();
+        List<Expression> sortedConjuncts = new ArrayList<>();
+        List<Expression> unsortedConjuncts = new ArrayList<>();
+        Set<String> unsortedColumns = new HashSet<>();
+        Set<String> sortedColumns = new HashSet<>();
+        Set<String> indexedColumns = new HashSet<>();
+        for (Expression conjunct : unaryPred.conjuncts) {
+            // Re-initialize index test
+            indexTest.canUseIndex = true;
+            indexTest.constantQueue.clear();
+            indexTest.columnNames.clear();
+            indexTest.sorted = true;
+
+            // Compare predicate against indexes
+            conjunct.accept(indexTest);
+            // Can conjunct be evaluated only from indices?
+            if (indexTest.canUseIndex && PreConfig.CONSIDER_INDICES) {
+                if (indexTest.sorted) {
+                    sortedConjuncts.add(conjunct);
+                    sortedColumns.addAll(indexTest.columnNames);
+                }
+                else {
+                    unsortedConjuncts.add(conjunct);
+                    unsortedColumns.addAll(indexTest.columnNames);
+                }
+            } else {
+                nonIndexedConjuncts.add(conjunct);
+            }
+        }
+        if (LoggingConfig.PREPROCESSING_VERBOSE) {
+            log("Indexed:\t" + indexedConjuncts +
+                    "; other: " + nonIndexedConjuncts);
+        }
+        // Create remaining predicate expression
+        if (unsortedConjuncts.size() > 0) {
+            indexedConjuncts.addAll(unsortedConjuncts);
+            indexedColumns.addAll(unsortedColumns);
+            nonIndexedConjuncts.addAll(sortedConjuncts);
+        }
+        else {
+            indexedColumns.addAll(sortedColumns);
+            indexedConjuncts.addAll(sortedConjuncts);
+        }
+        Expression remainingExpr = conjunction(nonIndexedConjuncts);
+        // Evaluate indexed predicate part
+        if (!indexedConjuncts.isEmpty()) {
+            long indexStart = System.currentTimeMillis();
+            IndexFilter indexFilter = new IndexFilter(query);
+            indexFilter.isSameColumn = indexedColumns.size() == 1;
+            Expression indexedExpr = conjunction(indexedConjuncts);
+            indexedExpr.accept(indexFilter);
+            long indexEnd = System.currentTimeMillis();
+            // Create filtered table
+            IntArrayList rows = indexFilter.qualifyingRows.peek();
+            // Need to keep columns for evaluating remaining predicates, if any
+            ExpressionInfo remainingInfo = null;
+            String alias = unaryPred.aliasesMentioned.iterator().next();
+            String table = query.aliasToTable.get(alias);
+            Set<ColumnRef> colSuperset = new HashSet<>();
+            colSuperset.addAll(query.colsForJoins);
+            colSuperset.addAll(query.colsForPostProcessing);
+            if (remainingExpr != null) {
+                remainingInfo = new ExpressionInfo(query, remainingExpr);
+                indexFilter.remainingInfo = remainingInfo;
+                colSuperset.addAll(remainingInfo.columnsMentioned);
+            }
+            List<String> requiredCols = colSuperset.stream().
+                    filter(c -> c.aliasName.equals(alias)).
+                    map(c -> c.columnName).collect(Collectors.toList());
+            String targetRelName = NamingConfig.IDX_FILTERED_PRE + alias;
+            boolean needSort = false;
+            int[] index_rows = new int[0];
+            if (indexFilter.isFull) {
+                index_rows = Arrays.copyOfRange(rows.elements(), 0, rows.size());
+            }
+            else if (!indexFilter.equalFull && rows != null && rows.size() == 1) {
+                Materialize.executeEqualPos(table, requiredCols, rows,
+                        indexFilter.lastIndex, targetRelName, true);
+            }
+            else {
+                int[] sort = indexFilter.lastIndex.sortedRow;
+                index_rows = Arrays.copyOfRange(sort, rows.getInt(0), rows.getInt(1));
+                int nrIndexes = 0;
+                for (String columnName: requiredCols) {
+                    ColumnRef columnRef = new ColumnRef(alias, columnName);
+                    if (query.indexCols.contains(columnRef)) {
+                        nrIndexes++;
+                    }
+                }
+                if (nrIndexes > 0) {
+                    Arrays.parallelSort(index_rows);
+                }
+            }
+
+            // All columns to be materialized
+            List<int[]> intSrcCols = new ArrayList<>();
+            List<double[]> doubleSrcCols = new ArrayList<>();
+            List<ColumnRef> sourceColRefs = new ArrayList<>();
+            List<ColumnRef> intColRefs = new ArrayList<>();
+            List<ColumnRef> doubleColRefs = new ArrayList<>();
+            for (String columnName: requiredCols) {
+                ColumnRef columnRef = new ColumnRef(alias, columnName);
+                ColumnRef mapRef = preSummary.columnMapping.get(columnRef);
+                ColumnRef filteredRef = new ColumnRef(targetRelName, columnRef.columnName);
+                sourceColRefs.add(mapRef);
+                ColumnData columnData = BufferManager.getData(mapRef);
+                if (columnData instanceof IntData) {
+                    intSrcCols.add(((IntData) columnData).data);
+                    intColRefs.add(filteredRef);
+                }
+                else {
+                    doubleSrcCols.add(((DoubleData) columnData).data);
+                    doubleColRefs.add(filteredRef);
+                }
+            }
+            int intSize = intSrcCols.size() == 0 ? 0 : index_rows.length;
+            int doubleSize = doubleSrcCols.size() == 0 ? 0 : index_rows.length;
+            int[][] intTargetCols = new int[intSrcCols.size()][intSize];
+            double[][] doubleTargetCols = new double[doubleSrcCols.size()][doubleSize];
+            long materialStart = System.currentTimeMillis();
+            JNIFilter.materialize(intSrcCols.toArray(new int[0][0]), doubleSrcCols.toArray(new double[0][0]),
+                    intTargetCols, doubleTargetCols, index_rows, ParallelConfig.EXE_THREADS, needSort);
+            long materialEnd = System.currentTimeMillis();
+            // Materialize relevant rows and columns
+            // Update catalog, inserting materialized table
+            TableInfo resultTable = new TableInfo(targetRelName, true);
+            CatalogManager.currentDB.addTable(resultTable);
+            for (ColumnRef sourceColRef : sourceColRefs) {
+                // Add result column to result table, using type of source column
+                ColumnInfo sourceCol = CatalogManager.getColumn(sourceColRef);
+                ColumnInfo resultCol = new ColumnInfo(sourceColRef.columnName,
+                        sourceCol.type, sourceCol.isPrimary,
+                        sourceCol.isUnique, sourceCol.isNotNull,
+                        sourceCol.isForeign);
+                resultTable.addColumn(resultCol);
+            }
+//			int newCardinality = intTargetCols.length > 0 ? intTargetCols[0].length : doubleTargetCols[0].length;
+            for (int intColCtr = 0; intColCtr < intSrcCols.size(); intColCtr++) {
+                IntData intData = new IntData(intTargetCols[intColCtr]);
+                BufferManager.colToData.put(intColRefs.get(intColCtr), intData);
+            }
+            for (int doubleColCtr = 0; doubleColCtr < doubleSrcCols.size(); doubleColCtr++) {
+                DoubleData doubleData = new DoubleData(doubleTargetCols[doubleColCtr]);
+                BufferManager.colToData.put(doubleColRefs.get(doubleColCtr), doubleData);
+            }
+            System.out.println("Index Filter: " + (indexEnd - indexStart) +
+                    "\tMaterialization: "
+                    + (materialEnd - materialStart));
+
+
+//            // Old version
+//            if (indexFilter.isFull) {
+//                Materialize.execute(table, requiredCols, rows,
+//                        null, targetRelName, true);
+//                System.out.println("After index applied: " + rows.size());
 //            }
-//        }
-//        // Initialize mapping from query alias to DB tables
-//        preSummary.aliasToFiltered.putAll(query.aliasToTable);
-//
-//        // Iterate over query aliases
-//        query.aliasToTable.keySet().parallelStream().forEach(alias -> {
-//            long s1 = System.currentTimeMillis();
-//            // Collect required columns (for joins and post-processing) for this table
-//            List<ColumnRef> curRequiredCols = new ArrayList<>();
-//            for (ColumnRef requiredCol : requiredCols) {
-//                if (requiredCol.aliasName.equals(alias)) {
-//                    curRequiredCols.add(requiredCol);
-//                }
-//            }
-//
-//            // Get applicable unary predicates
-//            ExpressionInfo curUnaryPred = null;
-//            for (ExpressionInfo exprInfo : query.unaryPredicates) {
-//                if (exprInfo.aliasesMentioned.contains(alias)) {
-//                    curUnaryPred = exprInfo;
-//                }
-//            }
-//
-//            // Filter and project if enabled
-//            if (curUnaryPred != null && PreConfig.FILTER) {
-//                //check if the predicate is in the cache
-//                List<Integer> inCacheRows = null;
-//                try {
-//                    if (inCacheRows == null) {
-//                        // Apply index to prune rows if possible
-//                        IndexFilter remainingPred = applyIndex(query, curUnaryPred);
-//                        //ExpressionInfo remainingPred = curUnaryPred;
-//                        // Filter remaining rows by remaining predicate
-//                        filterProject(query, alias, remainingPred,
-//                                curRequiredCols, preSummary);
-//                        String filteredName = NamingConfig.FILTERED_PRE + alias;
-//                        int cardinality = CatalogManager.getCardinality(filteredName);
-//                        if (cardinality == 0) {
-//                            terminated = true;
-//                        }
-//                    }
-//                    else {
-//                        System.out.println("In Cache!");
-//                    }
-//                } catch (Exception e) {
-//                    System.err.println("Error filtering " + alias);
-//                    e.printStackTrace();
-//                    hadError = true;
-//                }
+//            else if (!indexFilter.equalFull && rows != null && rows.size() == 1) {
+//                Materialize.executeEqualPos(table, requiredCols, rows,
+//                        indexFilter.lastIndex, targetRelName, true);
 //            }
 //            else {
-//                String table = query.aliasToTable.get(alias);
-//                preSummary.aliasToFiltered.put(alias, table);
-//            }
-//
-//            long s2 = System.currentTimeMillis();
-//            if (curUnaryPred != null) {
-//                System.out.println("Predicate: " + curUnaryPred.toString() + "\tTime: " + (s2 - s1));
-//            }
-//
-//        });
-//
-//        // Measure processing time
-//        if (performance) {
-//            PreStats.preMillis = System.currentTimeMillis() - startMillis;
-//            PreStats.subPreMillis.add(PreStats.preMillis);
-//        }
-//
-//        // construct mapping from join tables to index for each join predicate
-//        query.equiJoinPreds.forEach(expressionInfo -> {
-//            expressionInfo.extractIndex(preSummary);
-//            expressionInfo.setColumnType();
-//        });
-//        return preSummary;
-//    }
-//
-//    /**
-//     * Forms a conjunction between given conjuncts.
-//     *
-//     * @param conjuncts	list of conjuncts
-//     * @return	conjunction between all conjuncts or null
-//     * 			(iff the input list of conjuncts is empty)
-//     */
-//    static Expression conjunction(List<Expression> conjuncts) {
-//        Expression result = null;
-//        for (Expression conjunct : conjuncts) {
-//            if (result == null) {
-//                result = conjunct;
-//            } else {
-//                result = new AndExpression(
-//                        result, conjunct);
-//            }
-//        }
-//        return result;
-//    }
-//
-//    /**
-//     * Search for applicable index and use it to prune rows. Redirect
-//     * column mappings to index-filtered table if possible.
-//     *
-//     * @param query			query to pre-process
-//     * @param unaryPred		unary predicate on that table
-//     * @return	remaining unary predicate to apply afterwards
-//     */
-//    static IndexFilter applyIndex(QueryInfo query, ExpressionInfo unaryPred) throws Exception {
-//        // Divide predicate conjuncts depending on whether they can
-//        // be evaluated using indices alone.
-//        IndexTest indexTest = new IndexTest(query);
-//        List<Expression> indexedConjuncts = new ArrayList<>();
-//        List<Expression> nonIndexedConjuncts = new ArrayList<>();
-//        List<Expression> sortedConjuncts = new ArrayList<>();
-//        List<Expression> unsortedConjuncts = new ArrayList<>();
-//        for (Expression conjunct : unaryPred.conjuncts) {
-//            // Re-initialize index test
-//            indexTest.canUseIndex = true;
-//            indexTest.constantQueue.clear();
-//            indexTest.sorted = true;
-//            // Compare predicate against indexes
-//            conjunct.accept(indexTest);
-//            // Can conjunct be evaluated only from indices?
-//            if (indexTest.canUseIndex && PreConfig.CONSIDER_INDICES) {
-//                if (indexTest.sorted) {
-//                    sortedConjuncts.add(conjunct);
-//                } else {
-//                    unsortedConjuncts.add(conjunct);
-//                }
-//            } else {
-//                nonIndexedConjuncts.add(conjunct);
-//            }
-//        }
-//
-//        // Create remaining predicate expression
-//        if (unsortedConjuncts.size() > 0) {
-//            indexedConjuncts.addAll(unsortedConjuncts);
-//            nonIndexedConjuncts.addAll(sortedConjuncts);
-//        } else {
-//            indexedConjuncts.addAll(sortedConjuncts);
-//        }
-//        Expression remainingExpr = conjunction(nonIndexedConjuncts);
-//        // Evaluate indexed predicate part
-//        if (!indexedConjuncts.isEmpty()) {
-//            IndexFilter indexFilter = new IndexFilter(query);
-//            Expression indexedExpr = conjunction(indexedConjuncts);
-//            indexedExpr.accept(indexFilter);
-//            // Need to keep columns for evaluating remaining predicates, if any
-//            if (remainingExpr != null) {
-//                indexFilter.remainingInfo = new ExpressionInfo(query, remainingExpr);
-//            }
-//            return indexFilter;
-//        } else {
-//            IndexFilter indexFilter = new IndexFilter(query);
-//            indexFilter.remainingInfo = unaryPred;
-//            return indexFilter;
-//        }
-//    }
-//
-//
-//    /**
-//     * Creates a new temporary table containing remaining tuples
-//     * after applying unary predicates, project on columns that
-//     * are required for following steps.
-//     *
-//     * @param query			query to pre-process
-//     * @param alias			alias of table to filter
-//     * @param indexFilter	unary predicate and index filter on that table
-//     * @param requiredCols	project on those columns
-//     * @param preSummary	summary of pre-processing steps
-//     */
-//    static void filterProject(QueryInfo query, String alias, IndexFilter indexFilter,
-//                                       List<ColumnRef> requiredCols, Context preSummary) throws Exception {
-//        // Determine rows satisfying unary predicate
-//        // Compile unary predicate for fast evaluation
-//        Map<ColumnRef, ColumnRef> columnMapping = preSummary.columnMapping;
-//        ExpressionInfo unaryPred = indexFilter.remainingInfo;
-//        UnaryBoolEval unaryBoolEval = unaryPred == null ? null : compilePred(unaryPred, columnMapping);
-//        String tableName = preSummary.aliasToFiltered.get(alias);
-//        // Get cardinality of table referenced in predicate
-//        int cardinality = indexCardinality(tableName, indexFilter);
-//        // target relation name
-//        String targetRelName = NamingConfig.FILTERED_PRE + alias;
-//        // columns that need to be indexed
-//        List<ColumnRef> indexedCols = new ArrayList<>();
-//        List<ColumnRef> nonIndexedCols = new ArrayList<>();
-//        requiredCols.forEach(columnRef -> {
-//            if (query.indexCols.contains(columnRef)) {
-//                indexedCols.add(columnRef);
-//            }
-//            else {
-//                nonIndexedCols.add(columnRef);
-//            }
-//        });
-//
-//        // Choose between sequential and joining.parallel processing
-//        if (cardinality <= ParallelConfig.PARALLEL_SIZE || !GeneralConfig.isParallel) {
-//            RowRange allTuples = new RowRange(0, cardinality - 1);
-//            List<RowRange> batches = new ArrayList<>();
-//            batches.add(allTuples);
-////            filterBatch(unaryBoolEval, batches, indexFilter, indexedCols, nonIndexedCols);
-//        } else {
-//            if (unaryPred == null) {
-//                // Divide tuples into batches
-//                List<RowRange> batches = split(cardinality);
-//                if (indexedCols.size() == 0) {
-//                    materializeBatch(batches, nonIndexedCols,
-//                            indexFilter, targetRelName, cardinality);
-//                }
-//                else {
-//                    filterBatch(batches, indexFilter,
-//                            indexedCols, nonIndexedCols, targetRelName, cardinality);
-//                }
-//            }
-//            else if (PreConfig.PROCESS_KEYS && unaryPred.columnsMentioned.size() == 1) {
-//                throw new RuntimeException("Not Implemented!");
-//            }
-//            else {
-//                // Divide tuples into batches
-//                List<RowRange> batches = split(cardinality);
-//                // Process batches when there is no need to generate index.
-//            }
-//        }
-////
-//        // Update pre-processing summary
-//        for (ColumnRef srcRef : requiredCols) {
-//            String columnName = srcRef.columnName;
-//            ColumnRef resRef = new ColumnRef(targetRelName, columnName);
-//            preSummary.columnMapping.put(srcRef, resRef);
-//        }
-//        preSummary.aliasToFiltered.put(alias, targetRelName);
-//        // Print out intermediate result table if logging is enabled
-//        if (LoggingConfig.PRINT_INTERMEDIATES) {
-//            RelationPrinter.print(targetRelName);
-//        }
-//    }
-//
-//
-//
-//    private static void materializeBatch(List<RowRange> batches,
-//                                         List<ColumnRef> nonIndexedCols,
-//                                         IndexFilter indexFilter,
-//                                         String targetRelName,
-//                                         int cardinality) throws Exception {
-//        // Generate references to source columns
-//        if (indexFilter.qualifyingRows.size() > 0) {
-//            // Update catalog, inserting materialized table
-//            TableInfo resultTable = new TableInfo(targetRelName, true);
-//            CatalogManager.currentDB.addTable(resultTable);
-//
-//            List<IntData> intSource = new ArrayList<>();
-//            List<IntData> intTarget = new ArrayList<>();
-//            List<DoubleData> doubleSource = new ArrayList<>();
-//            List<DoubleData> doubleTarget = new ArrayList<>();
-//
-//            initializeData(nonIndexedCols, resultTable, cardinality, intSource, intTarget, doubleSource, doubleTarget);
-//            // materialize tuples
-//            List<Integer> rows = indexFilter.qualifyingRows.pop();
-//            Index index = indexFilter.lastIndex;
-//            batches.parallelStream().forEach(rowRange -> {
-//                // Materialize predicate for each table row
-//                copyColumnData(indexFilter, rowRange, rows, index,
-//                        intSource, intTarget, doubleSource, doubleTarget);
-//            });
-//        }
-//        else {
-//            throw new Exception("Not Implemented!");
-//        }
-//        // Update statistics in catalog
-//        CatalogManager.updateStats(targetRelName);
-//    }
-//
-//    static void copyColumnData(IndexFilter indexFilter, RowRange rowRange,
-//                               List<Integer> rows, Index index,
-//                               List<IntData> intSource, List<IntData> intTarget,
-//                               List<DoubleData> doubleSource, List<DoubleData> doubleTarget) {
-//        if (indexFilter.resultType == 0) {
-//            for (int i = 0; i < intSource.size(); i++) {
-//                IntData intDataSource = intSource.get(i);
-//                IntData intDataTarget = intTarget.get(i);
-//                int[] source = intDataSource.data;
-//                int[] target = intDataTarget.data;
-//                for (int rowCtr = rowRange.firstTuple;
-//                     rowCtr <= rowRange.lastTuple; ++rowCtr) {
-//                    int row = rows.get(rowCtr);
-//                    if (!intDataSource.isNull.get(row)) {
-//                        target[rowCtr] = source[row];
-//                    }
-//                    else {
-//                        target[rowCtr] = Integer.MIN_VALUE;
+//                int[] sort = indexFilter.lastIndex.sortedRow;
+//                int nrIndexes = 0;
+//                for (String columnName: requiredCols) {
+//                    ColumnRef columnRef = new ColumnRef(alias, columnName);
+//                    if (query.indexCols.contains(columnRef)) {
+//                        nrIndexes++;
 //                    }
 //                }
+//                if (nrIndexes > 0) {
+//                    sort = Arrays.copyOfRange(indexFilter.lastIndex.sortedRow,
+//                            rows.getInt(0), rows.getInt(1));
+//                    Arrays.parallelSort(sort);
+//                    rows.set(0, 0);
+//                    rows.set(1, sort.length);
+//                }
+//                long materialStart = System.currentTimeMillis();
+//                Materialize.executeRange(table, requiredCols, rows,
+//                        sort, targetRelName, true);
+//                long materialEnd = System.currentTimeMillis();
+//                System.out.println("Index Filter: " + (indexEnd - indexStart) +
+//                        "\tMaterialization: "
+//                        + (materialEnd - materialStart));
 //            }
-//            for (int i = 0; i < doubleSource.size(); i++) {
-//                DoubleData doubleDataSource = doubleSource.get(i);
-//                DoubleData doubleDataTarget = doubleTarget.get(i);
-//                double[] source = doubleDataSource.data;
-//                double[] target = doubleDataTarget.data;
-//                for (int rowCtr = rowRange.firstTuple;
-//                     rowCtr <= rowRange.lastTuple; ++rowCtr) {
-//                    int row = rows.get(rowCtr);
-//                    if (!doubleDataSource.isNull.get(row)) {
-//                        target[rowCtr] = source[row];
-//                    }
-//                    else {
-//                        target[rowCtr] = Integer.MIN_VALUE;
-//                    }
-//                }
-//            }
-//        }
-//        else if (indexFilter.resultType == 1) {
-//            int first = rows.get(0);
-//            int[] sortedRow = index.sortedRow;
-//            for (int i = 0; i < intSource.size(); i++) {
-//                IntData intDataSource = intSource.get(i);
-//                IntData intDataTarget = intTarget.get(i);
-//                int[] source = intDataSource.data;
-//                int[] target = intDataTarget.data;
-//                for (int rowCtr = rowRange.firstTuple;
-//                     rowCtr <= rowRange.lastTuple; ++rowCtr) {
-//                    int row = sortedRow[rowCtr + first];
-//                    if (!intDataSource.isNull.get(row)) {
-//                        target[rowCtr] = source[row];
-//                    }
-//                    else {
-//                        target[rowCtr] = Integer.MIN_VALUE;
-//                    }
-//                }
-//            }
-//            for (int i = 0; i < doubleSource.size(); i++) {
-//                DoubleData doubleDataSource = doubleSource.get(i);
-//                DoubleData doubleDataTarget = doubleTarget.get(i);
-//                double[] source = doubleDataSource.data;
-//                double[] target = doubleDataTarget.data;
-//                for (int rowCtr = rowRange.firstTuple;
-//                     rowCtr <= rowRange.lastTuple; ++rowCtr) {
-//                    int row = sortedRow[rowCtr + first];
-//                    if (!doubleDataSource.isNull.get(row)) {
-//                        target[rowCtr] = source[row];
-//                    }
-//                    else {
-//                        target[rowCtr] = Integer.MIN_VALUE;
-//                    }
-//                }
-//            }
-//        }
-//        else {
-//            int pos = rows.get(0);
-//            int[] positions = index.positions;
-//            for (int i = 0; i < intSource.size(); i++) {
-//                IntData intDataSource = intSource.get(i);
-//                IntData intDataTarget = intTarget.get(i);
-//                int[] source = intDataSource.data;
-//                int[] target = intDataTarget.data;
-//                for (int rowCtr = rowRange.firstTuple;
-//                     rowCtr <= rowRange.lastTuple; ++rowCtr) {
-//                    int row = positions[pos + 1 + rowCtr];
-//                    if (!intDataSource.isNull.get(row)) {
-//                        target[rowCtr] = source[row];
-//                    }
-//                    else {
-//                        target[rowCtr] = Integer.MIN_VALUE;
-//                    }
-//                }
-//            }
-//            for (int i = 0; i < doubleSource.size(); i++) {
-//                DoubleData doubleDataSource = doubleSource.get(i);
-//                DoubleData doubleDataTarget = doubleTarget.get(i);
-//                double[] source = doubleDataSource.data;
-//                double[] target = doubleDataTarget.data;
-//                for (int rowCtr = rowRange.firstTuple;
-//                     rowCtr <= rowRange.lastTuple; ++rowCtr) {
-//                    int row = positions[pos + 1 + rowCtr];
-//                    if (!doubleDataSource.isNull.get(row)) {
-//                        target[rowCtr] = source[row];
-//                    }
-//                    else {
-//                        target[rowCtr] = Integer.MIN_VALUE;
-//                    }
-//                }
-//            }
-//        }
-//    }
-//
-//    /**
-//     * Filters given tuple batch using specified predicate evaluator,
-//     * return indices of rows within the batch that satisfy the
-//     * predicate.
-//     *
-//     * @param indexFilter	unary predicate and index filter on that table
-//     */
-//    static void filterBatch(List<RowRange> batches,
-//                            IndexFilter indexFilter,
-//                            List<ColumnRef> indexedCols,
-//                            List<ColumnRef> nonIndexedCols,
-//                            String targetRelName,
-//                            int cardinality) throws Exception {
-//        if (indexFilter.qualifyingRows.size() > 0) {
-//            TableInfo resultTable = new TableInfo(targetRelName, true);
-//            CatalogManager.currentDB.addTable(resultTable);
-//            // initialize column data
-//            List<IntData> intSource = new ArrayList<>();
-//            List<IntData> intTarget = new ArrayList<>();
-//            List<DoubleData> doubleSource = new ArrayList<>();
-//            List<DoubleData> doubleTarget = new ArrayList<>();
-//            initializeData(nonIndexedCols, resultTable, cardinality, intSource, intTarget, doubleSource, doubleTarget);
-//            // initialize index
-//            List<IntPartitionIndex> intIndexes = new ArrayList<>();
-//            List<IntPartitionIndex> intSourceIndex = new ArrayList<>();
-//            List<DoublePartitionIndex> doubleIndexes = new ArrayList<>();
-//            List<DoublePartitionIndex> doubleSourceIndex = new ArrayList<>();
-//            initializeIndexes(indexedCols, resultTable, cardinality, intIndexes,
-//                    intSourceIndex, doubleIndexes, doubleSourceIndex);
-//            int nrBatches = batches.size();
-//            IntIndexRange[][] intIndexRanges = intIndexes.size() > 0 ?
-//                    new IntIndexRange[intIndexes.size()][nrBatches] : null;
-//            DoubleIndexRange[][] doubleIndexRanges = doubleIndexes.size() > 0 ?
-//                    new DoubleIndexRange[doubleIndexes.size()][nrBatches] : null;
-//            // materialize tuples
-//            List<Integer> rows = indexFilter.qualifyingRows.pop();
-//            Index index = indexFilter.lastIndex;
-//            IntStream.range(0, nrBatches).parallel().forEach(bid -> {
-//                RowRange rowRange = batches.get(bid);
-//                if (indexFilter.resultType == 0) {
-//                    for (int i = 0; i < intIndexes.size(); i++) {
-//                        IntPartitionIndex intIndex = intIndexes.get(i);
-//                        IntPartitionIndex source = intSourceIndex.get(i);
-//                        IntIndexRange intIndexRange = new IntIndexRange(rowRange.firstTuple, rowRange.lastTuple, bid);
-//                        intIndexRanges[i][bid] = intIndexRange;
-//                        for (int rowCtr = rowRange.firstTuple;
-//                             rowCtr <= rowRange.lastTuple; ++rowCtr) {
-//                            int row = rows.get(rowCtr);
-//                            if (!source.intData.isNull.get(row)) {
-//                                int value = source.intData.data[row];
-//                                intIndexRange.add(value);
-//                                intIndex.intData.data[rowCtr] = value;
-//                            }
-//                        }
-//                    }
-//                    for (int i = 0; i < doubleIndexes.size(); i++) {
-//                        DoublePartitionIndex doubleIndex = doubleIndexes.get(i);
-//                        DoublePartitionIndex source = doubleSourceIndex.get(i);
-//                        DoubleIndexRange doubleIndexRange = new DoubleIndexRange(rowRange.firstTuple, rowRange.lastTuple, bid);
-//                        doubleIndexRanges[i][bid] = doubleIndexRange;
-//                        for (int rowCtr = rowRange.firstTuple;
-//                             rowCtr <= rowRange.lastTuple; ++rowCtr) {
-//                            int row = rows.get(rowCtr);
-//                            if (!source.doubleData.isNull.get(row)) {
-//                                double value = source.doubleData.data[row];
-//                                doubleIndexRange.add(value);
-//                                doubleIndex.doubleData.data[rowCtr] = value;
-//                            }
-//                        }
-//                    }
-//                }
-//                else if (indexFilter.resultType == 1) {
-//                    int first = rows.get(0);
-//                    int[] sortedRow = index.sortedRow;
-//                    for (int i = 0; i < intIndexes.size(); i++) {
-//                        IntPartitionIndex intIndex = intIndexes.get(i);
-//                        IntPartitionIndex source = intSourceIndex.get(i);
-//                        IntIndexRange intIndexRange = new IntIndexRange(rowRange.firstTuple, rowRange.lastTuple, bid);
-//                        intIndexRanges[i][bid] = intIndexRange;
-//                        for (int rowCtr = rowRange.firstTuple;
-//                             rowCtr <= rowRange.lastTuple; ++rowCtr) {
-//                            int row = sortedRow[rowCtr + first];
-//                            if (!source.intData.isNull.get(row)) {
-//                                int value = source.intData.data[row];
-//                                intIndexRange.add(value);
-//                                intIndex.intData.data[rowCtr] = value;
-//                            }
-//                        }
-//                    }
-//                    for (int i = 0; i < doubleIndexes.size(); i++) {
-//                        DoublePartitionIndex doubleIndex = doubleIndexes.get(i);
-//                        DoublePartitionIndex source = doubleSourceIndex.get(i);
-//                        DoubleIndexRange doubleIndexRange = new DoubleIndexRange(rowRange.firstTuple, rowRange.lastTuple, bid);
-//                        doubleIndexRanges[i][bid] = doubleIndexRange;
-//                        for (int rowCtr = rowRange.firstTuple;
-//                             rowCtr <= rowRange.lastTuple; ++rowCtr) {
-//                            int row = sortedRow[rowCtr + first];
-//                            if (!source.doubleData.isNull.get(row)) {
-//                                double value = source.doubleData.data[row];
-//                                doubleIndexRange.add(value);
-//                                doubleIndex.doubleData.data[rowCtr] = value;
-//
-//                            }
-//                        }
-//                    }
-//                }
-//                else {
-//                    int pos = rows.get(0);
-//                    int[] positions = index.positions;
-//                    for (int i = 0; i < intIndexes.size(); i++) {
-//                        IntPartitionIndex intIndex = intIndexes.get(i);
-//                        IntPartitionIndex source = intSourceIndex.get(i);
-//                        IntIndexRange intIndexRange = new IntIndexRange(rowRange.firstTuple, rowRange.lastTuple, bid);
-//                        intIndexRanges[i][bid] = intIndexRange;
-//                        for (int rowCtr = rowRange.firstTuple;
-//                             rowCtr <= rowRange.lastTuple; ++rowCtr) {
-//                            int row = positions[pos + 1 + rowCtr];
-//                            if (!source.intData.isNull.get(row)) {
-//                                int value = source.intData.data[row];
-//                                intIndexRange.add(value);
-//                                intIndex.intData.data[rowCtr] = value;
-//                            }
-//                        }
-//                    }
-//                    for (int i = 0; i < doubleIndexes.size(); i++) {
-//                        DoublePartitionIndex doubleIndex = doubleIndexes.get(i);
-//                        DoublePartitionIndex source = doubleSourceIndex.get(i);
-//                        DoubleIndexRange doubleIndexRange = new DoubleIndexRange(rowRange.firstTuple, rowRange.lastTuple, bid);
-//                        doubleIndexRanges[i][bid] = doubleIndexRange;
-//                        for (int rowCtr = rowRange.firstTuple;
-//                             rowCtr <= rowRange.lastTuple; ++rowCtr) {
-//                            int row = positions[pos + 1 + rowCtr];
-//                            if (!source.doubleData.isNull.get(row)) {
-//                                double value = source.doubleData.data[row];
-//                                doubleIndexRange.add(value);
-//                                doubleIndex.doubleData.data[rowCtr] = value;
-//                            }
-//                        }
-//                    }
-//                }
-//                copyColumnData(indexFilter, rowRange, rows, index,
-//                        intSource, intTarget, doubleSource, doubleTarget);
-//            });
-//
-//            IntStream.range(0, nrBatches).parallel().forEach(bid -> {
-//                for (int i = 0; i < intIndexes.size(); i++) {
-//                    IntPartitionIndex intIndex = intIndexes.get(i);
-//                    IntPartitionIndex source = intSourceIndex.get(i);
-//                    IntIndexRange intIndexRange = intIndexRanges[i][bid];
-//                    IntIntCursor batchCursor = intIndexRange.valuesMap.cursor();
-//                    intIndexRange.prefixMap = HashIntIntMaps.newMutableMap(intIndexRange.valuesMap.size());
-//                    intIndex.keyToPositions = source.keyToPositions;
-//                    intIndex.positions = new int[source.positions.length];
-//                    int[] positions = intIndex.positions;
-//                    while (batchCursor.moveNext()) {
-//                        int key = batchCursor.key();
-//                        int prefix = 1;
-//                        int localNr = batchCursor.value();
-//                        int startPos = intIndex.keyToPositions.getOrDefault(key, -1);
-//                        for (int b = 0; b < bid; b++) {
-//                            prefix += intIndexRanges[i][b].valuesMap.getOrDefault(key, 0);
-//                        }
-//                        int nrValue = positions[startPos];
-//                        if (nrValue == 0) {
-//                            int nr = prefix - 1 + localNr;
-//                            for (int b = bid + 1; b < nrBatches; b++) {
-//                                nr += intIndexRanges[i][b].valuesMap.getOrDefault(key, 0);
-//                            }
-//                            positions[startPos] = nr;
-//                            nrValue = nr;
-//                        }
-//                        if (nrValue > 1) {
-//                            intIndexRange.prefixMap.put(key, prefix + startPos);
-//                        }
-//                    }
-//                    // Evaluate predicate for each table row
-//                    for (int rowCtr = intIndexRange.firstTuple;
-//                         rowCtr <= intIndexRange.lastTuple; ++rowCtr) {
-//                        if (!source.intData.isNull.get(rowCtr)) {
-//                            int value = intIndex.intData.data[rowCtr];
-//                            int firstPos = intIndex.keyToPositions.getOrDefault(value, -1);
-//                            int nr = positions[firstPos];
-//                            if (nr == 1) {
-//                                positions[firstPos + 1] = rowCtr;
-//                                intIndex.scopes[rowCtr] = 0;
-//                            } else {
-//                                int pos = intIndexRange.prefixMap.computeIfPresent(value, (k, v) -> v + 1) - 1;
-//                                positions[pos] = rowCtr;
-//                                int startThread = (pos - firstPos - 1) % ParallelConfig.EXE_THREADS;
-//                                intIndex.scopes[rowCtr] = (byte) startThread;
-//                            }
-//                        }
-//                    }
-//                }
-//
-//                for (int i = 0; i < doubleIndexes.size(); i++) {
-//                    DoublePartitionIndex doubleIndex = doubleIndexes.get(i);
-//                    DoublePartitionIndex source = doubleSourceIndex.get(i);
-//                    DoubleIndexRange doubleIndexRange = doubleIndexRanges[i][bid];
-//                    DoubleIntCursor batchCursor = doubleIndexRange.valuesMap.cursor();
-//                    doubleIndexRange.prefixMap = HashDoubleIntMaps.newMutableMap(doubleIndexRange.valuesMap.size());
-//                    doubleIndex.keyToPositions = source.keyToPositions;
-//                    doubleIndex.positions = new int[source.positions.length];
-//                    int[] positions = doubleIndex.positions;
-//                    while (batchCursor.moveNext()) {
-//                        double key = batchCursor.key();
-//                        int prefix = 1;
-//                        int localNr = batchCursor.value();
-//                        int startPos = doubleIndex.keyToPositions.getOrDefault(key, -1);
-//                        for (int b = 0; b < bid; b++) {
-//                            prefix += doubleIndexRanges[i][b].valuesMap.getOrDefault(key, 0);
-//                        }
-//                        int nrValue = positions[startPos];
-//                        if (nrValue == 0) {
-//                            int nr = prefix - 1 + localNr;
-//                            for (int b = bid + 1; b < nrBatches; b++) {
-//                                nr += doubleIndexRanges[i][b].valuesMap.getOrDefault(key, 0);
-//                            }
-//                            positions[startPos] = nr;
-//                            nrValue = nr;
-//                        }
-//                        if (nrValue > 1) {
-//                            doubleIndexRange.prefixMap.put(key, prefix + startPos);
-//                        }
-//                    }
-//                    // Evaluate predicate for each table row
-//                    for (int rowCtr = doubleIndexRange.firstTuple;
-//                         rowCtr <= doubleIndexRange.lastTuple; ++rowCtr) {
-//                        if (!source.doubleData.isNull.get(rowCtr)) {
-//                            double value = doubleIndex.doubleData.data[rowCtr];
-//                            int firstPos = doubleIndex.keyToPositions.getOrDefault(value, -1);
-//                            int nr = positions[firstPos];
-//                            if (nr == 1) {
-//                                positions[firstPos + 1] = rowCtr;
-//                                doubleIndex.scopes[rowCtr] = 0;
-//                            } else {
-//                                int pos = doubleIndexRange.prefixMap.computeIfPresent(value, (k, v) -> v + 1) - 1;
-//                                positions[pos] = rowCtr;
-//                                int startThread = (pos - firstPos - 1) % ParallelConfig.EXE_THREADS;
-//                                doubleIndex.scopes[rowCtr] = (byte) startThread;
-//                            }
-//                        }
-//                    }
-//                }
-//            });
-//            // Update statistics in catalog
-//            CatalogManager.updateStats(targetRelName);
-//        }
-//        else {
-//
-//        }
-//    }
-//
-//    static void initializeData(List<ColumnRef> nonIndexedCols, TableInfo resultTable, int cardinality,
-//                               List<IntData> intSource, List<IntData> intTarget,
-//                               List<DoubleData> doubleSource, List<DoubleData> doubleTarget) throws Exception {
-//        for (ColumnRef sourceColRef : nonIndexedCols) {
-//            // Add result column to result table, using type of source column
-//            ColumnInfo sourceCol = CatalogManager.getColumn(sourceColRef);
-//            ColumnData srcData = BufferManager.colToData.get(sourceColRef);
-//            ColumnInfo resultCol = new ColumnInfo(sourceColRef.columnName,
-//                    sourceCol.type, sourceCol.isPrimary,
-//                    sourceCol.isUnique, sourceCol.isNotNull,
-//                    sourceCol.isForeign);
-//            resultTable.addColumn(resultCol);
-//            ColumnRef resultColRef = new ColumnRef(resultTable.name, sourceColRef.columnName);
-//            JavaType jType = TypeUtil.toJavaType(sourceCol.type);
-//            switch (jType) {
-//                case INT:
-//                    IntData intData = new IntData(cardinality);
-//                    intSource.add((IntData) srcData);
-//                    intTarget.add(intData);
-//                    BufferManager.colToData.put(resultColRef, intData);
-//                    break;
-//                case DOUBLE:
-//                    DoubleData doubleData = new DoubleData(cardinality);
-//                    doubleSource.add((DoubleData) srcData);
-//                    doubleTarget.add(doubleData);
-//                    BufferManager.colToData.put(resultColRef, doubleData);
-//                    break;
-//            }
-//        }
-//    }
-//
-//    static void initializeIndexes(List<ColumnRef> indexedCols,
-//                                  TableInfo resultTable,
-//                                  int cardinality,
-//                                  List<IntPartitionIndex> intIndexes,
-//                                  List<IntPartitionIndex> intSource,
-//                                  List<DoublePartitionIndex> doubleIndexes,
-//                                  List<DoublePartitionIndex> doubleSource) throws Exception {
-//        for (ColumnRef sourceColRef : indexedCols) {
-//            // Add result column to result table, using type of source column
-//            ColumnInfo sourceCol = CatalogManager.getColumn(sourceColRef);
-//            ColumnInfo resultCol = new ColumnInfo(sourceColRef.columnName,
-//                    sourceCol.type, sourceCol.isPrimary,
-//                    sourceCol.isUnique, sourceCol.isNotNull,
-//                    sourceCol.isForeign);
-//            resultTable.addColumn(resultCol);
-//            JavaType jType = TypeUtil.toJavaType(sourceCol.type);
-//            switch (jType) {
-//                case INT: {
-//                    IntPartitionIndex intPartitionIndex = new IntPartitionIndex(cardinality, sourceColRef);
-//                    IntPartitionIndex source = (IntPartitionIndex) BufferManager.colToIndex.get(sourceColRef);
-//                    intIndexes.add(intPartitionIndex);
-//                    intSource.add(source);
-//                    ColumnRef targetColRef = new ColumnRef(resultTable.name, source.queryRef.columnName);
-//                    BufferManager.colToData.put(targetColRef, intPartitionIndex.intData);
-//                    BufferManager.colToIndex.put(targetColRef, intPartitionIndex);
-//                    break;
-//                }
-//                case DOUBLE: {
-//                    DoublePartitionIndex doublePartitionIndex = new DoublePartitionIndex(cardinality, sourceColRef);
-//                    DoublePartitionIndex source = (DoublePartitionIndex) BufferManager.colToIndex.get(sourceColRef);
-//                    doubleIndexes.add(doublePartitionIndex);
-//                    doubleSource.add(source);
-//                    ColumnRef targetColRef = new ColumnRef(resultTable.name, source.queryRef.columnName);
-//                    BufferManager.colToData.put(targetColRef, doublePartitionIndex.doubleData);
-//                    BufferManager.colToIndex.put(targetColRef, doublePartitionIndex);
-//                    break;
-//                }
-//            }
-//        }
-//    }
-//
-//    /**
-//     * Get the cardinality of filtered table
-//     * after applying index.
-//     *
-//     * @param tableName		name of DB table to which predicate applies
-//     * @param indexFilter	unary predicate and index filter on that table
-//     */
-//    static int indexCardinality(String tableName, IndexFilter indexFilter) {
-//        if (indexFilter.qualifyingRows.size() > 0) {
-//            List<Integer> rows = indexFilter.qualifyingRows.peek();
-//            // full results
-//            if (indexFilter.resultType == 0) {
-//                return rows.size();
-//            }
-//            // range results
-//            else if (indexFilter.resultType == 1) {
-//                return rows.get(1) - rows.get(0);
-//            }
-//            // equal position
-//            else {
-//                int position = rows.get(0);
-//                return indexFilter.lastIndex.positions[position];
-//            }
-//        }
-//        else {
-//            return CatalogManager.getCardinality(tableName);
-//        }
-//    }
-//
-//    /**
-//     * Compiles evaluator for unary predicate.
-//     *
-//     * @param unaryPred			predicate to compile
-//     * @param columnMapping		maps query to database columns
-//     * @return					compiled predicate evaluator
-//     * @throws Exception
-//     */
-//    static UnaryBoolEval compilePred(ExpressionInfo unaryPred,
-//                                     Map<ColumnRef, ColumnRef> columnMapping) throws Exception {
-//        ExpressionCompiler unaryCompiler = new ExpressionCompiler(
-//                unaryPred, columnMapping, null, null,
-//                EvaluatorType.UNARY_BOOLEAN);
-//        unaryPred.finalExpression.accept(unaryCompiler);
-//        return (UnaryBoolEval)unaryCompiler.getBoolEval();
-//    }
-//
-//    /**
-//     * Splits table with given cardinality into tuple batches
-//     * according to the configuration for joining.parallel processing.
-//     *
-//     * @param cardinality	cardinality of table to split
-//     * @return				list of row ranges (batches)
-//     */
-//    static List<RowRange> split(int cardinality) {
-//        List<RowRange> batches = new ArrayList<>();
-//        for (int batchCtr=0; batchCtr*ParallelConfig.PARALLEL_SIZE < cardinality;
-//             ++batchCtr) {
-//            int startIdx = batchCtr * ParallelConfig.PARALLEL_SIZE;
-//            int tentativeEndIdx = startIdx + ParallelConfig.PARALLEL_SIZE - 1;
-//            int endIdx = Math.min(cardinality - 1, tentativeEndIdx);
-//            RowRange rowRange = new RowRange(startIdx, endIdx);
-//            batches.add(rowRange);
-//        }
-//        return batches;
-//    }
+
+            // Update pre-processing summary
+            for (String colName : requiredCols) {
+                ColumnRef queryRef = new ColumnRef(alias, colName);
+                ColumnRef dbRef = new ColumnRef(targetRelName, colName);
+                preSummary.columnMapping.put(queryRef, dbRef);
+            }
+
+            // Update statistics in catalog
+            CatalogManager.updateStats(targetRelName);
+            preSummary.aliasToFiltered.put(alias, targetRelName);
+            return indexFilter;
+        } else {
+            IndexFilter indexFilter = new IndexFilter(query);
+            indexFilter.lastIndex = null;
+            indexFilter.remainingInfo = unaryPred;
+            return indexFilter;
+        }
+    }
+    /**
+     * Creates a new temporary table containing remaining tuples
+     * after applying unary predicates, project on columns that
+     * are required for following steps.
+     *
+     * @param query			query to pre-process
+     * @param alias			alias of table to filter
+     * @param filter		unary predicate filter
+     * @param requiredCols	project on those columns
+     * @param preSummary	summary of pre-processing steps
+     */
+    static List<Integer> filterProject(QueryInfo query, String alias, IndexFilter filter,
+                                       List<ColumnRef> requiredCols, Context preSummary) throws Exception {
+        long startMillis = 0;
+        ExpressionInfo unaryPred = filter.remainingInfo;
+        if (LoggingConfig.PERFORMANCE_VERBOSE) {
+            startMillis = System.currentTimeMillis();
+            log("Filtering and projection for " + alias + " ...");
+        }
+        String tableName = preSummary.aliasToFiltered.get(alias);
+        if (LoggingConfig.PERFORMANCE_VERBOSE) {
+            log("Table name for " + alias + " is " + tableName);
+        }
+        // Determine rows satisfying unary predicate
+        int[] indexFilteredRows = filter.rows == null ? new int[0] : filter.rows;
+        int cardinality = indexFilteredRows.length == 0 ?
+                CatalogManager.getCardinality(tableName) : indexFilteredRows.length;
+        List<Integer> satisfyingRows;
+        if (cardinality <= ParallelConfig.PRE_BATCH_SIZE) {
+            satisfyingRows = Filter.executeToList(
+                    filter, tableName, preSummary.columnMapping, query, requiredCols);
+            // Materialize relevant rows and columns
+            String filteredName = NamingConfig.FILTERED_PRE + alias;
+            List<String> columnNames = new ArrayList<>();
+            for (ColumnRef colRef : requiredCols) {
+                columnNames.add(colRef.columnName);
+            }
+            long s2 = System.currentTimeMillis();
+            Materialize.execute(tableName, columnNames,
+                    satisfyingRows, null, filteredName, true);
+            long s3 = System.currentTimeMillis();
+            System.out.println("Materializing after filtering " + unaryPred + " took " + (s3 - s2));
+            // Update pre-processing summary
+            for (ColumnRef srcRef : requiredCols) {
+                String columnName = srcRef.columnName;
+                ColumnRef resRef = new ColumnRef(filteredName, columnName);
+                preSummary.columnMapping.put(srcRef, resRef);
+            }
+            preSummary.aliasToFiltered.put(alias, filteredName);
+        }
+        else {
+            satisfyingRows = Filter.executeToListJNI(
+                    filter, tableName, preSummary, query, requiredCols, alias);
+        }
+        if (satisfyingRows == null) {
+            List<Integer> returnedResults = new ArrayList<>();
+            returnedResults.add(-1);
+            return returnedResults;
+        }
+        if (LoggingConfig.PERFORMANCE_VERBOSE) {
+            long totalMillis = System.currentTimeMillis() - startMillis;
+            log("Filtering using " + unaryPred + " took " + totalMillis + " milliseconds");
+        }
+        return satisfyingRows;
+    }
+    /**
+     * Create indices on equality join columns if not yet available.
+     *
+     * @param query			query for which to create indices
+     * @param preSummary	summary of pre-processing steps executed so far
+     * @throws Exception
+     */
+    static void createJoinIndices(QueryInfo query, Context preSummary)
+            throws Exception {
+        // Iterate over columns in equi-joins
+        long startMillis = System.currentTimeMillis();
+
+        query.indexCols.forEach(queryRef -> {
+            try {
+                // Resolve query-specific column reference
+                ColumnRef dbRef = preSummary.columnMapping.get(queryRef);
+                if (LoggingConfig.PREPROCESSING_VERBOSE) {
+                    log("Creating index for " + queryRef +
+                            " (query) - " + dbRef + " (DB)");
+                }
+                long timer1 = System.currentTimeMillis();
+                ColumnInfo columnInfo = query.colRefToInfo.get(queryRef);
+                String tableName = query.aliasToTable.get(queryRef.aliasName);
+                String columnName = queryRef.columnName;
+                ColumnRef columnRef = new ColumnRef(tableName, columnName);
+                Index index = BufferManager.colToIndex.getOrDefault(columnRef, null);
+                PartitionIndex partitionIndex = index == null ? null : (PartitionIndex) index;
+                // Get index generation policy according to statistics.
+                // Create index (unless it exists already)
+                Indexer.partitionIndex(query.aliasToPositions.get(columnRef), columnRef,
+                        dbRef, queryRef, partitionIndex, columnInfo.isPrimary);
+                long timer2 = System.currentTimeMillis();
+                System.out.println("Indexing " + queryRef + " " + (timer2 - timer1));
+            } catch (Exception e) {
+                System.err.println("Error creating index for " + queryRef);
+                e.printStackTrace();
+            }
+        });
+        long totalMillis = System.currentTimeMillis() - startMillis;
+        System.out.println("Created all indices in " + totalMillis + " ms.");
+        log("Created all indices in " + totalMillis + " ms.");
+    }
+    /**
+     * Output logging message if pre-processing logging activated.
+     *
+     * @param toLog		text to display if logging is activated
+     */
+    static void log(String toLog) {
+        if (LoggingConfig.PREPROCESSING_VERBOSE) {
+            System.out.println(toLog);
+        }
+    }
 }

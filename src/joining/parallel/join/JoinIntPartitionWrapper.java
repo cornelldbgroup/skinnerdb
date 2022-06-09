@@ -115,6 +115,14 @@ public class JoinIntPartitionWrapper extends JoinPartitionIndexWrapper {
     }
 
     @Override
+    public int nextIndexInScope(int[] tupleIndices, int tid, int nrDPThreads, int[] nextSize) {
+        int priorTuple = tupleIndices[priorTable];
+        int priorVal = priorIntData.data[priorTuple];
+        int curTuple = tupleIndices[nextTable];
+        return nextIntIndex.nextTupleInScope(priorVal, priorTuple, curTuple, tid, nextTable, nrDPThreads, nextSize);
+    }
+
+    @Override
     public int nextIndexInScope(int[] tupleIndices, int tid, int[] nextSize, IntSet finishedThreads) {
         int priorTuple = tupleIndices[priorTable];
         int priorVal = priorIntData.data[priorTuple];
@@ -136,6 +144,14 @@ public class JoinIntPartitionWrapper extends JoinPartitionIndexWrapper {
         int priorVal = priorIntData.data[priorTuple];
         int curTuple = tupleIndices[nextTable];
         return nextIntIndex.evaluateInScope(priorVal, priorTuple, curTuple, tid);
+    }
+
+    @Override
+    public boolean evaluateInScope(int[] tupleIndices, int tid, int nrDPThreads) {
+        int priorTuple = tupleIndices[priorTable];
+        int priorVal = priorIntData.data[priorTuple];
+        int curTuple = tupleIndices[nextTable];
+        return nextIntIndex.evaluateInScope(priorVal, priorTuple, curTuple, tid, nrDPThreads);
     }
 
     @Override

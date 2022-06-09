@@ -82,3 +82,4 @@ CREATE TABLE region (
         r_name CHAR(25) NOT NULL,
         r_comment VARCHAR(152) NOT NULL
 );
+

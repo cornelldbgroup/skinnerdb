@@ -310,7 +310,7 @@ public class ModJoin extends DPJoin {
         if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
             writeLog("Round: " + roundCtr + "\tJoin Order: " +
                     Arrays.toString(order) + "\tSplit: " + splitTable);
-            writeLog("Start progress: " + state + " Slow: " + slowState);
+            writeLog("Start progress: " + state + " Slow: " + slowState + "\t" + Arrays.toString(offsets));
         }
 //        long timer2 = System.currentTimeMillis();
         boolean forward = false;
@@ -663,6 +663,72 @@ public class ModJoin extends DPJoin {
         return nonEquiResults;
     }
 
+    int nextTuple(int[] joinOrder, int splitTable, List<JoinPartitionIndexWrapper> indexWrappers,
+                  int curIndex, int[] tupleIndices, int tid) {
+        int nextTable = joinOrder[curIndex];
+        int nextCardinality = cardinalities[nextTable];
+        int tuple = tupleIndices[nextTable];
+        // If there is no equi-predicates.
+        boolean isSplit = nextTable == splitTable;
+        if (indexWrappers.isEmpty()) {
+            if (isSplit) {
+                int bucket = tuple / nrThreads;
+                int hashedTid = (bucket + tid) % nrThreads;
+                int mod = tuple % nrThreads;
+                if (hashedTid > mod) {
+                    int jump = hashedTid - mod;
+                    tuple += jump;
+                }
+                else {
+                    hashedTid = (hashedTid + 1) % nrThreads;
+                    tuple = (bucket + 1) * nrThreads + hashedTid;
+                }
+            }
+            else {
+                tuple += 1;
+            }
+        }
+        else {
+            boolean first = true;
+            for (JoinPartitionIndexWrapper wrapper : indexWrappers) {
+                if (isSplit) {
+                    if (!first) {
+                        if (wrapper.evaluate(tupleIndices)) {
+                            continue;
+                        }
+                    }
+                    int nextRaw = first ? wrapper.nextIndexInScope(tupleIndices, tid, this.nrVisits):
+                            wrapper.nextIndex(tupleIndices, this.nrVisits);
+                    if (nextRaw < 0 || nextRaw == nextCardinality) {
+                        tuple = nextCardinality;
+                        break;
+                    }
+                    else {
+                        tuple = nextRaw;
+                    }
+                    first = false;
+                }
+                else {
+                    if (!first) {
+                        if (wrapper.evaluate(tupleIndices)) {
+                            continue;
+                        }
+                    }
+                    int nextRaw = wrapper.nextIndex(tupleIndices, this.nrVisits);
+                    if (nextRaw < 0 || nextRaw == nextCardinality) {
+                        tuple = nextCardinality;
+                        break;
+                    }
+                    else {
+                        tuple = nextRaw;
+                    }
+                    first = false;
+                }
+            }
+        }
+        return tuple;
+    }
+
     /**
      * Propose next tuple index to consider, based on a set of
      * indices on the join column.
@@ -673,7 +739,7 @@ public class ModJoin extends DPJoin {
      * @return				next join index
      */
     int proposeNextInScope(int[] joinOrder, int splitTable, List<JoinPartitionIndexWrapper> indexWrappers,
-                    int curIndex, int[] tupleIndices, int tid) {
+                    int curIndex, int[] tupleIndices, int tid, List<List<JoinPartitionIndexWrapper>> joinIndices) {
         int nextTable = joinOrder[curIndex];
         int nextCardinality = cardinalities[nextTable];
         // If there is no equi-predicates.
@@ -681,10 +747,17 @@ public class ModJoin extends DPJoin {
         if (indexWrappers.isEmpty()) {
             if (isSplit) {
                 int tuple = tupleIndices[nextTable];
-                int hashedTid = (tuple / nrThreads + tid) % nrThreads;
-                int jump = (nrThreads + hashedTid - tuple % nrThreads) % nrThreads;
-                jump = jump == 0 ? nrThreads : jump;
-                tupleIndices[nextTable] += jump;
+                int bucket = tuple / nrThreads;
+                int hashedTid = (bucket + tid) % nrThreads;
+                int mod = tuple % nrThreads;
+                if (hashedTid > mod) {
+                    int jump = hashedTid - mod;
+                    tupleIndices[nextTable] += jump;
+                }
+                else {
+                    hashedTid = (hashedTid + 1) % nrThreads;
+                    tupleIndices[nextTable] = (bucket + 1) * nrThreads + hashedTid;
+                }
             }
             else {
                 tupleIndices[nextTable]++;
@@ -747,7 +820,9 @@ public class ModJoin extends DPJoin {
             }
             nextTable = joinOrder[curIndex];
             nextCardinality = cardinalities[nextTable];
-            tupleIndices[nextTable] += 1;
+            // Get the next tuple
+            tupleIndices[nextTable] = nextTuple(joinOrder, splitTable,
+                    joinIndices.get(curIndex), curIndex, tupleIndices, tid);
             // Update statistics
             this.nrVisits[nextTable] = cardinalities[nextTable];
             downOps[nextTable]++;
@@ -756,7 +831,7 @@ public class ModJoin extends DPJoin {
     }
 
     int proposeFinalNextInScope(int[] joinOrder, int splitTable, List<JoinPartitionIndexWrapper> indexWrappers,
-                           int curIndex, int[] tupleIndices, int tid, int splitIndex,
+                                int curIndex, int[] tupleIndices, int tid, int splitIndex,
                                 List<List<JoinPartitionIndexWrapper>> joinIndices) {
         int nextTable = joinOrder[curIndex];
         int nextCardinality = cardinalities[nextTable];
@@ -914,7 +989,8 @@ public class ModJoin extends DPJoin {
                     tupleIndices[backTable] = 0;
                 }
                 joinIndex = proposeNextInScope(
-                        plan.joinOrder.order, splitTable, joinIndices.get(joinIndex), joinIndex, tupleIndices, tid);
+                        plan.joinOrder.order, splitTable, joinIndices.get(joinIndex),
+                        joinIndex, tupleIndices, tid, joinIndices);
                 break;
             }
             else if (joinIndex == nrTables - 1){
@@ -925,9 +1001,9 @@ public class ModJoin extends DPJoin {
                 else {
                     result.add(tupleIndices);
                 }
-//                writeLog("INFO:Bingo: " + Arrays.toString(tupleIndices));
                 joinIndex = proposeNextInScope(
-                        plan.joinOrder.order, splitTable, joinIndices.get(joinIndex), joinIndex, tupleIndices, tid);
+                        plan.joinOrder.order, splitTable, joinIndices.get(joinIndex),
+                        joinIndex, tupleIndices, tid, joinIndices);
             }
         }
 
@@ -975,9 +1051,9 @@ public class ModJoin extends DPJoin {
                     else {
                         result.add(tupleIndices);
                     }
-//                    writeLog("INFO:Bingo: " + Arrays.toString(tupleIndices));
                     joinIndex = proposeNextInScope(
-                            plan.joinOrder.order, splitTable, joinIndices.get(joinIndex), joinIndex, tupleIndices, tid);
+                            plan.joinOrder.order, splitTable, joinIndices.get(joinIndex),
+                            joinIndex, tupleIndices, tid, joinIndices);
                 } else {
                     // No complete result row -> complete further
                     joinIndex++;
@@ -986,7 +1062,8 @@ public class ModJoin extends DPJoin {
                 // At least one of applicable predicates evaluates to false -
                 // try next tuple in same table.
                 joinIndex = proposeNextInScope(
-                        plan.joinOrder.order, splitTable, joinIndices.get(joinIndex), joinIndex, tupleIndices, tid);
+                        plan.joinOrder.order, splitTable, joinIndices.get(joinIndex),
+                        joinIndex, tupleIndices, tid, joinIndices);
 
             }
             --remainingBudget;

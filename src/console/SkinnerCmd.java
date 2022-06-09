@@ -10,6 +10,7 @@ import buffer.BufferManager;
 import catalog.CatalogManager;
 import catalog.info.ColumnInfo;
 import catalog.info.TableInfo;
+import com.koloboke.collect.map.IntIntMap;
 import compression.Compressor;
 import config.*;
 import data.ColumnData;
@@ -18,6 +19,7 @@ import diskio.LoadCSV;
 import diskio.PathUtil;
 import execution.Master;
 import indexing.Indexer;
+import jni.JNIFilter;
 import joining.parallel.threads.ThreadPool;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.schema.Table;
@@ -106,9 +108,9 @@ public class SkinnerCmd {
                     System.out.println(query.toString());
                     QueryStats.queryName = queryName;
                     QueryStats.optimal = nameToOptimal.get(queryName);
+                    System.out.println("Use optimal plan: " + Arrays.toString(QueryStats.optimal));
                     processSQL(query.toString(), benchOut, queryOut);
                 }
-                System.out.println(Arrays.toString(JoinStats.nrJoined.toArray()));
                 // Close benchmark result file
                 benchOut.close();
                 if (queryOut != null) {
@@ -293,27 +295,35 @@ public class SkinnerCmd {
                 boolean printResult = plainSelect.getIntoTables() == null;
                 BufferManager.unloadCache(name.charAt(0) + "" + name.charAt(1));
                 try {
-                    for (int warmupCtr = 0; warmupCtr < GeneralConfig.NR_WARMUP; warmupCtr++) {
-                        GeneralConfig.ISTESTCASE = false;
-                        Master.executeSelect(plainSelect,
-                                false, -1, -1, null, name, benchOut);
-                        BufferManager.unloadTempData();
-                        CatalogManager.removeTempTables();
-                        sqlStatement = CCJSqlParserUtil.parse(input);
-                        select = (Select) sqlStatement;
-                        plainSelect = (PlainSelect) select.getSelectBody();
+                    if (ParallelConfig.EXE_THREADS <= 1) {
+                        GeneralConfig.ISTESTCASE = true;
+                        // Run the query after the warm up.
+                        Master.executeOldSelect(plainSelect, false,
+                                -1, -1, null, name, benchOut);
                     }
-                    GeneralConfig.ISTESTCASE = true;
-                    // Run the query after the warm up.
-                    Master.executeSelect(plainSelect, false,
-                            -1, -1, null, name, benchOut);
+                    else {
+                        for (int warmupCtr = 0; warmupCtr < GeneralConfig.NR_WARMUP && !name.equals("q09.sql"); warmupCtr++) {
+                            GeneralConfig.ISTESTCASE = false;
+                            Master.executeSelect(plainSelect,
+                                    false, -1, -1, null, name, benchOut);
+                            BufferManager.unloadTempData();
+                            CatalogManager.removeTempTables();
+                            sqlStatement = CCJSqlParserUtil.parse(input);
+                            select = (Select) sqlStatement;
+                            plainSelect = (PlainSelect) select.getSelectBody();
+                        }
+                        GeneralConfig.ISTESTCASE = true;
+                        // Run the query after the warm up.
+                        Master.executeSelect(plainSelect, false,
+                                -1, -1, null, name, benchOut);
+                    }
 
                     // Display query result if no target tables specified
                     // and if this is not a benchmark run.
                     if (benchOut == null && printResult) {
                         // Display on console
-//                        RelationPrinter.print(
-//                                NamingConfig.FINAL_RESULT_NAME);
+                        RelationPrinter.print(
+                                NamingConfig.FINAL_RESULT_NAME);
                     }
                     if (queryOut != null) {
                         RelationPrinter.write(NamingConfig.FINAL_RESULT_NAME, queryOut);
@@ -583,6 +593,22 @@ public class SkinnerCmd {
                 algoSpec = 18;
                 break;
             }
+            case "SP-A": {
+                algoSpec = 19;
+                break;
+            }
+            case "HP-A": {
+                algoSpec = 20;
+                break;
+            }
+            case "DPL": {
+                algoSpec = 11;
+                break;
+            }
+            case "DPM": {
+                algoSpec = 12;
+                break;
+            }
         }
         return algoSpec;
     }
@@ -608,6 +634,10 @@ public class SkinnerCmd {
         // Whether to measure memory consumption
         StartupConfig.Memory = Boolean.parseBoolean(
                 Configuration.getProperty("TEST_MEM", "false"));
+        // Load JNI path
+        // Whether to measure memory consumption
+        GeneralConfig.JNI_PATH = Configuration.getProperty("JNI_PATH",
+                "/Users/tracy/Documents/Research/skinnerdb/src/jni/jniFilter.jnilib");
     }
 
     /**
@@ -658,6 +688,10 @@ public class SkinnerCmd {
             // string dictionary is still loaded.
             BufferManager.loadDictionary();
         }
+        int backupThreads = ParallelConfig.EXE_THREADS;
+        if (ParallelConfig.PARALLEL_SPEC == 20) {
+            ParallelConfig.EXE_THREADS = 24;
+        }
         // Create indexes
         Indexer.indexAll(StartupConfig.INDEX_CRITERIA);
 
@@ -665,14 +699,19 @@ public class SkinnerCmd {
         if (ParallelConfig.PARALLEL_SPEC == 9) {
             ThreadPool.initThreadsPool(2, ParallelConfig.PRE_THREADS);
         } else {
+            if (ParallelConfig.PARALLEL_SPEC == 20) {
+                ParallelConfig.EXE_THREADS = backupThreads;
+            }
             ThreadPool.initThreadsPool(ParallelConfig.EXE_THREADS, ParallelConfig.PRE_THREADS);
         }
-
         System.out.println("SkinnerMT is using " +
                 ParallelConfig.EXE_THREADS + " threads (" +
                 ParallelConfig.SEARCH_THREADS + ")");
-//        processInput("exec ./imdb/queries/33c.sql");
-//        processInput("exec ../jcch-sf-10/queries/q03.sql");
+
+//        processInput("exec ./imdb/queries/18b.sql");
+//        processInput("bench ./tpch/queries/ tpch_jni.log");
+//        processInput("exec ./tpch/queries/q18.sql");
+//        processInput("exec ./jcch/queries/q10.sql");
         // Command line processing
         System.out.println("Enter 'help' for help and 'quit' to exit");
         Scanner scanner = new Scanner(System.in);

@@ -1,6 +1,5 @@
 package joining.parallel.join;
 
-import com.sun.org.apache.xml.internal.utils.res.IntArrayWrapper;
 import config.JoinConfig;
 import config.LoggingConfig;
 import config.ParallelConfig;
@@ -143,7 +142,7 @@ public class OldJoin extends SPJoin {
                 return 1;
             }
         }
-//        order = new int[]{3, 0, 1, 2, 4, 5};
+//        order = new int[]{7, 5, 4, 3, 2, 0, 1, 6};
         // Lookup or generate left-deep query plan
         JoinOrder joinOrder = new JoinOrder(order);
         for (int i = 0; i < nrJoined; i++) {
@@ -225,7 +224,7 @@ public class OldJoin extends SPJoin {
         }
         lastState = state;
         if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
-            writeLog("End: " + state);
+            writeLog("End: " + state + "\tReward: " + reward + "\t" + nrResultTuples);
         }
 //        long timer5 = System.currentTimeMillis();
 //        writeLog((timer5 - timer1) + "\t" + (timer2 - timer1) + "\t" + (timer3 - timer2)
@@ -321,9 +320,7 @@ public class OldJoin extends SPJoin {
         }
         lastState = state;
         if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
-            long endEpisode = System.currentTimeMillis();
-            writeLog("End: " + state + "\t"
-                    + endEpisode + "\t" + (endEpisode - startEpisode));
+            writeLog("End: " + state );
         }
 //        long timer5 = System.currentTimeMillis();
 //        writeLog((timer5 - timer1) + "\t" + (timer2 - timer1) + "\t" + (timer3 - timer2)

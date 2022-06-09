@@ -88,6 +88,13 @@ public class ParallelProgressTracker {
         }
     }
 
+    public void resetTracker() {
+        for (int joinCtr = 0; joinCtr < nrTables; ++joinCtr) {
+            sharedProgress.childNodes[joinCtr] = null;
+        }
+        Arrays.fill(tableOffsetMaps[0][0], 0);
+    }
+
     /**
      * Integrates final state achieved when evaluating one specific
      * join order.

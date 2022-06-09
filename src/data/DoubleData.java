@@ -32,6 +32,15 @@ public class DoubleData extends ColumnData implements Serializable {
 		super(cardinality);
 		this.data = new double[cardinality];
 	}
+	/**
+	 * Initializes data array for given array.
+	 *
+	 * @param data	number of rows
+	 */
+	public DoubleData(double[] data) {
+		super(data.length);
+		this.data = data;
+	}
 
 	@Override
 	public int compareRows(int row1, int row2) {

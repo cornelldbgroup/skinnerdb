@@ -1,8 +1,6 @@
 package postprocessing;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.stream.Collectors;
 
@@ -10,16 +8,27 @@ import buffer.BufferManager;
 import catalog.CatalogManager;
 import catalog.info.ColumnInfo;
 import catalog.info.TableInfo;
+import com.google.common.collect.Maps;
+import com.koloboke.collect.set.IntSet;
+import com.koloboke.collect.set.hash.HashIntSets;
+import config.GeneralConfig;
 import config.LoggingConfig;
 import config.NamingConfig;
+import config.ParallelConfig;
 import data.ColumnData;
+import data.DoubleData;
 import data.IntData;
 import expressions.ExpressionInfo;
 import expressions.aggregates.AggInfo;
 import indexing.Index;
+import jni.JNIFilter;
+import joining.parallel.indexing.IntPartitionIndex;
+import net.sf.jsqlparser.expression.Expression;
+import net.sf.jsqlparser.expression.ExtractExpression;
 import net.sf.jsqlparser.expression.Function;
 import net.sf.jsqlparser.schema.Column;
 import operators.*;
+import operators.parallel.JNIParser;
 import operators.parallel.ParallelAvgAggregate;
 import operators.parallel.ParallelGroupBy;
 import operators.parallel.ParallelMapRows;
@@ -28,6 +37,8 @@ import print.RelationPrinter;
 import query.ColumnRef;
 import query.QueryInfo;
 import statistics.PostStats;
+
+import static types.SQLtype.*;
 
 /**
  * Uses the result of the join phase as input and
@@ -39,6 +50,14 @@ import statistics.PostStats;
  *
  */
 public class PostProcessor {
+	static {
+		try {
+			System.load(GeneralConfig.JNI_PATH);
+		} catch (UnsatisfiedLinkError e) {
+			System.err.println("Native code library failed to load.\n" + e);
+			System.exit(1);
+		}
+	}
 	/**
 	 * Assigns each join result row to a group ID if the query
 	 * specifies a group by clause. Stores results in context.
@@ -91,7 +110,8 @@ public class PostProcessor {
 		long timer1 = System.currentTimeMillis();
 //		context.nrGroups = GroupBy.execute(sourceRefs, targetRef);
 //		context.nrGroups = ParallelGroupBy.execute(sourceRefs, targetRef, query);
-		context.nrGroups = ParallelGroupBy.executeByIndex(sourceRefs, targetRef, query);
+		context.nrGroups = ParallelGroupBy.executeJNI(sourceRefs, targetRef, query);
+//		context.nrGroups = ParallelGroupBy.executeByIndex(sourceRefs, targetRef, query);
 //		context.nrGroups = ParallelGroupBy.executeBySimpleIndex(sourceRefs, targetRef, query, context);
 		long timer2 = System.currentTimeMillis();
 		System.out.println("Group: " + (timer2 - timer1));
@@ -656,12 +676,222 @@ public class PostProcessor {
 		}
 		else {
 			long groupStart = System.currentTimeMillis();
+			boolean hasCase = query.selectExpressions.stream().filter(expressionInfo ->
+					expressionInfo.originalExpression.toString().contains("CASE WHEN"))
+					.findFirst().orElse(null) != null;
 			// Execute group by
-			if (index != null && joinCard == index.cardinality) {
+			if (index != null && joinCard == index.cardinality && !index.sorted) {
 				groupBySingleIndex(query, context, index);
+			} else if (hasCase) {
+				groupBy(query, context);
 			}
 			else {
-				groupBy(query, context);
+				List<String[]> selectASTNodes = new ArrayList<>();
+				String havingNode = "";
+				JNIParser parser = new JNIParser(query, context.columnMapping);
+				parser.isSelect = true;
+				int nrIntSelects = 0;
+				int nrDoubleSelects = 0;
+				int count = 0;
+				List<ColumnRef> intColRefs = new ArrayList<>();
+				List<ColumnRef> doubleColRefs = new ArrayList<>();
+				List<ExpressionInfo> selectExpressions = new ArrayList<>(query.selectExpressions);
+
+				ExpressionInfo havingInfo = null;
+				String havingCol = null;
+				if (hasHaving) {
+					for (Function agg: query.havingExpression.aggregates) {
+						ExpressionInfo exp = selectExpressions.stream().filter(s ->
+								s.finalExpression.toString().equals(agg.toString())).findFirst().orElse(null);
+						if (exp == null) {
+							try {
+								havingInfo = new ExpressionInfo(query, agg);
+								selectExpressions.add(havingInfo);
+
+							} catch (Exception e) {
+								e.printStackTrace();
+							}
+						}
+						else {
+							havingInfo = exp;
+						}
+					}
+				}
+				int nrSelects = selectExpressions.size();
+				boolean[] isIntSelects = new boolean[nrSelects];
+				for (ExpressionInfo select : selectExpressions) {
+					Expression checkExpression = select.originalExpression.toString().startsWith("count") ?
+							select.originalExpression : select.finalExpression;
+					checkExpression.accept(parser);
+					String colName = query.selectToAlias.get(select);
+					if (colName == null) {
+						colName = "tmp";
+					}
+					ColumnRef resultRef = new ColumnRef(resultRelName, colName);
+
+					if (select.resultType != DOUBLE) {
+						isIntSelects[count] = true;
+						if (select == havingInfo) {
+							havingCol = "IT(" + nrIntSelects + ")";
+						}
+						nrIntSelects++;
+						intColRefs.add(resultRef);
+					}
+					else {
+						if (select == havingInfo) {
+							havingCol = "DT(" + nrDoubleSelects + ")";
+						}
+						nrDoubleSelects++;
+						doubleColRefs.add(resultRef);
+					}
+					if (parser.jniAST.isEmpty()) {
+						String[] columns = new String[]{parser.extractedIndex.pop()};
+						selectASTNodes.add(columns);
+					}
+					else {
+						selectASTNodes.add(parser.jniAST.toArray(new String[0]));
+					}
+					parser.nodeIndexes.clear();
+					parser.extractedIndex.clear();
+					parser.extractedNumbers.clear();
+					parser.extractedConstants.clear();
+					parser.jniAST.clear();
+					parser.isDouble = false;
+					count++;
+				}
+				// Check having expression
+
+				// Add group by columns
+				List<Integer> groupIntCols = new ArrayList<>();
+				List<Integer> groupDoubleCols = new ArrayList<>();
+				int groupCol = -1;
+				int maxKeys = -1;
+				List<String> groupIntMapCols = new ArrayList<>();
+				List<String> groupDoubleMapCols = new ArrayList<>();
+				boolean needSort = true;
+				for (ExpressionInfo group : query.groupByExpressions) {
+					group.finalExpression.accept(parser);
+					String column = group.finalExpression instanceof Column ?
+							parser.extractedIndex.pop() : parser.jniAST.get(0).split("-")[0];
+					int columnIdx = Integer.parseInt(column.substring(3, column.length() - 1));
+					ColumnRef mentionedCol = group.columnsMentioned.iterator().next();
+					Index mentionedIndex = BufferManager.colToIndex.get(mentionedCol);
+					ColumnData data = BufferManager.colToData.get(mentionedCol);
+					if (group.finalExpression instanceof ExtractExpression) {
+						int nrKeys = 30;
+						if (nrKeys > maxKeys) {
+							groupCol = columnIdx;
+							maxKeys = nrKeys;
+						}
+						if (column.charAt(0) == 'I') {
+							groupIntMapCols.add(parser.jniAST.get(0));
+						} else {
+							groupDoubleMapCols.add(parser.jniAST.get(0));
+						}
+					}
+					else if (mentionedIndex instanceof IntPartitionIndex) {
+						int nrKeys = ((IntPartitionIndex) mentionedIndex).nrKeys;
+						if (nrKeys > maxKeys) {
+							groupCol = columnIdx;
+							maxKeys = nrKeys;
+							needSort = index == null || joinCard != index.cardinality || (!mentionedIndex.sorted);
+						}
+					} else if (data instanceof IntData){
+						// Sample 500 values
+						IntData intData = (IntData) data;
+						IntSet intSet = HashIntSets.newMutableSet();
+						for (int rowCtr = 0; rowCtr < 500; rowCtr++) {
+							intSet.add(intData.data[rowCtr]);
+						}
+						int nrKeysLowerBound = intSet.size();
+						if (nrKeysLowerBound > maxKeys) {
+							groupCol = columnIdx;
+							maxKeys = nrKeysLowerBound;
+						}
+					}
+					if (column.charAt(0) == 'I') {
+						groupIntCols.add(columnIdx);
+						groupIntMapCols.add("");
+					} else {
+						groupDoubleCols.add(columnIdx);
+						groupDoubleMapCols.add("");
+					}
+					parser.nodeIndexes.clear();
+					parser.extractedIndex.clear();
+					parser.extractedNumbers.clear();
+					parser.extractedConstants.clear();
+					parser.jniAST.clear();
+				}
+				if (hasHaving) {
+					parser.isHaving = true;
+					parser.havingCol = havingCol;
+					query.havingExpression.finalExpression.accept(parser);
+					havingNode = parser.jniAST.get(0);
+				}
+				// All columns to be materialized
+				List<int[]> intSrcCols = new ArrayList<>();
+				List<double[]> doubleSrcCols = new ArrayList<>();
+				List<Map.Entry<ColumnRef, String>> sortedColRefs = parser.dataIndexMap.entrySet()
+						.stream().sorted(Map.Entry.comparingByValue()).collect(Collectors.toList());
+				for (Map.Entry<ColumnRef, String> entry: sortedColRefs) {
+					ColumnRef columnRef = entry.getKey();
+					ColumnData columnData = BufferManager.getData(columnRef);
+					if (columnData instanceof IntData) {
+						intSrcCols.add(((IntData) columnData).data);
+					}
+					else {
+						doubleSrcCols.add(((DoubleData) columnData).data);
+					}
+				}
+
+				int[][] intTargetCols = new int[nrIntSelects][];
+				double[][] doubleTargetCols = new double[nrSelects - nrIntSelects][];
+				long group_start = System.currentTimeMillis();
+				JNIFilter.postprocessing(intSrcCols.toArray(new int[0][0]), doubleSrcCols.toArray(new double[0][0]),
+						groupIntCols.stream().mapToInt(i->i).toArray(),
+						groupDoubleCols.stream().mapToInt(i->i).toArray(),
+						groupIntMapCols.toArray(new String[0]), groupDoubleMapCols.toArray(new String[0]),
+						groupCol, maxKeys,
+						selectASTNodes.toArray(new String[0][0]), isIntSelects, nrIntSelects,
+						havingNode, needSort,
+						intTargetCols, doubleTargetCols, joinCard,
+						ParallelConfig.EXE_THREADS);
+				long groupEnd = System.currentTimeMillis() - group_start;
+				// Update catalog, inserting materialized table
+				TableInfo resultTable = new TableInfo(resultRelName, true);
+				CatalogManager.currentDB.addTable(resultTable);
+				for (ExpressionInfo selInfo : query.selectExpressions) {
+					String colName = query.selectToAlias.get(selInfo);
+					// Update catalog by adding result column
+					ColumnInfo resultColInfo = new ColumnInfo(colName,
+							selInfo.resultType, false, false, false, false);
+					resultTable.addColumn(resultColInfo);
+				}
+				for (int intColCtr = 0; intColCtr < nrIntSelects; intColCtr++) {
+					int[] target = intTargetCols[intColCtr];
+					IntData intData = new IntData(target);
+					BufferManager.colToData.put(intColRefs.get(intColCtr), intData);
+				}
+				for (int doubleColCtr = 0; doubleColCtr < (nrSelects - nrIntSelects); doubleColCtr++) {
+					double[] target = doubleTargetCols[doubleColCtr];
+					DoubleData doubleData = new DoubleData(target);
+					BufferManager.colToData.put(doubleColRefs.get(doubleColCtr), doubleData);
+				}
+				// Update statistics in catalog
+				CatalogManager.updateStats(resultRelName);
+				System.out.println("JNI post: " + groupEnd);
+				if (hasOrder) {
+					TableInfo orderInfo = CatalogManager.getTable(resultRelName);
+					List<ColumnRef> orderRefs = new ArrayList<>();
+					for (ExpressionInfo orderExpInfo: query.orderByExpressions) {
+						String columnName = orderExpInfo.originalExpression.toString();
+						orderRefs.add(new ColumnRef(resultRelName, columnName));
+					}
+
+					OrderBy.execute(orderRefs, query.orderByAsc, resultRelName);
+				}
+				return;
+				//				groupBy(query, context);
 			}
 			long groupEnd = System.currentTimeMillis();
 			PostStats.groupByMillis = groupEnd - groupStart;

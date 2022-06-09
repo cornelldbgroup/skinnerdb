@@ -109,34 +109,41 @@ public class HybridParallelization extends Parallelization {
         List<Future<SearchResult>> futures = executorService.invokeAll(tasks);
         long executionEnd = System.currentTimeMillis();
         JoinStats.exeTime = executionEnd - executionStart;
+        // Check whether search parallel finishes before data
+        OldJoin finishedJoin = oldJoins.stream().filter(join ->
+                join.lastState != null && join.lastState.isFinished()).findFirst().orElse(null);
+        long finishedCount = 0;
+        if (finishedJoin != null) {
+            resultList.addAll(finishedJoin.concurrentList);
+            finishedCount = finishedJoin.roundCtr;
+        }
+        else {
+            context.resultTuplesList = new ArrayList<>(nrSPThreads);
+        }
+
         int maxSize = 0;
-        context.resultTuplesList = new ArrayList<>(nrDPThreads+nrSPThreads);
         long avgNrEpisode = 0;
         for (int futureCtr = 0; futureCtr < tasks.size(); futureCtr++) {
             try {
                 SearchResult result = futures.get(futureCtr).get();
-                context.resultTuplesList.add(result.result);
                 if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
                     int id = result.isSearch ? result.id : nrSPThreads + result.id;
                     logs[id] = result.logs;
                 }
                 if (!result.isSearch) {
-                    maxSize += result.result.size();
-                    context.resultTuplesList.add(result.result);
-                    UniqueJoinResult uniqueJoinResult = joins[result.id].uniqueJoinResult;
-                    avgNrEpisode += joins[result.id].roundCtr;
-                    if (uniqueJoinResult != null) {
-                        if (context.uniqueJoinResult == null) {
-                            context.uniqueJoinResult = uniqueJoinResult;
-                        } else {
-                            context.uniqueJoinResult.merge(uniqueJoinResult);
+                    if (finishedJoin == null) {
+                        maxSize += result.result.size();
+                        context.resultTuplesList.add(result.result);
+                        UniqueJoinResult uniqueJoinResult = joins[result.id].uniqueJoinResult;
+                        avgNrEpisode += joins[result.id].roundCtr;
+                        if (uniqueJoinResult != null) {
+                            if (context.uniqueJoinResult == null) {
+                                context.uniqueJoinResult = uniqueJoinResult;
+                            } else {
+                                context.uniqueJoinResult.merge(uniqueJoinResult);
+                            }
                         }
                     }
-                } else {
-                    Set<ResultTuple> resultTuples =
-                            new HashSet<>(oldJoins.get(result.id).concurrentList);
-                    maxSize += resultTuples.size();
-                    context.resultTuplesList.add(resultTuples);
                 }
 
             } catch (InterruptedException | ExecutionException e) {
@@ -146,7 +153,7 @@ public class HybridParallelization extends Parallelization {
         context.maxSize = maxSize;
         long mergeEnd = System.currentTimeMillis();
         JoinStats.mergeTime = mergeEnd - executionEnd;
-        JoinStats.nrSamples = avgNrEpisode / nrDPThreads;
+        JoinStats.nrSamples = nrDPThreads == 0 ? finishedCount : avgNrEpisode / nrDPThreads;
         // Write log to the local file.
         if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
             LogUtils.writeLogs(logs, "verbose/hybrid/" + QueryStats.queryName);
