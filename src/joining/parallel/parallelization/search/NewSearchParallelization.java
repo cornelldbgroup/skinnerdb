@@ -15,6 +15,7 @@ import joining.parallel.progress.ParallelProgressTracker;
 import joining.parallel.threads.ThreadPool;
 import joining.parallel.uct.NSPNode;
 import joining.parallel.uct.SPNode;
+import joining.plan.JoinOrder;
 import joining.result.ResultTuple;
 import logs.LogUtils;
 import net.sf.jsqlparser.expression.Expression;
@@ -23,6 +24,7 @@ import preprocessing.Context;
 import query.QueryInfo;
 import statistics.JoinStats;
 import statistics.QueryStats;
+import writer.ExpWriter;
 
 import java.util.*;
 import java.util.concurrent.*;
@@ -109,14 +111,34 @@ public class NewSearchParallelization extends Parallelization {
                 e.printStackTrace();
             }
         });
+        double optimalReward = -1;
+        int[] optimalJoinOrder = null;
         for (SPTask spTask: tasks) {
             OldJoin join = spTask.joinOp;
+            if (spTask.optimalReward > optimalReward) {
+                optimalJoinOrder = spTask.optimalJoinOrder;
+                optimalReward = spTask.optimalReward;
+            }
             if (join.lastState != null && join.lastState.isFinished()) {
                 JoinStats.nrSamples = join.roundCtr;
                 resultList.addAll(join.concurrentList);
+                if (LoggingConfig.CONVERGENCE_VERBOSE) {
+                    ExpWriter.convergeOut.println(QueryStats.queryName);
+                    for (Map.Entry<JoinOrder, Integer> entry: spTask.optimalCounter.entrySet()) {
+                        ExpWriter.convergeOut.println(Arrays.toString(entry.getKey().order) + ": " + entry.getValue());
+                    }
+                }
                 break;
             }
         }
+        String[] aliasOrder = new String[query.nrJoined];
+        for (int tableCtr = 0; tableCtr < query.nrJoined; tableCtr++) {
+            int table = optimalJoinOrder[tableCtr];
+            String tableAlias = query.aliases[table];
+            aliasOrder[tableCtr] = tableAlias;
+        }
+        JoinStats.lastOrder = String.join("|", aliasOrder);
+
         long mergeEnd = System.currentTimeMillis();
         JoinStats.mergeTime = mergeEnd - executionEnd;
 

@@ -3,6 +3,7 @@ package joining.parallel.parallelization.hybrid;
 import com.koloboke.collect.map.IntIntMap;
 import com.koloboke.collect.map.hash.HashIntIntMaps;
 import config.JoinConfig;
+import config.LoggingConfig;
 import config.ParallelConfig;
 import joining.parallel.join.HybridJoin;
 import joining.parallel.parallelization.search.SearchResult;
@@ -13,6 +14,7 @@ import joining.plan.JoinOrder;
 import joining.progress.State;
 import joining.result.ResultTuple;
 import joining.uct.SelectionPolicy;
+import net.sf.jsqlparser.statement.select.Join;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import preprocessing.Context;
@@ -40,7 +42,7 @@ public class NewHybridTask implements Callable<SearchResult> {
     /**
      * Search parallel operator.
      */
-    private final HybridJoin joinOp;
+    public final HybridJoin joinOp;
     /**
      * Atomic boolean flag to represent
      * the end of query.
@@ -87,6 +89,12 @@ public class NewHybridTask implements Callable<SearchResult> {
      */
     public boolean runnable = true;
 
+    public int[] lastJoinOrder  = null;
+    /**
+     * Map to count the optimal join order in each episode.
+     */
+    public final Map<JoinOrder, Integer> optimalCounter;
+
     /**
      * @param query
      * @param context
@@ -123,6 +131,12 @@ public class NewHybridTask implements Callable<SearchResult> {
         this.planCache = planCache;
         this.taskCache = new HashMap<>();
         this.coverTid = coverTid;
+        if (LoggingConfig.CONVERGENCE_VERBOSE) {
+            this.optimalCounter = new HashMap<>();
+        }
+        else {
+            this.optimalCounter = null;
+        }
     }
 
     @Override
@@ -133,7 +147,8 @@ public class NewHybridTask implements Callable<SearchResult> {
         // Get default action selection policy
         SelectionPolicy policy = SelectionPolicy.UCB1;
         // Initialize counter until memory loss
-        long nextForget = 10;
+        long nextForget = JoinConfig.BASE_FORGET_EPISODE;
+        long gamma = JoinConfig.BASE_FORGET_EPISODE;
         // Iterate until join result was generated
         double accReward = 0;
         double maxReward = Double.NEGATIVE_INFINITY;
@@ -240,7 +255,7 @@ public class NewHybridTask implements Callable<SearchResult> {
                         }
                         progress = slowestState == null ? 0 :
                                 Arrays.stream(slowestState.tupleIndices).sum();
-                        if (slowThread == -1) {
+                        if (slowThread == -1 && monitorDPThreads.size() > 0) {
                             isFinished.set(true);
                         }
                         State prevState = prevPlan.slowestStates[forgetID].get();
@@ -276,7 +291,13 @@ public class NewHybridTask implements Callable<SearchResult> {
                                 bestPlan = joinPlan;
                             }
                         }
-//                        joinOp.writeLog(map.toString());
+
+                        if (LoggingConfig.CONVERGENCE_VERBOSE && bestPlan != null) {
+                            System.out.println("Best Plan: " + bestPlan);
+                            JoinOrder order = new JoinOrder(bestPlan.joinOrder);
+                            int newCount = this.optimalCounter.getOrDefault(order, 0)+1;
+                            this.optimalCounter.put(order, newCount);
+                        }
                         boolean canReplace = bestPlan != null && (prevPlan == null ||
                                 !Arrays.equals(bestPlan.joinOrder, prevPlan.joinOrder));
 //                        if (canReplace && prevPlan != null && bestPlan.tid != prevPlan.tid &&
@@ -298,12 +319,13 @@ public class NewHybridTask implements Callable<SearchResult> {
                 } else {
                     System.out.println("Finish ID: " + tid);
                     isFinished.set(true);
+                    lastJoinOrder = joinOrder;
                     break;
                 }
                 // Consider memory loss
                 int curForget = nrForgets.get();
                 if (JoinConfig.FORGET) {
-                    if (tid == 0 && roundCtr >= nextForget) {
+                    if (tid == 0 && roundCtr >= nextForget && monitorSPThreads.size() > 2) {
                         joinOp.writeLog("Forget Enabled");
                         // TODO: More sophisticated mechanism
                         int nrSPThreads = Math.max(2, monitorSPThreads.size() / 2);
@@ -338,7 +360,7 @@ public class NewHybridTask implements Callable<SearchResult> {
                         int endTid = lastThread == 0 ? 1 : nrThreads;
                         root = new NSPNode(roundCtr, query, root.useHeuristic,
                                 tid, 0, endTid);
-                        nextForget *= 10;
+                        nextForget *= gamma;
                         forgetID++;
                         nrForgets.getAndIncrement();
                     }
@@ -364,7 +386,7 @@ public class NewHybridTask implements Callable<SearchResult> {
                                 threadMap.put(dpTid, dpCtr);
                             }
                         }
-                        nextForget *= 10;
+                        nextForget *= gamma;
                         forgetID++;
                         // Check if the thread turns to the data thread.
                         isSearch = !dataThreads.contains(tid);
@@ -416,7 +438,7 @@ public class NewHybridTask implements Callable<SearchResult> {
                             threadMap.put(dpTid, dpCtr);
                         }
                         joinOp.threadTracker.resetTracker();
-                        nextForget *= 10;
+                        nextForget *= gamma;
                         forgetID++;
                     }
                     if (threadFinished) {

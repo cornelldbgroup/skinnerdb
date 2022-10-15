@@ -68,4 +68,8 @@ public class LoggingConfig {
 	 * Whether to generate performance output during.
 	 */
 	public final static boolean PERFORMANCE_VERBOSE = false;
+	/**
+	 * Whether to record the convergence of join orders.
+	 */
+	public final static boolean CONVERGENCE_VERBOSE = false;
 }

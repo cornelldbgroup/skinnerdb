@@ -1,6 +1,8 @@
 package joining.parallel.parallelization.lockfree;
 
+import config.GeneralConfig;
 import config.JoinConfig;
+import config.LoggingConfig;
 import config.ParallelConfig;
 import joining.parallel.join.OldJoin;
 import joining.parallel.parallelization.hybrid.HDataTask;
@@ -68,6 +70,10 @@ public class SampleTask implements Callable<SearchResult> {
      * Map to store the next join plan.
      */
     public final Map<Integer, JoinPlan> taskCache;
+    /**
+     * Map to count the optimal join order in each episode.
+     */
+    public final Map<JoinOrder, Integer> optimalCounter;
 
     /**
      * @param query
@@ -95,6 +101,12 @@ public class SampleTask implements Callable<SearchResult> {
         this.nrDPThreadsPerSpace = nrDPThreadsPerSpace;
         this.planCache = planCache;
         this.taskCache = new HashMap<>();
+        if (LoggingConfig.CONVERGENCE_VERBOSE) {
+            this.optimalCounter = new HashMap<>();
+        }
+        else {
+            this.optimalCounter = null;
+        }
     }
 
     @Override
@@ -111,11 +123,13 @@ public class SampleTask implements Callable<SearchResult> {
         double maxReward = Double.NEGATIVE_INFINITY;
         int[] joinOrder = new int[nrJoined];
         boolean setSplitTable = false;
+//        QueryStats.optimal = new int[]{0, 13, 9, 10, 11, 6, 12, 7, 1, 2, 3, 5, 8, 4};
         while (!isFinished.get()) {
             ++roundCtr;
             double reward = 0;
             int[] optimalJoinOrder;
-            if (QueryStats.optimal != null) {
+            if (GeneralConfig.USE_OPTIMAL && QueryStats.optimal != null) {
+                System.arraycopy(QueryStats.optimal, 0, joinOrder, 0, nrJoined);
                 reward = joinOp.execute(QueryStats.optimal, (int) roundCtr);
                 optimalJoinOrder = Arrays.copyOf(QueryStats.optimal, nrJoined);
             }
@@ -201,6 +215,11 @@ public class SampleTask implements Callable<SearchResult> {
 //                joinPlan.slowestState = joinOp.tracker.continueFromSP(order);
                 joinOp.writeLog("Set Optimal: " + Arrays.toString(optimalJoinOrder));
                 nextJoinOrder.set(joinPlan);
+            }
+            if (LoggingConfig.CONVERGENCE_VERBOSE && roundCtr % 10 == 0) {
+                JoinOrder order = new JoinOrder(optimalJoinOrder);
+                int newCount = this.optimalCounter.getOrDefault(order, 0)+1;
+                this.optimalCounter.put(order, newCount);
             }
             // Count reward except for final sample
             if (!this.joinOp.isFinished()) {

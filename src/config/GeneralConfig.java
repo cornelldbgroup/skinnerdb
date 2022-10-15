@@ -25,9 +25,13 @@ public class GeneralConfig {
 	 */
 	public static int NR_WARMUP = 1;
 	/**
-	 * Whether to write query results to file
+	 * Whether to write query results to file.
 	 */
 	public static boolean WRITE_RESULTS = false;
+	/**
+	 * Whether to use optimal join order.
+	 */
+	public final static boolean USE_OPTIMAL = false;
 	/**
 	 * Whether it is the test case.
 	 */

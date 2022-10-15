@@ -261,7 +261,7 @@ public class Master {
 			boolean lastSubQuery = subQueryCtr==nrSubQueries-1;
 			boolean tempResult = !lastSubQuery || finalTempResult;
 			String resultRel = subQuery.getIntoTables().get(0).getName();
-			if (!CatalogManager.currentDB.nameToTable.containsKey(resultRel)) {
+			if (!CatalogManager.currentDB.nameToTable.containsKey(resultRel) && JoinStats.lastJoinCard > 0) {
 				// Aggregation, grouping, and sorting if required
 				PostProcessor.process(subQueryInfo, context,
 						resultRel, tempResult);
@@ -313,6 +313,9 @@ public class Master {
 			subQueryResults.add(resultRel);
 			BufferManager.unloadTempData(subQueryResults);
 			CatalogManager.removeTempTables(subQueryResults);
+			if (JoinStats.lastJoinCard == 0) {
+				break;
+			}
 		}
 	}
 

@@ -8,6 +8,7 @@ import joining.parallel.parallelization.hybrid.JoinPlan;
 import joining.parallel.threads.ThreadPool;
 import joining.parallel.uct.ASPNode;
 import joining.parallel.uct.NASPNode;
+import joining.plan.JoinOrder;
 import joining.result.ResultTuple;
 import logs.LogUtils;
 import net.sf.jsqlparser.expression.Expression;
@@ -16,6 +17,7 @@ import preprocessing.Context;
 import query.QueryInfo;
 import statistics.JoinStats;
 import statistics.QueryStats;
+import writer.ExpWriter;
 
 import java.util.*;
 import java.util.concurrent.ExecutionException;
@@ -23,6 +25,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.IntStream;
 
 public class NewAdaptiveSearchParallelization extends Parallelization {
     /**
@@ -108,6 +111,19 @@ public class NewAdaptiveSearchParallelization extends Parallelization {
                 e.printStackTrace();
             }
         });
+        List<Double> avgRewards = new ArrayList<>();
+        if (LoggingConfig.CONVERGENCE_VERBOSE) {
+            ExpWriter.convergeOut.println(QueryStats.queryName);
+            for (ASPTask spTask: tasks) {
+                avgRewards.add(spTask.accRewards / spTask.nrVisits);
+            }
+            int index = IntStream.range(0, avgRewards.size()).boxed()
+                    .max(Comparator.comparing(avgRewards::get)).orElse(-1);
+            ASPTask maxTask = tasks.get(index);
+            for (Map.Entry<JoinOrder, Integer> entry: maxTask.optimalCounter.entrySet()) {
+                ExpWriter.convergeOut.println(Arrays.toString(entry.getKey().order) + ": " + entry.getValue());
+            }
+        }
         for (ASPTask spTask: tasks) {
             OldJoin join = spTask.joinOp;
             if (join.lastState != null && join.lastState.isFinished()) {

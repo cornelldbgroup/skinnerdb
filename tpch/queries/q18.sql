@@ -32,5 +32,3 @@ order by
 	o_totalprice desc,
 	o_orderdate
 LIMIT 100;
-
-

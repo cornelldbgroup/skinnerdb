@@ -12,6 +12,8 @@ import joining.parallel.parallelization.root.RootParallelization;
 import joining.parallel.parallelization.search.*;
 import joining.parallel.parallelization.task.StandardParallelization;
 import joining.parallel.parallelization.task.TaskParallelization;
+import joining.parallel.parallelization.test.SPSychronization;
+import joining.parallel.parallelization.test.Sychronization;
 import joining.parallel.parallelization.tree.TreeParallelization;
 import joining.result.ResultTuple;
 import operators.Materialize;
@@ -62,6 +64,7 @@ public class ParallelJoinProcessor {
         JoinStats.nrUctNodes = 0;
         JoinStats.nrPlansTried = 0;
         JoinStats.lastJoinCard = 0;
+        JoinStats.noSyncTime = 0;
         JoinStats.avgReward = 0;
         JoinStats.maxReward = 0;
         JoinStats.totalWork = 0;
@@ -73,6 +76,7 @@ public class ParallelJoinProcessor {
             // Measure execution time for join phase
             JoinStats.exeTime = 0;
             JoinStats.joinMillis = 0;
+            JoinStats.noSyncTime = 0;
             JoinStats.matMillis = 0;
             // Update processing context
             context.columnMapping.clear();
@@ -217,6 +221,24 @@ public class ParallelJoinProcessor {
             // New SP adaptive
             else if (ParallelConfig.PARALLEL_SPEC == 20) {
                 Parallelization parallelization = new AdaptiveHybridParallelization(ParallelConfig.EXE_THREADS,
+                        JoinConfig.BUDGET_PER_EPISODE, query, context);
+                parallelization.execute(resultTuples);
+            }
+            // DP synchronization
+            else if (ParallelConfig.PARALLEL_SPEC == 21) {
+                Parallelization parallelization = new Sychronization(ParallelConfig.EXE_THREADS,
+                        JoinConfig.BUDGET_PER_EPISODE, query, context);
+                parallelization.execute(resultTuples);
+            }
+            // SP synchronization
+            else if (ParallelConfig.PARALLEL_SPEC == 22) {
+                Parallelization parallelization = new SPSychronization(ParallelConfig.EXE_THREADS,
+                        JoinConfig.BUDGET_PER_EPISODE, query, context);
+                parallelization.execute(resultTuples);
+            }
+            // HP synchronization
+            else if (ParallelConfig.PARALLEL_SPEC == 23) {
+                Parallelization parallelization = new SPSychronization(ParallelConfig.EXE_THREADS,
                         JoinConfig.BUDGET_PER_EPISODE, query, context);
                 parallelization.execute(resultTuples);
             }

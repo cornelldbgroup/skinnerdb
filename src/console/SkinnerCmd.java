@@ -37,6 +37,7 @@ import query.SQLexception;
 import statistics.JoinStats;
 import statistics.QueryStats;
 import tools.Configuration;
+import writer.ExpWriter;
 
 /**
  * Runs Skinner command line console.
@@ -93,6 +94,9 @@ public class SkinnerCmd {
                 if (writeResult) {
                     queryOut = new PrintWriter(outputName + ".res");
                 }
+                if (LoggingConfig.CONVERGENCE_VERBOSE) {
+                    ExpWriter.convergeOut = new PrintWriter(outputName.replace(".txt", ".ord"));
+                }
                 // Load all queries to benchmark
                 Map<String, Statement> nameToQuery =
                         BenchUtil.readAllQueries(dirPath);
@@ -115,6 +119,9 @@ public class SkinnerCmd {
                 benchOut.close();
                 if (queryOut != null) {
                     queryOut.close();
+                }
+                if (LoggingConfig.CONVERGENCE_VERBOSE) {
+                    ExpWriter.convergeOut.close();
                 }
             }
         }
@@ -302,7 +309,8 @@ public class SkinnerCmd {
                                 -1, -1, null, name, benchOut);
                     }
                     else {
-                        for (int warmupCtr = 0; warmupCtr < GeneralConfig.NR_WARMUP && !name.equals("q09.sql"); warmupCtr++) {
+                        for (int warmupCtr = 0; warmupCtr < GeneralConfig.NR_WARMUP && !name.equals("q09.sql")
+                                && !name.equals("q01.sql"); warmupCtr++) {
                             GeneralConfig.ISTESTCASE = false;
                             Master.executeSelect(plainSelect,
                                     false, -1, -1, null, name, benchOut);
@@ -609,6 +617,18 @@ public class SkinnerCmd {
                 algoSpec = 12;
                 break;
             }
+            case "SYNC-DP": {
+                algoSpec = 21;
+                break;
+            }
+            case "SYNC-SP": {
+                algoSpec = 22;
+                break;
+            }
+            case "SYNC-HP": {
+                algoSpec = 23;
+                break;
+            }
         }
         return algoSpec;
     }
@@ -638,6 +658,12 @@ public class SkinnerCmd {
         // Whether to measure memory consumption
         GeneralConfig.JNI_PATH = Configuration.getProperty("JNI_PATH",
                 "/Users/tracy/Documents/Research/skinnerdb/src/jni/jniFilter.jnilib");
+        // Get budget value
+        JoinConfig.BUDGET_PER_EPISODE = Integer.parseInt(Configuration.getProperty("BUDGET",
+                "500"));
+        // Reassignment base
+        JoinConfig.BASE_FORGET_EPISODE = Integer.parseInt(Configuration.getProperty("FORGET",
+                "10"));
     }
 
     /**

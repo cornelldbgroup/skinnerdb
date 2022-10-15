@@ -4,23 +4,10 @@ import catalog.CatalogManager;
 import config.*;
 import joining.parallel.indexing.OffsetIndex;
 import joining.parallel.join.OldJoin;
-import joining.parallel.parallelization.Parallelization;
-import joining.parallel.parallelization.dpdsync.DPDSync;
-import joining.parallel.parallelization.hybrid.AdaptiveHybridParallelization;
-import joining.parallel.parallelization.hybrid.HybridParallelization;
-import joining.parallel.parallelization.join.JoinParallelization;
-import joining.parallel.parallelization.leaf.LeafParallelization;
-import joining.parallel.parallelization.lockfree.DataParallelization;
-import joining.parallel.parallelization.lockfree.LockFreeParallelization;
-import joining.parallel.parallelization.root.RootParallelization;
-import joining.parallel.parallelization.search.*;
-import joining.parallel.parallelization.task.StandardParallelization;
-import joining.parallel.parallelization.task.TaskParallelization;
-import joining.parallel.parallelization.tree.TreeParallelization;
 import joining.parallel.uct.NSPNode;
+import joining.plan.JoinOrder;
 import joining.result.ResultTuple;
 import joining.uct.SelectionPolicy;
-import joining.uct.UctNode;
 import logs.LogUtils;
 import net.sf.jsqlparser.expression.Expression;
 import operators.Materialize;
@@ -30,9 +17,8 @@ import query.ColumnRef;
 import query.QueryInfo;
 import statistics.JoinStats;
 import statistics.QueryStats;
-import visualization.TreePlotter;
+import writer.ExpWriter;
 
-import java.nio.file.Paths;
 import java.util.*;
 
 /**
@@ -115,6 +101,7 @@ public class SeqJoinProcessor {
         // Initialize counters and variables
         int[] joinOrder = new int[query.nrJoined];
         long roundCtr = 0;
+        Map<JoinOrder, Integer> joinOrderCounter = new HashMap<>(1000);
         // Initialize exploration weight
         switch (JoinConfig.EXPLORATION_POLICY) {
             case SCALE_DOWN:
@@ -151,6 +138,9 @@ public class SeqJoinProcessor {
         while (!joinOp.isFinished()) {
             ++roundCtr;
             double reward = root.sample(roundCtr, joinOrder, joinOp, policy);
+            JoinOrder order = new JoinOrder(joinOrder);
+            Integer currentCount = joinOrderCounter.getOrDefault(order, 0)+1;
+            joinOrderCounter.put(order, currentCount);
             if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
                 joinOp.logs.add("Round: " + roundCtr + "\tJoin order: " + Arrays.toString(joinOrder));
                 joinOp.logs.add("Reward: " + reward);
@@ -189,6 +179,14 @@ public class SeqJoinProcessor {
             log("Table offsets:\t" + Arrays.toString(joinOp.tracker.tableOffset));
             log("Table cardinalities:\t" + Arrays.toString(joinOp.cardinalities));
         }
+
+        if (LoggingConfig.CONVERGENCE_VERBOSE) {
+            ExpWriter.convergeOut.println(QueryStats.queryName);
+            for (Map.Entry<JoinOrder, Integer> entry: joinOrderCounter.entrySet()) {
+                ExpWriter.convergeOut.println(Arrays.toString(entry.getKey().order) + ": " + entry.getValue());
+            }
+        }
+
         // Write log to the local file.
         if (LoggingConfig.PARALLEL_JOIN_VERBOSE) {
             List<String>[] logs = new List[1];

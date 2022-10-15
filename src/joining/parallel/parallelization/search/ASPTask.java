@@ -1,6 +1,7 @@
 package joining.parallel.parallelization.search;
 
 import config.JoinConfig;
+import config.LoggingConfig;
 import config.ParallelConfig;
 import joining.parallel.join.OldJoin;
 import joining.parallel.parallelization.hybrid.JoinPlan;
@@ -8,6 +9,7 @@ import joining.parallel.plan.LeftDeepPartitionPlan;
 import joining.parallel.uct.ASPNode;
 import joining.parallel.uct.NASPNode;
 import joining.parallel.uct.NSPNode;
+import joining.plan.JoinOrder;
 import joining.result.ResultTuple;
 import joining.uct.SelectionPolicy;
 import preprocessing.Context;
@@ -60,6 +62,15 @@ public class ASPTask implements Callable<SearchResult> {
      */
     public final AtomicReference<List<Set<Integer>>>[] assignment;
     /**
+     * Map to count the optimal join order in each episode.
+     */
+    public final Map<JoinOrder, Integer> optimalCounter;
+    /**
+     * Reward statistics
+     */
+    public double accRewards = 0;
+    public double nrVisits = 0;
+    /**
      *
      *
      * @param query
@@ -80,6 +91,12 @@ public class ASPTask implements Callable<SearchResult> {
         this.isFinished = isFinished;
         this.tid = tid;
         this.assignment = assignment;
+        if (LoggingConfig.CONVERGENCE_VERBOSE) {
+            this.optimalCounter = new HashMap<>();
+        }
+        else {
+            this.optimalCounter = null;
+        }
     }
     @Override
     public SearchResult call() throws Exception {
@@ -108,7 +125,7 @@ public class ASPTask implements Callable<SearchResult> {
                     root.sample(roundCtr, joinOrder, this.joinOp, policy) :
                     root.sample(roundCtr, joinOrder, this.joinOp, threadAssignment, policy);
             // Adaptively re-partition the search space
-            if (roundCtr == 100 && tid == 0 && !isSmall) {
+            if (roundCtr == nextForget && tid == 0 && !isSmall) {
                 List<List<Set<Integer>>> actionsAssignment = new ArrayList<>();
                 for (int threadCtr = 0; threadCtr < nrThreads; threadCtr++) {
                     actionsAssignment.add(new ArrayList<>());
@@ -121,6 +138,13 @@ public class ASPTask implements Callable<SearchResult> {
                 root = new NASPNode(roundCtr, query, root.useHeuristic, threadAssignment);
             }
 
+            if (LoggingConfig.CONVERGENCE_VERBOSE && roundCtr >= 100) {
+                JoinOrder order = new JoinOrder(joinOrder);
+                accRewards +=reward;
+                nrVisits++;
+                int newCount = this.optimalCounter.getOrDefault(order, 0)+1;
+                this.optimalCounter.put(order, newCount);
+            }
 
             // Count reward except for final sample
             if (!this.joinOp.isFinished()) {
@@ -128,8 +152,8 @@ public class ASPTask implements Callable<SearchResult> {
                 maxReward = Math.max(reward, maxReward);
             }
             else {
-                System.out.println(Arrays.toString(joinOrder));
                 isFinished.set(true);
+                System.out.println("Finished ID: " + tid);
                 break;
             }
             if (root.nodeStatistics != null) {
@@ -141,7 +165,7 @@ public class ASPTask implements Callable<SearchResult> {
             // Consider memory loss
             if (JoinConfig.FORGET && (roundCtr==nextForget && tid != 0)) {
                 needForget = true;
-                nextForget *= 10;
+                nextForget *= JoinConfig.BASE_FORGET_EPISODE;
             }
             if (needForget && !isSmall) {
                 threadAssignment = assignment[tid].get();

@@ -79,6 +79,10 @@ public class JoinStats {
      */
     public static long exeTime = 0;
     /**
+     * Total execution time without synchronization overhead.
+     */
+    public static long noSyncTime = 0;
+    /**
      * Total time of merging results tuples
      */
     public static long mergeTime = 0;
@@ -98,5 +102,9 @@ public class JoinStats {
      * Size of join algorithm.
      */
     public static long joinSize = 0;
+    /**
+     * Order of last join.
+     */
+    public static String lastOrder = "";
     public static List<Integer> nrJoined = new ArrayList<>();
 }

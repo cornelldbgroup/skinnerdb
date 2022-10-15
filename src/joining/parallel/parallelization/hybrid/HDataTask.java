@@ -1,13 +1,11 @@
 package joining.parallel.parallelization.hybrid;
 
-import config.JoinConfig;
-import config.ParallelConfig;
+
+import config.LoggingConfig;
 import joining.parallel.join.ModJoin;
 import joining.parallel.parallelization.search.SearchResult;
 import joining.progress.State;
 import joining.result.ResultTuple;
-import org.apache.commons.lang3.tuple.ImmutablePair;
-import org.apache.commons.lang3.tuple.Pair;
 import preprocessing.Context;
 import query.QueryInfo;
 
@@ -67,8 +65,6 @@ public class HDataTask implements Callable<SearchResult> {
         long timer1 = System.currentTimeMillis();
         int[] joinOrder = null;
         long roundCtr = 0;
-        int nrJoined = query.nrJoined;
-        boolean prevFinished = false;
         while (!isFinished.get()) {
             JoinPlan joinPlan = nextJoinOrder.get();
             if (joinPlan != null) {

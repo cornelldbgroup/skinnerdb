@@ -9,6 +9,7 @@ import joining.parallel.parallelization.Parallelization;
 import joining.parallel.parallelization.search.SearchResult;
 import joining.parallel.plan.LeftDeepPartitionPlan;
 import joining.parallel.threads.ThreadPool;
+import joining.plan.JoinOrder;
 import joining.result.ResultTuple;
 import joining.result.UniqueJoinResult;
 import logs.LogUtils;
@@ -18,6 +19,7 @@ import preprocessing.Context;
 import query.QueryInfo;
 import statistics.JoinStats;
 import statistics.QueryStats;
+import writer.ExpWriter;
 
 import java.util.*;
 import java.util.concurrent.*;
@@ -105,6 +107,48 @@ public class AdaptiveHybridParallelization extends Parallelization {
         List<Future<SearchResult>> futures = executorService.invokeAll(tasks);
         long executionEnd = System.currentTimeMillis();
         JoinStats.exeTime = executionEnd - executionStart;
+        // Last join order
+        if (nextJoinOrder.get() != null) {
+            int[] lastJoinOrder = nextJoinOrder.get().joinOrder;
+            String[] aliasOrder = new String[query.nrJoined];
+            for (int tableCtr = 0; tableCtr < query.nrJoined; tableCtr++) {
+                int table = lastJoinOrder[tableCtr];
+                String tableAlias = query.aliases[table];
+                aliasOrder[tableCtr] = tableAlias;
+            }
+            JoinStats.lastOrder = String.join("|", aliasOrder);
+        } else {
+            int[] lastJoinOrder = null;
+            for (int threadCtr = 0; threadCtr < nrThreads; threadCtr++) {
+                NewHybridTask hybridTask = tasks.get(threadCtr);
+                if (hybridTask.lastJoinOrder != null) {
+                    lastJoinOrder = hybridTask.lastJoinOrder;
+                    break;
+                }
+            }
+            if (lastJoinOrder != null) {
+                String[] aliasOrder = new String[query.nrJoined];
+                for (int tableCtr = 0; tableCtr < query.nrJoined; tableCtr++) {
+                    int table = lastJoinOrder[tableCtr];
+                    String tableAlias = query.aliases[table];
+                    aliasOrder[tableCtr] = tableAlias;
+                }
+                JoinStats.lastOrder = String.join("|", aliasOrder);
+            }
+            else {
+                JoinStats.lastOrder = "NA";
+            }
+        }
+        if (LoggingConfig.CONVERGENCE_VERBOSE) {
+//            ExpWriter.convergeOut.println(QueryStats.queryName);
+            NewHybridTask hybridTask = tasks.get(0);
+            Map<JoinOrder, Integer> targetCounter = hybridTask.optimalCounter;
+            if (targetCounter != null) {
+                for (Map.Entry<JoinOrder, Integer> entry: targetCounter.entrySet()) {
+//                    ExpWriter.convergeOut.println(Arrays.toString(entry.getKey().order) + ": " + entry.getValue());
+                }
+            }
+        }
         // Check whether search parallel finishes before data
         int finalDPThreads = tasks.get(0).dataThreads.size();
         HybridJoin finishedJoin = null;

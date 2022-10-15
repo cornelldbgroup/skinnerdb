@@ -93,4 +93,8 @@ public class JoinConfig {
 	 * Whether to avoid redundant intermediate results for minmax queries.
 	 */
 	public static final boolean EARLY_AGGREGATION = false;
+	/**
+	 * Number of steps performed before next forget.
+	 */
+	public static int BASE_FORGET_EPISODE = 10;
 }

@@ -1,6 +1,7 @@
 package joining.parallel.parallelization.search;
 
 import config.JoinConfig;
+import config.LoggingConfig;
 import config.ParallelConfig;
 import joining.parallel.join.OldJoin;
 import joining.parallel.parallelization.hybrid.JoinPlan;
@@ -72,6 +73,18 @@ public class SPTask implements Callable<SearchResult> {
      */
     public boolean runnable = true;
     /**
+     * The optimal join order found by search threads.
+     */
+    public int[] optimalJoinOrder = null;
+    /**
+     * The average reward of optimal join order.
+     */
+    public double optimalReward = 0;
+    /**
+     * Map to count the optimal join order in each episode.
+     */
+    public final Map<JoinOrder, Integer> optimalCounter;
+    /**
      *
      *
      * @param query
@@ -100,6 +113,12 @@ public class SPTask implements Callable<SearchResult> {
         this.nextJoinOrder = nextJoinOrder;
         this.taskCache = new HashMap<>();
         this.planCache = new HashMap<>();
+        if (LoggingConfig.CONVERGENCE_VERBOSE) {
+            this.optimalCounter = new HashMap<>();
+        }
+        else {
+            this.optimalCounter = null;
+        }
     }
     @Override
     public SearchResult call() throws Exception {
@@ -184,8 +203,17 @@ public class SPTask implements Callable<SearchResult> {
                         tid, 0, nrThreads);
                 nextForget *= 10;
             }
+            if (LoggingConfig.CONVERGENCE_VERBOSE) {
+                JoinOrder order = new JoinOrder(joinOrder);
+                int newCount = this.optimalCounter.getOrDefault(order, 0)+1;
+                this.optimalCounter.put(order, newCount);
+            }
         }
         long timer2 = System.currentTimeMillis();
+        // Optimal join order
+        optimalJoinOrder = root.optimalJoinOrder();
+        int firstAction = Arrays.binarySearch(root.nextTable, optimalJoinOrder[0]);
+        optimalReward = root.getReward(firstAction);
         System.out.println("Thread " + tid + " " + (timer2 - timer1)
                 + "\tRound: " + roundCtr + "\tOrder: " + Arrays.toString(joinOrder) + "\t"
                 + System.currentTimeMillis());

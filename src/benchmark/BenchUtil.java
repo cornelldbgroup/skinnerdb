@@ -104,9 +104,9 @@ public class BenchUtil {
 	public static void writeBenchHeader(PrintWriter benchOut) {
 		benchOut.println("Query,IsWarmup,Millis,PreMillis,JoinMillis,MatMillis,PostMillis,"
 				+ "FilterMillis,IndexMillis,GroupByMillis,AggregateMillis,HavingMillis,OrderMillis,"
-				+ "Tuples,Samples,Lookups,NrIndexEntries,nrUniqueLookups,"
+				+ "NoSync,Tuples,Samples,Lookups,NrIndexEntries,nrUniqueLookups,"
 				+ "NrPlans,JoinCard,AvgReward,MaxReward,TotalWork,"
-				+ "DataSize,UctSize,StateSize,JoinSize");
+				+ "DataSize,UctSize,StateSize,JoinSize,LastOrder");
 	}
 	/**
 	 * Writes out statistics concerning last query execution
@@ -135,6 +135,7 @@ public class BenchUtil {
 		benchOut.print(PostStats.havingMillis + ",");
 		benchOut.print(PostStats.orderMillis + ",");
 		// Additional statistics
+		benchOut.print(JoinStats.noSyncTime + ",");
 		benchOut.print(JoinStats.nrTuples + ",");
 		benchOut.print(JoinStats.nrSamples + ",");
 		benchOut.print(JoinStats.nrIndexLookups + ",");
@@ -149,7 +150,8 @@ public class BenchUtil {
 		benchOut.print(JoinStats.dataSize + ",");
 		benchOut.print(JoinStats.treeSize + ",");
 		benchOut.print(JoinStats.stateSize + ",");
-		benchOut.println(JoinStats.joinSize);
+		benchOut.print(JoinStats.joinSize + ",");
+		benchOut.println(JoinStats.lastOrder);
 		benchOut.flush();
 	}
 }

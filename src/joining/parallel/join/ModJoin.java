@@ -292,7 +292,6 @@ public class ModJoin extends DPJoin {
             }
         }
 //        System.arraycopy(new int[]{4, 5, 0, 1, 2, 3}, 0, order, 0, nrJoined);
-//        splitTable = 2;
         this.roundCtr = roundCtr;
         slowest = false;
         // Lookup or generate left-deep query plan

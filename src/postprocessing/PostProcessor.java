@@ -800,7 +800,8 @@ public class PostProcessor {
 						// Sample 500 values
 						IntData intData = (IntData) data;
 						IntSet intSet = HashIntSets.newMutableSet();
-						for (int rowCtr = 0; rowCtr < 500; rowCtr++) {
+						int lastNrSamples = Math.min(500, intData.data.length);
+						for (int rowCtr = 0; rowCtr < lastNrSamples; rowCtr++) {
 							intSet.add(intData.data[rowCtr]);
 						}
 						int nrKeysLowerBound = intSet.size();
