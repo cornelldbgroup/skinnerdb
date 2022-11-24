@@ -9,6 +9,8 @@ SkinnerDB uses reinforcement learning to decide which plans to try. It executes 
 
 # Publications
 
+**VLDB 2023** SkinnerMT: Parallelizing for efficiency and robustness in adaptive query processing on multicore platforms. _Ziyun Wei, Immanuel Trummer_
+
 **TODS 2021 - Best of SIGMOD Edition** [SkinnerDB: Regret-bounded query evaluation via reinforcement learning](https://dl.acm.org/doi/10.1145/3464389). _Immanuel Trummer, Junxiong Wang, Ziyun Wei, Deepak Maram, Samuel Moseley, Saehan Jo, Joseph Antonakakis, Ankush Rhayabhari_
 
 **SIGMOD 2019** SkinnerDB: Regret-bounded query evaluation via reinforcement learning. _Immanuel Trummer, Junxiong Wang, Ziyun Wei, Deepak Maram, Samuel Moseley, Saehan Jo, Joseph Antonakakis_ **Selected for Best of SIGMOD**
