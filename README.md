@@ -4,36 +4,43 @@ Please use commits from September 2019 for benchmarking, the latest commits in t
 
 # SkinnerDB
 
-This repository contains a very early version of a (slightly refined) re-implementation of SkinnerDB, 
-described in the paper <a href="https://dl.acm.org/citation.cfm?id=3275600">SkinnerDB: Regret-bounded query evaluation via reinforcement learning</a> at SIGMOD 2019 (see video recording of SIGMOD talk <a href="https://www.youtube.com/watch?v=QRYVnKaZ9fw">here</a>). 
+This repository contains an early version of a re-implementation of SkinnerDB, 
+described in the SIGMOD 2019 paper <a href="https://dl.acm.org/citation.cfm?id=3275600">SkinnerDB: Regret-bounded query evaluation via reinforcement learning</a>. 
 
-This source code is currently under development and **NOT CONSIDERED STABLE**. 
+# Running the Join Order Benchmark on EC2
 
-We expect to release the first stable version in the next months.
+The <a href="http://www.vldb.org/pvldb/vol9/p204-leis.pdf">join order benchmark</a> (JOB) is a popular benchmark for query optimizers. Follow these steps to benchmark SkinnerDB on JOB using an EC2 instance:
 
-# Running the Join Order (IMDB) Benchmark
-
-The <a href="http://www.vldb.org/pvldb/vol9/p204-leis.pdf">join order benchmark</a> is a popular benchmark for query optimizers. Execute the following steps to run SkinnerDB on that benchmark:
-
-<ol>
-<li>Download the IMDB database in the SkinnerDB format <a href="https://drive.google.com/file/d/1UCXtiPvVlwzUCWxKM6ic-XqIryk4OTgE/view?usp=sharing">here</a>. Decompress the linked .zip file.</li>
-<li>Download this GitHub repository (the master branch!) which already contains the join order benchmark queries in the sub-folder imdb/queries.</li> 
-<li>Start SkinnerDB using the executable .jar file in the jars sub-folder. For Linux, use the following command in the jars directory (while replacing /path/to/skinner/data by the path to the decompressed IMDB database): 
-<p>
-<code>
-java -jar -Xmx16G -XX:+UseConcMarkSweepGC Skinner.jar /path/to/skinner/data
-</code>
-</p>
-The settings for garbage collector (<code>-XX:+UseConcMarkSweepGC</code>) and heap space (<code>-Xmx16G</code>) work best for our benchmarking platform but may need to be revised for different machines.    
-</li>
-<li>Optionally, create indexes on all columns using the <code>index all</code> 
-command in the SkinnerDB console. Note that you need to re-create indexes after each startup as the current version does not store indexes on disk.</li>
-<li>Run a benchmark using the <code>bench ../imdb/queries outputfile.txt</code> command in the SkinnerDB console (you may need to adapt the relative path to the directory containing benchmark queries, replace <code>outputfile.txt</code> by a file name of your choosing).</li>
-</ol>
+1. Create and connect to an EC2 instance. The following instructions have been tested on an EC2 t2.2xlarge instance running Ubuntu 22 with disk space enlarged to 32 GiB (compared to the default settings). After the login, stay in the home repository (/home/ubuntu).
+2. Download this SkinnerDB repository and install Java:
+```
+git clone https://github.com/cornelldbgroup/skinnerdb
+sudo apt-get update
+sudo apt install openjdk-8-jre-headless
+```
+3. Install gdown and download a JOB database in the SkinnerDB format as .zip file from Google Drive:
+```
+sudo apt install python3-pip
+sudo pip install gdown
+gdown https://drive.google.com/uc?id=1UCXtiPvVlwzUCWxKM6ic-XqIryk4OTgE
+```
+4. Install unzip and use it to unzip the database file:
+```
+sudo apt install unzip
+unzip imdbskinner.zip
+```
+5. Start SkinnerDB on the JOB database, using 16 GB of heap space and a specific garbage collector:
+```
+java -jar -Xmx16G -XX:+UseConcMarkSweepGC skinnerdb/jars/Skinner.jar skinnerimdb
+```
+6. After less than a minute, the SkinnerDB console should appear. Now, run a benchmark on the JOB queries using the following command:
+```
+bench skinnerdb/imdb/queries results.csv
+```
 
 After running the benchmark, benchmark results can be found in the specified output file. Benchmark results include per-query times for each of the processing phases (pre-processing, join phase, and post-processing) as well as many other statistics such as the number of tuples generated (column "Tuples") or the number of UCT tree nodes generated (column "NrUctNodes"). 
 
-Typical times for running all queries of the join order benchmark are 83 seconds with indexes (104 seconds without indexes) on our benchmarking platform (Dell PowerEdge R640 server with 2 Intel Xeon 2.3 GHz CPUs and 256 GB of RAM running OpenJDK 1.8). Times may slightly vary from run to run as join ordering decisions depend initially on randomization. 
+Running the benchmark should take around 104 seconds on the EC2 instance. Running it a second time (without leaving the SkinnerDB console) should only take around 83 seconds since SkinnerDB automatically caches indexes created on join columns. Optionally, you may index all columns in advance using the `index all` command in the SkinnerDB console.
 
 # Quickstart
 
