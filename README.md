@@ -1,6 +1,6 @@
 # Important Note
 
-Please use commits from September 2019 for benchmarking, the latest commits in the Master branch introduce new features that currently degrade performance.
+This repository contains many different versions of SkinnerDB, many of them test versions that degrade performance compared to the original. For benchmarking, please use the SkinnerDB version contained in the .jar files of the main branch.
 
 # SkinnerDB
 
