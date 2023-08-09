@@ -69,3 +69,20 @@ SkinnerDB includes various tuning parameters that can improve performance for sp
 # Team
 
 SkinnerDB is developed by the Cornell database group (https://research.cs.cornell.edu/).
+
+# Citation
+
+If you find this project inspiring or use our repository, please cite our journal paper.
+
+```
+@article{trummer2021skinnerdb,
+  title={Skinnerdb: Regret-bounded query evaluation via reinforcement learning},
+  author={Trummer, Immanuel and Wang, Junxiong and Wei, Ziyun and Maram, Deepak and Moseley, Samuel and Jo, Saehan and Antonakakis, Joseph and Rayabhari, Ankush},
+  journal={ACM Transactions on Database Systems (TODS)},
+  volume={46},
+  number={3},
+  pages={1--45},
+  year={2021},
+  publisher={ACM New York, NY}
+}
+```
