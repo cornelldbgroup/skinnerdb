@@ -5,9 +5,9 @@ described in the SIGMOD 2019 paper <a href="https://dl.acm.org/citation.cfm?id=3
 
 # Trying SkinnerDB on Google Colab
 
-To get a first impression of SkinnerDB without installing it on your local machine, try the Google CoLab notebook [here](https://colab.research.google.com/drive/1P1Ekl-gdFwatIWSU5ZWajw82caM13te2?usp=sharing). Execute cells in the given order and follow the instructions in text. The notebook downloads different SkinnerDB versions, benchmark data and workloads, executes SkinnerDB and analyzes the results. 
+To get a first impression of SkinnerDB without installing it on your local machine, try the Google Colab notebook [here](https://colab.research.google.com/drive/1P1Ekl-gdFwatIWSU5ZWajw82caM13te2?usp=sharing). Execute cells in the given order and follow the instructions in text. The notebook downloads different SkinnerDB versions, benchmark data and workloads, executes SkinnerDB and analyzes the results. 
 
-This notebook should **not be used** for benchmarking purposes as Google CoLab is not well suited to maximize SkinnerDB's performance (e.g., lack of native support for Java, few CPU cores making pre-processing slow etc.). 
+This notebook should **not be used** for benchmarking purposes as Colab is not well suited to maximize SkinnerDB's performance (e.g., lack of native support for Java, few CPU cores making pre-processing slow etc.). 
 
 # Running the Join Order Benchmark on EC2
 
