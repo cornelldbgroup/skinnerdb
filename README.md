@@ -1,11 +1,11 @@
-# Important Note
-
-This repository contains different versions of SkinnerDB, many of them test versions that degrade performance compared to the original. For benchmarking, please use the SkinnerDB version contained in the .jar files of the main branch.
-
 # SkinnerDB
 
-This repository contains an early version of a re-implementation of SkinnerDB, 
+This repository contains a re-implementation of SkinnerDB, 
 described in the SIGMOD 2019 paper <a href="https://dl.acm.org/citation.cfm?id=3275600">SkinnerDB: Regret-bounded query evaluation via reinforcement learning</a>. 
+
+# Trying SkinnerDB on Google Colab
+
+To get a first impression of SkinnerDB without installing it on your local machine, try the Google CoLab notebook [here](https://colab.research.google.com/drive/1P1Ekl-gdFwatIWSU5ZWajw82caM13te2?usp=sharing). The notebook downloads different SkinnerDB versions, benchmark data and workloads, executes SkinnerDB and analyzes the results. This notebook should **not be used** for benchmarking purposes as Google CoLab is not well suited to maximize SkinnerDB's performance (e.g., lack of native support for Java, few CPU cores making pre-processing slow etc.). 
 
 # Running the Join Order Benchmark on EC2
 
