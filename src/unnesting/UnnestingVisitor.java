@@ -12,6 +12,7 @@ import java.util.Stack;
 import catalog.CatalogManager;
 import catalog.info.ColumnInfo;
 import catalog.info.TableInfo;
+import config.LoggingConfig;
 import config.NamingConfig;
 import expressions.normalization.CollectReferencesVisitor;
 import expressions.normalization.CopyVisitor;
@@ -97,33 +98,38 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 	 * 
 	 * @param plainSelect	extract columns for this query's FROM clause
 	 */
-	void treatSimpleFrom(PlainSelect plainSelect) {
+	void treatSimpleFrom(final PlainSelect plainSelect) {
 		// Retrieve fields to update
-		Set<ColumnRef> curScopeCols = scopeCols.peek();
-		Map<String, List<String>> curAliasToCols = aliasToCols.peek();
+		final Set<ColumnRef> curScopeCols = scopeCols.peek();
+		final Map<String, List<String>> curAliasToCols = aliasToCols.peek();
 		// Get all items in FROM clause
-		List<FromItem> fromItems = FromUtil.allFromItems(plainSelect);
+		final List<FromItem> fromItems = FromUtil.allFromItems(plainSelect);
 		// Iterate over base tables in FROM clause
-		for (FromItem fromItem : fromItems) {
+		for (final FromItem fromItem : fromItems) {
 			if (fromItem instanceof Table) {
 				// Extract table and alias name (defaults to table name)
-				Table table = (Table)fromItem;
-				String tableName = table.getName().toLowerCase();
-				String alias = table.getAlias()!=null?
+				final Table table = (Table)fromItem;
+				final String tableName = table.getName().toLowerCase();
+				final String alias = table.getAlias()!=null?
 						table.getAlias().getName():tableName;
 				// Extract associated column references
-				TableInfo tableInfo = CatalogManager.currentDB.
+				final TableInfo tableInfo = CatalogManager.currentDB.
 						nameToTable.get(tableName);
 				// Update scope and mappings
-				List<String> curAliasCols = new ArrayList<>();
+				final List<String> curAliasCols = new ArrayList<>();
 				curAliasToCols.put(alias, curAliasCols);
-				for (ColumnInfo colInfo : tableInfo.nameToCol.values()) {
-					String colName = colInfo.name;
-					// Update current scope
-					curScopeCols.add(new ColumnRef("", colName));
-					curScopeCols.add(new ColumnRef(alias, colName));
-					// Update current alias to column mapping
-					curAliasCols.add(colName);
+
+				if (null == tableInfo.nameToCol) {
+					log("Table information not available for table " + tableName + ". Data may be missing / not in file location.");
+				} else {
+					for (ColumnInfo colInfo : tableInfo.nameToCol.values()) {
+						final String colName = colInfo.name;
+						// Update current scope
+						curScopeCols.add(new ColumnRef("", colName));
+						curScopeCols.add(new ColumnRef(alias, colName));
+						// Update current alias to column mapping
+						curAliasCols.add(colName);
+					}
 				}
 			}
 		}
@@ -574,4 +580,17 @@ public class UnnestingVisitor extends CopyVisitor implements SelectVisitor {
 			}
 		}
 	}	
+
+	/**
+	 * @FIXME: bad code duplication for missing logging capability / library
+	 * Outputs given string if expression logging
+	 * is activated.
+	 * 
+	 * @param logEntry	entry to log
+	 */
+	void log(String logEntry) {
+		if (LoggingConfig.EXPRESSIONS_VERBOSE) {
+			System.out.println(logEntry);
+		}
+	}
 }
